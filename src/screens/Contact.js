@@ -1,0 +1,39 @@
+import * as React from 'react';
+import { Box, Stack } from '@mui/material';
+import Typography from '../modules/components/Typography';
+import Avatar from '@mui/material/Avatar';
+import Button from '@mui/material/Button';
+import {TextField} from '@mui/material';
+
+function Contact() {
+  return (
+    <Box>
+        <Box sx={{ py: 10, display:"flex", justifyContent:"center", flexDirection:"column", alignItems:"center",
+            }}
+        >
+            <Typography color="#06752b" align="center" variant="h1" fontWeight="bold">
+                Get in touch
+            </Typography>
+            <Typography color="inherit" align="center" variant="h5" my={1} href="tel:856-899-7642">
+                Phone: +1 (856) 899 7642
+            </Typography>
+            <Typography color="inherit" align="center" variant="h5" mb={1} >
+                Email:  hello@jointprinting.com
+            </Typography>
+            <Stack display="flex" justifyContent="center" alignItems="center" width='40vw' spacing={2} mt={6}>
+                <Stack direction="row" width="100%" spacing={2} alignItems="start" >
+                    <Stack spacing={1.73}>
+                        <TextField id="outlined-basic" label="Name" variant="outlined" fullWidth={true} size="small"/>
+                        <TextField id="outlined-basic" label="Email Address" variant="outlined" fullWidth={true} size="small"/>
+                        <TextField id="outlined-basic" label="Phone Number" variant="outlined" fullWidth={true} size="small"/>
+                    </Stack>
+                    <TextField id="outlined-basic" label="Message" variant="outlined" fullWidth={true} multiline={true} minRows={5}/>
+                </Stack>
+                <Button variant="contained" color="primary" fullWidth >Send Message</Button>
+            </Stack>
+        </Box>
+    </Box>
+  );
+}
+
+export default Contact;

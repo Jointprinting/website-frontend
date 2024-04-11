@@ -6,6 +6,7 @@ import theme from './theme';
 import Navbar from './common/Navbar';
 import Home from './screens/Home';
 import About from './screens/About';
+import Contact from './screens/Contact';
 //import SignIn from './screens/SignIn';
 //import SignUp from './screens/SignUp';
 import Footer from './common/Footer';
@@ -22,6 +23,7 @@ function App() {
         <Routes>
           <Route exact path="/" element={<Home />} />
           <Route exact path="/about" element={<About />} />
+          <Route exact path="/contact" element={<Contact />} />
         </Routes>
         <Footer/>
       </ThemeProvider>

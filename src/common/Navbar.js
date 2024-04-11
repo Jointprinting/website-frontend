@@ -21,7 +21,7 @@ function Navbar() {
             <Typography component={ReactRouterLink} to="/" 
                 sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
             >
-                BRANDNAME
+                JOINT PRINTING
             </Typography>
           <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
             <Stack direction="row" spacing={4}>
