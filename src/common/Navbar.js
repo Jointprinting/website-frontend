@@ -25,10 +25,10 @@ function Navbar() {
             </Typography>
           <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
             <Stack direction="row" spacing={4}>
-                <Typography component={ReactRouterLink} to="/product" 
+                <Typography component={ReactRouterLink} to="/products" 
                     sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
                 >
-                    PRODUCT
+                    PRODUCTS
                 </Typography>
                 <Typography component={ReactRouterLink} to="/services" 
                     sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
