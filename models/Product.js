@@ -61,6 +61,14 @@ const ProductSchema = new mongoose.Schema({
         type: String,
         default: 'New Arrival'
     },
+    type: {
+        type: String,
+        default: 'Shirts'
+    },
+    for: {
+        type: String,
+        default: 'Unisex'
+    },
     createdAt: {
         type: Date,
         default: Date.now()
