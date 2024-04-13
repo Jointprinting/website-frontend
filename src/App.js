@@ -7,6 +7,7 @@ import Navbar from './common/Navbar';
 import Home from './screens/Home';
 import About from './screens/About';
 import Contact from './screens/Contact';
+import Product from './screens/Product';
 //import SignIn from './screens/SignIn';
 //import SignUp from './screens/SignUp';
 import Footer from './common/Footer';
@@ -24,6 +25,7 @@ function App() {
           <Route exact path="/" element={<Home />} />
           <Route exact path="/about" element={<About />} />
           <Route exact path="/contact" element={<Contact />} />
+          <Route exact path="/product" element={<Product />} />
         </Routes>
         <Footer/>
       </ThemeProvider>

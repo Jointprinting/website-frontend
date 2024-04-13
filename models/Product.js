@@ -57,6 +57,10 @@ const ProductSchema = new mongoose.Schema({
         type: Number,
         default: 5
     },
+    tag: {
+        type: String,
+        default: 'New Arrival'
+    },
     createdAt: {
         type: Date,
         default: Date.now()
