@@ -38,6 +38,11 @@ const ProductSchema = new mongoose.Schema({
             type: String
         }
     ],
+    colorCodes: [
+        {
+            type: String
+        }
+    ],
     productFrontImages: [
         {
             type: String
