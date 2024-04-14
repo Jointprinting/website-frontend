@@ -1,15 +1,13 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React from 'react';
 import {Routes, Route} from 'react-router-dom';
 import { CssBaseline, ThemeProvider } from '@mui/material';
-//import { createTheme } from '@mui/material/styles';
 import theme from './theme';
 import Navbar from './common/Navbar';
 import Home from './screens/Home';
 import About from './screens/About';
 import Contact from './screens/Contact';
 import Product from './screens/Product';
-//import SignIn from './screens/SignIn';
-//import SignUp from './screens/SignUp';
+import Products from './screens/Products';
 import Footer from './common/Footer';
 
 function App() {
@@ -26,6 +24,7 @@ function App() {
           <Route exact path="/about" element={<About />} />
           <Route exact path="/contact" element={<Contact />} />
           <Route exact path="/product" element={<Product />} />
+          <Route exact path="/products" element={<Products />} />
         </Routes>
         <Footer/>
       </ThemeProvider>

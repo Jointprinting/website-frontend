@@ -61,11 +61,11 @@ const ProductSchema = new mongoose.Schema({
         type: String,
         default: 'New Arrival'
     },
-    type: {
+    category: {
         type: String,
         default: 'Shirts'
     },
-    for: {
+    type: {
         type: String,
         default: 'Unisex'
     },
