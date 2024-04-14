@@ -10,10 +10,9 @@ function Copyright() {
   return (
     <React.Fragment>
       {'© '}
-      <Link color="inherit" href="https://mui.com/">
-        Your Website
-      </Link>{' '}
-      {new Date().getFullYear()}
+      <Link color="inherit" href="/">
+        Joint Printing
+      </Link>
     </React.Fragment>
   );
 }
@@ -73,6 +72,25 @@ export default function Footer() {
                 <Copyright />
               </Grid>
             </Grid>
+          </Grid>
+          <Grid item xs={6} sm={4} md={2}>
+            <Typography variant="h6" marked="left" gutterBottom>
+              Company
+            </Typography>
+            <Box component="ul" sx={{ m: 0, listStyle: 'none', p: 0 }}>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/about">About</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/contact">Contact</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/products">Products</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/services">Services</Link>
+              </Box>
+            </Box>
           </Grid>
           <Grid item xs={6} sm={4} md={2}>
             <Typography variant="h6" marked="left" gutterBottom>
