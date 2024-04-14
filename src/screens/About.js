@@ -8,7 +8,7 @@ function About() {
   return (
     <Box>
         <Box sx={{ height: '50vh', py:2, display:"flex", justifyContent:"center", flexDirection:"column", alignItems:"center",
-                backgroundImage:'url(https://img.freepik.com/free-photo/blur-shopping-mall_1203-8809.jpg?size=626&ext=jpg&ga=GA1.1.1224184972.1711670400&semt=ais)'
+                backgroundImage:'url(https://images.pexels.com/photos/1254736/pexels-photo-1254736.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2)'
             }}
         >
             <Typography color="#06752b" align="center" variant="h1" fontWeight="bold">
