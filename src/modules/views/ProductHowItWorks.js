@@ -5,6 +5,9 @@ import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
+import drawImage from '../images/draw.webp';
+import relaxImage from '../images/relax.webp';
+import deliveryImage from '../images/delivery.webp';
 
 const item = {
   display: 'flex',
@@ -62,12 +65,12 @@ function ProductHowItWorks() {
                 <Box sx={number}>1.</Box>
                 <Box
                   component="img"
-                  src="https://mui.com/static/themes/onepirate/productHowItWorks1.svg"
-                  alt="gavel"
+                  src={drawImage}
+                  alt="draw"
                   sx={image}
                 />
                 <Typography variant="h5" align="center">
-                  Appointment every Wednesday 9am.
+                Request a free mockup and let us know your vision — we're ready to listen around the clock.
                 </Typography>
               </Box>
             </Grid>
@@ -76,13 +79,12 @@ function ProductHowItWorks() {
                 <Box sx={number}>2.</Box>
                 <Box
                   component="img"
-                  src="https://mui.com/static/themes/onepirate/productHowItWorks2.svg"
-                  alt="price-tag"
+                  src={relaxImage}
+                  alt="relax"
                   sx={image}
                 />
                 <Typography variant="h5" align="center">
-                  First come, first served. Our offers are in limited quantities, so
-                  be quick.
+                Sit back as we seamlessly coordinate the perfect match of quality materials and printing precision for your project.
                 </Typography>
               </Box>
             </Grid>
@@ -91,13 +93,12 @@ function ProductHowItWorks() {
                 <Box sx={number}>3.</Box>
                 <Box
                   component="img"
-                  src="https://mui.com/static/themes/onepirate/productHowItWorks3.svg"
-                  alt="bullhorn"
+                  src={deliveryImage}
+                  alt="delivery"
                   sx={image}
                 />
                 <Typography variant="h5" align="center">
-                  {'New offers every week. New experiences, new surprises. '}
-                  {'Your Sundays will no longer be alike.'}
+                Get premium prints, flawlessly delivered, right to your door. Satisfaction guaranteed!
                 </Typography>
               </Box>
             </Grid>
@@ -108,7 +109,7 @@ function ProductHowItWorks() {
           size="large"
           variant="contained"
           component="a"
-          href="/premium-themes/onepirate/sign-up/"
+          href="/products"
           sx={{ mt: 8 }}
         >
           Get started

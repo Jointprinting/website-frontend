@@ -37,7 +37,7 @@ function ProductCTA() {
                 Receive offers
               </Typography>
               <Typography variant="h5">
-                Taste the holidays of the everyday close to home.
+                Get updates on our limited-time deals and save big!
               </Typography>
               <TextField
                 noBorder
@@ -75,7 +75,7 @@ function ProductCTA() {
           />
           <Box
             component="img"
-            src="https://images.unsplash.com/photo-1527853787696-f7be74f2e39a?auto=format&fit=crop&w=750"
+            src="https://images.pexels.com/photos/322207/pexels-photo-322207.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
             alt="call to action"
             sx={{
               position: 'absolute',

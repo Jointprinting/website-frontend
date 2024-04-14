@@ -4,6 +4,9 @@ import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
 import Typography from '../components/Typography';
+import tailorImage from '../images/tailor.webp';
+import deliverImage from '../images/deliver.webp';
+import clothingImage from '../images/clothing.webp';
 
 const item = {
   display: 'flex',
@@ -30,16 +33,17 @@ function ProductValues() {
             <Box sx={item}>
               <Box
                 component="img"
-                src="https://mui.com/static/themes/onepirate/productValues1.svg"
-                alt="umbrella"
-                sx={{ height: 55 }}
+                src={clothingImage}
+                alt="clothes"
+                sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }}>
-                The best luxury hotels
+              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
+                Your Dedicated Print Concierge
               </Typography>
-              <Typography variant="h5" fontWeight>
-                  From the latest trendy boutique hotel to the iconic palace with XXL pool
-                    , go for a mini-vacation just a few subway stops away from your home.'
+              <Typography variant="h5" textAlign='center'>
+              Focus on your business, not your printing. 
+              Joint Printing assigns you a dedicated agent who handles everything – from finding the perfect supplier to ensuring on-time delivery.
+              Let us sweat the details, so you can focus on what matters.
               </Typography>
             </Box>
           </Grid>
@@ -47,19 +51,15 @@ function ProductValues() {
             <Box sx={item}>
               <Box
                 component="img"
-                src="https://mui.com/static/themes/onepirate/productValues2.svg"
-                alt="steer"
-                sx={{ height: 55 }}
+                src={tailorImage}
+                alt="tailor"
+                sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }}>
-                New experiences
+              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
+                Tailor-Made Printing Mastery
               </Typography>
-              <Typography variant="h5">
-                {
-                  'Privatize a pool, take a Japanese bath or wake up in 900m2 of garden… '
-                }
-
-                {'your Sundays will not be alike.'}
+              <Typography variant="h5" textAlign='center'>
+                  Your brand deserves the spotlight. Submit your design, and our team will transform it into a masterpiece, offering expert brand consultations to capture the essence of your vision. With Joint Print you'll earn a customized experience, not just an order.
               </Typography>
             </Box>
           </Grid>
@@ -67,16 +67,15 @@ function ProductValues() {
             <Box sx={item}>
               <Box
                 component="img"
-                src="https://mui.com/static/themes/onepirate/productValues3.svg"
-                alt="clock"
-                sx={{ height: 55 }}
+                src={deliverImage}
+                alt="deliver"
+                sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }}>
-                Exclusive rates
+              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
+                Home-Delivered Perfection
               </Typography>
-              <Typography variant="h5">
-                {'By registering, you will access specially negotiated rates '}
-                {'that you will not find anywhere else.'}
+              <Typography variant="h5" textAlign='center'>
+              Who has the time to track shipments and handle logistics? We do. And we love it. Kick back and relax; We handle everything, ensuring flawless prints arrive on time.
               </Typography>
             </Box>
           </Grid>
