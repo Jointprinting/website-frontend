@@ -23,8 +23,20 @@ function Product() {
     //const productColor = "White";
     //const productColorCode = "#FFFFFF";
 
-    const productFrontImages = ['https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_F.jpg?v=1711658794/func=resize&h=640']
-    const productBackImages = ['https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_B.jpg?v=1711658791/func=resize&h=640']
+    const productFrontImages = [
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_F_cdcaf2f4-9cb4-42fc-9a49-47b07c97df5c.jpg?v=1711658788/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_F_8295c8ff-499d-4372-aa51-5765a45d7eeb.jpg?v=1711658790/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_F_79d746ba-d33c-4074-8a26-3941f2eb0e6d.jpg?v=1711658788/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_F.jpg?v=1711658787/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_F.jpg?v=1711658794/func=resize&h=640'
+    ]
+    const productBackImages = [
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_B_44bca3d5-2126-41d3-9f85-7d2782fd2dd4.jpg?v=1711658792/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_B_caf98d4f-5784-4e34-9fe3-ccbe3ab0dfb6.jpg?v=1711658788/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_B_25913a2e-24dc-4ade-9300-c299d2550ec7.jpg?v=1711658787/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_B.jpg?v=1711658790/func=resize&h=640',
+        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_B.jpg?v=1711658791/func=resize&h=640'
+    ]
 
     const productDescription = "This is a description of the product. It is a very good product. You should buy it.";
 
@@ -32,6 +44,7 @@ function Product() {
     const [productColor, setProductColor] = useState("White");
     const [productColorCode, setProductColorCode] = useState("#FFFFFF");
     const [selectedCircle, setSelectedCircle] = useState({});
+    const [productIndex, setProductIndex] = useState(0);
 
     //useEffect to change the color of the circle when the productColor changes
     useEffect(() => {
@@ -46,24 +59,24 @@ function Product() {
             }
         )
     }
-    , [productColor]);
+    , [productColorCode]);
 
   return (
     <Box px="5vw" py="7vh" bgcolor="#f5f5f5">
         <Stack direction="row" spacing={'4vw'} alignItems="top">
             {/* Stack for tiny product images */}
             <Stack spacing={2}>
-                <img src={productFrontImages[0]} alt="product" onClick={() => setFrontSelected(true)}
+                <img src={productFrontImages[productIndex]} alt="product" onClick={() => setFrontSelected(true)}
                     style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? '1px green solid' : 'none'}} 
                 />
-                <img src={productBackImages[0]} alt="product" onClick={() => setFrontSelected(false)}
+                <img src={productBackImages[productIndex]} alt="product" onClick={() => setFrontSelected(false)}
                     style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? 'none' : '1px green solid',}} 
                 />
             </Stack>
 
             {/* Stack for large product images */}
             <Stack spacing={4}>
-                <img src={frontSelected ? productFrontImages[0] : productBackImages[0]} alt="product" style={{width: '33vw', height: 'auto', boxShadow: '0 0 10px 0px lightgray'}} />
+                <img src={frontSelected ? productFrontImages[productIndex] : productBackImages[productIndex]} alt="product" style={{width: '33vw', height: 'auto', boxShadow: '0 0 10px 0px lightgray'}} />
                 {/*<img src={productBackImages[0]} alt="product" style={{width: '33vw', height: 'auto'}} />*/}
             </Stack>
 
@@ -112,7 +125,7 @@ function Product() {
                     {productColorOptions.map((item, index) => ( // Loop through each item in the array
                         <Tooltip title={item} placement="top" arrow={true}>
                             <Box 
-                                onClick={() => {setProductColor(item); setProductColorCode(productColorCodes[index])}} // Set the product color to the item
+                                onClick={() => {setProductColor(item); setProductColorCode(productColorCodes[index]); setProductIndex(index)}} // Set the product color to the item
                                 sx={
                                     {
                                         cursor: 'pointer',
