@@ -4,8 +4,10 @@ import Typography from '../modules/components/Typography';
 
 function Contact() {
   return (
-    <Box>
-        <Box sx={{ py: 10, display:"flex", justifyContent:"center", flexDirection:"column", alignItems:"center",
+    <Box bgcolor="#f5f5f5" pt={6} pb={8} display="flex" justifyContent="center">
+        <Box 
+            sx={{ 
+                width: '45vw', p: 4, display:"flex", justifyContent:"center", flexDirection:"column", alignItems:"center", bgcolor:"white", boxShadow: 2, borderRadius: 1
             }}
         >
             <Typography color="primary" align="center" variant="h1" fontWeight="bold">
