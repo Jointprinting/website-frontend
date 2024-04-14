@@ -1,9 +1,6 @@
 import * as React from 'react';
-import { Box, Stack } from '@mui/material';
+import { Box, Stack, TextField, Link, Button } from '@mui/material';
 import Typography from '../modules/components/Typography';
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import {TextField} from '@mui/material';
 
 function Contact() {
   return (
@@ -11,14 +8,14 @@ function Contact() {
         <Box sx={{ py: 10, display:"flex", justifyContent:"center", flexDirection:"column", alignItems:"center",
             }}
         >
-            <Typography color="#06752b" align="center" variant="h1" fontWeight="bold">
+            <Typography color="primary" align="center" variant="h1" fontWeight="bold">
                 Get in touch
             </Typography>
-            <Typography color="inherit" align="center" variant="h5" my={1} href="tel:856-899-7642">
-                Phone: +1 (856) 899 7642
+            <Typography color="inherit" align="center" variant="h5" my={1}>
+            📞 Phone: <Typography component={Link} fontSize={18} href={`tel:8568997642`}>+1 (856) 899 7642 </Typography>
             </Typography>
-            <Typography color="inherit" align="center" variant="h5" mb={1} >
-                Email:  hello@jointprinting.com
+            <Typography color="inherit" align="center" variant="h5" mb={1}>
+                ✉️ Email: <Typography component={Link} fontSize={18} href="mailto:hello@jointprinting.com">hello@jointprinting.com</Typography>
             </Typography>
             <Stack display="flex" justifyContent="center" alignItems="center" width='40vw' spacing={2} mt={6}>
                 <Stack direction="row" width="100%" spacing={2} alignItems="start" >
