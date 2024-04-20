@@ -11,7 +11,7 @@ function Copyright() {
     <React.Fragment>
       {'© '}
       <Link color="inherit" href="/">
-        Joint Printing
+        Joint Printing LLC
       </Link>
     </React.Fragment>
   );
@@ -79,16 +79,16 @@ export default function Footer() {
             </Typography>
             <Box component="ul" sx={{ m: 0, listStyle: 'none', p: 0 }}>
               <Box component="li" sx={{ py: 0.5 }}>
-                <Link href="/about">About</Link>
-              </Box>
-              <Box component="li" sx={{ py: 0.5 }}>
-                <Link href="/contact">Contact</Link>
-              </Box>
-              <Box component="li" sx={{ py: 0.5 }}>
                 <Link href="/products">Products</Link>
               </Box>
               <Box component="li" sx={{ py: 0.5 }}>
                 <Link href="/services">Services</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/about">About</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/contact">Contact</Link>
               </Box>
             </Box>
           </Grid>
@@ -104,31 +104,6 @@ export default function Footer() {
                 <Link href="/privacy">Privacy</Link>
               </Box>
             </Box>
-          </Grid>
-          <Grid item xs={6} sm={8} md={4}>
-            <Typography variant="h6" marked="left" gutterBottom>
-              Language
-            </Typography>
-            <TextField
-              select
-              size="medium"
-              variant="standard"
-              SelectProps={{
-                native: true,
-              }}
-              sx={{ mt: 1, width: 150 }}
-            >
-              {LANGUAGES.map((language) => (
-                <option value={language.code} key={language.code}>
-                  {language.name}
-                </option>
-              ))}
-            </TextField>
-          </Grid>
-          <Grid item>
-            <Typography variant="caption">
-              Sample text asdasdasdfasfasfasfd
-            </Typography>
           </Grid>
         </Grid>
       </Container>
