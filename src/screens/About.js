@@ -15,19 +15,24 @@ function About() {
                 About Us
             </Typography>
             <Typography color="inherit" align="center" variant="h5" >
-                We're just as cool as the
+                Every print tells a story. 
             </Typography>
             <Typography color="inherit" align="center" variant="h5" >
-                merch we make.
+                Let’s tell yours.
             </Typography>
         </Box>
-        <Box py="20vh">
+        <Box py="18vh">
             <Typography color="royalblue" align="center" variant="h2" >
                 12,346
             </Typography>
-            <Typography color="inherit" align="center" variant="h4" mb="10vh">
+            <Typography color="inherit" align="center" variant="h4" mb="6vh">
                 Garments Printed
             </Typography>
+            <Box display="flex" justifyContent="center">
+                <img src={'https://cdn.midjourney.com/1a20a760-213c-4835-a8cb-bbaf433917d9/0_0.webp'} alt='garments' width='40%' height='auto' />
+            </Box>
+            { /* Reviews sections */}
+            {/*
             <Stack direction="row" alignItems="center" justifyContent="center" spacing={10}>
                 <Stack spacing={1} alignItems="center">
                     <img src='https://fp.freshprints.com/assets/icons/about-us/reviews/facebook.svg' alt='facebook' />
@@ -45,7 +50,7 @@ function About() {
                     <img src='https://fp.freshprints.com/assets/icons/about-us/reviews/yelp.svg' alt='yelp' />
                     <Typography color="inherit" align="center" fontSize="10px" fontWeight="bold"> "These guys are awesome!" </Typography>
                 </Stack>
-            </Stack>
+            </Stack> */}
         </Box>
         <Box pt="5vh" pb="20vh">
             <Typography align="center" variant="h2" >
@@ -85,7 +90,7 @@ function About() {
                         Think of us as your creative sidekick; we're here to ensure that each print piece not only looks fantastic but also resonates with your brand's playful spirit and ambition.
                     </Typography>
                 </Stack>
-                <img src='https://images.pexels.com/photos/15543047/pexels-photo-15543047/free-photo-of-whiteboard-with-hashtag-company-values-of-walls-io-website.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' alt='story' style={{width:'33vw', height: 'auto'}} />
+                <img src='https://images.pexels.com/photos/7666429/pexels-photo-7666429.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' alt='story' style={{width:'33vw', height: 'auto'}} />
 
                 
             </Stack>

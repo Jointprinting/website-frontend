@@ -75,7 +75,7 @@ function ProductCTA() {
           />
           <Box
             component="img"
-            src="https://images.pexels.com/photos/322207/pexels-photo-322207.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+            src="https://cdn.midjourney.com/1a20a760-213c-4835-a8cb-bbaf433917d9/0_1.webp"
             alt="call to action"
             sx={{
               position: 'absolute',
@@ -84,6 +84,7 @@ function ProductCTA() {
               right: 0,
               bottom: 0,
               width: '100%',
+              height: '90%',
               maxWidth: 600,
             }}
           />
