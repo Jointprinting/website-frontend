@@ -4,7 +4,9 @@ import Grid from '@mui/material/Grid';
 import Link from '@mui/material/Link';
 import Container from '@mui/material/Container';
 import Typography from '../modules/components/Typography';
-import TextField from '../modules/components/TextField';
+//import TextField from '../modules/components/TextField';
+import { SocialIcon } from 'react-social-icons'
+import { useNavigate } from 'react-router-dom';
 
 function Copyright() {
   return (
@@ -30,16 +32,6 @@ const iconStyle = {
   },
 };
 
-const LANGUAGES = [
-  {
-    code: 'en-US',
-    name: 'English',
-  },
-  {
-    code: 'fr-FR',
-    name: 'Français',
-  },
-];
 
 export default function Footer() {
   return (
@@ -58,14 +50,11 @@ export default function Footer() {
               sx={{ height: 120 }}
             >
               <Grid item sx={{ display: 'flex' }}>
-                <Box component="a" href="https://mui.com/" sx={iconStyle}>
-                  <img
-                    src="https://mui.com/static/themes/onepirate/appFooterFacebook.png"
-                    alt="Facebook"
-                  />
+                <Box width='48px' mr={1} >
+                  <SocialIcon url="https://www.instagram.com" bgColor="black" target="_blank"/>
                 </Box>
-                <Box component="a" href="https://twitter.com/MUI_hq" sx={iconStyle}>
-                  <img src="https://mui.com/static/themes/onepirate/appFooterTwitter.png" alt="X" />
+                <Box width='48px'>
+                  <SocialIcon url="https://www.tiktok.com" target="_blank"/>
                 </Box>
               </Grid>
               <Grid item>
