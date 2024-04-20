@@ -4,7 +4,7 @@ import Typography from '../components/Typography';
 import ProductHeroLayout from './ProductHeroLayout';
 
 const backgroundImage =
-  'https://media.istockphoto.com/id/1340200038/photo/cbd-beautiful-background-green-cannabis-flowers-cannabis-sativa-leaves-on-dark-medical-legal.jpg?s=612x612&w=0&k=20&c=IusJWQC5D5oP-GvorSyHRZuy8rXYh6sZ7oH0qxp-PDc=';
+  'https://cdn.midjourney.com/02200c93-b8ea-452c-b02d-99cc2954e81f/0_2.webp';
 
 export default function ProductHero() {
   return (

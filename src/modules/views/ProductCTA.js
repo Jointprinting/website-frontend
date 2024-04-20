@@ -27,7 +27,7 @@ function ProductCTA() {
             sx={{
               display: 'flex',
               justifyContent: 'center',
-              bgcolor: 'warning.main',
+              bgcolor: 'secondary.light',
               py: 8,
               px: 3,
             }}
