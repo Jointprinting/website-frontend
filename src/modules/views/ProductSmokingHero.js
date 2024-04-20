@@ -3,8 +3,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '../components/Typography';
+import { useNavigate } from 'react-router-dom';
 
 function ProductSmokingHero() {
+  const navigate = useNavigate();
+
   return (
     <Container
       component="section"
@@ -18,6 +21,7 @@ function ProductSmokingHero() {
           py: 2,
           px: 5,
         }}
+        onClick = {() => navigate('/contact')}
       >
         <Typography variant="h4" component="span">
           Got any questions? Need help?
