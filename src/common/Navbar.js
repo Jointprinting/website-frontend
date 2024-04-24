@@ -2,12 +2,62 @@ import * as React from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import Drawer from '@mui/material/Drawer';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import IconButton from '@mui/material/IconButton';
+import MenuIcon from '@mui/icons-material/Menu';
 import { Link as ReactRouterLink } from 'react-router-dom';
 import AppBar from '../modules/components/AppBar';
 import Toolbar from '../modules/components/Toolbar';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 function Navbar() {
+  const mobile = useMediaQuery("(max-width: 920px)");
+
+  const DrawerComponent = () => {
+    const [openDrawer, setOpenDrawer] = React.useState(false);
+    return (
+        <>
+        <Drawer anchor = 'right' onClose = {() => setOpenDrawer(false)} open = {openDrawer} >
+            <List>
+                <ListItem divider key={"Products"} disablePadding>
+                    <ListItemButton component={ReactRouterLink} to="/products">
+                        <ListItemText primary={"Products"} />
+                    </ListItemButton>
+                </ListItem>
+                
+
+                <ListItem key={"About"} disablePadding>
+                    <ListItemButton component={ReactRouterLink} to="/about">
+                        <ListItemText primary={"About"} />
+                    </ListItemButton>
+                </ListItem>
+
+                <ListItem key={"Contact"} disablePadding>
+                    <ListItemButton component={ReactRouterLink} to="/contact">
+                        <ListItemText primary={"Contact"} />
+                    </ListItemButton>
+                </ListItem>
+
+                <ListItem key={"FAQ"} disablePadding>
+                    <ListItemButton component={ReactRouterLink} to="/faq">
+                        <ListItemText primary={"FAQ"} />
+                    </ListItemButton>
+                </ListItem>
+            </List>
+        </Drawer>
+        <IconButton onClick = {() => setOpenDrawer(!openDrawer)} sx={{ml:'auto'}}>
+            <MenuIcon sx={{color:'inherit', fontSize:'30px', color: 'white'}}/>
+        </IconButton>
+        </>
+    )
+  }
+
   return (
+    !mobile ?
     <div>
       <AppBar position="fixed">
         <Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -45,6 +95,15 @@ function Navbar() {
       </AppBar>
       <Toolbar />
     </div>
+    :
+    <Stack direction="row" alignItems="center" px={2} py={0.7} bgcolor='primary.main'>
+        {/*<Box mt={1} sx={{":hover": {cursor: 'pointer'}}}  component={ReactRouterLink} to="/"><img src={logo} alt="logo" width="40px"/></Box>
+        <Box sx={{flexGrow: 1}}/>*/}
+        <Box sx={{flexGrow: 1}}/>
+        <Typography variant="h6" fontSize={18} align="center" sx={{color: 'white', ml: '46px'}}>Joint Printing</Typography>
+        <Box sx={{flexGrow: 1}}/>
+        <DrawerComponent/>
+    </Stack>
   );
 }
 
