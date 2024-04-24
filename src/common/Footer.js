@@ -6,7 +6,6 @@ import Container from '@mui/material/Container';
 import Typography from '../modules/components/Typography';
 //import TextField from '../modules/components/TextField';
 import { SocialIcon } from 'react-social-icons'
-import { useNavigate } from 'react-router-dom';
 
 function Copyright() {
   return (
@@ -18,20 +17,6 @@ function Copyright() {
     </React.Fragment>
   );
 }
-
-const iconStyle = {
-  width: 48,
-  height: 48,
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: 'warning.main',
-  mr: 1,
-  '&:hover': {
-    bgcolor: 'warning.dark',
-  },
-};
-
 
 export default function Footer() {
   return (
@@ -71,13 +56,13 @@ export default function Footer() {
                 <Link href="/products">Products</Link>
               </Box>
               <Box component="li" sx={{ py: 0.5 }}>
-                <Link href="/services">Services</Link>
-              </Box>
-              <Box component="li" sx={{ py: 0.5 }}>
                 <Link href="/about">About</Link>
               </Box>
               <Box component="li" sx={{ py: 0.5 }}>
                 <Link href="/contact">Contact</Link>
+              </Box>
+              <Box component="li" sx={{ py: 0.5 }}>
+                <Link href="/faq">FAQ</Link>
               </Box>
             </Box>
           </Grid>

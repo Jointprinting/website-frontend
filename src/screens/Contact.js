@@ -17,7 +17,7 @@ function Contact() {
             📞 Phone: <Typography component={Link} fontSize={18} href={`tel:8568997642`}>+1 (856) 899 7642 </Typography>
             </Typography>
             <Typography color="inherit" align="center" variant="h5" mb={1}>
-                ✉️ Email: <Typography component={Link} fontSize={18} href="mailto:hello@jointprinting.com">hello@jointprinting.com</Typography>
+                ✉️ Email: <Typography component={Link} fontSize={18} href="mailto:nate@jointprinting.com">nate@jointprinting.com</Typography>
             </Typography>
             <Stack display="flex" justifyContent="center" alignItems="center" width='40vw' spacing={2} mt={6}>
                 <Stack direction="row" width="100%" spacing={2} alignItems="start" >

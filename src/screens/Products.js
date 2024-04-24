@@ -1,4 +1,4 @@
-import  {React, useEffect, useState} from 'react';
+import  {React, useState} from 'react';
 import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, Menu, Button, MenuItem } from '@mui/material';
 //import Grid from '@mui/material/Unstable_Grid2';
 //import ImageGrid from '../common/ImageGrid';
@@ -43,7 +43,7 @@ function Product() {
         setPage(value);
     };
 
-    const paginatedImages = imageUrls.slice((page - 1) * imagesPerPage, page * imagesPerPage);
+    //const paginatedImages = imageUrls.slice((page - 1) * imagesPerPage, page * imagesPerPage);
     //useMediaQuery to adjust cols based on screen size (i.e. mobile should be 1 column, tablet should be 2 columns, desktop should be 4 columns)
     return (
         <Stack py={2}>

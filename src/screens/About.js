@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Box, Stack } from '@mui/material';
 import Typography from '../modules/components/Typography';
-import Avatar from '@mui/material/Avatar';
+//import Avatar from '@mui/material/Avatar';
 import storyImage from '../modules/images/storyImage.webp'
 
 function About() {
@@ -96,7 +96,7 @@ function About() {
             </Stack>
         </Box>
 
-        <Box pt="5vh" pb="20vh">
+        {/*<Box pt="5vh" pb="20vh">
             <Typography align="center" variant="h2" >
                 Our Team
             </Typography>
@@ -105,7 +105,7 @@ function About() {
                 <Avatar alt="Travis Howard" src="/static/images/avatar/2.jpg" sx={{ width: 80, height: 80 }}/>
                 <Avatar alt="Cindy Baker" src="/static/images/avatar/3.jpg" sx={{ width: 80, height: 80 }} />
             </Stack>
-        </Box>
+        </Box>*/}
     </Box>
   );
 }

@@ -6,12 +6,6 @@ import { Link as ReactRouterLink } from 'react-router-dom';
 import AppBar from '../modules/components/AppBar';
 import Toolbar from '../modules/components/Toolbar';
 
-const rightLink = {
-  fontSize: 16,
-  color: 'common.white',
-  ml: 3,
-};
-
 function Navbar() {
   return (
     <div>
@@ -30,11 +24,6 @@ function Navbar() {
                 >
                     PRODUCTS
                 </Typography>
-                <Typography component={ReactRouterLink} to="/services" 
-                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
-                >
-                    SERVICES
-                </Typography>
                 <Typography component={ReactRouterLink} to="/about" 
                     sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
                 >
@@ -44,6 +33,11 @@ function Navbar() {
                     sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
                 >
                     CONTACT
+                </Typography>
+                <Typography component={ReactRouterLink} to="/faq" 
+                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
+                >
+                    FAQ
                 </Typography>
             </Stack>
             </Box>

@@ -9,6 +9,7 @@ import Contact from './screens/Contact';
 import Product from './screens/Product';
 import Products from './screens/Products';
 import Footer from './common/Footer';
+import FAQ from './screens/FAQ';
 
 function App() {
 
@@ -25,6 +26,7 @@ function App() {
           <Route exact path="/contact" element={<Contact />} />
           <Route exact path="/product" element={<Product />} />
           <Route exact path="/products" element={<Products />} />
+          <Route exact path="/faq" element={<FAQ />} />
         </Routes>
         <Footer/>
       </ThemeProvider>
