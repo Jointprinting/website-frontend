@@ -1,11 +1,15 @@
 import  {React, useState} from 'react';
-import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, Menu, Button, MenuItem } from '@mui/material';
+import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, Menu, Button, MenuItem, useMediaQuery } from '@mui/material';
 //import Grid from '@mui/material/Unstable_Grid2';
 //import ImageGrid from '../common/ImageGrid';
 import { useNavigate } from 'react-router-dom';
 
 function Product() {
     const navigate = useNavigate();
+    const mobile = useMediaQuery("(max-width: 600px)");
+    const tablet = useMediaQuery("(max-width: 860px)");
+    const laptop = useMediaQuery("(max-width: 1160px)");
+    const columns = mobile ? 1 : tablet ? 2 : laptop ? 3 : 4;
     const [page, setPage] = useState(1);
     const [anchorEl, setAnchorEl] = useState(null);
     const [anchorElType, setAnchorElType] = useState(null);
@@ -102,7 +106,7 @@ function Product() {
             </Stack>
             <Divider />
             <Box width='100%' display='flex' justifyContent='center'  sx={{ flexGrow: 1 }} mt={3}>
-                <ImageList cols={4} rowHeight={300} gap={30}>
+                <ImageList cols={columns} rowHeight={300} gap={30}>
                 {imageUrls.map((item, index) => (
                     <Stack p={1} spacing={1} alignItems="center" >
                         <Box onClick={() => navigate('/product/')}

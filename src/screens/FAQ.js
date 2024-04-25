@@ -1,12 +1,12 @@
 import * as React from 'react';
-import { Box, Stack } from '@mui/material';
+import { Box, Stack, useMediaQuery } from '@mui/material';
 import Typography from '../modules/components/Typography';
 import Faq from "react-faq-component";
 import '@fontsource/work-sans';
-//import Avatar from '@mui/material/Avatar';
 
 function FAQ() {
-    const textStyle={fontSize: 20,fontFamily: "'Work Sans', sans-serif",}
+    const mobile = useMediaQuery("(max-width: 800px)");
+    const textStyle={fontSize: mobile ? 18 : 20,fontFamily: "'Work Sans', sans-serif",}
     const data = {
         rows: [
             {
@@ -59,8 +59,9 @@ function FAQ() {
 
   return (
     <Stack alignItems="center" spacing={2} p={6}>
-        <Typography variant="h2" align="center" gutterBottom> Frequently Asked Questions </Typography>
-        <Box width="80%" pb="10vh">
+        {mobile ? <Typography variant="h4" align="center" gutterBottom> Frequently Asked Questions </Typography> :
+        <Typography variant="h2" align="center" gutterBottom> Frequently Asked Questions </Typography> }
+        <Box width="80%" pb="10vh" pt={2}>
             <Faq
             data={data}
             styles={styles}

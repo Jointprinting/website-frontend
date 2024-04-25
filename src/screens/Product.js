@@ -1,9 +1,8 @@
 import  {React, useEffect, useState} from 'react';
-import { Box, Stack, Typography, Chip, Button, Rating, Tooltip } from '@mui/material';
+import { Box, Stack, Typography, Chip, Button, Rating, Tooltip, useMediaQuery } from '@mui/material';
 
 function Product() {
-    
-
+    const mobile = useMediaQuery("(max-width: 800px)");
     const productVendor = "Vendor";
     const productStyle = "12345";
     const productRating = 5;
@@ -63,25 +62,29 @@ function Product() {
 
   return (
     <Box px="5vw" py="7vh" bgcolor="#f5f5f5">
-        <Stack direction="row" spacing={'4vw'} alignItems="top">
-            {/* Stack for tiny product images */}
-            <Stack spacing={2}>
-                <img src={productFrontImages[productIndex]} alt="product" onClick={() => setFrontSelected(true)}
-                    style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? '1px green solid' : 'none'}} 
-                />
-                <img src={productBackImages[productIndex]} alt="product" onClick={() => setFrontSelected(false)}
-                    style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? 'none' : '1px green solid',}} 
-                />
+        <Stack direction={mobile ? "column" : "row"} spacing={'4vw'} alignItems={mobile ? "center" : "top"}>
+            {/* Stack for clothing images */}
+            <Stack direction={"row"} alignItems="top" spacing={'4vw'}>
+                {/* Stack for tiny product images */}
+                <Stack spacing={2}>
+                    <img src={productFrontImages[productIndex]} alt="product" onClick={() => setFrontSelected(true)}
+                        style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? '1px green solid' : 'none'}} 
+                    />
+                    <img src={productBackImages[productIndex]} alt="product" onClick={() => setFrontSelected(false)}
+                        style={{width: '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? 'none' : '1px green solid',}} 
+                    />
+                </Stack>
+
+                {/* Stack for large product images */}
+                <Stack spacing={4}>
+                    <img src={frontSelected ? productFrontImages[productIndex] : productBackImages[productIndex]} alt="product" style={{width: '33vw', height: 'auto', boxShadow: '0 0 10px 0px lightgray'}} />
+                    {/*<img src={productBackImages[0]} alt="product" style={{width: '33vw', height: 'auto'}} />*/}
+                </Stack>
             </Stack>
 
-            {/* Stack for large product images */}
-            <Stack spacing={4}>
-                <img src={frontSelected ? productFrontImages[productIndex] : productBackImages[productIndex]} alt="product" style={{width: '33vw', height: 'auto', boxShadow: '0 0 10px 0px lightgray'}} />
-                {/*<img src={productBackImages[0]} alt="product" style={{width: '33vw', height: 'auto'}} />*/}
-            </Stack>
 
             {/* Stack for product details */}
-            <Stack spacing={2.5} pr='5vw'>
+            <Stack spacing={2.5} pr='5vw' alignItems={mobile ? "center" : 'start'}>
                 {/* Stack for product vendor, style, and rating */}
                 <Stack spacing={1.5} direction="row" alignItems="center">
                     <Typography color='black'>{productVendor}</Typography>
@@ -109,7 +112,7 @@ function Product() {
                     </Stack>
                 </Stack>
 
-                <Typography color='gray'>
+                <Typography color='gray' textAlign={mobile ? 'center' : 'none'} fontSize={mobile ? 12 : 16}>
                     *The price will depend on your design and your order size. Customize the product below for a more accurate estimate.*
                 </Typography>
 
@@ -144,11 +147,13 @@ function Product() {
                 </Stack>
 
                 <Stack spacing={1}>
-                    <Button variant="contained" size="large" sx={{width: '50%'}}> Customize </Button>
+                    <Button variant="contained" size="large" sx={{width: '100%'}}> Customize </Button>
                     <Typography fontSize={12}>Free mockup by <b>4 AM.</b></Typography>
                 </Stack>
 
-                <Typography color='charcoal'>{productDescription}</Typography>
+                <Typography color='charcoal' textAlign={mobile ? 'center' : 'none'} fontSize={mobile ? 14 : 16}>
+                    {productDescription}
+                </Typography>
 
             </Stack>
         </Stack>

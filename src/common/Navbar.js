@@ -15,7 +15,7 @@ import Toolbar from '../modules/components/Toolbar';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
 function Navbar() {
-  const mobile = useMediaQuery("(max-width: 920px)");
+  const mobile = useMediaQuery("(max-width: 800px)");
 
   const DrawerComponent = () => {
     const [openDrawer, setOpenDrawer] = React.useState(false);
@@ -100,7 +100,10 @@ function Navbar() {
         {/*<Box mt={1} sx={{":hover": {cursor: 'pointer'}}}  component={ReactRouterLink} to="/"><img src={logo} alt="logo" width="40px"/></Box>
         <Box sx={{flexGrow: 1}}/>*/}
         <Box sx={{flexGrow: 1}}/>
-        <Typography variant="h6" fontSize={18} align="center" sx={{color: 'white', ml: '46px'}}>Joint Printing</Typography>
+        <Typography variant="h6" fontSize={18} align="center" component={ReactRouterLink} to="/" 
+          sx={{color: 'white', ml: '46px', textDecoration: 'none', }}>
+            Joint Printing
+        </Typography>
         <Box sx={{flexGrow: 1}}/>
         <DrawerComponent/>
     </Stack>
