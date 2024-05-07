@@ -1,8 +1,11 @@
 import  {React, useEffect, useState} from 'react';
 import { Box, Stack, Typography, Chip, Button, Rating, Tooltip, useMediaQuery } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 
 function Product() {
     const mobile = useMediaQuery("(max-width: 800px)");
+    const navigate = useNavigate();
+
     const productVendor = "Vendor";
     const productStyle = "12345";
     const productRating = 5;
@@ -147,7 +150,7 @@ function Product() {
                 </Stack>
 
                 <Stack spacing={1}>
-                    <Button variant="contained" size="large" sx={{width: '100%'}}> Customize </Button>
+                    <Button variant="contained" size="large" sx={{width: '100%'}} onClick={()=>navigate('/customize')}> Customize </Button>
                     <Typography fontSize={12}>Free mockup by <b>4 AM.</b></Typography>
                 </Stack>
 

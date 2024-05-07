@@ -13,6 +13,7 @@ import { Link as ReactRouterLink } from 'react-router-dom';
 import AppBar from '../modules/components/AppBar';
 import Toolbar from '../modules/components/Toolbar';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import boxLogo from '../modules/images/justboxwhite.png';
 
 function Navbar() {
   const mobile = useMediaQuery("(max-width: 800px)");
@@ -62,8 +63,9 @@ function Navbar() {
       <AppBar position="fixed">
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Box sx={{ flex: 1 }} component={ReactRouterLink} to="/"/>
+            <img src={boxLogo} alt="logo" width="50px" height="auto"/>
             <Typography component={ReactRouterLink} to="/" 
-                sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
+                sx={{ml: 2, color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
             >
                 JOINT PRINTING
             </Typography>
@@ -100,12 +102,17 @@ function Navbar() {
         {/*<Box mt={1} sx={{":hover": {cursor: 'pointer'}}}  component={ReactRouterLink} to="/"><img src={logo} alt="logo" width="40px"/></Box>
         <Box sx={{flexGrow: 1}}/>*/}
         <Box sx={{flexGrow: 1}}/>
-        <Typography variant="h6" fontSize={18} align="center" component={ReactRouterLink} to="/" 
-          sx={{color: 'white', ml: '46px', textDecoration: 'none', }}>
-            Joint Printing
-        </Typography>
+        <Stack direction="row" to="/" alignItems="center" ml='46px'>
+            <img src={boxLogo} alt="logo" width="36px" height="auto" textDecoration='none'/>
+            <Typography variant="h6" fontSize={18} align="center" component={ReactRouterLink} to="/" 
+            sx={{color: 'white', textDecoration: 'none', ml:1 }}>
+                Joint Printing
+            </Typography>
+        </Stack>
         <Box sx={{flexGrow: 1}}/>
+        <Box flex={1} justifyContent="right">
         <DrawerComponent/>
+        </Box>
     </Stack>
   );
 }

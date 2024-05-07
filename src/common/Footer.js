@@ -6,6 +6,7 @@ import Container from '@mui/material/Container';
 import Typography from '../modules/components/Typography';
 //import TextField from '../modules/components/TextField';
 import { SocialIcon } from 'react-social-icons'
+import jpstacked from '../modules/images/jpstacked.webp'
 
 function Copyright() {
   return (
@@ -79,6 +80,11 @@ export default function Footer() {
               </Box>
             </Box>
           </Grid>
+          <Grid item xs={6} sm={4} md={2}>
+          <img src={jpstacked} alt="logo" width="150px" height="auto"/>
+
+          </Grid>
+
         </Grid>
       </Container>
     </Typography>
