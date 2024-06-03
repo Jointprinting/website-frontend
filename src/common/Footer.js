@@ -4,6 +4,7 @@ import Grid from '@mui/material/Grid';
 import Link from '@mui/material/Link';
 import Container from '@mui/material/Container';
 import Typography from '../modules/components/Typography';
+import Stack from '@mui/material/Stack';
 //import TextField from '../modules/components/TextField';
 import { SocialIcon } from 'react-social-icons'
 import jpstacked from '../modules/images/jpstacked.webp'
@@ -25,30 +26,25 @@ export default function Footer() {
       component="footer"
       sx={{ display: 'flex', bgcolor: 'secondary.light' }}
     >
-      <Container sx={{ my: 8, display: 'flex' }}>
-        <Grid container spacing={5}>
-          <Grid item xs={6} sm={4} md={3}>
-            <Grid
-              container
-              direction="column"
-              justifyContent="flex-end"
-              spacing={2}
-              sx={{ height: 120 }}
-            >
-              <Grid item sx={{ display: 'flex' }}>
-                <Box width='48px' mr={1} >
-                  <SocialIcon url="https://www.instagram.com" bgColor="black" target="_blank"/>
-                </Box>
-                <Box width='48px'>
-                  <SocialIcon url="https://www.tiktok.com" target="_blank"/>
-                </Box>
-              </Grid>
-              <Grid item>
-                <Copyright />
-              </Grid>
-            </Grid>
-          </Grid>
-          <Grid item xs={6} sm={4} md={2}>
+      <Stack direction="row" spacing='10vw' width="100%" py={'6vh'}>
+          <Box flex={1} />
+          <Stack spacing='2vh'>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Box width='48px' mr={1} >
+                <SocialIcon url="https://www.instagram.com" bgColor="black" target="_blank"/>
+              </Box>
+              <Box width='48px'>
+                <SocialIcon url="https://www.tiktok.com" target="_blank"/>
+              </Box>
+            </Stack>
+            <Stack direction="row" alignItems="center" spacing={1} width="170px">
+              <Typography>© </Typography>
+              <Link color="inherit" href="/">
+                Joint Printing LLC
+              </Link>
+            </Stack>
+          </Stack>
+          <Stack>
             <Typography variant="h6" marked="left" gutterBottom>
               Company
             </Typography>
@@ -66,8 +62,8 @@ export default function Footer() {
                 <Link href="/faq">FAQ</Link>
               </Box>
             </Box>
-          </Grid>
-          <Grid item xs={6} sm={4} md={2}>
+          </Stack>
+          <Stack item xs={6} sm={4} md={2}>
             <Typography variant="h6" marked="left" gutterBottom>
               Legal
             </Typography>
@@ -79,14 +75,13 @@ export default function Footer() {
                 <Link href="/privacy">Privacy</Link>
               </Box>
             </Box>
-          </Grid>
-          <Grid item xs={6} sm={4} md={2}>
-          <img src={jpstacked} alt="logo" width="150px" height="auto"/>
-
-          </Grid>
-
-        </Grid>
-      </Container>
+          </Stack>
+          <Stack direction="row" width="100%">
+            <Box flex={1}/>
+            <img src={jpstacked} alt="logo" width="150px" height="auto"/>
+          </Stack>
+          <Box flex={1} />
+        </Stack>
     </Typography>
   );
 }

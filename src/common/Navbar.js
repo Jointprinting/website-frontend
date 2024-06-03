@@ -13,7 +13,7 @@ import { Link as ReactRouterLink } from 'react-router-dom';
 import AppBar from '../modules/components/AppBar';
 import Toolbar from '../modules/components/Toolbar';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import boxLogo from '../modules/images/justboxwhite.png';
+import boxLogo from '../modules/images/logo_white.webp';
 
 function Navbar() {
   const mobile = useMediaQuery("(max-width: 800px)");
@@ -63,9 +63,9 @@ function Navbar() {
       <AppBar position="fixed">
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Box sx={{ flex: 1 }} component={ReactRouterLink} to="/"/>
-            <img src={boxLogo} alt="logo" width="50px" height="auto"/>
+            <img src={boxLogo} alt="logo" width="60px" height="auto"/>
             <Typography component={ReactRouterLink} to="/" 
-                sx={{ml: 2, color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
+                sx={{ml: 1, color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
             >
                 JOINT PRINTING
             </Typography>
