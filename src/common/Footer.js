@@ -1,32 +1,21 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import Link from '@mui/material/Link';
-import Container from '@mui/material/Container';
 import Typography from '../modules/components/Typography';
 import Stack from '@mui/material/Stack';
 //import TextField from '../modules/components/TextField';
 import { SocialIcon } from 'react-social-icons'
+import { useMediaQuery } from '@mui/material';
 import jpstacked from '../modules/images/jpstacked.webp'
 
-function Copyright() {
-  return (
-    <React.Fragment>
-      {'© '}
-      <Link color="inherit" href="/">
-        Joint Printing LLC
-      </Link>
-    </React.Fragment>
-  );
-}
-
 export default function Footer() {
+  const mobile = useMediaQuery('(max-width:800px)');
   return (
     <Typography
       component="footer"
       sx={{ display: 'flex', bgcolor: 'secondary.light' }}
     >
-      <Stack direction="row" spacing='10vw' width="100%" py={'6vh'}>
+      <Stack direction={mobile ? "column" : "row"} spacing='10vw' width="100%" py={'6vh'}>
           <Box flex={1} />
           <Stack spacing='2vh'>
             <Stack direction="row" alignItems="center" spacing={1}>
@@ -78,7 +67,8 @@ export default function Footer() {
           </Stack>
           <Stack direction="row" width="100%">
             <Box flex={1}/>
-            <img src={jpstacked} alt="logo" width="150px" height="auto"/>
+            <img src={jpstacked} alt="logo" width={mobile ? "100px" : "150px"} height="auto"/>
+            {mobile && <Box flex={1}/> }
           </Stack>
           <Box flex={1} />
         </Stack>
