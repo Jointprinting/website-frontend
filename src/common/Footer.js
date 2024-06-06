@@ -9,13 +9,13 @@ import { useMediaQuery } from '@mui/material';
 import jpstacked from '../modules/images/jpstacked.webp'
 
 export default function Footer() {
-  const mobile = useMediaQuery('(max-width:800px)');
+  const mobile = useMediaQuery('(max-width:700px)');
   return (
     <Typography
       component="footer"
       sx={{ display: 'flex', bgcolor: 'secondary.light' }}
     >
-      <Stack direction={mobile ? "column" : "row"} spacing='10vw' width="100%" py={'6vh'}>
+      <Stack direction={mobile ? "column" : "row"} spacing='10vw' width="100%" py={'6vh'} alignItems={mobile ? "center" : "start"}>
           <Box flex={1} />
           <Stack spacing='2vh'>
             <Stack direction="row" alignItems="center" spacing={1}>
