@@ -1,18 +1,18 @@
-const axios = require('axios');
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const app = express();
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080; //changed port bc 5000 was already in use
 
 app.use(cors());
 app.use(express.json());
 
 const mongoose = require('mongoose');
-const MONGODB_URI_ = "mongodb+srv://milobarkow:ZigcHvPpoJfzNWGD@nate-site-test.tncmmsb.mongodb.net/?retryWrites=true&w=majority&appName=nate-site-test";
+//const MONGODB_URI_ = "mongodb+srv://milobarkow:ZigcHvPpoJfzNWGD@nate-site-test.tncmmsb.mongodb.net/?retryWrites=true&w=majority&appName=nate-site-test";
 const MONGODB_URI = "mongodb+srv://admin:password@nate-site-test.tncmmsb.mongodb.net/?retryWrites=true&w=majority&appName=nate-site-test";
 
-mongoose.connect(MONGODB_URI);
+mongoose.connect(process.env.MONGO_URI);
 
 const db = mongoose.connection;
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
@@ -21,7 +21,6 @@ db.once('open', () => {
 });
 
 const productRoutes = require('./routes/productRoutes');
-const testRoutes = require('./routes/testRoutes');
 app.use('/api/products', productRoutes);
 
 app.listen(PORT, () => {
