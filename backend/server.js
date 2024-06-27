@@ -9,8 +9,6 @@ app.use(cors());
 app.use(express.json());
 
 const mongoose = require('mongoose');
-//const MONGODB_URI_ = "mongodb+srv://milobarkow:ZigcHvPpoJfzNWGD@nate-site-test.tncmmsb.mongodb.net/?retryWrites=true&w=majority&appName=nate-site-test";
-const MONGODB_URI = "mongodb+srv://admin:password@nate-site-test.tncmmsb.mongodb.net/?retryWrites=true&w=majority&appName=nate-site-test";
 
 mongoose.connect(process.env.MONGO_URI);
 
