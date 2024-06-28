@@ -19,7 +19,9 @@ db.once('open', () => {
 });
 
 const productRoutes = require('./routes/productRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 app.use('/api/products', productRoutes);
+app.use('/api/email', emailRoutes);
 
 app.listen(PORT, () => {
   console.log(`Mongoose server is running on port ${PORT}`);

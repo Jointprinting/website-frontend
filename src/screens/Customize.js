@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Box, Stack, TextField, RadioGroup, Button, useMediaQuery, FormControl, FormControlLabel, Radio } from '@mui/material';
+import { Box, Stack, TextField, RadioGroup, Button, useMediaQuery, FormControlLabel, Radio } from '@mui/material';
 import Typography from '../modules/components/Typography';
 
 function Contact() {
