@@ -45,6 +45,13 @@ function Contact() {
         }
     }
     , [success]);
+
+    const handleKeyPress = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    }
+    
   return (
     <Box bgcolor="#f5f5f5" pt={6} pb={8} display="flex" justifyContent="center">
         <Box 
@@ -61,7 +68,7 @@ function Contact() {
             <Typography color="inherit" align="center" variant={mobile ? "h7" : "h5"} fontWeight={200} mb={1}>
                 ✉️ Email: <Typography component={Link} fontSize={mobile ? 16 : 18} href="mailto:nate@jointprinting.com">nate@jointprinting.com</Typography>
             </Typography>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} onKeyPress={handleKeyPress}>
                 <Stack display="flex" justifyContent="center" alignItems="center" width={mobile ? '92%' : '40vw'} spacing={2} mt={mobile ? 4 : 6}>
                     <Stack direction="row" width="100%" spacing={2} alignItems="start" >
                         <Stack spacing={1.73}>

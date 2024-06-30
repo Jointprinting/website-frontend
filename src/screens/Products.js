@@ -1,8 +1,11 @@
-import  {React, useState} from 'react';
+import  {React, useState, useEffect} from 'react';
 import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, Menu, Button, MenuItem, useMediaQuery } from '@mui/material';
 //import Grid from '@mui/material/Unstable_Grid2';
 //import ImageGrid from '../common/ImageGrid';
 import { useNavigate } from 'react-router-dom';
+//import config.json from src root
+import config from '../config.json';
+//get backendUrl from config.json
 
 function Product() {
     const navigate = useNavigate();
@@ -28,24 +31,39 @@ function Product() {
         setAnchorElType(null);
     };
     const imagesPerPage = 12; // Adjust based on your requirement
-    const imageUrls = [
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_F_cdcaf2f4-9cb4-42fc-9a49-47b07c97df5c.jpg?v=1711658788',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_F_8295c8ff-499d-4372-aa51-5765a45d7eeb.jpg?v=1711658790',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_F_79d746ba-d33c-4074-8a26-3941f2eb0e6d.jpg?v=1711658788',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_F.jpg?v=1711658787',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_F.jpg?v=1711658794',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_F_cdcaf2f4-9cb4-42fc-9a49-47b07c97df5c.jpg?v=1711658788',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_F_8295c8ff-499d-4372-aa51-5765a45d7eeb.jpg?v=1711658790',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_F_79d746ba-d33c-4074-8a26-3941f2eb0e6d.jpg?v=1711658788',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_F.jpg?v=1711658787',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_F.jpg?v=1711658794',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_F_cdcaf2f4-9cb4-42fc-9a49-47b07c97df5c.jpg?v=1711658788',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_F_8295c8ff-499d-4372-aa51-5765a45d7eeb.jpg?v=1711658790',
-    ];
 
     const handleChange = (event, value) => {
         setPage(value);
     };
+
+    //useEffect to load products from db
+    const [products, setProducts] = useState([]);
+    useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                const response = await fetch(config.backendUrl+'/api/products');
+                const data = await response.json();
+                setProducts(data);
+                console.log(data)
+            } catch (err) {
+                console.error(err);
+            }
+        }
+        fetchProducts();
+    }, []);
+
+    const getTagCode = (tag) => {
+        switch (tag) {
+            case 'Best Seller':
+                return 'success';
+            case 'New Arrival':
+                return 'error';
+            case 'Our Favorite':
+                return 'warning';
+            default:
+                return 'info';
+        }
+    }
 
     //const paginatedImages = imageUrls.slice((page - 1) * imagesPerPage, page * imagesPerPage);
     //useMediaQuery to adjust cols based on screen size (i.e. mobile should be 1 column, tablet should be 2 columns, desktop should be 4 columns)
@@ -107,19 +125,19 @@ function Product() {
             <Divider />
             <Box width='100%' display='flex' justifyContent='center'  sx={{ flexGrow: 1 }} mt={3}>
                 <ImageList cols={columns} rowHeight={300} gap={30}>
-                {imageUrls.map((item, index) => (
+                {products.map((item, index) => (
                     <Stack p={1} spacing={1} alignItems="center" >
-                        <Box onClick={() => navigate('/product/')}
+                        <Box onClick={() => navigate('/product?styleCode='+item.style)}
                             sx={{position:"relative", cursor:'pointer', ':hover': {boxShadow: '0 0 8px 1px lightgray' }}}
                         >
                             <img
-                                src={item}
+                                src={item.productFrontImages[0]}
                                 alt={'product_'+index}
                                 loading="lazy"
                                 height='auto'
                                 width='250px'
                             />
-                            <Chip label={'Best Seller'} color={'success'} variant='contained'
+                            <Chip label={item.tag} color={getTagCode(item.tag)} variant='contained'
                             sx={{
                                 position: 'absolute', /* Absolute position to place it on bottom left */
                                 bottom: 40, /* Align bottom edge with bottom of the parent Box */
@@ -127,17 +145,16 @@ function Product() {
                                 transform: 'translateY(100%)' /* Move it down 100% of its height to overlap bottom edge */
                             }}
                             />
-                            {/*Once db is working it should be item.productTag*/}
                         </Box>
-                        <Typography sx={{mt:2}}>Vendor</Typography>
-                        <Typography fontWeight='bold'>Product Name</Typography>
-                        <Rating name="read-only" value={5} readOnly size="small" /> {/*Once db is working it should be item.productRating*/}
+                        <Typography sx={{mt:2}}>{item.vendor}</Typography>
+                        <Typography fontWeight='bold'>{item.name}</Typography>
+                        <Rating name="read-only" value={item.rating} readOnly size="small" /> {/*Once db is working it should be item.productRating*/}
                     </Stack>
                 ))}
                 </ImageList>
             </Box>
             <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
-                <Pagination count={Math.ceil(imageUrls.length / imagesPerPage)} page={page} onChange={handleChange} />
+                <Pagination count={Math.ceil(products.length / imagesPerPage)} page={page} onChange={handleChange} />
             </Stack>
         </Stack>
     );

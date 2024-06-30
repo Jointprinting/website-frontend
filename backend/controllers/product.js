@@ -11,8 +11,29 @@ exports.getProducts = async (req, res, next) => {
     }
 }
 
+exports.getProductById = async (req, res, next) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        res.status(200).json(product);
+    } catch (err) {
+        res.status(404).json({ message: err.message });
+        console.error(err);
+    }
+}
+
+exports.getProductByStyleCode = async (req, res, next) => {
+    try {
+        const product = await Product.findOne({ style: req.params.style });
+        res.status(200).json(product);
+    } catch (err) {
+        res.status(404).json({ message: err.message });
+        console.error(err);
+    }
+}
+
 //create a new product
 exports.createProduct = async (req, res, next) => {
+    console.log('adding product')
     try {
         const newProduct = new Product({
             name: req.body.name,
@@ -25,8 +46,8 @@ exports.createProduct = async (req, res, next) => {
             priceRangeTop: req.body.priceRangeTop,
             colors: req.body.colors,
             colorCodes: req.body.colorCodes,
-            productImagesFront: req.body.productImagesFront,
-            productImagesBack: req.body.productImagesBack,
+            productFrontImages: req.body.productFrontImages,
+            productBackImages: req.body.productBackImages,
             rating: req.body.rating,
             tag: req.body.tag,
             category: req.body.category,

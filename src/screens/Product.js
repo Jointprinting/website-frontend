@@ -1,52 +1,85 @@
 import  {React, useEffect, useState} from 'react';
 import { Box, Stack, Typography, Chip, Button, Rating, Tooltip, useMediaQuery } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import config from '../config.json';
 
 function Product() {
     const mobile = useMediaQuery("(max-width: 800px)");
     const navigate = useNavigate();
-
-    const productVendor = "Vendor";
-    const productStyle = "12345";
-    const productRating = 5;
-    //const productRatings = new Array(productRating).fill('https://fp.freshprints.com/assets/icons/yellow_star.svg');
-    const productTitle = "Garment Dyed Short Sleeve T-Shirt";
-    const productPriceRangeBttom = "10";
-    const productPriceRangeTop = "20";
-    const productSizeRangeBttom = "S";
-    const productSizeRangeTop = "XXL";
-    const productTag = "Best Seller";
-    let productTagColor = "warning";
-    if (productTag === "Best Seller") {
-        productTagColor = "success";
-    }
-    const productColorOptions = ["White", "Black", "Red", "Blue", "Gray"];
-    const productColorCodes = ["#FFFFFF", "#000000", "#FF0000", "#0000FF", "#808080"];
-    //const productColor = "White";
-    //const productColorCode = "#FFFFFF";
-
-    const productFrontImages = [
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_F_cdcaf2f4-9cb4-42fc-9a49-47b07c97df5c.jpg?v=1711658788/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_F_8295c8ff-499d-4372-aa51-5765a45d7eeb.jpg?v=1711658790/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_F_79d746ba-d33c-4074-8a26-3941f2eb0e6d.jpg?v=1711658788/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_F.jpg?v=1711658787/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_F.jpg?v=1711658794/func=resize&h=640'
-    ]
-    const productBackImages = [
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/White_B_44bca3d5-2126-41d3-9f85-7d2782fd2dd4.jpg?v=1711658792/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Black_B_caf98d4f-5784-4e34-9fe3-ccbe3ab0dfb6.jpg?v=1711658788/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Crimson_B_25913a2e-24dc-4ade-9300-c299d2550ec7.jpg?v=1711658787/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/DelicateBlue_B.jpg?v=1711658790/func=resize&h=640',
-        'https://alofmzptzp.cloudimg.io/v7/https://cdn.shopify.com/s/files/1/1544/1909/files/Concrete_B.jpg?v=1711658791/func=resize&h=640'
-    ]
-
-    const productDescription = "This is a description of the product. It is a very good product. You should buy it.";
-
+    const [searchParams] = useSearchParams();
+    const id = searchParams.get("styleCode");
+    const [productVendor, setProductVendor] = useState("");
+    const [productStyle, setProductStyle] = useState("");
+    const [productRating, setProductRating] = useState(5);
+    const [productTitle, setProductTitle] = useState("");
+    const [productPriceRangeBottom, setProductPriceRangeBottom] = useState("10");
+    const [productPriceRangeTop, setProductPriceRangeTop] = useState("20");
+    const [productSizeRangeBottom, setProductSizeRangeBottom] = useState("S");
+    const [productSizeRangeTop, setProductSizeRangeTop] = useState("XXL");
+    const [productTag, setProductTag] = useState("Best Seller");
+    const [productTagColor, setProductTagColor] = useState("warning");
+    const [productColorOptions, setProductColorOptions] = useState([]);
+    const [productColorCodes, setProductColorCodes] = useState([]);
+    const [productFrontImages, setProductFrontImages] = useState([]);
+    const [productBackImages, setProductBackImages] = useState([]);
+    const [productDescription, setProductDescription] = useState("");
+        
     const [frontSelected, setFrontSelected] = useState(true);
-    const [productColor, setProductColor] = useState("White");
-    const [productColorCode, setProductColorCode] = useState("#FFFFFF");
+    const [productColor, setProductColor] = useState("");
+    const [productColorCode, setProductColorCode] = useState("");
     const [selectedCircle, setSelectedCircle] = useState({});
     const [productIndex, setProductIndex] = useState(0);
+
+    const getTagCode = (tag) => {
+        switch (tag) {
+            case 'Best Seller':
+                return 'success';
+            case 'New Arrival':
+                return 'error';
+            case 'Our Favorite':
+                return 'warning';
+            default:
+                return 'info';
+        }
+    }
+
+    //function to capitalize the first letter of a string
+    const capitalize = (str) => {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    //useEffect to get product by id
+    useEffect(() => {
+        const fetchProduct = async () => {
+            try {
+                console.log('id', id)
+                const response = await fetch(config.backendUrl+'/api/products/style/'+id);
+                const data = await response.json();
+                setProductVendor(data.vendor);
+                setProductStyle(data.style);
+                setProductRating(data.rating);
+                setProductTitle(data.name);
+                setProductPriceRangeBottom(data.priceRangeBottom);
+                setProductPriceRangeTop(data.priceRangeTop);
+                setProductSizeRangeBottom(data.sizeRangeBottom);
+                setProductSizeRangeTop(data.sizeRangeTop);
+                setProductTag(data.tag);
+                setProductTagColor(getTagCode(data.tag));
+                const colors = data.colors.map((color) => capitalize(color));
+                setProductColorOptions(colors);
+                setProductColorCodes(data.colorCodes);
+                setProductFrontImages(data.productFrontImages);
+                setProductBackImages(data.productBackImages);
+                setProductDescription(data.description);
+                setProductColor(colors[0]);
+                setProductColorCode(data.colorCodes[0]);
+                console.log(data);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+        fetchProduct();
+    }, [id]);
 
     //useEffect to change the color of the circle when the productColor changes
     useEffect(() => {
@@ -104,13 +137,13 @@ function Product() {
                     <Stack spacing={0.5}>
                         <Typography color='black'>Typically</Typography>
                         <Typography fontSize={24} color='black'>
-                            ${productPriceRangeBttom} - ${productPriceRangeTop}
+                            ${productPriceRangeBottom} - ${productPriceRangeTop}
                         </Typography>
                     </Stack>
                     <Stack spacing={0.5}>
                         <Typography color='black'>Comes in</Typography>
                         <Typography fontSize={24} color='black'>
-                            {productSizeRangeBttom} - {productSizeRangeTop}
+                            {productSizeRangeBottom} - {productSizeRangeTop}
                         </Typography>
                     </Stack>
                 </Stack>
