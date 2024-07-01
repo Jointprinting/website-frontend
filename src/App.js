@@ -11,6 +11,7 @@ import Products from './screens/Products';
 import Footer from './common/Footer';
 import FAQ from './screens/FAQ';
 import Customize from './screens/Customize';
+import Admin from './screens/Admin';
 
 function App() {
 
@@ -29,6 +30,7 @@ function App() {
           <Route exact path="/products" element={<Products />} />
           <Route exact path="/faq" element={<FAQ />} />
           <Route exact path="/customize" element={<Customize />} />
+          <Route exact path="/admin" element={<Admin />} />
         </Routes>
         <Footer/>
       </ThemeProvider>

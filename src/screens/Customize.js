@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Box, Stack, TextField, RadioGroup, Button, useMediaQuery, FormControl, FormControlLabel, Radio } from '@mui/material';
+import { Box, Stack, TextField, RadioGroup, Button, useMediaQuery, FormControlLabel, Radio } from '@mui/material';
 import Typography from '../modules/components/Typography';
 
 function Contact() {
@@ -19,11 +19,15 @@ function Contact() {
             </Typography>
             <Stack display="flex" justifyContent="center" alignItems="center" width={mobile ? '92%' : '40vw'} spacing={2} mt={mobile ? 2 : 4}>
                 <Box width="100%">
-                    <Typography variant="h6">Email</Typography>
+                    <Typography variant="h6">Name</Typography>
                     <TextField id="outlined-basic" variant="outlined" fullWidth={true} size={mobile ? "small" : "medium"} required/>
                 </Box>
                 <Box width="100%">
-                    <Typography variant="h6">Name</Typography>
+                    <Typography variant="h6">Business Name</Typography>
+                    <TextField id="outlined-basic" variant="outlined" fullWidth={true} size={mobile ? "small" : "medium"} required/>
+                </Box>
+                <Box width="100%">
+                    <Typography variant="h6">Email</Typography>
                     <TextField id="outlined-basic" variant="outlined" fullWidth={true} size={mobile ? "small" : "medium"} required/>
                 </Box>
                 <Box width="100%">
@@ -37,21 +41,14 @@ function Contact() {
                         defaultValue="female"
                         name="radio-buttons-group"
                     >
-                        <FormControlLabel value="1-11" control={<Radio />} label="1-11" />
-                        <FormControlLabel value="12-23" control={<Radio />} label="12-23" />
-                        <FormControlLabel value="24-53" control={<Radio />} label="24-53" />
-                        <FormControlLabel value="1-11" control={<Radio />} label="36-47" />
-                        <FormControlLabel value="12-23" control={<Radio />} label="48-59" />
-                        <FormControlLabel value="24-53" control={<Radio />} label="60-119" />
-                        <FormControlLabel value="1-11" control={<Radio />} label="120+" />
+                        <FormControlLabel value="12-47" control={<Radio />} label="12-47" />
+                        <FormControlLabel value="48-71" control={<Radio />} label="48-71" />
+                        <FormControlLabel value="72-120" control={<Radio />} label="72-120" />
+                        <FormControlLabel value="120+" control={<Radio />} label="120+" />
                     </RadioGroup>
                 </Box>
                 <Box width="100%">
                     <Typography variant="h6">Title</Typography>
-                    <TextField id="outlined-basic" variant="outlined" fullWidth={true} size={mobile ? "small" : "medium"} required/>
-                </Box>
-                <Box width="100%">
-                    <Typography variant="h6">Business</Typography>
                     <TextField id="outlined-basic" variant="outlined" fullWidth={true} size={mobile ? "small" : "medium"} required/>
                 </Box>
                 <Box width="100%">
