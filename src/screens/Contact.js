@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Box, Stack, TextField, Link, Button, useMediaQuery, Collapse, Alert } from '@mui/material';
 import Typography from '../modules/components/Typography';
 import axios from 'axios';
+import config from '../config.json';
 
 function Contact() {
     const mobile = useMediaQuery("(max-width: 800px)");
@@ -23,7 +24,7 @@ function Contact() {
                 alert("Please enter a valid phone number in the form of 123-456-7890");
                 return;
             }
-            await axios.post('http://localhost:8080/api/email/send-contact', {name, email, phone, message});
+            await axios.post(config.backendUrl+'/api/email/send-contact', {name, email, phone, message});
             setSuccess(true);
             setName('');
             setEmail('');
