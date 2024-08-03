@@ -72,7 +72,7 @@ function Product() {
                 setProductDescription(data.description);
                 setProductColor(colors[0]);
                 setProductColorCode(data.colorCodes[0]);
-                console.log(data);
+                //console.log(data);
             } catch (err) {
                 console.error(err);
             }

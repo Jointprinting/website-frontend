@@ -35,6 +35,7 @@ function Customize() {
             formData.append('quantity', quantity);
             formData.append('title', title);
             formData.append('instructions', instructions);
+            formData.append('styleCode', id);
             if (logo) {
                 formData.append('logo', logo);
             }
@@ -44,6 +45,7 @@ function Customize() {
                     'Content-Type': 'multipart/form-data'
                 }
             });
+            
             setSuccess(true);
             setName('');
             setBusinessName('');
@@ -53,6 +55,7 @@ function Customize() {
             setTitle('');
             setInstructions('');
             setLogo(null);
+            alert("Your mockup request has been sent. We will email you a design in under 24 hours!");
         } catch (err) {
             console.error(err);
             alert("There was an error sending your mockup request. Please try again later.");
@@ -119,7 +122,7 @@ function Customize() {
                     </Box>
                     <Box width="100%">
                         <Typography variant="h6">Design Instructions</Typography>
-                        <TextField value={instructions} onChange={(e)=>setInstructions(e.target.value)}
+                        <TextField value={instructions} onChange={(e)=>setInstructions(e.target.value)} required
                         id="outlined-basic" placeholder="Place logo here..." variant="outlined" fullWidth={true} multiline={true} minRows={5}/>
                     </Box>
                     <Button variant="contained" color="primary" fullWidth size={mobile ? "small" : "large"} type="submit">Submit</Button>
