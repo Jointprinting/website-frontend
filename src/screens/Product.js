@@ -52,7 +52,6 @@ function Product() {
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                console.log('id', id)
                 const response = await fetch(config.backendUrl+'/api/products/style/'+id);
                 const data = await response.json();
                 setProductVendor(data.vendor);
@@ -183,7 +182,7 @@ function Product() {
                 </Stack>
 
                 <Stack spacing={1}>
-                    <Button variant="contained" size="large" sx={{width: '100%'}} onClick={()=>navigate('/customize')}> Customize </Button>
+                    <Button variant="contained" size="large" sx={{width: '100%'}} onClick={()=>navigate(`/customize?styleCode=${id}`)}> Customize </Button>
                     <Typography fontSize={12}>Free mockup by <b>4 AM.</b></Typography>
                 </Stack>
 

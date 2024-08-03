@@ -176,21 +176,31 @@ function Admin() {
                     <Stack direction="row" width="100%" spacing={2} alignItems="center">
                         <FormControl>
                             <Select value={sizeRangeBottom} onChange={handleSizeRangeBottomChange}>
+                                <MenuItem value={'2XS'}>2XS</MenuItem>
+                                <MenuItem value={'XS'}>XS</MenuItem>
                                 <MenuItem value={'S'}>S</MenuItem>
                                 <MenuItem value={'M'}>M</MenuItem>
                                 <MenuItem value={'L'}>L</MenuItem>
                                 <MenuItem value={'XL'}>XL</MenuItem>
-                                <MenuItem value={'XLL'}>XLL</MenuItem>
+                                <MenuItem value={'2XL'}>2XL</MenuItem>
+                                <MenuItem value={'3XL'}>3XL</MenuItem>
+                                <MenuItem value={'4XL'}>4XL</MenuItem>
+                                <MenuItem value={'5XL'}>5XL</MenuItem>
                             </Select>
                         </FormControl>
                         <Typography variant="h6">-</Typography>
                         <FormControl>
                             <Select value={sizeRangeTop} onChange={handleSizeRangeTopChange}>
+                                <MenuItem value={'2XS'}>2XS</MenuItem>
+                                <MenuItem value={'XS'}>XS</MenuItem>
                                 <MenuItem value={'S'}>S</MenuItem>
                                 <MenuItem value={'M'}>M</MenuItem>
                                 <MenuItem value={'L'}>L</MenuItem>
                                 <MenuItem value={'XL'}>XL</MenuItem>
-                                <MenuItem value={'XLL'}>XLL</MenuItem>
+                                <MenuItem value={'2XL'}>2XL</MenuItem>
+                                <MenuItem value={'3XL'}>3XL</MenuItem>
+                                <MenuItem value={'4XL'}>4XL</MenuItem>
+                                <MenuItem value={'5XL'}>5XL</MenuItem>
                             </Select>
                         </FormControl>
                     </Stack>
