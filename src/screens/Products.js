@@ -134,8 +134,7 @@ function Product() {
                                 src={item.productFrontImages[0]}
                                 alt={'product_'+index}
                                 loading="lazy"
-                                height='auto'
-                                width='250px'
+                                style={{height: '300px', width: '250px'}}
                             />
                             <Chip label={item.tag} color={getTagCode(item.tag)} variant='contained'
                             sx={{
