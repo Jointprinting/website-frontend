@@ -65,7 +65,8 @@ function Admin() {
             setLoading(false)
         } catch (err) {
             console.error(err);
-            alert('Product could not be added');
+            console.log(err?.response?.data?.message)
+            alert(`Product could not be added:\n${err?.response?.data?.message}`);
             setLoading(false)
         } finally {
             setLoading(false)
