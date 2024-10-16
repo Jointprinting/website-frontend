@@ -58,10 +58,10 @@ export default function Footer() {
             </Typography>
             <Box component="ul" sx={{ m: 0, listStyle: 'none', p: 0 }}>
               <Box component="li" sx={{ py: 0.5 }}>
-                <Link href="/terms">Terms</Link>
+                <Link href="https://jointprinting.com/TOS.pdf" target="_blank">Terms</Link>
               </Box>
               <Box component="li" sx={{ py: 0.5 }}>
-                <Link href="/privacy">Privacy</Link>
+                <Link href="https://jointprinting.com/Privacy.pdf" target="_blank">Privacy</Link>
               </Box>
             </Box>
           </Stack>
