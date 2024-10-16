@@ -20,10 +20,10 @@ export default function Footer() {
           <Stack spacing='2vh'>
             <Stack direction="row" alignItems="center" spacing={1}>
               <Box width='48px' mr={1} >
-                <SocialIcon url="https://www.instagram.com" bgColor="black" target="_blank"/>
+                <SocialIcon url="https://www.instagram.com/jointprinting/" bgColor="black" target="_blank"/>
               </Box>
               <Box width='48px'>
-                <SocialIcon url="https://www.tiktok.com" target="_blank"/>
+                <SocialIcon url="https://www.linkedin.com/company/joint-printing-llc/" bgColor="black" target="_blank"/>
               </Box>
             </Stack>
             <Stack direction="row" alignItems="center" spacing={1} width="170px">
