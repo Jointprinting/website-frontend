@@ -11,8 +11,8 @@ function Admin() {
     const [priceRangeTop, setPriceRangeTop] = React.useState('');
     const [rating, setRating] = React.useState(5);
     const [tag, setTag] = React.useState('Best Seller');
-    const [category, setCategory] = React.useState('');
-    const [type, setType] = React.useState('');
+    const [category, setCategory] = React.useState('Shirts');
+    const [type, setType] = React.useState('Unisex');
     const [loading, setLoading] = React.useState(false);
    
     const handleRatingChange = (event) => {
