@@ -44,7 +44,7 @@ function Product() {
                 const response = await fetch(config.backendUrl+'/api/products');
                 const data = await response.json();
                 setProducts(data);
-                console.log(data)
+                //console.log(data)
             } catch (err) {
                 console.error(err);
             }
