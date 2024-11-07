@@ -1,5 +1,6 @@
 import  {React, useState, useEffect} from 'react';
-import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, Menu, Button, MenuItem, useMediaQuery } from '@mui/material';
+import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, CircularProgress,
+     Menu, Button, MenuItem, useMediaQuery } from '@mui/material';
 //import Grid from '@mui/material/Unstable_Grid2';
 //import ImageGrid from '../common/ImageGrid';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +17,10 @@ function Product() {
     const [page, setPage] = useState(1);
     const [anchorEl, setAnchorEl] = useState(null);
     const [anchorElType, setAnchorElType] = useState(null);
+    const [numPages, setNumPages] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const imagesPerPage = 12; // Adjust based on your requirement
+
     const open = Boolean(anchorEl);
     const openType = Boolean(anchorElType);
     const handleClick = (event) => {
@@ -30,7 +35,6 @@ function Product() {
     const handleCloseType = () => {
         setAnchorElType(null);
     };
-    const imagesPerPage = 12; // Adjust based on your requirement
 
     const handleChange = (event, value) => {
         setPage(value);
@@ -41,16 +45,20 @@ function Product() {
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                const response = await fetch(config.backendUrl+'/api/products');
+                setLoading(true);
+                const response = await fetch(`${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}`);
                 const data = await response.json();
-                setProducts(data);
-                //console.log(data)
+                setProducts(data.products);
+                setNumPages(data.totalPages);
+                setLoading(false);
             } catch (err) {
                 console.error(err);
+                setLoading(false);
             }
         }
         fetchProducts();
-    }, []);
+    }, [page]);
+    
 
     const getTagCode = (tag) => {
         switch (tag) {
@@ -69,7 +77,7 @@ function Product() {
     //useMediaQuery to adjust cols based on screen size (i.e. mobile should be 1 column, tablet should be 2 columns, desktop should be 4 columns)
     return (
         <Stack py={2}>
-            <Stack direction="row" px={'4vw'} mb={1.5} alignItems='center' spacing={'5vw'}>
+            {!loading ? <><Stack direction="row" px={'4vw'} mb={1.5} alignItems='center' spacing={'5vw'}>
                 <Typography variant="h4" component="span">Filters</Typography>
 
                 {/* Category Filter */}
@@ -125,7 +133,7 @@ function Product() {
             <Divider />
             <Box width='100%' display='flex' justifyContent='center'  sx={{ flexGrow: 1 }} mt={3}>
                 <ImageList cols={columns} rowHeight={300} gap={30}>
-                {products.map((item, index) => (
+                {products && products.map((item, index) => (
                     <Stack p={1} spacing={1} alignItems="center" >
                         <Box onClick={() => navigate('/product?styleCode='+item.style)}
                             sx={{position:"relative", cursor:'pointer', ':hover': {boxShadow: '0 0 8px 1px lightgray' }}}
@@ -151,9 +159,13 @@ function Product() {
                     </Stack>
                 ))}
                 </ImageList>
+            </Box></> : 
+            <Box display="flex" justifyContent="center" alignItems="center" height="76vh">
+                <CircularProgress size='30vh'/>
             </Box>
+            }
             <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
-                <Pagination count={Math.ceil(products.length / imagesPerPage)} page={page} onChange={handleChange} />
+                <Pagination count={numPages} page={page} onChange={handleChange} />
             </Stack>
         </Stack>
     );
