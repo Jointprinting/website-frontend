@@ -19,6 +19,8 @@ function Product() {
     const [anchorElType, setAnchorElType] = useState(null);
     const [numPages, setNumPages] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedType, setSelectedType] = useState('');
     const imagesPerPage = 12; // Adjust based on your requirement
 
     const open = Boolean(anchorEl);
@@ -26,14 +28,16 @@ function Product() {
     const handleClick = (event) => {
       setAnchorEl(event.currentTarget);
     };
-    const handleClose = () => {
-      setAnchorEl(null);
+    const handleCategoryClose = (category) => {
+        setAnchorEl(null);
+        setSelectedCategory(category);
     };
     const handleClickType = (event) => {
         setAnchorElType(event.currentTarget);
     };
-    const handleCloseType = () => {
+    const handleCloseType = (type) => {
         setAnchorElType(null);
+        setSelectedType(type);
     };
 
     const handleChange = (event, value) => {
@@ -43,10 +47,12 @@ function Product() {
     //useEffect to load products from db
     const [products, setProducts] = useState([]);
     useEffect(() => {
+        console.log(selectedType)
+        console.log(selectedCategory)
         const fetchProducts = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}`);
+                const response = await fetch(`${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}&category=${selectedCategory}&type=${selectedType}`);
                 const data = await response.json();
                 setProducts(data.products);
                 setNumPages(data.totalPages);
@@ -57,7 +63,7 @@ function Product() {
             }
         }
         fetchProducts();
-    }, [page]);
+    }, [page, selectedCategory, selectedType]);
     
 
     const getTagCode = (tag) => {
@@ -94,41 +100,46 @@ function Product() {
                     id="category-menu"
                     anchorEl={anchorEl}
                     open={open}
-                    onClose={handleClose}
+                    onClose={handleCategoryClose}
                     MenuListProps={{
                     'aria-labelledby': 'category-button',
                     }}
                 >
-                    <MenuItem onClick={handleClose}>Shirts</MenuItem>
-                    <MenuItem onClick={handleClose}>Pants</MenuItem>
-                    <MenuItem onClick={handleClose}>Hoodies</MenuItem>
-                    <MenuItem onClick={handleClose}>Hats</MenuItem>
+                    <MenuItem onClick={() => handleCategoryClose('Shirts')}>Shirts</MenuItem>
+                    <MenuItem onClick={() => handleCategoryClose('Pants')}>Pants</MenuItem>
+                    <MenuItem onClick={() => handleCategoryClose('Hoodies')}>Hoodies</MenuItem>
+                    <MenuItem onClick={() => handleCategoryClose('Hats')}>Hats</MenuItem>
                 </Menu>
                 
                 {/* Type Filter */}
-                <Button
-                    id="type-button"
-                    aria-controls={openType ? 'type-menu' : undefined}
-                    aria-haspopup="true"
-                    aria-expanded={openType ? 'true' : undefined}
-                    onClick={handleClickType}
-                >
-                    Type
-                </Button>
-                <Menu
-                    id="type-menu"
-                    anchorEl={anchorElType}
-                    open={openType}
-                    onClose={handleCloseType}
-                    MenuListProps={{
-                    'aria-labelledby': 'type-button',
-                    }}
-                >
-                    <MenuItem onClick={handleCloseType}>Unisex</MenuItem>
-                    <MenuItem onClick={handleCloseType}>Male</MenuItem>
-                    <MenuItem onClick={handleCloseType}>Female</MenuItem>
-                    <MenuItem onClick={handleCloseType}>Kids</MenuItem>
-                </Menu>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Button
+                        id="type-button"
+                        aria-controls={openType ? 'type-menu' : undefined}
+                        aria-haspopup="true"
+                        aria-expanded={openType ? 'true' : undefined}
+                        onClick={handleClickType}
+                    >
+                        Type
+                    </Button>
+                    <Menu
+                        id="type-menu"
+                        anchorEl={anchorElType}
+                        open={openType}
+                        onClose={handleCloseType}
+                        MenuListProps={{
+                        'aria-labelledby': 'type-button',
+                        }}
+                    >
+                        <MenuItem onClick={() => handleCloseType('Unisex')}>Unisex</MenuItem>
+                        <MenuItem onClick={() => handleCloseType('Male')}>Male</MenuItem>
+                        <MenuItem onClick={() => handleCloseType('Female')}>Female</MenuItem>
+                        <MenuItem onClick={() => handleCloseType('Kids')}>Kids</MenuItem>
+                    </Menu>
+                    <Box width='12px'></Box>
+                    {selectedCategory && <Chip label={selectedCategory} onDelete={() => setSelectedCategory('')} />}
+                    {selectedType && <Chip label={selectedType} onDelete={() => setSelectedType('')} />}
+                </Stack>
             </Stack>
             <Divider />
             <Box width='100%' display='flex' justifyContent='center'  sx={{ flexGrow: 1 }} mt={3}>
@@ -154,14 +165,14 @@ function Product() {
                             />
                         </Box>
                         <Typography sx={{mt:2}}>{item.vendor}</Typography>
-                        <Typography fontWeight='bold'>{item.name}</Typography>
+                        <Typography sx={{maxWidth: 300}} fontWeight='bold' textAlign="center" noWrap={true}>{item.name.replace('', '')}</Typography>
                         <Rating name="read-only" value={item.rating} readOnly size="small" /> {/*Once db is working it should be item.productRating*/}
                     </Stack>
                 ))}
                 </ImageList>
             </Box></> : 
             <Box display="flex" justifyContent="center" alignItems="center" height="76vh">
-                <CircularProgress size='30vh'/>
+                <CircularProgress size='30vh' thickness='2.8'/>
             </Box>
             }
             <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
