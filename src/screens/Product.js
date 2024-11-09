@@ -1,5 +1,5 @@
 import  {React, useEffect, useState} from 'react';
-import { Box, Stack, Typography, Chip, Button, Rating, Tooltip, useMediaQuery } from '@mui/material';
+import { Box, Stack, Typography, Chip, Button, Rating, Tooltip, useMediaQuery, CircularProgress } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 
@@ -28,6 +28,7 @@ function Product() {
     const [productColorCode, setProductColorCode] = useState("");
     const [selectedCircle, setSelectedCircle] = useState({});
     const [productIndex, setProductIndex] = useState(0);
+    const [loading, setLoading] = useState(true);
 
     const getTagCode = (tag) => {
         switch (tag) {
@@ -51,6 +52,7 @@ function Product() {
     useEffect(() => {
         const fetchProduct = async () => {
             try {
+                setLoading(true);
                 const response = await fetch(config.backendUrl+'/api/products/style/'+id);
                 const data = await response.json();
                 setProductVendor(data.vendor);
@@ -71,8 +73,10 @@ function Product() {
                 setProductDescription(data.description);
                 setProductColor(colors[0]);
                 setProductColorCode(data.colorCodes[0]);
+                setLoading(false);
                 //console.log(data);
             } catch (err) {
+                setLoading(false);
                 console.error(err);
             }
         }
@@ -96,11 +100,14 @@ function Product() {
 
   return (
     <Box px="5vw" py="7vh" bgcolor="#f5f5f5">
-        <Stack direction={mobile ? "column" : "row"} spacing={'4vw'} alignItems={mobile ? "center" : "top"} sx={{width: '100%'}}>
+        {loading ? <Box display="flex" justifyContent="center" alignItems="center" height="75vh">
+            <CircularProgress size='25vh' thickness='2.6'/>
+            </Box> : 
+            <Stack direction={mobile ? "column" : "row"} spacing={'4vw'} alignItems={mobile ? "center" : "top"} sx={{width: '100%'}}>
             {/* Stack for clothing images */}
             <Stack direction={"row"} alignItems="top" spacing={'4vw'}>
                 {/* Stack for tiny product images */}
-                <Stack spacing={2}>
+                {!loading && <Stack spacing={2}>
                     <img src={productFrontImages[productIndex]} alt="product front" onClick={() => setFrontSelected(true)}
                         style={{width: mobile ? '8vw' : '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? '1px green solid' : 'none'}} 
                     />
@@ -108,7 +115,7 @@ function Product() {
                     {productBackImages[productIndex] && <img src={productBackImages[productIndex]} alt="product back" onClick={() => setFrontSelected(false)}
                         style={{width: mobile ? '8vw' : '5vw', height: 'auto', cursor: 'pointer', border: frontSelected ? 'none' : '1px green solid',}} 
                     />}
-                </Stack>
+                </Stack> }
 
                 {/* Stack for large product images */}
                 <Stack spacing={4}>
@@ -226,6 +233,7 @@ function Product() {
 
             </Stack>
         </Stack>
+        }
     </Box>
   );
 }
