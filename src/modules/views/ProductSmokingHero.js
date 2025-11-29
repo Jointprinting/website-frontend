@@ -14,26 +14,39 @@ function ProductSmokingHero() {
     <Box
       component="section"
       sx={{
-        bgcolor: '#f5f5f5',
-        py: { xs: 6, md: 10 },
+        my: 10,
         px: 2,
+        bgcolor: '#f5f5f5', // light page background so the card pops
+        display: 'flex',
+        justifyContent: 'center',
       }}
     >
-      <Container maxWidth="md" sx={{ display: 'flex', justifyContent: 'center' }}>
+      <Container
+        maxWidth="md"
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
         <Paper
           elevation={6}
           sx={{
+            width: '100%',
             borderRadius: 4,
-            px: { xs: 3, md: 6 },
-            py: { xs: 5, md: 6 },
+            px: { xs: 3, sm: 6 },
+            py: { xs: 5, sm: 6 },
             textAlign: 'center',
-            bgcolor: '#131816',
+            bgcolor: '#101613', // deep green/black card
             color: 'common.white',
           }}
         >
           <Typography
             variant="overline"
-            sx={{ letterSpacing: 3, color: 'grey.400', mb: 1 }}
+            sx={{
+              letterSpacing: 3,
+              color: 'grey.300',
+              mb: 1.5,
+            }}
           >
             PREFER TO TALK IT OUT?
           </Typography>
@@ -41,16 +54,20 @@ function ProductSmokingHero() {
           <Typography
             variant="h4"
             component="h2"
-            align="center"
-            sx={{ mb: 3, fontWeight: 600 }}
+            sx={{ mb: 2.5 }}
+            color="common.white"
           >
             Hop on a quick call about your next drop
           </Typography>
 
           <Typography
             variant="body1"
-            align="center"
-            sx={{ mb: 4, maxWidth: 560, mx: 'auto' }}
+            sx={{
+              maxWidth: 560,
+              mx: 'auto',
+              mb: 4,
+              color: 'common.white',
+            }}
           >
             15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape it
             into a clean lineup.
@@ -64,13 +81,13 @@ function ProductSmokingHero() {
               fontSize: 18,
               fontWeight: 600,
               textTransform: 'none',
-              boxShadow: 4,
+              boxShadow: 3,
             }}
             variant="contained"
             color="secondary"
             onClick={() => navigate('/contact')}
           >
-            Request a free mockup &amp; quote
+            Contact us about your next drop
           </Button>
         </Paper>
       </Container>

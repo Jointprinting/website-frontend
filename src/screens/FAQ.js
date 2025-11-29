@@ -1,74 +1,84 @@
+// src/screens/FAQ.js
 import * as React from 'react';
-import { Box, Stack, useMediaQuery } from '@mui/material';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MuiTypography from '@mui/material/Typography';
 import Typography from '../modules/components/Typography';
-import Faq from "react-faq-component";
-import '@fontsource/work-sans';
 
 function FAQ() {
-    const mobile = useMediaQuery("(max-width: 800px)");
-    const textStyle={fontSize: mobile ? 18 : 20,fontFamily: "'Work Sans', sans-serif",}
-    const data = {
-        rows: [
-            {
-                title: <span style={textStyle}><b>What services do you offer?</b></span>,
-                content: `We specialize in connecting suppliers with printers to fulfill client orders, offering a range of services from product design to complete print solutions.`,
-            },
-            {
-                title: <span style={textStyle}><b>How do I place an order?</b></span>,
-                content:
-                    "You can place an order by visiting our Products page, selecting the items you need, and submitting your design requirements through our Submit a Free Custom Design form. From there, a personal agent will contact you for the next steps.",
-            },
-            {
-              title: <span style={textStyle}><b>What is the turnaround time for an order?</b></span>,
-              content: `The standard turnaround time is 2-3 weeks from the confirmation of your order. If you need a faster turnaround, please contact us to discuss expedited options.`,
-            },
-            {
-              title: <span style={textStyle}><b>Do you offer discounts for bulk orders?</b></span>,
-              content: `Yes, we offer volume discounts on large orders. Contact us with your order details, and we will provide you with a customized quote.`,
-            },
-            {
-              title: <span style={textStyle}><b>Can I see a mockup of my order before it goes to print?</b></span>,
-              content: `Absolutely! We provide a digital proof for your approval within 24 hours of receiving your design request. Production will only start once we have your final approval.
-              `,
-            },
-            {
-              title: <span style={textStyle}><b>Do you offer international shipping?</b></span>,
-              content: `Currently, we only operate and ship within the United States. For special international requests, please contact our support team.`,
-            },
-            {
-              title: <span style={textStyle}><b>How can I track my order?</b></span>,
-              content: `Once your order is shipped, we will provide you with a tracking number via email. You can use this number to track your order’s progress to delivery.`,
-            },
-        ],
-      };
-    
-      const styles = {
-          // bgColor: 'white',
-          bgColor: `transparent`,
-          titleTextColor: "black",
-          rowTitleColor: "black",
-          // rowContentColor: 'grey',
-          // arrowColor: "red",
-      };
-    
-      const config = {
-          // animate: true,
-          // arrowIcon: "V",
-          // tabFocus: true
-      };
+  const faqs = [
+    {
+      q: 'What kinds of products can you source?',
+      a: 'Most apparel (tees, crews, hoodies, hats) plus bags, drinkware, and a wide range of promo items. If it can be printed or embroidered, there’s a good chance we can find it.',
+    },
+    {
+      q: 'Is there a minimum order quantity?',
+      a: 'Our sweet spot is 50+ units per design. We can sometimes flex lower depending on the item and print method, but pricing is always better once you hit real “run” numbers.',
+    },
+    {
+      q: 'How long does a typical order take?',
+      a: 'Most projects land in the 3–4 week range from approved mockups and payment, depending on decoration method and stock. If you have a hard date, we’ll work backward and tell you honestly what’s realistic.',
+    },
+    {
+      q: 'Can you help with design or just printing?',
+      a: 'Both. If you already have art, we’ll prep it for production. If you just have a logo and a half-formed idea, we can help translate that into a clean set of merch concepts.',
+    },
+    {
+      q: 'How does pricing work?',
+      a: 'Pricing is based on blank brand, decoration method, number of print locations, and quantity. We send tiered quotes (e.g., 50 / 100 / 150 units) so you can see where the best value is.',
+    },
+    {
+      q: 'What’s the best way to get started?',
+      a: 'Hit “Get your free mockup & quote” on the homepage, pick a few products, and send us your art or ideas. We’ll come back with mockups, recommendations, and clear next steps.',
+    },
+  ];
 
   return (
-    <Stack alignItems="center" spacing={2} p={6}>
-        {mobile ? <Typography variant="h4" align="center" gutterBottom> Frequently Asked Questions </Typography> :
-        <Typography variant="h2" align="center" gutterBottom> Frequently Asked Questions </Typography> }
-        <Box width="80%" pb="10vh" pt={2}>
-            <Faq
-            data={data}
-            styles={styles}
-            config={config}
-            />
-        </Box>
-    </Stack>
+    <Box bgcolor="#f5f5f5" py={8}>
+      <Container maxWidth="md">
+        <Typography
+          variant="overline"
+          align="center"
+          sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
+        >
+          FAQ
+        </Typography>
+        <Typography
+          variant="h4"
+          component="h1"
+          align="center"
+          sx={{ mb: 4 }}
+        >
+          Answers before you hit &quot;send art&quot;
+        </Typography>
+
+        {faqs.map((item, idx) => (
+          <Accordion
+            key={idx}
+            disableGutters
+            sx={{
+              mb: 1.5,
+              borderRadius: 2,
+              '&:before': { display: 'none' },
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <MuiTypography fontWeight={600}>{item.q}</MuiTypography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <MuiTypography color="text.secondary">{item.a}</MuiTypography>
+            </AccordionDetails>
+          </Accordion>
+        ))}
+      </Container>
+    </Box>
   );
 }
 
