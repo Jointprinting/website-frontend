@@ -1,3 +1,4 @@
+// src/modules/views/ProductCTA.js
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -32,16 +33,20 @@ function ProductCTA() {
               px: 3,
             }}
           >
-            <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 400 }}>
-              <Typography variant="h2" component="h2" gutterBottom>
-                Receive offers
+            <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 420 }}>
+              <Typography variant="overline" sx={{ letterSpacing: 3 }}>
+                NOT READY TO ORDER YET?
               </Typography>
-              <Typography variant="h5">
-                Get updates on our limited-time deals and save big!
+              <Typography variant="h4" component="h2" gutterBottom sx={{ mt: 1 }}>
+                Get ideas in your inbox
+              </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 300 }}>
+                Drop your email and we&apos;ll send seasonal merch ideas and
+                quick tips for getting the most out of your next run.
               </Typography>
               <TextField
                 noBorder
-                placeholder="Your email"
+                placeholder="Your work email"
                 variant="standard"
                 sx={{ width: '100%', mt: 3, mb: 2 }}
               />
@@ -49,13 +54,14 @@ function ProductCTA() {
                 type="submit"
                 color="primary"
                 variant="contained"
-                sx={{ width: '100%' }}
+                sx={{ width: '100%', borderRadius: 999 }}
               >
-                Keep me updated
+                Send me ideas
               </Button>
             </Box>
           </Box>
         </Grid>
+
         <Grid
           item
           xs={12}
@@ -93,7 +99,7 @@ function ProductCTA() {
       <Snackbar
         open={open}
         closeFunc={handleClose}
-        message="We will send you our best offers, once a week."
+        message="Thanks — we’ll send you ideas, not spam."
       />
     </Container>
   );
