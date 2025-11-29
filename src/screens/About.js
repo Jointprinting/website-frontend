@@ -1,189 +1,124 @@
 // src/screens/About.js
 import * as React from 'react';
-import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Grid from '@mui/material/Grid';
-import Stack from '@mui/material/Stack';
-import Paper from '@mui/material/Paper';
-import MuiTypography from '@mui/material/Typography';
-import Typography from '../modules/components/Typography';
+import {
+  Box,
+  Container,
+  Grid,
+  Paper,
+  Stack,
+  Typography,
+  Chip,
+} from '@mui/material';
 
 function About() {
   return (
-    <Box bgcolor="#f5f5f5" py={8}>
+    <Box bgcolor="#f5f5f5" py={{ xs: 6, md: 10 }}>
       <Container maxWidth="lg">
-        {/* HERO ROW: copy + image collage */}
+        {/* Top intro */}
+        <Stack spacing={1} mb={{ xs: 5, md: 7 }}>
+          <Chip
+            label="Joint Printing · Merch Studio"
+            color="secondary"
+            sx={{
+              alignSelf: 'flex-start',
+              borderRadius: 999,
+              fontWeight: 500,
+            }}
+          />
+          <Typography variant="h4" fontWeight={700}>
+            About Joint Printing
+          </Typography>
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            maxWidth={720}
+          >
+            Joint Printing is a brand-first merch studio. We connect the dots
+            between great blanks, thoughtful decoration, and the way your
+            audience actually wears your gear — so you get more than just
+            random swag in a box.
+          </Typography>
+        </Stack>
+
         <Grid container spacing={6} alignItems="center">
+          {/* Text side */}
           <Grid item xs={12} md={6}>
-            <Stack spacing={2}>
-              <Typography
-                variant="overline"
-                sx={{ letterSpacing: 3, color: 'text.secondary' }}
-              >
-                ABOUT JOINT PRINTING
+            <Stack spacing={3}>
+              <Typography variant="h6" fontWeight={600}>
+                Built for modern brands, not just one-off orders.
               </Typography>
-              <Typography variant="h3" component="h1">
-                Merch that behaves like a brand asset, not a throwaway.
+              <Typography variant="body1" color="text.secondary">
+                We pull from premium wholesalers like SanMar and S&amp;S
+                Activewear, match the right blanks to your brand, and manage
+                the print details so everything feels cohesive — from tees and
+                hoodies to hats, bags, and promo.
               </Typography>
-              <MuiTypography variant="h5" sx={{ maxWidth: 720 }}>
-                Joint Printing is a merch studio that pairs brand-level
-                thinking with on-demand production. We live in the details so
-                your team doesn&apos;t have to — from blank selection and print
-                specs to shipping boxes landing on the right doorstep.
-              </MuiTypography>
+
+              <Typography variant="body1" color="text.secondary">
+                Whether you&apos;re a dispensary, brewery, startup or
+                community brand, we treat your line like a campaign: dialed-in
+                fits, smart placements, and a lineup that actually sells
+                through instead of collecting dust.
+              </Typography>
+
+              <Stack spacing={1}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Where we work best
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  • Cannabis brands and dispensaries
+                  <br />
+                  • Breweries and beverage brands
+                  <br />
+                  • Tech/startup teams and creator projects
+                  <br />
+                  • Any brand that wants merch people actually wear
+                </Typography>
+              </Stack>
             </Stack>
           </Grid>
 
+          {/* Image side */}
           <Grid item xs={12} md={6}>
-            <Box
-              sx={{
-                position: 'relative',
-                height: { xs: 260, sm: 320, md: 360 },
-              }}
-            >
-              {/* Main studio-style image */}
-              <Box
-                component="img"
-                src="https://images.pexels.com/photos/4484078/pexels-photo-4484078.jpeg?auto=compress&cs=tinysrgb&w=1200"
-                alt="Merch and apparel on a worktable"
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: { xs: '4%', md: '8%' },
-                  width: { xs: '78%', md: '72%' },
-                  height: '80%',
-                  objectFit: 'cover',
-                  borderRadius: 4,
-                  boxShadow: 6,
-                }}
-              />
-              {/* Overlapping detail shot */}
-              <Box
-                component="img"
-                src="https://images.pexels.com/photos/3738085/pexels-photo-3738085.jpeg?auto=compress&cs=tinysrgb&w=1200"
-                alt="Closeup of printed garments"
-                sx={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: { xs: '4%', md: '6%' },
-                  width: { xs: '48%', md: '44%' },
-                  height: '62%',
-                  objectFit: 'cover',
-                  borderRadius: 4,
-                  boxShadow: 5,
-                  border: '4px solid #f5f5f5',
-                }}
-              />
-              {/* Tiny badge chip */}
+            <Stack spacing={3}>
               <Paper
                 elevation={4}
                 sx={{
-                  position: 'absolute',
-                  bottom: 18,
-                  left: { xs: '6%', md: '10%' },
-                  px: 2,
-                  py: 1,
-                  borderRadius: 999,
-                  bgcolor: '#0f1b14',
-                  color: 'common.white',
-                  fontSize: 12,
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  height: 260,
                 }}
               >
-                Real merch, real clients — no mock data.
-              </Paper>
-            </Box>
-          </Grid>
-        </Grid>
-
-        {/* STORY / FIT / WHAT YOU GET */}
-        <Grid container spacing={4} sx={{ mt: 6 }}>
-          <Grid item xs={12} md={7}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 3,
-                borderRadius: 3,
-                bgcolor: 'common.white',
-                border: '1px solid',
-                borderColor: 'divider',
-              }}
-            >
-              <MuiTypography variant="h5" sx={{ mb: 1.5 }}>
-                Built by a merch obsessive, for teams that care about brand.
-              </MuiTypography>
-              <MuiTypography variant="body1" sx={{ mb: 2 }}>
-                We&apos;ve sat on both sides of the table — managing campaigns,
-                wrangling vendors, and fixing last-minute print issues so a
-                launch could actually happen. Joint Printing exists to make that
-                process feel simple, predictable, and a little bit fun.
-              </MuiTypography>
-              <MuiTypography variant="body1" sx={{ mb: 1 }}>
-                Instead of pushing whatever&apos;s easiest to print, we start
-                with your brand: audience, use-case, and what &quot;success&quot;
-                looks like for the drop. Then we reverse-engineer the blanks,
-                decoration, and fulfillment to match.
-              </MuiTypography>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} md={5}>
-            <Stack spacing={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: '#0f1b14',
-                  color: 'common.white',
-                }}
-              >
-                <MuiTypography
-                  variant="subtitle2"
-                  sx={{ mb: 1, opacity: 0.8 }}
-                >
-                  WHO WE&apos;RE A FIT FOR
-                </MuiTypography>
-                <MuiTypography variant="body1">
-                  Dispensaries, breweries, startups, and growing brands that:
-                </MuiTypography>
-                <Box component="ul" sx={{ mt: 1.5, pl: 3, mb: 0 }}>
-                  <Box component="li" sx={{ mb: 0.5 }}>
-                    <MuiTypography variant="body2">
-                      Want merch people actually wear
-                    </MuiTypography>
-                  </Box>
-                  <Box component="li" sx={{ mb: 0.5 }}>
-                    <MuiTypography variant="body2">
-                      Need help turning loose ideas into a clear lineup
-                    </MuiTypography>
-                  </Box>
-                  <Box component="li">
-                    <MuiTypography variant="body2">
-                      Care about deadlines as much as design
-                    </MuiTypography>
-                  </Box>
-                </Box>
+                <Box
+                  component="img"
+                  src="https://images.pexels.com/photos/3965558/pexels-photo-3965558.jpeg?cs=srgb&dl=pexels-anna-shvets-3965558.jpg&fm=jpg"
+                  alt="Screen printing setup"
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
               </Paper>
 
               <Paper
-                elevation={0}
+                elevation={2}
                 sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: 'common.white',
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  height: 220,
                 }}
               >
-                <MuiTypography variant="subtitle2" sx={{ mb: 1 }}>
-                  What you get with Joint Printing
-                </MuiTypography>
-                <MuiTypography variant="body2">
-                  • A single point of contact from idea to delivery <br />
-                  • Vendor-agnostic sourcing across major wholesalers <br />
-                  • Honest guidance on where to splurge vs. save <br />
-                  • Fast mockups and clear, line-itemed quotes
-                </MuiTypography>
+                <Box
+                  component="img"
+                  src="https://images.pexels.com/photos/15170532/pexels-photo-15170532.jpeg?cs=srgb&dl=pexels-kseniachernaya-15170532.jpg&fm=jpg"
+                  alt="Merchandise racks with apparel"
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
               </Paper>
             </Stack>
           </Grid>

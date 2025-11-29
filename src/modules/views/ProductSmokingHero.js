@@ -14,11 +14,8 @@ function ProductSmokingHero() {
     <Box
       component="section"
       sx={{
-        my: 10,
-        px: 2,
-        bgcolor: '#f5f5f5', // light page background so the card pops
-        display: 'flex',
-        justifyContent: 'center',
+        bgcolor: '#f5f5f5',
+        py: { xs: 6, md: 10 },
       }}
     >
       <Container
@@ -29,24 +26,19 @@ function ProductSmokingHero() {
         }}
       >
         <Paper
-          elevation={6}
+          elevation={4}
           sx={{
-            width: '100%',
             borderRadius: 4,
-            px: { xs: 3, sm: 6 },
-            py: { xs: 5, sm: 6 },
+            px: { xs: 3, md: 6 },
+            py: { xs: 4, md: 6 },
             textAlign: 'center',
-            bgcolor: '#101613', // deep green/black card
+            bgcolor: '#101712',
             color: 'common.white',
           }}
         >
           <Typography
             variant="overline"
-            sx={{
-              letterSpacing: 3,
-              color: 'grey.300',
-              mb: 1.5,
-            }}
+            sx={{ letterSpacing: 3, opacity: 0.8, mb: 1 }}
           >
             PREFER TO TALK IT OUT?
           </Typography>
@@ -54,20 +46,14 @@ function ProductSmokingHero() {
           <Typography
             variant="h4"
             component="h2"
-            sx={{ mb: 2.5 }}
-            color="common.white"
+            sx={{ mb: 2, fontWeight: 600 }}
           >
-            Hop on a quick call about your next drop
+            HOP ON A QUICK CALL ABOUT YOUR NEXT DROP
           </Typography>
 
           <Typography
             variant="body1"
-            sx={{
-              maxWidth: 560,
-              mx: 'auto',
-              mb: 4,
-              color: 'common.white',
-            }}
+            sx={{ mb: 4, maxWidth: 520, mx: 'auto', opacity: 0.9 }}
           >
             15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape it
             into a clean lineup.
@@ -81,13 +67,14 @@ function ProductSmokingHero() {
               fontSize: 18,
               fontWeight: 600,
               textTransform: 'none',
-              boxShadow: 3,
+              boxShadow: 4,
+              bgcolor: 'secondary.main',
+              '&:hover': { bgcolor: 'secondary.dark' },
             }}
             variant="contained"
-            color="secondary"
             onClick={() => navigate('/contact')}
           >
-            Contact us about your next drop
+            Request a free mockup &amp; quote
           </Button>
         </Paper>
       </Container>
