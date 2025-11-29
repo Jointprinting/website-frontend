@@ -1,7 +1,5 @@
 // src/modules/views/ProductHero.js
 import * as React from 'react';
-import Box from '@mui/material/Box';
-import { keyframes } from '@mui/system';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
 import ProductHeroLayout from './ProductHeroLayout';
@@ -9,103 +7,87 @@ import ProductHeroLayout from './ProductHeroLayout';
 const backgroundImage =
   'https://cdn.midjourney.com/02200c93-b8ea-452c-b02d-99cc2954e81f/0_2.webp';
 
-const fadeUp = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
 export default function ProductHero() {
   return (
     <ProductHeroLayout
       sxBackground={{
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundColor: '#101416',
+        backgroundImage: `linear-gradient(
+          rgba(5, 15, 10, 0.35),
+          rgba(5, 15, 10, 0.65)
+        ), url(${backgroundImage})`,
+        backgroundColor: '#0e1511',
         backgroundPosition: 'center',
       }}
     >
-      {/* Preload background */}
+      {/* Preload the image */}
       <img
         style={{ display: 'none' }}
         src={backgroundImage}
         alt="increase priority"
       />
 
-      <Box
+      {/* Overline */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="overline"
         sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-          animation: `${fadeUp} 700ms ease-out`,
+          letterSpacing: 6,
+          mb: 2,
+          opacity: 0.9,
         }}
       >
-        {/* LINE 1 */}
-        <Typography
-          color="inherit"
-          variant="overline"
-          sx={{ letterSpacing: 4, opacity: 0.9 }}
-        >
-          INNOVATION IN INK
-        </Typography>
+        INNOVATION IN INK
+      </Typography>
 
-        {/* LINE 2 */}
-        <Typography
-          color="inherit"
-          align="center"
-          variant="h2"
-          marked="center"
-          sx={{ mt: 2, maxWidth: 900 }}
-        >
-          Brand-first merch that actually gets worn.
-        </Typography>
+      {/* Main line */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="h2"
+        component="h1"
+        sx={{
+          maxWidth: 760,
+          mx: 'auto',
+        }}
+      >
+        Custom merch for modern brands.
+      </Typography>
 
-        {/* LINE 3 */}
-        <Typography
-          color="inherit"
-          align="center"
-          variant="h5"
-          sx={{
-            mt: 3,
-            mb: 5,
-            maxWidth: 540,
-            opacity: 0.9,
-          }}
-        >
-          One place for blanks, art, and fulfillment — built for modern brands.
-        </Typography>
+      {/* Secondary line (short + optional) */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="h6"
+        sx={{
+          mt: { xs: 3, sm: 4 },
+          mb: 4,
+          maxWidth: 640,
+          mx: 'auto',
+          opacity: 0.9,
+          fontWeight: 400,
+        }}
+      >
+        Start with a free mockup and quote in under 24 hours.
+      </Typography>
 
-        {/* SINGLE BIG CTA */}
-        <Button
-          color="secondary"
-          variant="contained"
-          size="large"
-          component="a"
-          href="/products"
-          sx={{
-            minWidth: 260,
-            borderRadius: 999,
-            px: 4,
-            py: 1.5,
-            fontWeight: 600,
-            textTransform: 'none',
-            fontSize: 18,
-            boxShadow: '0 18px 45px rgba(0,0,0,0.55)',
-            transition: 'transform 160ms ease-out, box-shadow 160ms ease-out',
-            '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: '0 22px 55px rgba(0,0,0,0.75)',
-            },
-          }}
-        >
-          Get your free mockup &amp; quote
-        </Button>
-      </Box>
+      {/* Single primary CTA */}
+      <Button
+        color="secondary"
+        variant="contained"
+        size="large"
+        component="a"
+        href="/products"
+        sx={{
+          minWidth: 260,
+          borderRadius: 999,
+          fontSize: 18,
+          fontWeight: 600,
+          textTransform: 'none',
+        }}
+      >
+        Get your free mockup &amp; quote
+      </Button>
     </ProductHeroLayout>
   );
 }
