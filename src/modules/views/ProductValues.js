@@ -9,11 +9,25 @@ import tailorImage from '../images/tailor.webp';
 import deliverImage from '../images/deliver.webp';
 import clothingImage from '../images/clothing.webp';
 
-const item = {
+const card = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'flex-start',
-  px: { xs: 2, md: 4 },
+  p: 3,
+  borderRadius: 3,
+  bgcolor: 'background.paper',
+  boxShadow: 1,
+  height: '100%',
+  transition: 'transform 160ms ease-out, box-shadow 160ms ease-out',
+  '&:hover': {
+    transform: 'translateY(-3px)',
+    boxShadow: 4,
+  },
+};
+
+const iconStyle = {
+  height: 72,
+  mb: 2,
 };
 
 function ProductValues() {
@@ -23,81 +37,65 @@ function ProductValues() {
       sx={{
         display: 'flex',
         overflow: 'hidden',
-        bgcolor: '#050806',
-        color: 'common.white',
+        bgcolor: '#f4f6f5',
       }}
     >
-      <Container
-        sx={{
-          mt: 10,
-          mb: 12,
-          display: 'flex',
-          position: 'relative',
-        }}
-      >
-        <Box
-          component="img"
-          src="https://mui.com/static/themes/onepirate/productCurvyLines.png"
-          alt="curvy lines"
-          sx={{
-            pointerEvents: 'none',
-            position: 'absolute',
-            top: -140,
-            opacity: 0.4,
-          }}
-        />
-        <Grid container spacing={6}>
+      <Container sx={{ mt: 10, mb: 12, position: 'relative' }}>
+        <Typography
+          variant="overline"
+          sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
+          align="center"
+        >
+          HOW WE WORK WITH YOU
+        </Typography>
+        <Typography
+          variant="h4"
+          marked="center"
+          align="center"
+          component="h2"
+          sx={{ mb: 6 }}
+        >
+          A small studio feel with big-run capability
+        </Typography>
+
+        <Grid container spacing={4}>
           <Grid item xs={12} md={4}>
-            <Box sx={item}>
-              <Box
-                component="img"
-                src={clothingImage}
-                alt="clothes"
-                sx={{ height: 80, mb: 3 }}
-              />
+            <Box sx={card}>
+              <Box component="img" src={clothingImage} alt="clothes" sx={iconStyle} />
               <Typography variant="h6" sx={{ mb: 1.5 }}>
-                Your dedicated print concierge
+                Dedicated merch partner
               </Typography>
               <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                Focus on your business, not your printing. Joint Printing assigns
-                you a dedicated agent who handles everything – from finding the
-                perfect supplier to ensuring on-time delivery.
+                One person who actually knows your brand, not a support ticket.
+                From day one you get a point of contact who steers suppliers,
+                samples, and timelines for you.
               </Typography>
             </Box>
           </Grid>
+
           <Grid item xs={12} md={4}>
-            <Box sx={item}>
-              <Box
-                component="img"
-                src={tailorImage}
-                alt="tailor"
-                sx={{ height: 80, mb: 3 }}
-              />
+            <Box sx={card}>
+              <Box component="img" src={tailorImage} alt="tailor" sx={iconStyle} />
               <Typography variant="h6" sx={{ mb: 1.5 }}>
-                Tailor-made printing mastery
+                Design &amp; decoration dialed in
               </Typography>
               <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                Your brand deserves the spotlight. Share your art and we&apos;ll
-                turn it into production-ready merch, with real feedback on what
-                will land with your audience.
+                You send art, brand folder, or even a rough idea. We turn it
+                into clean mockups with the right print method so everything
+                feels intentional — not slapped on.
               </Typography>
             </Box>
           </Grid>
+
           <Grid item xs={12} md={4}>
-            <Box sx={item}>
-              <Box
-                component="img"
-                src={deliverImage}
-                alt="deliver"
-                sx={{ height: 80, mb: 3 }}
-              />
+            <Box sx={card}>
+              <Box component="img" src={deliverImage} alt="deliver" sx={iconStyle} />
               <Typography variant="h6" sx={{ mb: 1.5 }}>
-                Hands-off production &amp; delivery
+                Production you don&apos;t have to babysit
               </Typography>
               <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                We manage vendors, timelines, and shipping. You get finished
-                merch that shows up on time and on-brand — without chasing anyone
-                down.
+                We manage vendors, QA, and shipping so boxes just show up where
+                they need to be — for launches, events, and re-orders.
               </Typography>
             </Box>
           </Grid>

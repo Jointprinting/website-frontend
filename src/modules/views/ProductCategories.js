@@ -15,7 +15,7 @@ const ImageBackdrop = styled('div')(({ theme }) => ({
   bottom: 0,
   background: '#000',
   opacity: 0.45,
-  transition: theme.transitions.create(['opacity', 'transform']),
+  transition: theme.transitions.create('opacity'),
 }));
 
 const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
@@ -24,22 +24,15 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   padding: 0,
   borderRadius: 0,
   height: '40vh',
-  overflow: 'hidden',
-  transform: 'translateY(0)',
-  transition: theme.transitions.create(['transform', 'box-shadow'], {
-    duration: 200,
-  }),
   [theme.breakpoints.down('md')]: {
     width: '100% !important',
     height: 120,
   },
   '&:hover': {
     zIndex: 1,
-    transform: 'translateY(-3px)',
-    boxShadow: '0 20px 45px rgba(0,0,0,0.45)',
   },
   '&:hover .imageBackdrop': {
-    opacity: 0.2,
+    opacity: 0.18,
   },
   '&:hover .imageMarked': {
     opacity: 0,
@@ -59,6 +52,7 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   },
 }));
 
+// Category tiles that all route into the products page
 const tiles = [
   {
     url: 'https://images.pexels.com/photos/4641825/pexels-photo-4641825.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
@@ -87,91 +81,79 @@ export default function ProductCategories() {
   const navigate = useNavigate();
 
   return (
-    <Box component="section" sx={{ mt: 10, mb: 12 }}>
-      <Container
-        sx={{
-          borderRadius: 3,
-          py: 6,
-          px: { xs: 2, md: 4 },
-          bgcolor: '#0e1511',
-        }}
+    <Container component="section" sx={{ mt: 10, mb: 12 }}>
+      <Typography
+        variant="overline"
+        align="center"
+        sx={{ letterSpacing: 3, color: 'text.secondary' }}
       >
-        <Typography
-          variant="overline"
-          align="center"
-          sx={{
-            letterSpacing: 3,
-            color: 'rgba(255,255,255,0.7)',
-          }}
-        >
-          THE CANVAS FOR YOUR BRAND
-        </Typography>
-        <Typography
-          variant="h4"
-          marked="center"
-          align="center"
-          component="h2"
-          sx={{ mt: 1, color: 'common.white' }}
-        >
-          Apparel and promo that doesn&apos;t get left in a drawer
-        </Typography>
+        LINEUP STARTERS
+      </Typography>
+      <Typography
+        variant="h4"
+        marked="center"
+        align="center"
+        component="h2"
+        sx={{ mt: 1 }}
+      >
+        Pick your lane, then we dial in the rest.
+      </Typography>
 
-        <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
-          {tiles.map((tile) => (
-            <ImageIconButton
-              key={tile.title}
-              onClick={() => navigate(tile.tab)}
-              style={{ width: tile.width }}
+      <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
+        {tiles.map((tile) => (
+          <ImageIconButton
+            key={tile.title}
+            onClick={() => navigate(tile.tab)}
+            style={{ width: tile.width }}
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center 40%',
+                backgroundImage: `url(${tile.url})`,
+              }}
+            />
+            <ImageBackdrop className="imageBackdrop" />
+            <Box
+              sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'common.white',
+                px: 2,
+              }}
             >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center 40%',
-                  backgroundImage: `url(${tile.url})`,
-                }}
-              />
-              <ImageBackdrop className="imageBackdrop" />
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'common.white',
-                  px: 2,
-                }}
+              <Typography
+                component="h3"
+                variant="h6"
+                color="inherit"
+                className="imageTitle"
+                sx={{ textTransform: 'none' }}
               >
-                <Typography
-                  component="h3"
-                  variant="h6"
-                  color="inherit"
-                  className="imageTitle"
-                  sx={{ textTransform: 'none' }}
-                >
-                  {tile.title}
-                  <div className="imageMarked" />
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ mt: 0.5, opacity: 0.9, maxWidth: 260 }}
-                >
-                  {tile.subtitle}
-                </Typography>
-              </Box>
-            </ImageIconButton>
-          ))}
-        </Box>
-      </Container>
-    </Box>
+                {tile.title}
+                <div className="imageMarked" />
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{ mt: 0.5, opacity: 0.9, maxWidth: 260 }}
+              >
+                {tile.subtitle}
+              </Typography>
+            </Box>
+          </ImageIconButton>
+        ))}
+      </Box>
+    </Container>
   );
 }
