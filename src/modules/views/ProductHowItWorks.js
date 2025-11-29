@@ -1,3 +1,4 @@
+// src/modules/views/ProductHowItWorks.js
 import * as React from 'react';
 
 import Box from '@mui/material/Box';
@@ -5,30 +6,56 @@ import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
-import drawImage from '../images/draw.webp';
-import relaxImage from '../images/relax.webp';
-import deliveryImage from '../images/delivery.webp';
 
-const item = {
+const stepCard = {
   display: 'flex',
   flexDirection: 'column',
-  alignItems: 'center',
-  px: 5,
+  alignItems: 'flex-start',
+  p: 3,
+  borderRadius: 3,
+  border: '1px solid rgba(0,0,0,0.08)',
+  bgcolor: 'background.paper',
+  height: '100%',
+  position: 'relative',
+  overflow: 'hidden',
 };
 
-const number = {
+const stepNumber = {
   fontSize: 24,
   fontFamily: 'default',
   color: 'secondary.main',
   fontWeight: 'medium',
-};
-
-const image = {
-  height: 55,
-  my: 4,
+  mb: 1,
 };
 
 function ProductHowItWorks() {
+  const steps = [
+    {
+      number: '01',
+      title: 'Share your brand & goals',
+      body:
+        'Tell us who you’re serving, what the merch is for, and your rough timeline and budget. We keep it simple and straight to the point.',
+    },
+    {
+      number: '02',
+      title: 'Pick a few products you’re into',
+      body:
+        'Pick a few products you’re into — we’ll send options from budget to premium and handle the art, so you don’t have to play merch roulette.',
+    },
+    {
+      number: '03',
+      title: 'Get mockups & a clear quote',
+      body:
+        'We send free digital mockups plus a clean price breakdown per product, including printing and shipping, so you can decide quickly.',
+    },
+    {
+      number: '04',
+      title: 'Approve & launch',
+      body:
+        'You sign off, we run production and logistics with our supplier network, and boxes show up ready to wear or sell.',
+    },
+  ];
+
   return (
     <Box
       component="section"
@@ -52,58 +79,46 @@ function ProductHowItWorks() {
             pointerEvents: 'none',
             position: 'absolute',
             top: -180,
-            opacity: 0.7,
+            opacity: 0.6,
           }}
         />
-        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 14 }}>
+
+        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 4 }}>
           How it works
         </Typography>
-        <div>
-          <Grid container spacing={5}>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>1.</Box>
-                <Box
-                  component="img"
-                  src={drawImage}
-                  alt="draw"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Request a free mockup and let us know your vision — we're ready to listen around the clock.
+
+        <Typography
+          variant="h5"
+          align="center"
+          sx={{
+            mb: 10,
+            maxWidth: 720,
+          }}
+        >
+          A clear, four-step path from idea to finished merch — with us doing the
+          heavy lifting so you can stay focused on your brand.
+        </Typography>
+
+        <Grid container spacing={4}>
+          {steps.map((step) => (
+            <Grid item xs={12} sm={6} md={3} key={step.number}>
+              <Box sx={stepCard}>
+                <Box sx={stepNumber}>{step.number}.</Box>
+                <Typography
+                  variant="h6"
+                  align="left"
+                  sx={{ mb: 1.5, textTransform: 'none' }}
+                >
+                  {step.title}
+                </Typography>
+                <Typography variant="h5" align="left" sx={{ fontSize: 16 }}>
+                  {step.body}
                 </Typography>
               </Box>
             </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>2.</Box>
-                <Box
-                  component="img"
-                  src={relaxImage}
-                  alt="relax"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Sit back as we seamlessly coordinate the perfect match of quality materials and printing precision for your project.
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>3.</Box>
-                <Box
-                  component="img"
-                  src={deliveryImage}
-                  alt="delivery"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Get premium prints, flawlessly delivered, right to your door. Satisfaction guaranteed!
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </div>
+          ))}
+        </Grid>
+
         <Button
           color="secondary"
           size="large"
@@ -112,7 +127,7 @@ function ProductHowItWorks() {
           href="/products"
           sx={{ mt: 8 }}
         >
-          Get started
+          Start by browsing products
         </Button>
       </Container>
     </Box>
