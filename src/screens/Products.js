@@ -1,185 +1,357 @@
-import  {React, useState, useEffect} from 'react';
-import { Box, Stack, Typography, Chip, Divider, Rating, Pagination, ImageList, CircularProgress,
-     Menu, Button, MenuItem, useMediaQuery } from '@mui/material';
-//import Grid from '@mui/material/Unstable_Grid2';
-//import ImageGrid from '../common/ImageGrid';
+// src/screens/Products.js
+import { React, useState, useEffect } from 'react';
+import {
+  Box,
+  Stack,
+  Typography,
+  Chip,
+  Divider,
+  Rating,
+  Pagination,
+  ImageList,
+  CircularProgress,
+  Menu,
+  Button,
+  MenuItem,
+  useMediaQuery,
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-//import config.json from src root
 import config from '../config.json';
-//get backendUrl from config.json
 
-function Product() {
-    const navigate = useNavigate();
-    const mobile = useMediaQuery("(max-width: 600px)");
-    const tablet = useMediaQuery("(max-width: 860px)");
-    const laptop = useMediaQuery("(max-width: 1160px)");
-    const columns = mobile ? 1 : tablet ? 2 : laptop ? 3 : 4;
-    const [page, setPage] = useState(1);
-    const [anchorEl, setAnchorEl] = useState(null);
-    const [anchorElType, setAnchorElType] = useState(null);
-    const [numPages, setNumPages] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [selectedType, setSelectedType] = useState('');
-    const imagesPerPage = 12; // Adjust based on your requirement
+function Products() {
+  const navigate = useNavigate();
+  const mobile = useMediaQuery('(max-width: 600px)');
+  const tablet = useMediaQuery('(max-width: 860px)');
+  const laptop = useMediaQuery('(max-width: 1160px)');
+  const columns = mobile ? 1 : tablet ? 2 : laptop ? 3 : 4;
 
-    const open = Boolean(anchorEl);
-    const openType = Boolean(anchorElType);
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-    };
-    const handleCategoryClose = (category) => {
-        setAnchorEl(null);
-        setSelectedCategory(category);
-    };
-    const handleClickType = (event) => {
-        setAnchorElType(event.currentTarget);
-    };
-    const handleCloseType = (type) => {
-        setAnchorElType(null);
-        setSelectedType(type);
+  const [page, setPage] = useState(1);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [anchorElType, setAnchorElType] = useState(null);
+  const [numPages, setNumPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedType, setSelectedType] = useState('');
+  const [products, setProducts] = useState([]);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+
+  const imagesPerPage = 12; // Adjust based on your requirement
+
+  const open = Boolean(anchorEl);
+  const openType = Boolean(anchorElType);
+
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleCategoryClose = (category) => {
+    setAnchorEl(null);
+    setSelectedCategory(category);
+    setPage(1);
+  };
+
+  const handleClickType = (event) => {
+    setAnchorElType(event.currentTarget);
+  };
+
+  const handleCloseType = (type) => {
+    setAnchorElType(null);
+    setSelectedType(type);
+    setPage(1);
+  };
+
+  const handleChange = (event, value) => {
+    setPage(value);
+  };
+
+  // Load products from backend
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}&category=${selectedCategory}&type=${selectedType}`
+        );
+        const data = await response.json();
+        setProducts(data.products);
+        setNumPages(data.totalPages);
+        setLoading(false);
+      } catch (err) {
+        console.error(err);
+        setLoading(false);
+      }
     };
 
-    const handleChange = (event, value) => {
-        setPage(value);
-    };
+    fetchProducts();
+  }, [page, selectedCategory, selectedType]);
 
-    //useEffect to load products from db
-    const [products, setProducts] = useState([]);
-    useEffect(() => {
-        console.log(selectedType)
-        console.log(selectedCategory)
-        const fetchProducts = async () => {
-            try {
-                setLoading(true);
-                const response = await fetch(`${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}&category=${selectedCategory}&type=${selectedType}`);
-                const data = await response.json();
-                setProducts(data.products);
-                setNumPages(data.totalPages);
-                setLoading(false);
-            } catch (err) {
-                console.error(err);
-                setLoading(false);
-            }
-        }
-        fetchProducts();
-    }, [page, selectedCategory, selectedType]);
-    
-
-    const getTagCode = (tag) => {
-        switch (tag) {
-            case 'Best Seller':
-                return 'success';
-            case 'New Arrival':
-                return 'error';
-            case 'Our Favorite':
-                return 'warning';
-            default:
-                return 'info';
-        }
+  const getTagCode = (tag) => {
+    switch (tag) {
+      case 'Best Seller':
+        return 'success';
+      case 'New Arrival':
+        return 'error';
+      case 'Our Favorite':
+        return 'warning';
+      default:
+        return 'info';
     }
+  };
 
-    //const paginatedImages = imageUrls.slice((page - 1) * imagesPerPage, page * imagesPerPage);
-    //useMediaQuery to adjust cols based on screen size (i.e. mobile should be 1 column, tablet should be 2 columns, desktop should be 4 columns)
-    return (
-        <Stack py={2}>
-            {!loading ? <><Stack direction="row" px={'4vw'} mb={1.5} alignItems='center' spacing={'5vw'}>
-                <Typography variant="h4" component="span">Filters</Typography>
+  // Toggle a product in the "quote" selection
+  const toggleSelected = (item) => {
+    setSelectedProducts((current) => {
+      const exists = current.some((p) => p.style === item.style);
+      if (exists) {
+        return current.filter((p) => p.style !== item.style);
+      }
+      return [
+        ...current,
+        {
+          style: item.style,
+          name: item.name,
+          vendor: item.vendor,
+          tag: item.tag,
+        },
+      ];
+    });
+  };
 
-                {/* Category Filter */}
-                <Button
-                    id="category-button"
-                    aria-controls={open ? 'category-menu' : undefined}
-                    aria-haspopup="true"
-                    aria-expanded={open ? 'true' : undefined}
-                    onClick={handleClick}
-                >
-                    Category
-                </Button>
-                <Menu
-                    id="category-menu"
-                    anchorEl={anchorEl}
-                    open={open}
-                    onClose={handleCategoryClose}
-                    MenuListProps={{
-                    'aria-labelledby': 'category-button',
-                    }}
-                >
-                    <MenuItem onClick={() => handleCategoryClose('Shirts')}>Shirts</MenuItem>
-                    <MenuItem onClick={() => handleCategoryClose('Pants')}>Pants</MenuItem>
-                    <MenuItem onClick={() => handleCategoryClose('Hoodies')}>Hoodies</MenuItem>
-                    <MenuItem onClick={() => handleCategoryClose('Hats')}>Hats</MenuItem>
-                </Menu>
-                
-                {/* Type Filter */}
-                <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <Button
-                        id="type-button"
-                        aria-controls={openType ? 'type-menu' : undefined}
-                        aria-haspopup="true"
-                        aria-expanded={openType ? 'true' : undefined}
-                        onClick={handleClickType}
+  // When user is ready, stash selected products and go to contact form
+  const handleRequestQuote = () => {
+    try {
+      window.sessionStorage.setItem(
+        'jpSelectedProducts',
+        JSON.stringify(selectedProducts)
+      );
+    } catch (e) {
+      console.error('Could not save selected products', e);
+    }
+    navigate('/contact');
+  };
+
+  return (
+    <Stack py={2}>
+      {!loading ? (
+        <>
+          <Stack
+            direction="row"
+            px="4vw"
+            mb={1.5}
+            alignItems="center"
+            spacing="5vw"
+          >
+            <Typography variant="h4" component="span">
+              Filters
+            </Typography>
+
+            {/* Category Filter */}
+            <Button
+              id="category-button"
+              aria-controls={open ? 'category-menu' : undefined}
+              aria-haspopup="true"
+              aria-expanded={open ? 'true' : undefined}
+              onClick={handleClick}
+            >
+              Category
+            </Button>
+            <Menu
+              id="category-menu"
+              anchorEl={anchorEl}
+              open={open}
+              onClose={() => handleCategoryClose(selectedCategory)}
+              MenuListProps={{
+                'aria-labelledby': 'category-button',
+              }}
+            >
+              <MenuItem onClick={() => handleCategoryClose('Shirts')}>
+                Shirts
+              </MenuItem>
+              <MenuItem onClick={() => handleCategoryClose('Pants')}>
+                Pants
+              </MenuItem>
+              <MenuItem onClick={() => handleCategoryClose('Hoodies')}>
+                Hoodies
+              </MenuItem>
+              <MenuItem onClick={() => handleCategoryClose('Hats')}>
+                Hats
+              </MenuItem>
+            </Menu>
+
+            {/* Type Filter */}
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Button
+                id="type-button"
+                aria-controls={openType ? 'type-menu' : undefined}
+                aria-haspopup="true"
+                aria-expanded={openType ? 'true' : undefined}
+                onClick={handleClickType}
+              >
+                Type
+              </Button>
+              <Menu
+                id="type-menu"
+                anchorEl={anchorElType}
+                open={openType}
+                onClose={() => handleCloseType(selectedType)}
+                MenuListProps={{
+                  'aria-labelledby': 'type-button',
+                }}
+              >
+                <MenuItem onClick={() => handleCloseType('Unisex')}>
+                  Unisex
+                </MenuItem>
+                <MenuItem onClick={() => handleCloseType('Male')}>
+                  Male
+                </MenuItem>
+                <MenuItem onClick={() => handleCloseType('Female')}>
+                  Female
+                </MenuItem>
+                <MenuItem onClick={() => handleCloseType('Kids')}>
+                  Kids
+                </MenuItem>
+              </Menu>
+              <Box width="12px" />
+              {selectedCategory && (
+                <Chip
+                  label={selectedCategory}
+                  onDelete={() => setSelectedCategory('')}
+                />
+              )}
+              {selectedType && (
+                <Chip label={selectedType} onDelete={() => setSelectedType('')} />
+              )}
+            </Stack>
+          </Stack>
+          <Divider />
+          <Box
+            width="100%"
+            display="flex"
+            justifyContent="center"
+            sx={{ flexGrow: 1 }}
+            mt={3}
+          >
+            <ImageList cols={columns} rowHeight={300} gap={30}>
+              {products &&
+                products.map((item, index) => {
+                  const isSelected = selectedProducts.some(
+                    (p) => p.style === item.style
+                  );
+
+                  return (
+                    <Stack
+                      key={item._id || index}
+                      p={1}
+                      spacing={1}
+                      alignItems="center"
                     >
-                        Type
-                    </Button>
-                    <Menu
-                        id="type-menu"
-                        anchorEl={anchorElType}
-                        open={openType}
-                        onClose={handleCloseType}
-                        MenuListProps={{
-                        'aria-labelledby': 'type-button',
+                      <Box
+                        onClick={() =>
+                          navigate('/product?styleCode=' + item.style)
+                        }
+                        sx={{
+                          position: 'relative',
+                          cursor: 'pointer',
+                          ':hover': {
+                            boxShadow: '0 0 8px 1px lightgray',
+                          },
                         }}
-                    >
-                        <MenuItem onClick={() => handleCloseType('Unisex')}>Unisex</MenuItem>
-                        <MenuItem onClick={() => handleCloseType('Male')}>Male</MenuItem>
-                        <MenuItem onClick={() => handleCloseType('Female')}>Female</MenuItem>
-                        <MenuItem onClick={() => handleCloseType('Kids')}>Kids</MenuItem>
-                    </Menu>
-                    <Box width='12px'></Box>
-                    {selectedCategory && <Chip label={selectedCategory} onDelete={() => setSelectedCategory('')} />}
-                    {selectedType && <Chip label={selectedType} onDelete={() => setSelectedType('')} />}
-                </Stack>
-            </Stack>
-            <Divider />
-            <Box width='100%' display='flex' justifyContent='center'  sx={{ flexGrow: 1 }} mt={3}>
-                <ImageList cols={columns} rowHeight={300} gap={30}>
-                {products && products.map((item, index) => (
-                    <Stack p={1} spacing={1} alignItems="center" >
-                        <Box onClick={() => navigate('/product?styleCode='+item.style)}
-                            sx={{position:"relative", cursor:'pointer', ':hover': {boxShadow: '0 0 8px 1px lightgray' }}}
-                        >
-                            <img
-                                src={item.productFrontImages[0]}
-                                alt={'product_'+index}
-                                loading="lazy"
-                                style={{height: '300px', width: '250px'}}
-                            />
-                            <Chip label={item.tag} color={getTagCode(item.tag)} variant='contained'
-                            sx={{
-                                position: 'absolute', /* Absolute position to place it on bottom left */
-                                bottom: 40, /* Align bottom edge with bottom of the parent Box */
-                                right: 8, /* Align left edge with left of the parent Box */
-                                transform: 'translateY(100%)' /* Move it down 100% of its height to overlap bottom edge */
-                            }}
-                            />
-                        </Box>
-                        <Typography sx={{mt:2}}>{item.vendor}</Typography>
-                        <Typography sx={{maxWidth: 300}} fontWeight='bold' textAlign="center" noWrap={true}>{item.name.replace('', '')}</Typography>
-                        <Rating name="read-only" value={item.rating} readOnly size="small" /> {/*Once db is working it should be item.productRating*/}
+                      >
+                        <img
+                          src={item.productFrontImages[0]}
+                          alt={'product_' + index}
+                          loading="lazy"
+                          style={{ height: '300px', width: '250px' }}
+                        />
+                        <Chip
+                          label={item.tag}
+                          color={getTagCode(item.tag)}
+                          variant="contained"
+                          sx={{
+                            position: 'absolute',
+                            bottom: 40,
+                            right: 8,
+                            transform: 'translateY(100%)',
+                          }}
+                        />
+                      </Box>
+                      <Typography sx={{ mt: 2 }}>{item.vendor}</Typography>
+                      <Typography
+                        sx={{ maxWidth: 300 }}
+                        fontWeight="bold"
+                        textAlign="center"
+                        noWrap={true}
+                      >
+                        {item.name.replace('', '')}
+                      </Typography>
+                      <Rating
+                        name="read-only"
+                        value={item.rating}
+                        readOnly
+                        size="small"
+                      />
+                      <Button
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        size="small"
+                        sx={{ mt: 1 }}
+                        onClick={() => toggleSelected(item)}
+                      >
+                        {isSelected ? 'Remove from quote' : 'Add to quote'}
+                      </Button>
                     </Stack>
-                ))}
-                </ImageList>
-            </Box></> : 
-            <Box display="flex" justifyContent="center" alignItems="center" height="76vh">
-                <CircularProgress size='30vh' thickness='2.8'/>
-            </Box>
-            }
-            <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
-                <Pagination count={numPages} page={page} onChange={handleChange} />
-            </Stack>
-        </Stack>
-    );
+                  );
+                })}
+            </ImageList>
+          </Box>
+        </>
+      ) : (
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          height="76vh"
+        >
+          <CircularProgress size="30vh" thickness="2.8" />
+        </Box>
+      )}
+      <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
+        <Pagination count={numPages} page={page} onChange={handleChange} />
+      </Stack>
+
+      {/* Sticky "quote" bar */}
+      {selectedProducts.length > 0 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bgcolor: 'background.paper',
+            boxShadow: 4,
+            borderRadius: 999,
+            px: 3,
+            py: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            zIndex: 1300,
+          }}
+        >
+          <Typography variant="body2">
+            {selectedProducts.length} product
+            {selectedProducts.length > 1 ? 's' : ''} selected
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleRequestQuote}
+          >
+            Request mockup & quote
+          </Button>
+        </Box>
+      )}
+    </Stack>
+  );
 }
 
-export default Product;
+export default Products;
