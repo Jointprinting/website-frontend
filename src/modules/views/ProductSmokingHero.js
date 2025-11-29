@@ -13,20 +13,24 @@ function ProductSmokingHero() {
     <Container
       component="section"
       sx={{
+        my: 10,
+        py: 6,
+        borderRadius: 3,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        my: 10,
+        bgcolor: '#0e1511',
+        color: 'common.white',
       }}
     >
       <Typography
         variant="overline"
-        sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
+        sx={{ letterSpacing: 3, mb: 1, opacity: 0.85 }}
       >
-        PREFER TO TALK IT OUT?
+        WANT A HUMAN BRAIN ON THIS?
       </Typography>
       <Typography variant="h4" component="h2" align="center" sx={{ mb: 3 }}>
-        Hop on a quick call about your next drop
+        Talk through your next merch drop
       </Typography>
 
       <Button
@@ -37,18 +41,21 @@ function ProductSmokingHero() {
           fontSize: 18,
           fontWeight: 600,
           textTransform: 'none',
-          boxShadow: 3,
+          boxShadow: 4,
         }}
         variant="contained"
         color="secondary"
         onClick={() => navigate('/contact')}
       >
-        Talk with a merch nerd
+        Request a free mockup &amp; quote
       </Button>
 
-      <Typography variant="subtitle1" sx={{ my: 3 }} align="center">
-        15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape it
-        into a clean lineup.
+      <Typography
+        variant="subtitle1"
+        sx={{ my: 3, opacity: 0.9 }}
+        align="center"
+      >
+        Share your art, timeline, and budget — we&apos;ll do the heavy lifting.
       </Typography>
 
       <Box

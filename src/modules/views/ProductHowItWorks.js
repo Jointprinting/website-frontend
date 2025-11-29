@@ -1,3 +1,4 @@
+// src/modules/views/ProductHowItWorks.js
 import * as React from 'react';
 
 import Box from '@mui/material/Box';
@@ -83,12 +84,17 @@ function ProductHowItWorks() {
   return (
     <Box
       component="section"
-      sx={{ display: 'flex', bgcolor: 'secondary.light', overflow: 'hidden' }}
+      sx={{
+        display: 'flex',
+        bgcolor: '#0b120f',
+        overflow: 'hidden',
+        color: 'common.white',
+      }}
     >
       <Container
         sx={{
-          mt: 10,
-          mb: 15,
+          mt: 6,
+          mb: 10,
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
@@ -102,12 +108,20 @@ function ProductHowItWorks() {
           sx={{
             pointerEvents: 'none',
             position: 'absolute',
-            top: -180,
-            opacity: 0.7,
+            top: -160,
+            opacity: 0.45,
           }}
         />
 
-        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 10 }}>
+        <Typography
+          variant="overline"
+          align="center"
+          sx={{ letterSpacing: 3, mb: 1, opacity: 0.8 }}
+        >
+          SIMPLE, BRAND-SAFE PROCESS
+        </Typography>
+
+        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 8 }}>
           How it works
         </Typography>
 
@@ -120,7 +134,9 @@ function ProductHowItWorks() {
                 <Typography variant="h6" sx={{ mb: 1.5 }}>
                   {step.title}
                 </Typography>
-                <Typography variant="body1">{step.body}</Typography>
+                <Typography variant="body1" sx={{ color: 'text.primary' }}>
+                  {step.body}
+                </Typography>
               </Box>
             </Grid>
           ))}
@@ -132,9 +148,9 @@ function ProductHowItWorks() {
           variant="contained"
           component="a"
           href="/products"
-          sx={{ mt: 8 }}
+          sx={{ mt: 8, borderRadius: 999, px: 4, textTransform: 'none' }}
         >
-          Get started
+          Start with a mockup
         </Button>
       </Container>
     </Box>
