@@ -12,7 +12,7 @@ export default function ProductHero() {
     <ProductHeroLayout
       sxBackground={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundColor: '#7fc7d9', // average color of the background image
+        backgroundColor: '#7fc7d9', // Average color of the background image.
         backgroundPosition: 'center',
       }}
     >
@@ -22,8 +22,6 @@ export default function ProductHero() {
         src={backgroundImage}
         alt="increase priority"
       />
-
-      {/* Headline */}
       <Typography
         color="inherit"
         align="center"
@@ -31,44 +29,28 @@ export default function ProductHero() {
         marked="center"
         sx={{ mt: 10 }}
       >
-        Modern merch for growing brands.
+        Innovation in Ink
       </Typography>
-
-      {/* Subhead */}
       <Typography
         color="inherit"
         align="center"
         variant="h5"
-        sx={{ mb: 4, mt: { xs: 4, sm: 10 }, maxWidth: 700, mx: 'auto' }}
+        sx={{ mb: 4, mt: { xs: 4, sm: 10 } }}
       >
-        We help teams design and produce merch that actually gets worn —
-        from first idea to shipped boxes — with free mockups and clear quotes
-        on every project.
+        Elevate your brand with our unmatched quality &amp; service.
       </Typography>
-
-      {/* Primary CTA – goes straight to Contact */}
       <Button
         color="secondary"
         variant="contained"
         size="large"
         component="a"
-        href="/contact"
-        sx={{ minWidth: 220 }}
+        href="/products"
+        sx={{ minWidth: 200 }}
       >
-        Request free mockup &amp; quote
+        Request Free Mockup
       </Button>
-
       <Typography variant="body2" color="inherit" sx={{ mt: 2 }}>
-        Free mockup &amp; quote within 24 hours on most projects.
-      </Typography>
-
-      {/* Soft B2B positioning so you don’t get 1-shirt requests */}
-      <Typography
-        variant="caption"
-        color="inherit"
-        sx={{ mt: 1, opacity: 0.9 }}
-      >
-        Best for teams planning drops of around 50+ units per design.
+        (24-hr turnaround)
       </Typography>
     </ProductHeroLayout>
   );
