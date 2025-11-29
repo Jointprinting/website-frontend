@@ -79,7 +79,7 @@ function ProductValues() {
               <Typography variant="body1" sx={{ opacity: 0.9 }}>
                 Your brand deserves the spotlight. Share your art and we&apos;ll
                 turn it into production-ready merch, with real feedback on what
-                will actually land with your audience.
+                will land with your audience.
               </Typography>
             </Box>
           </Grid>
