@@ -16,61 +16,73 @@ import config from '../config.json';
 
 function Contact() {
   const mobile = useMediaQuery('(max-width: 800px)');
+
   const [name, setName] = React.useState('');
+  const [companyName, setCompanyName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
-  const [message, setMessage] = React.useState('');
+  const [quantity, setQuantity] = React.useState('');
+  const [inHandDate, setInHandDate] = React.useState('');
+  const [notes, setNotes] = React.useState('');
   const [success, setSuccess] = React.useState(false);
   const [selectedProducts, setSelectedProducts] = React.useState([]);
 
-  // Load selected products (if any) from sessionStorage and prefill message
+  // Load selected products from sessionStorage
   React.useEffect(() => {
     try {
       const stored = window.sessionStorage.getItem('jpSelectedProducts');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setSelectedProducts(parsed);
+        }
+      }
+    } catch (err) {
+      console.error('Error reading selected products from storage', err);
+    }
+  }, []);
 
-          // Only prefill if the user hasn't started typing
-          if (!message) {
-            const summaryLines = parsed
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!name || !companyName || !email || !phone) {
+      alert('Please fill out Name, Company Name, Email, and Phone Number.');
+      return;
+    }
+
+    if (!phone.match(/^\d{3}-\d{3}-\d{4}$/)) {
+      alert('Please enter a valid phone number in the form of 123-456-7890');
+      return;
+    }
+
+    try {
+      const productLines =
+        selectedProducts.length > 0
+          ? selectedProducts
               .map(
                 (p) =>
                   `- ${p.name || 'Product'} (Style ${p.style || 'N/A'})${
                     p.vendor ? ` — ${p.vendor}` : ''
                   }`
               )
-              .join('\n');
+              .join('\n')
+          : 'No specific products selected.';
 
-            setMessage(
-              `Interested in:\n${summaryLines}\n\n` +
-                `Approximate quantities (per item):\n\n` +
-                `Ideal in-hand date:\n\n` +
-                `Anything else we should know:\n`
-            );
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error reading selected products from storage', err);
-    }
-    // run only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      const message = `
+Company: ${companyName}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (!name || !email || !phone || !message) {
-        alert('Please fill out all fields');
-        return;
-      }
-      // phone number validation 123-456-7890
-      if (!phone.match(/^\d{3}-\d{3}-\d{4}$/)) {
-        alert('Please enter a valid phone number in the form of 123-456-7890');
-        return;
-      }
+Interested in:
+${productLines}
+
+Approximate quantities (per item):
+${quantity || 'Not specified'}
+
+Ideal in-hand date:
+${inHandDate || 'Not specified'}
+
+Anything else we should know:
+${notes || 'Not specified'}
+`.trim();
 
       await axios.post(config.backendUrl + '/api/email/send-contact', {
         name,
@@ -78,13 +90,20 @@ function Contact() {
         phone,
         message,
         selectedProducts,
+        companyName,
+        quantity,
+        inHandDate,
+        notes,
       });
 
       setSuccess(true);
       setName('');
+      setCompanyName('');
       setEmail('');
       setPhone('');
-      setMessage('');
+      setQuantity('');
+      setInHandDate('');
+      setNotes('');
       setSelectedProducts([]);
       try {
         window.sessionStorage.removeItem('jpSelectedProducts');
@@ -97,12 +116,10 @@ function Contact() {
     }
   };
 
-  // useEffect for success alert auto-hide
+  // Auto-hide success alert
   React.useEffect(() => {
     if (success) {
-      const timeout = setTimeout(() => {
-        setSuccess(false);
-      }, 5000);
+      const timeout = setTimeout(() => setSuccess(false), 5000);
       return () => clearTimeout(timeout);
     }
   }, [success]);
@@ -134,7 +151,7 @@ function Contact() {
           variant={mobile ? 'h3' : 'h1'}
           fontWeight="bold"
         >
-          Request a free mockup & quote
+          REQUEST A FREE MOCKUP & QUOTE
         </Typography>
 
         <Typography
@@ -199,48 +216,74 @@ function Contact() {
             spacing={2}
             mt={mobile ? 4 : 6}
           >
-            <Stack direction="row" width="100%" spacing={2} alignItems="start">
-              <Stack spacing={1.73}>
-                <TextField
-                  id="contact-name"
-                  value={name}
-                  label="Name"
-                  variant="outlined"
-                  fullWidth
-                  size="small"
-                  onChange={(e) => setName(e.target.value)}
-                />
-                <TextField
-                  id="contact-email"
-                  type="email"
-                  value={email}
-                  label={mobile ? 'Email' : 'Email Address'}
-                  variant="outlined"
-                  fullWidth
-                  size="small"
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <TextField
-                  id="contact-phone"
-                  value={phone}
-                  label={mobile ? 'Phone' : 'Phone Number (123-456-7890)'}
-                  variant="outlined"
-                  fullWidth
-                  size="small"
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </Stack>
-              <TextField
-                id="contact-message"
-                value={message}
-                label="Project details"
-                variant="outlined"
-                fullWidth
-                multiline
-                minRows={5}
-                onChange={(e) => setMessage(e.target.value)}
-              />
-            </Stack>
+            <TextField
+              id="contact-name"
+              value={name}
+              label="Name"
+              variant="outlined"
+              fullWidth
+              size="small"
+              onChange={(e) => setName(e.target.value)}
+            />
+            <TextField
+              id="contact-company"
+              value={companyName}
+              label="Company Name"
+              variant="outlined"
+              fullWidth
+              size="small"
+              onChange={(e) => setCompanyName(e.target.value)}
+            />
+            <TextField
+              id="contact-email"
+              type="email"
+              value={email}
+              label="Email"
+              variant="outlined"
+              fullWidth
+              size="small"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <TextField
+              id="contact-phone"
+              value={phone}
+              label="Phone Number"
+              variant="outlined"
+              fullWidth
+              size="small"
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="123-456-7890"
+            />
+            <TextField
+              id="contact-quantity"
+              value={quantity}
+              label="Quantity (for each item)"
+              variant="outlined"
+              fullWidth
+              size="small"
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+            <TextField
+              id="contact-inhand"
+              value={inHandDate}
+              label="In-hand date"
+              type="date"
+              variant="outlined"
+              fullWidth
+              size="small"
+              InputLabelProps={{ shrink: true }}
+              onChange={(e) => setInHandDate(e.target.value)}
+            />
+            <TextField
+              id="contact-notes"
+              value={notes}
+              label="Anything else we should know?"
+              variant="outlined"
+              fullWidth
+              multiline
+              minRows={3}
+              onChange={(e) => setNotes(e.target.value)}
+            />
             <Button variant="contained" color="primary" fullWidth type="submit">
               Send request
             </Button>
