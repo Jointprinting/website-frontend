@@ -3,8 +3,7 @@ import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
-import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
+import Typography from '../components/Typography';
 import { useNavigate } from 'react-router-dom';
 
 function ProductSmokingHero() {
@@ -15,31 +14,36 @@ function ProductSmokingHero() {
       component="section"
       sx={{
         bgcolor: '#f5f5f5',
-        py: { xs: 6, md: 10 },
+        py: 10,
       }}
     >
       <Container
-        maxWidth="md"
         sx={{
           display: 'flex',
-          justifyContent: 'center',
+          flexDirection: 'column',
+          alignItems: 'center',
         }}
       >
-        <Paper
-          elevation={4}
+        <Box
           sx={{
-            borderRadius: 4,
-            px: { xs: 3, md: 6 },
-            py: { xs: 4, md: 6 },
-            textAlign: 'center',
-            bgcolor: '#101712',
+            bgcolor: '#111816',
             color: 'common.white',
+            borderRadius: 4,
+            px: { xs: 3, sm: 6 },
+            py: { xs: 5, sm: 6 },
+            textAlign: 'center',
+            boxShadow: 6,
+            maxWidth: 720,
+            width: '100%',
           }}
         >
           <Typography
             variant="overline"
-            color="inherit"
-            sx={{ letterSpacing: 3, opacity: 0.85, mb: 1 }}
+            sx={{
+              letterSpacing: 3,
+              color: 'rgba(255,255,255,0.75)',
+              mb: 1,
+            }}
           >
             PREFER TO TALK IT OUT?
           </Typography>
@@ -47,16 +51,14 @@ function ProductSmokingHero() {
           <Typography
             variant="h4"
             component="h2"
-            color="inherit"
             sx={{ mb: 2, fontWeight: 600 }}
           >
-            HOP ON A QUICK CALL ABOUT YOUR NEXT DROP
+            Hop on a quick call about your next drop
           </Typography>
 
           <Typography
             variant="body1"
-            color="inherit"
-            sx={{ mb: 4, maxWidth: 520, mx: 'auto', opacity: 0.9 }}
+            sx={{ mb: 4, opacity: 0.9, maxWidth: 520, mx: 'auto' }}
           >
             15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape
             it into a clean lineup.
@@ -70,16 +72,15 @@ function ProductSmokingHero() {
               fontSize: 18,
               fontWeight: 600,
               textTransform: 'none',
-              boxShadow: 4,
-              bgcolor: 'secondary.main',
-              '&:hover': { bgcolor: 'secondary.dark' },
+              boxShadow: 5,
             }}
             variant="contained"
+            color="secondary"
             onClick={() => navigate('/contact')}
           >
-            Talk to us about your drop
+            Request a free mockup & quote
           </Button>
-        </Paper>
+        </Box>
       </Container>
     </Box>
   );
