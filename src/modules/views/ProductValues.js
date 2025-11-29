@@ -110,4 +110,48 @@ function ProductValues() {
               <Box sx={iconWrapper}>
                 <Box
                   component="img"
-                  src={tailorIm
+                  src={tailorImage}
+                  alt="tailor"
+                  sx={{ height: 40 }}
+                />
+              </Box>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Tailor-Made Printing Mastery
+              </Typography>
+              <Typography variant="body1">
+                Your brand deserves the spotlight. Submit your design, and our
+                team will transform it into a masterpiece, offering expert brand
+                consultations to capture the essence of your vision. With Joint
+                Print you&apos;ll earn a customized experience, not just an
+                order.
+              </Typography>
+            </Box>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Box sx={card}>
+              <Box sx={iconWrapper}>
+                <Box
+                  component="img"
+                  src={deliverImage}
+                  alt="deliver"
+                  sx={{ height: 40 }}
+                />
+              </Box>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Home-Delivered Perfection
+              </Typography>
+              <Typography variant="body1">
+                Who has the time to track shipments and handle logistics? We do.
+                And we love it. Kick back and relax; we handle everything,
+                ensuring flawless prints arrive on time.
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
+  );
+}
+
+export default ProductValues;
