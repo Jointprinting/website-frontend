@@ -1,97 +1,180 @@
 // src/modules/views/ProductHero.js
 import * as React from 'react';
-import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
+import { keyframes } from '@mui/system';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
+import ProductHeroLayout from './ProductHeroLayout';
 
 const backgroundImage =
   'https://cdn.midjourney.com/02200c93-b8ea-452c-b02d-99cc2954e81f/0_2.webp';
 
+// Simple motion for headings / button
+const fadeUp = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+// Floating scroll indicator
+const floatArrow = keyframes`
+  0% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+  100% { transform: translateY(0); }
+`;
+
 export default function ProductHero() {
   return (
-    <Box
-      component="section"
-      sx={{
-        position: 'relative',
-        color: 'common.white',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: { xs: '80vh', md: '88vh' },
-        backgroundImage: `
-          linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0.55),
-            rgba(0, 0, 0, 0.65)
-          ),
-          url(${backgroundImage})
-        `,
-        backgroundSize: 'cover',
+    <ProductHeroLayout
+      sxBackground={{
+        backgroundImage: `linear-gradient(
+          to bottom,
+          rgba(3, 7, 5, 0.5),
+          rgba(3, 7, 5, 0.88)
+        ), url(${backgroundImage})`,
+        backgroundColor: '#0e1511',
         backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        textAlign: 'center',
+        backgroundSize: 'cover',
       }}
     >
-      {/* Preload image in case browser wants it */}
-      <img style={{ display: 'none' }} src={backgroundImage} alt="hero" />
+      {/* Preload background */}
+      <img
+        style={{ display: 'none' }}
+        src={backgroundImage}
+        alt="increase priority"
+      />
 
-      <Container maxWidth="md">
-        <Typography
-          variant="overline"
-          sx={{
-            letterSpacing: 6,
-            textTransform: 'uppercase',
-            opacity: 0.9,
-          }}
-        >
-          INNOVATION IN INK
-        </Typography>
+      {/* Tagline */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="overline"
+        sx={{
+          letterSpacing: 6,
+          mb: 2,
+          opacity: 0,
+          animation: `${fadeUp} 700ms ease-out forwards`,
+        }}
+      >
+        INNOVATION IN INK
+      </Typography>
 
-        <Typography
-          color="inherit"
-          align="center"
-          variant="h2"
-          sx={{
-            mt: 2,
-            fontWeight: 700,
-            fontSize: { xs: 32, sm: 40, md: 48 },
-          }}
-        >
-          CUSTOM MERCH FOR MODERN BRANDS.
-        </Typography>
+      {/* Main headline */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="h2"
+        marked="center"
+        sx={{
+          mt: 2,
+          maxWidth: 900,
+          mx: 'auto',
+          textTransform: 'uppercase',
+          lineHeight: 1.1,
+          textShadow: '0 24px 60px rgba(0,0,0,0.75)',
+          opacity: 0,
+          animation: `${fadeUp} 800ms ease-out forwards`,
+          animationDelay: '80ms',
+        }}
+      >
+        CUSTOM MERCH FOR MODERN BRANDS.
+      </Typography>
 
-        <Typography
-          color="inherit"
-          align="center"
-          variant="h5"
-          sx={{
-            mt: { xs: 3, sm: 4 },
-            mb: 4,
-          }}
-        >
-          Start with a free mockup and quote in under 24 hours.
-        </Typography>
+      {/* Subheadline */}
+      <Typography
+        color="inherit"
+        align="center"
+        variant="h5"
+        sx={{
+          mb: 4,
+          mt: { xs: 3, sm: 4 },
+          maxWidth: 640,
+          mx: 'auto',
+          textShadow: '0 16px 40px rgba(0,0,0,0.7)',
+          opacity: 0,
+          animation: `${fadeUp} 800ms ease-out forwards`,
+          animationDelay: '160ms',
+        }}
+      >
+        START WITH A FREE MOCKUP AND QUOTE IN UNDER 24 HOURS.
+      </Typography>
 
-        <Button
-          color="secondary"
-          variant="contained"
-          size="large"
-          component="a"
-          href="/products"
-          sx={{
-            minWidth: 260,
+      {/* Primary CTA */}
+      <Button
+        color="secondary"
+        variant="contained"
+        size="large"
+        component="a"
+        href="/products"
+        sx={{
+          minWidth: 260,
+          borderRadius: 999,
+          fontSize: 18,
+          fontWeight: 600,
+          textTransform: 'none',
+          px: 5,
+          py: 1.6,
+          boxShadow: '0 18px 40px rgba(0,0,0,0.5)',
+          opacity: 0,
+          animation: `${fadeUp} 800ms ease-out forwards`,
+          animationDelay: '260ms',
+        }}
+      >
+        Get your free mockup &amp; quote
+      </Button>
+
+      {/* Small line under button – existing copy, just styled */}
+      <Typography
+        variant="body2"
+        color="inherit"
+        sx={{
+          mt: 2.5,
+          opacity: 0.9,
+          textShadow: '0 12px 32px rgba(0,0,0,0.6)',
+          opacity: 0,
+          animation: `${fadeUp} 800ms ease-out forwards`,
+          animationDelay: '340ms',
+        }}
+      >
+        Free mockup &amp; quote in under 24 hours.
+      </Typography>
+
+      {/* Scroll cue (no extra text, just motion) */}
+      <div
+        style={{
+          marginTop: '40px',
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 22,
+            height: 34,
             borderRadius: 999,
-            fontSize: 16,
-            fontWeight: 600,
-            textTransform: 'none',
-            px: 4,
-            py: 1.4,
+            border: '2px solid rgba(255,255,255,0.5)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: 4,
           }}
         >
-          Get your free mockup &amp; quote
-        </Button>
-      </Container>
-    </Box>
+          <span
+            style={{
+              fontSize: 16,
+              color: '#fff',
+              animation: `${floatArrow} 1400ms ease-in-out infinite`,
+              lineHeight: 1,
+            }}
+          >
+            ↓
+          </span>
+        </div>
+      </div>
+    </ProductHeroLayout>
   );
 }
