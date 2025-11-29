@@ -1,3 +1,4 @@
+// src/modules/views/ProductSmokingHero.js
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -11,30 +12,49 @@ function ProductSmokingHero() {
   return (
     <Container
       component="section"
-      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', my: 9 }}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        my: 10,
+      }}
     >
+      <Typography
+        variant="overline"
+        sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
+      >
+        WANT A HUMAN BRAIN ON THIS?
+      </Typography>
+      <Typography variant="h4" component="h2" align="center" sx={{ mb: 3 }}>
+        Talk through your next merch drop
+      </Typography>
+
       <Button
         sx={{
-          border: '4px solid currentColor',
-          borderRadius: 0,
-          height: 'auto',
-          py: 2,
+          borderRadius: 999,
           px: 5,
+          py: 1.8,
+          fontSize: 18,
+          fontWeight: 600,
+          textTransform: 'none',
+          boxShadow: 3,
         }}
-        onClick = {() => navigate('/contact')}
+        variant="contained"
+        color="secondary"
+        onClick={() => navigate('/contact')}
       >
-        <Typography variant="h4" component="span">
-          Got any questions? Need help?
-        </Typography>
+        Request a free mockup & quote
       </Button>
-      <Typography variant="subtitle1" sx={{ my: 3 }}>
-        We are here to help. Get in touch!
+
+      <Typography variant="subtitle1" sx={{ my: 3 }} align="center">
+        Share your art, timeline, and budget — we&apos;ll do the heavy lifting.
       </Typography>
+
       <Box
         component="img"
         src="https://mui.com/static/themes/onepirate/productBuoy.svg"
         alt="buoy"
-        sx={{ width: 60 }}
+        sx={{ width: 60, opacity: 0.7 }}
       />
     </Container>
   );
