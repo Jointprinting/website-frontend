@@ -14,7 +14,7 @@ function About() {
   return (
     <Box bgcolor="#f5f5f5" py={{ xs: 6, md: 10 }}>
       <Container maxWidth="lg">
-        {/* Top intro */}
+        {/* Intro */}
         <Stack spacing={1} mb={{ xs: 5, md: 7 }}>
           <Chip
             label="Joint Printing · Merch Studio"
@@ -26,7 +26,7 @@ function About() {
             }}
           />
           <Typography variant="h4" fontWeight={700}>
-            About Joint Printing
+            ABOUT JOINT PRINTING
           </Typography>
           <Typography
             variant="body1"
@@ -35,33 +35,34 @@ function About() {
           >
             Joint Printing is a brand-first merch studio. We connect the dots
             between great blanks, thoughtful decoration, and the way your
-            audience actually wears your gear — so you get more than just
-            random swag in a box.
+            audience actually wears your gear — so you get more than just random
+            swag in a box.
           </Typography>
         </Stack>
 
         <Grid container spacing={6} alignItems="center">
-          {/* Text side */}
+          {/* Text */}
           <Grid item xs={12} md={6}>
             <Stack spacing={3}>
               <Typography variant="h6" fontWeight={600}>
                 Built for modern brands, not just one-off orders.
               </Typography>
+
               <Typography variant="body1" color="text.secondary">
                 We pull from premium wholesalers like SanMar and S&amp;S
-                Activewear, match the right blanks to your brand, and manage
-                the print details so everything feels cohesive — from tees and
+                Activewear, match the right blanks to your brand, and manage the
+                print details so everything feels cohesive — from tees and
                 hoodies to hats, bags, and promo.
               </Typography>
 
               <Typography variant="body1" color="text.secondary">
-                Whether you&apos;re a dispensary, brewery, startup or
-                community brand, we treat your line like a campaign: dialed-in
-                fits, smart placements, and a lineup that actually sells
-                through instead of collecting dust.
+                Whether you&apos;re a dispensary, brewery, startup or community
+                brand, we treat your line like a campaign: dialed-in fits, smart
+                placements, and a lineup that actually sells through instead of
+                collecting dust.
               </Typography>
 
-              <Stack spacing={1}>
+              <Stack spacing={1.2}>
                 <Typography variant="subtitle2" fontWeight={600}>
                   Where we work best
                 </Typography>
@@ -78,7 +79,7 @@ function About() {
             </Stack>
           </Grid>
 
-          {/* Image side */}
+          {/* Images */}
           <Grid item xs={12} md={6}>
             <Stack spacing={3}>
               <Paper
@@ -91,7 +92,7 @@ function About() {
               >
                 <Box
                   component="img"
-                  src="https://images.pexels.com/photos/3965558/pexels-photo-3965558.jpeg?cs=srgb&dl=pexels-anna-shvets-3965558.jpg&fm=jpg"
+                  src="https://images.pexels.com/photos/3965558/pexels-photo-3965558.jpeg?auto=compress&cs=tinysrgb&w=1600"
                   alt="Screen printing setup"
                   sx={{
                     width: '100%',
@@ -111,8 +112,8 @@ function About() {
               >
                 <Box
                   component="img"
-                  src="https://images.pexels.com/photos/15170532/pexels-photo-15170532.jpeg?cs=srgb&dl=pexels-kseniachernaya-15170532.jpg&fm=jpg"
-                  alt="Merchandise racks with apparel"
+                  src="https://images.pexels.com/photos/7671166/pexels-photo-7671166.jpeg?auto=compress&cs=tinysrgb&w=1600"
+                  alt="Rack of branded apparel"
                   sx={{
                     width: '100%',
                     height: '100%',
