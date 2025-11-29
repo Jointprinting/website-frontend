@@ -8,13 +8,13 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '../modules/components/Typography';
 
-// Swap these later for your own product / shop photos if you’d like
+// Merch / print related imagery
 const heroImg =
-  'https://images.pexels.com/photos/3965558/pexels-photo-3965558.jpeg?auto=compress&cs=tinysrgb&w=1600';
+  'https://images.pexels.com/photos/3738081/pexels-photo-3738081.jpeg?auto=compress&cs=tinysrgb&w=1600&dpr=2'; // person working in a print/apparel shop
 const rackImg =
-  'https://images.pexels.com/photos/7671166/pexels-photo-7671166.jpeg?auto=compress&cs=tinysrgb&w=1600';
+  'https://images.pexels.com/photos/7691086/pexels-photo-7691086.jpeg?auto=compress&cs=tinysrgb&w=1600&dpr=2'; // apparel on racks
 const detailImg =
-  'https://images.pexels.com/photos/4484074/pexels-photo-4484074.jpeg?auto=compress&cs=tinysrgb&w=1600';
+  'https://images.pexels.com/photos/3738082/pexels-photo-3738082.jpeg?auto=compress&cs=tinysrgb&w=1600&dpr=2'; // close-up of print/garment detail
 
 function About() {
   return (
@@ -59,7 +59,7 @@ function About() {
               <Box
                 component="img"
                 src={heroImg}
-                alt="Screen printing shop"
+                alt="Merch and apparel production"
                 sx={{
                   width: '100%',
                   height: { xs: 260, md: 320 },
@@ -145,26 +145,21 @@ function About() {
                   gap: 1,
                 }}
               >
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    Hands-on production & delivery.
-                  </Typography>
-                  <Typography variant="body2">
-                    We manage timelines, proofs, and print details with the
-                    shops so you don&apos;t have to babysit an order. You tell
-                    us your in-hand date — we work backwards from there.
-                  </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Hands-on production & delivery.
+                </Typography>
+                <Typography variant="body2">
+                  We manage timelines, proofs, and print details with the shops
+                  so you don&apos;t have to babysit an order. You tell us your
+                  in-hand date — we work backwards from there.
+                </Typography>
               </Paper>
             </Grid>
           </Grid>
         </Box>
 
-        {/* WHO WE'RE BEST FOR + IMAGES */}
-        <Grid
-          container
-          spacing={6}
-          alignItems="center"
-          sx={{ mt: 10 }}
-        >
+        {/* BRAND FIT + IMAGERY */}
+        <Grid container spacing={6} alignItems="center" sx={{ mt: 10 }}>
           <Grid item xs={12} md={6}>
             <Typography
               variant="overline"
@@ -184,36 +179,11 @@ function About() {
               brand, we treat your merch like a campaign: dialed-in fits, smart
               placements, and a lineup that feels like your brand on fabric.
             </Typography>
-
-            <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-              We work best with:
-            </Typography>
-            <Box component="ul" sx={{ pl: 3, m: 0 }}>
-              <Typography component="li" variant="body1">
-                Cannabis brands and dispensaries that want pieces people wear
-                outside the shop.
-              </Typography>
-              <Typography component="li" variant="body1">
-                Breweries and beverage brands that live in taprooms, festivals,
-                and bottle shops.
-              </Typography>
-              <Typography component="li" variant="body1">
-                Tech / startup teams and creators that need runs that look as
-                intentional as their product.
-              </Typography>
-              <Typography component="li" variant="body1">
-                Any brand that wants merch to feel like a real extension of
-                their identity — not an afterthought.
-              </Typography>
-            </Box>
           </Grid>
 
           <Grid item xs={12} md={6}>
             <Stack spacing={3}>
-              <Paper
-                elevation={3}
-                sx={{ borderRadius: 3, overflow: 'hidden' }}
-              >
+              <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
                 <Box
                   component="img"
                   src={rackImg}
@@ -225,10 +195,7 @@ function About() {
                   }}
                 />
               </Paper>
-              <Paper
-                elevation={3}
-                sx={{ borderRadius: 3, overflow: 'hidden' }}
-              >
+              <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
                 <Box
                   component="img"
                   src={detailImg}
