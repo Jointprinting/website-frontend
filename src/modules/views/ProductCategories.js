@@ -14,32 +14,26 @@ const ImageBackdrop = styled('div')(({ theme }) => ({
   top: 0,
   bottom: 0,
   background: '#000',
-  opacity: 0.45,
-  transition: theme.transitions.create(['opacity', 'transform']),
+  opacity: 0.35,
+  transition: theme.transitions.create('opacity'),
 }));
 
 const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   position: 'relative',
   display: 'block',
   padding: 0,
-  borderRadius: 0,
+  borderRadius: 18,
   height: '40vh',
   overflow: 'hidden',
-  transform: 'translateY(0)',
-  transition: theme.transitions.create(['transform', 'box-shadow'], {
-    duration: 200,
-  }),
   [theme.breakpoints.down('md')]: {
     width: '100% !important',
-    height: 120,
+    height: 140,
   },
   '&:hover': {
     zIndex: 1,
-    transform: 'translateY(-3px)',
-    boxShadow: '0 20px 45px rgba(0,0,0,0.45)',
   },
   '&:hover .imageBackdrop': {
-    opacity: 0.2,
+    opacity: 0.15,
   },
   '&:hover .imageMarked': {
     opacity: 0,
@@ -70,14 +64,14 @@ const tiles = [
   {
     url: 'https://images.pexels.com/photos/4498143/pexels-photo-4498143.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     title: 'Headwear & Layers',
-    subtitle: 'Caps, beanies, outerwear for real-world use.',
+    subtitle: 'Caps, beanies, and outerwear that travel with your audience.',
     width: '33.34%',
     tab: '/products',
   },
   {
     url: 'https://images.pexels.com/photos/9594432/pexels-photo-9594432.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     title: 'Promo & Accessories',
-    subtitle: 'Totes, drinkware, and the fun extras.',
+    subtitle: 'Totes, drinkware, and extras that feel on-brand — not junk.',
     width: '33.33%',
     tab: '/products',
   },
@@ -87,36 +81,26 @@ export default function ProductCategories() {
   const navigate = useNavigate();
 
   return (
-    <Box component="section" sx={{ mt: 10, mb: 12 }}>
-      <Container
-        sx={{
-          borderRadius: 3,
-          py: 6,
-          px: { xs: 2, md: 4 },
-          bgcolor: '#0e1511',
-        }}
-      >
+    <Box component="section" sx={{ mt: 8, mb: 12, bgcolor: '#f7f7f7' }}>
+      <Container sx={{ pt: 6, pb: 2 }}>
         <Typography
           variant="overline"
           align="center"
-          sx={{
-            letterSpacing: 3,
-            color: 'rgba(255,255,255,0.7)',
-          }}
+          sx={{ letterSpacing: 3, color: 'text.secondary' }}
         >
-          THE CANVAS FOR YOUR BRAND
+          WHAT WE LOVE TO BUILD
         </Typography>
         <Typography
           variant="h4"
           marked="center"
           align="center"
           component="h2"
-          sx={{ mt: 1, color: 'common.white' }}
+          sx={{ mt: 1, mb: 5 }}
         >
-          Apparel and promo that doesn&apos;t get left in a drawer
+          The pieces your audience actually keeps
         </Typography>
 
-        <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
           {tiles.map((tile) => (
             <ImageIconButton
               key={tile.title}
@@ -140,38 +124,3 @@ export default function ProductCategories() {
                 sx={{
                   position: 'absolute',
                   left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'common.white',
-                  px: 2,
-                }}
-              >
-                <Typography
-                  component="h3"
-                  variant="h6"
-                  color="inherit"
-                  className="imageTitle"
-                  sx={{ textTransform: 'none' }}
-                >
-                  {tile.title}
-                  <div className="imageMarked" />
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ mt: 0.5, opacity: 0.9, maxWidth: 260 }}
-                >
-                  {tile.subtitle}
-                </Typography>
-              </Box>
-            </ImageIconButton>
-          ))}
-        </Box>
-      </Container>
-    </Box>
-  );
-}
