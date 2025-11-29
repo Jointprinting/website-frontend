@@ -1,3 +1,4 @@
+// src/modules/views/ProductHowItWorks.js
 import * as React from 'react';
 
 import Box from '@mui/material/Box';
@@ -9,26 +10,75 @@ import drawImage from '../images/draw.webp';
 import relaxImage from '../images/relax.webp';
 import deliveryImage from '../images/delivery.webp';
 
-const item = {
+const cardBase = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  px: 5,
+  textAlign: 'center',
+  p: 4,
+  borderRadius: 3,
+  bgcolor: 'common.white',
+  boxShadow: 2,
+  minHeight: 260,
+  position: 'relative',
+  transition: 'transform 180ms ease-out, box-shadow 180ms ease-out',
+  '&:hover': {
+    transform: 'translateY(-4px)',
+    boxShadow: 6,
+  },
 };
 
-const number = {
-  fontSize: 24,
-  fontFamily: 'default',
+const numberCircle = {
+  width: 40,
+  height: 40,
+  borderRadius: '50%',
+  border: '2px solid #06752b', // secondary.main
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontWeight: 700,
   color: 'secondary.main',
-  fontWeight: 'medium',
+  mb: 2,
+  bgcolor: 'secondary.light',
 };
 
-const image = {
+const imageStyle = {
   height: 55,
-  my: 4,
+  my: 3,
 };
 
 function ProductHowItWorks() {
+  const steps = [
+    {
+      num: '1',
+      img: drawImage,
+      title: 'Share the plan',
+      body:
+        'Tell us about your brand, the event or launch, and a rough idea of quantities. We’re built for teams and growing brands, not one-off personal tees.',
+    },
+    {
+      num: '2',
+      img: relaxImage,
+      title: 'Pick a few product directions',
+      body:
+        'Pick a few products you’re into — we’ll send options from budget to premium and handle the art, so you can compare what makes sense for your budget.',
+    },
+    {
+      num: '3',
+      img: deliveryImage,
+      title: 'Approve mockups & quote',
+      body:
+        'We send polished mockups and clear pricing you can share with your team. Tweak anything until it feels exactly right.',
+    },
+    {
+      num: '4',
+      img: relaxImage,
+      title: 'We print, ship & you look good',
+      body:
+        'We coordinate production, quality control, and shipping so your merch shows up on time and on-brand — for your team, customers, or community.',
+    },
+  ];
+
   return (
     <Box
       component="section"
@@ -55,55 +105,35 @@ function ProductHowItWorks() {
             opacity: 0.7,
           }}
         />
-        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 14 }}>
-          How it works
+
+        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 2 }}>
+          How it works for growing brands
         </Typography>
-        <div>
-          <Grid container spacing={5}>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>1.</Box>
-                <Box
-                  component="img"
-                  src={drawImage}
-                  alt="draw"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Request a free mockup and let us know your vision — we're ready to listen around the clock.
+        <Typography
+          variant="body1"
+          align="center"
+          sx={{ mb: 10, maxWidth: 720 }}
+        >
+          We partner with businesses, teams, and organizations that want merch
+          to actually move the needle — from dispensaries and breweries to
+          agencies, startups, and more.
+        </Typography>
+
+        <Grid container spacing={4}>
+          {steps.map((step) => (
+            <Grid item xs={12} sm={6} md={3} key={step.num}>
+              <Box sx={cardBase}>
+                <Box sx={numberCircle}>{step.num}</Box>
+                <Box component="img" src={step.img} alt={step.title} sx={imageStyle} />
+                <Typography variant="h6" sx={{ mb: 1.5 }}>
+                  {step.title}
                 </Typography>
+                <Typography variant="body1">{step.body}</Typography>
               </Box>
             </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>2.</Box>
-                <Box
-                  component="img"
-                  src={relaxImage}
-                  alt="relax"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Sit back as we seamlessly coordinate the perfect match of quality materials and printing precision for your project.
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={item}>
-                <Box sx={number}>3.</Box>
-                <Box
-                  component="img"
-                  src={deliveryImage}
-                  alt="delivery"
-                  sx={image}
-                />
-                <Typography variant="h5" align="center">
-                Get premium prints, flawlessly delivered, right to your door. Satisfaction guaranteed!
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </div>
+          ))}
+        </Grid>
+
         <Button
           color="secondary"
           size="large"
@@ -112,7 +142,7 @@ function ProductHowItWorks() {
           href="/products"
           sx={{ mt: 8 }}
         >
-          Get started
+          Start a mockup & quote
         </Button>
       </Container>
     </Box>

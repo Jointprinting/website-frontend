@@ -1,5 +1,5 @@
 // src/screens/Products.js
-import { React, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Stack,
@@ -149,98 +149,96 @@ function Products() {
 
   return (
     <Stack py={2}>
-      {!loading ? (
-        <>
-          <Stack
-            direction="row"
-            px="4vw"
-            mb={1.5}
-            alignItems="center"
-            spacing="5vw"
+    {!loading ? (
+  <>
+    <Stack px="4vw" mb={1.5} spacing={1.5}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing="5vw"
+      >
+        <Typography variant="h4" component="span">
+          Filters
+        </Typography>
+
+        {/* Category Filter */}
+        <Button
+          id="category-button"
+          aria-controls={open ? 'category-menu' : undefined}
+          aria-haspopup="true"
+          aria-expanded={open ? 'true' : undefined}
+          onClick={handleClick}
+        >
+          Category
+        </Button>
+        <Menu
+          id="category-menu"
+          anchorEl={anchorEl}
+          open={open}
+          onClose={() => handleCategoryClose(selectedCategory)}
+          MenuListProps={{
+            'aria-labelledby': 'category-button',
+          }}
+        >
+          <MenuItem onClick={() => handleCategoryClose('Shirts')}>Shirts</MenuItem>
+          <MenuItem onClick={() => handleCategoryClose('Pants')}>Pants</MenuItem>
+          <MenuItem onClick={() => handleCategoryClose('Hoodies')}>Hoodies</MenuItem>
+          <MenuItem onClick={() => handleCategoryClose('Hats')}>Hats</MenuItem>
+        </Menu>
+
+        {/* Type Filter */}
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Button
+            id="type-button"
+            aria-controls={openType ? 'type-menu' : undefined}
+            aria-haspopup="true"
+            aria-expanded={openType ? 'true' : undefined}
+            onClick={handleClickType}
           >
-            <Typography variant="h4" component="span">
-              Filters
-            </Typography>
+            Type
+          </Button>
+          <Menu
+            id="type-menu"
+            anchorEl={anchorElType}
+            open={openType}
+            onClose={() => handleCloseType(selectedType)}
+            MenuListProps={{
+              'aria-labelledby': 'type-button',
+            }}
+          >
+            <MenuItem onClick={() => handleCloseType('Unisex')}>Unisex</MenuItem>
+            <MenuItem onClick={() => handleCloseType('Male')}>Male</MenuItem>
+            <MenuItem onClick={() => handleCloseType('Female')}>Female</MenuItem>
+            <MenuItem onClick={() => handleCloseType('Kids')}>Kids</MenuItem>
+          </Menu>
+          <Box width="12px" />
+          {selectedCategory && (
+            <Chip
+              label={selectedCategory}
+              onDelete={() => setSelectedCategory('')}
+            />
+          )}
+          {selectedType && (
+            <Chip
+              label={selectedType}
+              onDelete={() => setSelectedType('')}
+            />
+          )}
+        </Stack>
+      </Stack>
 
-            {/* Category Filter */}
-            <Button
-              id="category-button"
-              aria-controls={open ? 'category-menu' : undefined}
-              aria-haspopup="true"
-              aria-expanded={open ? 'true' : undefined}
-              onClick={handleClick}
-            >
-              Category
-            </Button>
-            <Menu
-              id="category-menu"
-              anchorEl={anchorEl}
-              open={open}
-              onClose={() => handleCategoryClose(selectedCategory)}
-              MenuListProps={{
-                'aria-labelledby': 'category-button',
-              }}
-            >
-              <MenuItem onClick={() => handleCategoryClose('Shirts')}>
-                Shirts
-              </MenuItem>
-              <MenuItem onClick={() => handleCategoryClose('Pants')}>
-                Pants
-              </MenuItem>
-              <MenuItem onClick={() => handleCategoryClose('Hoodies')}>
-                Hoodies
-              </MenuItem>
-              <MenuItem onClick={() => handleCategoryClose('Hats')}>
-                Hats
-              </MenuItem>
-            </Menu>
+      {/* New helper line under filters */}
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ maxWidth: 640 }}
+      >
+        Pick a few products you’re into — we’ll send options from budget to premium and handle the art.
+      </Typography>
+    </Stack>
 
-            {/* Type Filter */}
-            <Stack direction="row" alignItems="center" spacing={1.5}>
-              <Button
-                id="type-button"
-                aria-controls={openType ? 'type-menu' : undefined}
-                aria-haspopup="true"
-                aria-expanded={openType ? 'true' : undefined}
-                onClick={handleClickType}
-              >
-                Type
-              </Button>
-              <Menu
-                id="type-menu"
-                anchorEl={anchorElType}
-                open={openType}
-                onClose={() => handleCloseType(selectedType)}
-                MenuListProps={{
-                  'aria-labelledby': 'type-button',
-                }}
-              >
-                <MenuItem onClick={() => handleCloseType('Unisex')}>
-                  Unisex
-                </MenuItem>
-                <MenuItem onClick={() => handleCloseType('Male')}>
-                  Male
-                </MenuItem>
-                <MenuItem onClick={() => handleCloseType('Female')}>
-                  Female
-                </MenuItem>
-                <MenuItem onClick={() => handleCloseType('Kids')}>
-                  Kids
-                </MenuItem>
-              </Menu>
-              <Box width="12px" />
-              {selectedCategory && (
-                <Chip
-                  label={selectedCategory}
-                  onDelete={() => setSelectedCategory('')}
-                />
-              )}
-              {selectedType && (
-                <Chip label={selectedType} onDelete={() => setSelectedType('')} />
-              )}
-            </Stack>
-          </Stack>
-          <Divider />
+    <Divider />
+
           <Box
             width="100%"
             display="flex"
