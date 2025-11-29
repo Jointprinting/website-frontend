@@ -1,3 +1,4 @@
+// src/modules/views/ProductValues.js
 import * as React from 'react';
 
 import Box from '@mui/material/Box';
@@ -37,16 +38,16 @@ function ProductValues() {
                 alt="clothes"
                 sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
-                Your Dedicated Print Concierge
+              <Typography variant="h6" sx={{ my: 3 }} textAlign="center">
+                A real person on your project
               </Typography>
-              <Typography variant="h5" textAlign='center'>
-              Focus on your business, not your printing. 
-              Joint Printing assigns you a dedicated agent who handles everything – from finding the perfect supplier to ensuring on-time delivery.
-              Let us sweat the details, so you can focus on what matters.
+              <Typography variant="h5" textAlign="center">
+                You get a dedicated merch partner who handles vendors, proofs,
+                and logistics — so you can stay focused on the business.
               </Typography>
             </Box>
           </Grid>
+
           <Grid item xs={12} md={4}>
             <Box sx={item}>
               <Box
@@ -55,14 +56,16 @@ function ProductValues() {
                 alt="tailor"
                 sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
-                Tailor-Made Printing Mastery
+              <Typography variant="h6" sx={{ my: 3 }} textAlign="center">
+                Design help included
               </Typography>
-              <Typography variant="h5" textAlign='center'>
-                  Your brand deserves the spotlight. Submit your design, and our team will transform it into a masterpiece, offering expert brand consultations to capture the essence of your vision. With Joint Print you'll earn a customized experience, not just an order.
+              <Typography variant="h5" textAlign="center">
+                Already have art or just a rough idea? We’ll clean it up,
+                place it on the right products, and make sure it feels on-brand.
               </Typography>
             </Box>
           </Grid>
+
           <Grid item xs={12} md={4}>
             <Box sx={item}>
               <Box
@@ -71,11 +74,12 @@ function ProductValues() {
                 alt="deliver"
                 sx={{ height: 80 }}
               />
-              <Typography variant="h6" sx={{ my: 5 }} textAlign='center'>
-                Home-Delivered Perfection
+              <Typography variant="h6" sx={{ my: 3 }} textAlign="center">
+                Worry-free delivery
               </Typography>
-              <Typography variant="h5" textAlign='center'>
-              Who has the time to track shipments and handle logistics? We do. And we love it. Kick back and relax; We handle everything, ensuring flawless prints arrive on time.
+              <Typography variant="h5" textAlign="center">
+                We manage production and shipping end-to-end, with clear
+                timelines and updates so your merch shows up when you need it.
               </Typography>
             </Box>
           </Grid>
