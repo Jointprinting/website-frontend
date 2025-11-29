@@ -15,7 +15,7 @@ const ImageBackdrop = styled('div')(({ theme }) => ({
   bottom: 0,
   background: '#000',
   opacity: 0.45,
-  transition: theme.transitions.create('opacity'),
+  transition: theme.transitions.create(['opacity', 'transform']),
 }));
 
 const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
@@ -24,12 +24,19 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   padding: 0,
   borderRadius: 0,
   height: '40vh',
+  overflow: 'hidden',
+  transform: 'translateY(0)',
+  transition: theme.transitions.create(['transform', 'box-shadow'], {
+    duration: 200,
+  }),
   [theme.breakpoints.down('md')]: {
     width: '100% !important',
     height: 120,
   },
   '&:hover': {
     zIndex: 1,
+    transform: 'translateY(-3px)',
+    boxShadow: '0 20px 45px rgba(0,0,0,0.45)',
   },
   '&:hover .imageBackdrop': {
     opacity: 0.2,
@@ -97,7 +104,7 @@ export default function ProductCategories() {
             color: 'rgba(255,255,255,0.7)',
           }}
         >
-          MERCH WE&apos;RE BUILT AROUND
+          THE CANVAS FOR YOUR BRAND
         </Typography>
         <Typography
           variant="h4"
@@ -106,7 +113,7 @@ export default function ProductCategories() {
           component="h2"
           sx={{ mt: 1, color: 'common.white' }}
         >
-          The pieces your brand actually lives on
+          Apparel and promo that doesn&apos;t get left in a drawer
         </Typography>
 
         <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
