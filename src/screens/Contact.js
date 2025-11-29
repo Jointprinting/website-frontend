@@ -91,8 +91,7 @@ function Contact() {
       );
 
       files.forEach((file) => {
-        // matches upload.array('files', 10) on the backend
-        formData.append('files', file);
+        formData.append('files', file); // matches upload.array('files', 10)
       });
 
       await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
