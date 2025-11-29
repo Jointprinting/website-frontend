@@ -224,7 +224,9 @@ function Product() {
 
                 <Stack spacing={1}>
                     <Button variant="contained" size="large" sx={{width: '100%'}} onClick={()=>navigate(`/customize?styleCode=${id}`)}> Customize </Button>
-                    <Typography fontSize={12}>Free mockup by <b>4 AM.</b></Typography>
+                    <Typography fontSize={12}>
+  Free mockup & quote by <b>4 AM.</b>
+</Typography>
                 </Stack>
 
                 <Typography color='charcoal' textAlign={mobile ? 'center' : 'none'} fontSize={mobile ? 14 : 16}>
