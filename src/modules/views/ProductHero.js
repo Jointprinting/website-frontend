@@ -28,13 +28,9 @@ export default function ProductHero() {
         color="inherit"
         align="center"
         variant="overline"
-        sx={{
-          letterSpacing: 4,
-          opacity: 0.85,
-          mt: { xs: 6, sm: 8 },
-        }}
+        sx={{ letterSpacing: 4, opacity: 0.9 }}
       >
-        JOINT PRINTING · MERCH STUDIO
+        BRAND-FIRST MERCH STUDIO
       </Typography>
 
       <Typography
@@ -44,26 +40,26 @@ export default function ProductHero() {
         marked="center"
         sx={{ mt: 2 }}
       >
-        Brand-first merch that actually gets worn.
+        CUSTOM MERCH FOR MODERN BRANDS
       </Typography>
 
       <Typography
         color="inherit"
         align="center"
         variant="h5"
-        sx={{ mb: 3, mt: { xs: 3, sm: 4 }, maxWidth: 700, mx: 'auto' }}
+        sx={{ mb: 4, mt: { xs: 3, sm: 4 }, maxWidth: 620 }}
       >
-        We treat your line like a campaign — dialing in blanks, fit and
-        decoration so your logo feels at home on every piece.
+        Pick your blanks, send your art, and we&apos;ll handle the rest — from
+        sourcing to delivery.
       </Typography>
 
       <Box
         sx={{
-          mt: { xs: 3, sm: 4 },
+          mt: 2,
           display: 'flex',
-          gap: 2,
-          flexWrap: 'wrap',
-          justifyContent: 'center',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 1.5,
         }}
       >
         <Button
@@ -72,38 +68,34 @@ export default function ProductHero() {
           size="large"
           component="a"
           href="/products"
-          sx={{ minWidth: 220, borderRadius: 999, textTransform: 'none' }}
-        >
-          Start with products
-        </Button>
-
-        <Button
-          color="inherit"
-          variant="text"
-          size="large"
-          component="a"
-          href="/contact"
           sx={{
-            textTransform: 'none',
+            minWidth: 240,
             borderRadius: 999,
-            px: 2.5,
-            opacity: 0.9,
+            px: 4,
+            py: 1.4,
+            fontWeight: 600,
+            textTransform: 'none',
+            fontSize: 18,
+            boxShadow: '0 18px 45px rgba(0,0,0,0.55)',
+            transition: 'all 160ms ease-out',
             '&:hover': {
-              backgroundColor: 'rgba(255,255,255,0.08)',
+              transform: 'translateY(-1px)',
+              boxShadow: '0 22px 55px rgba(0,0,0,0.7)',
             },
           }}
         >
-          Or send us your art →
+          Get your mockup &amp; quote
         </Button>
-      </Box>
 
-      <Typography
-        variant="body2"
-        color="inherit"
-        sx={{ mt: 3, opacity: 0.85 }}
-      >
-        Free mockup & quote in under 24 hours. No pressure, no minimum spend.
-      </Typography>
+        <Typography
+          variant="body2"
+          color="inherit"
+          sx={{ opacity: 0.9, maxWidth: 360, textAlign: 'center' }}
+        >
+          Free mockup &amp; quote in under 24 hours. No spam, no pressure — just
+          a clear starting point.
+        </Typography>
+      </Box>
     </ProductHeroLayout>
   );
 }
