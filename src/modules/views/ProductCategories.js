@@ -52,26 +52,26 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   },
 }));
 
-// Same photos, but framed around what you actually make
+// Framed like a brand/merch system, all tiles still go to /products
 const tiles = [
   {
     url: 'https://images.pexels.com/photos/4641825/pexels-photo-4641825.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'Core Apparel',
-    subtitle: 'Tees, crews & hoodies that actually get worn.',
+    title: 'Launch drops & campaigns',
+    subtitle: 'Tees, hoodies and hats built around a moment.',
     width: '33.33%',
     tab: '/products',
   },
   {
     url: 'https://images.pexels.com/photos/4498143/pexels-photo-4498143.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'Headwear & Layers',
-    subtitle: 'Caps, beanies, outerwear for real-world use.',
+    title: 'Team & staff uniforms',
+    subtitle: 'Pieces your crew actually wants to wear.',
     width: '33.34%',
     tab: '/products',
   },
   {
     url: 'https://images.pexels.com/photos/9594432/pexels-photo-9594432.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'Promo & Accessories',
-    subtitle: 'Totes, drinkware, and the fun extras.',
+    title: 'Retail & repeat sellers',
+    subtitle: 'Blanks and placements tuned for your shelves.',
     width: '33.33%',
     tab: '/products',
   },
@@ -87,7 +87,7 @@ export default function ProductCategories() {
         align="center"
         sx={{ letterSpacing: 3, color: 'text.secondary' }}
       >
-        WHAT WE HELP YOU MAKE
+        WHERE WE PLUG INTO YOUR BRAND
       </Typography>
       <Typography
         variant="h4"
@@ -96,7 +96,7 @@ export default function ProductCategories() {
         component="h2"
         sx={{ mt: 1 }}
       >
-        Dialed-in merch, not random swag
+        From launch drops to everyday uniforms
       </Typography>
 
       <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>

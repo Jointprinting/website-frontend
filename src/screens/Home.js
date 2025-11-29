@@ -11,8 +11,8 @@ function Home() {
   return (
     <Box>
       <ProductHero />
-      <ProductValues />
       <ProductCategories />
+      <ProductValues />
       <ProductHowItWorks />
       <ProductSmokingHero />
     </Box>

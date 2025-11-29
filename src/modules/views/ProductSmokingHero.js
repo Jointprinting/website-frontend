@@ -23,10 +23,10 @@ function ProductSmokingHero() {
         variant="overline"
         sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
       >
-        WANT A HUMAN BRAIN ON THIS?
+        PREFER TO TALK IT OUT?
       </Typography>
       <Typography variant="h4" component="h2" align="center" sx={{ mb: 3 }}>
-        Talk through your next merch drop
+        Hop on a quick call about your next drop
       </Typography>
 
       <Button
@@ -43,11 +43,12 @@ function ProductSmokingHero() {
         color="secondary"
         onClick={() => navigate('/contact')}
       >
-        Request a free mockup & quote
+        Talk with a merch nerd
       </Button>
 
       <Typography variant="subtitle1" sx={{ my: 3 }} align="center">
-        Share your art, timeline, and budget — we&apos;ll do the heavy lifting.
+        15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape it
+        into a clean lineup.
       </Typography>
 
       <Box
