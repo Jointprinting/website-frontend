@@ -39,6 +39,7 @@ function ProductSmokingHero() {
         >
           <Typography
             variant="overline"
+            color="inherit"
             sx={{
               letterSpacing: 3,
               color: 'rgba(255,255,255,0.75)',
@@ -51,6 +52,7 @@ function ProductSmokingHero() {
           <Typography
             variant="h4"
             component="h2"
+            color="inherit"
             sx={{ mb: 2, fontWeight: 600 }}
           >
             Hop on a quick call about your next drop
@@ -58,6 +60,7 @@ function ProductSmokingHero() {
 
           <Typography
             variant="body1"
+            color="inherit"
             sx={{ mb: 4, opacity: 0.9, maxWidth: 520, mx: 'auto' }}
           >
             15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape
