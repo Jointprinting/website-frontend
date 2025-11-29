@@ -53,7 +53,7 @@ function FAQ() {
           align="center"
           sx={{ mb: 4 }}
         >
-          Answers before you hit &quot;send art&quot;
+          Common questions about working with us
         </Typography>
 
         {faqs.map((item, idx) => (
@@ -73,7 +73,9 @@ function FAQ() {
               <MuiTypography fontWeight={600}>{item.q}</MuiTypography>
             </AccordionSummary>
             <AccordionDetails>
-              <MuiTypography color="text.secondary">{item.a}</MuiTypography>
+              <MuiTypography color="text.secondary">
+                {item.a}
+              </MuiTypography>
             </AccordionDetails>
           </Accordion>
         ))}
