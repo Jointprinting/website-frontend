@@ -166,7 +166,7 @@ function Products() {
         maxWidth={1240}
         mx="auto"
       >
-        {/* HEADER / STEP LABEL */}
+        {/* HEADER */}
         <Stack spacing={0.5}>
           <Typography
             variant="overline"
