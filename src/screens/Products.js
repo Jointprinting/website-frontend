@@ -64,6 +64,12 @@ function Products() {
     setPage(value);
   };
 
+  const handleClearFilters = () => {
+    setSelectedCategory('');
+    setSelectedType('');
+    setPage(1);
+  };
+
   // Load any existing selected products from sessionStorage on first mount
   useEffect(() => {
     try {
@@ -151,12 +157,6 @@ function Products() {
     navigate('/contact');
   };
 
-  const handleClearFilters = () => {
-    setSelectedCategory('');
-    setSelectedType('');
-    setPage(1);
-  };
-
   return (
     <Box bgcolor="#f5f5f5" minHeight="100vh">
       <Stack
@@ -192,7 +192,7 @@ function Products() {
               sx={{ maxWidth: 420 }}
             >
               Choose the pieces you like, drop them in your quote tray, and
-              we’ll handle mockups, pricing, and print details.
+              we&apos;ll handle mockups, pricing, and print details.
             </Typography>
           </Stack>
         </Stack>
@@ -493,11 +493,16 @@ function Products() {
         ) : (
           <Box
             display="flex"
+            flexDirection="column"
             justifyContent="center"
             alignItems="center"
             height="60vh"
+            gap={2}
           >
-            <CircularProgress size="30vh" thickness={2.8} />
+            <CircularProgress size={48} thickness={4} />
+            <Typography variant="body2" color="text.secondary">
+              Loading your merch lineup…
+            </Typography>
           </Box>
         )}
 
