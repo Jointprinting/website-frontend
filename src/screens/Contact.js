@@ -85,9 +85,11 @@ function Contact() {
       formData.append('notes', notes);
       formData.append('selectedProducts', JSON.stringify(selectedProducts || []));
 
-      files.forEach((file) => {
-        formData.append('designFiles', file);
-      });
+      // src/screens/Contact.js – inside handleSubmit
+files.forEach((file) => {
+  formData.append('files', file);   // <- change 'designFiles' to 'files'
+});
+
 
       await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
