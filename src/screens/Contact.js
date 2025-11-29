@@ -11,9 +11,12 @@ import {
   Alert,
   IconButton,
   Typography as MuiTypography,
+  Avatar,
+  Paper,
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AvatarGroup from '@mui/material/AvatarGroup';
 import Typography from '../modules/components/Typography';
 import axios from 'axios';
 import config from '../config.json';
@@ -51,7 +54,6 @@ function Contact() {
     const newFiles = Array.from(e.target.files || []);
     if (!newFiles.length) return;
     setFiles((prev) => [...prev, ...newFiles]);
-    // allow picking the same file again if needed
     e.target.value = '';
   };
 
@@ -83,13 +85,15 @@ function Contact() {
       formData.append('quantity', quantity);
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
-      formData.append('selectedProducts', JSON.stringify(selectedProducts || []));
+      formData.append(
+        'selectedProducts',
+        JSON.stringify(selectedProducts || [])
+      );
 
-      // src/screens/Contact.js – inside handleSubmit
-files.forEach((file) => {
-  formData.append('files', file);   // <- change 'designFiles' to 'files'
-});
-
+      files.forEach((file) => {
+        // matches upload.array('files', 10) on the backend
+        formData.append('files', file);
+      });
 
       await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -189,25 +193,59 @@ files.forEach((file) => {
           </Typography>
         </Typography>
 
+        {/* Selected products preview */}
         {selectedProducts.length > 0 && (
-          <Box mt={2} width="100%">
-            <Typography
-              align="center"
-              variant={mobile ? 'h6' : 'h5'}
+          <Paper
+            elevation={0}
+            sx={{
+              mt: 3,
+              mb: 1,
+              width: '100%',
+              bgcolor: 'secondary.light',
+              borderRadius: 2,
+              p: 2,
+            }}
+          >
+            <MuiTypography
+              align="left"
+              variant={mobile ? 'body1' : 'h6'}
               fontWeight={500}
               mb={1}
             >
               You selected:
-            </Typography>
-            <Stack spacing={0.5}>
-              {selectedProducts.map((p, idx) => (
-                <MuiTypography key={idx} align="center" variant="body2">
-                  {p.name || 'Product'} (Style {p.style || 'N/A'})
-                  {p.vendor ? ` — ${p.vendor}` : ''}
-                </MuiTypography>
-              ))}
+            </MuiTypography>
+            <Stack
+              direction="row"
+              spacing={2}
+              alignItems="center"
+              flexWrap="wrap"
+            >
+              <AvatarGroup
+                max={4}
+                sx={{
+                  '& .MuiAvatar-root': {
+                    width: 32,
+                    height: 32,
+                    fontSize: 12,
+                  },
+                }}
+              >
+                {selectedProducts.map((p) => (
+                  <Avatar key={p.style} src={p.thumbnail || undefined}>
+                    {p.name ? p.name.charAt(0) : '?'}
+                  </Avatar>
+                ))}
+              </AvatarGroup>
+              <Stack spacing={0.3}>
+                {selectedProducts.map((p, idx) => (
+                  <MuiTypography key={idx} variant="body2">
+                    {p.name || 'Product'} (Style {p.style || 'N/A'})
+                    {p.vendor ? ` — ${p.vendor}` : ''}
+                  </MuiTypography>
+                ))}
+              </Stack>
             </Stack>
-          </Box>
+          </Paper>
         )}
 
         <form onSubmit={handleSubmit} onKeyPress={handleKeyPress}>
