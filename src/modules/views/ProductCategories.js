@@ -1,3 +1,4 @@
+// src/modules/views/ProductCategories.js
 import * as React from 'react';
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
@@ -13,7 +14,7 @@ const ImageBackdrop = styled('div')(({ theme }) => ({
   top: 0,
   bottom: 0,
   background: '#000',
-  opacity: 0.5,
+  opacity: 0.45,
   transition: theme.transitions.create('opacity'),
 }));
 
@@ -25,19 +26,16 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   height: '40vh',
   [theme.breakpoints.down('md')]: {
     width: '100% !important',
-    height: 100,
+    height: 120,
   },
   '&:hover': {
     zIndex: 1,
   },
   '&:hover .imageBackdrop': {
-    opacity: 0.15,
+    opacity: 0.18,
   },
   '&:hover .imageMarked': {
     opacity: 0,
-  },
-  '&:hover .imageTitle': {
-    border: '4px solid currentColor',
   },
   '& .imageTitle': {
     position: 'relative',
@@ -54,22 +52,26 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   },
 }));
 
-const images = [
+// Same photos, but framed around what you actually make
+const tiles = [
   {
     url: 'https://images.pexels.com/photos/4641825/pexels-photo-4641825.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'Best Sellers',
+    title: 'Core Apparel',
+    subtitle: 'Tees, crews & hoodies that actually get worn.',
     width: '33.33%',
     tab: '/products',
   },
   {
     url: 'https://images.pexels.com/photos/4498143/pexels-photo-4498143.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'On Sale',
+    title: 'Headwear & Layers',
+    subtitle: 'Caps, beanies, outerwear for real-world use.',
     width: '33.34%',
     tab: '/products',
   },
   {
     url: 'https://images.pexels.com/photos/9594432/pexels-photo-9594432.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    title: 'New Arrivals',
+    title: 'Promo & Accessories',
+    subtitle: 'Totes, drinkware, and the fun extras.',
     width: '33.33%',
     tab: '/products',
   },
@@ -79,18 +81,30 @@ export default function ProductCategories() {
   const navigate = useNavigate();
 
   return (
-    <Container component="section" sx={{ mt: 8, mb: 10 }}>
-      <Typography variant="h4" marked="center" align="center" component="h2">
-        Products You'll Love
+    <Container component="section" sx={{ mt: 10, mb: 12 }}>
+      <Typography
+        variant="overline"
+        align="center"
+        sx={{ letterSpacing: 3, color: 'text.secondary' }}
+      >
+        WHAT WE HELP YOU MAKE
       </Typography>
-      <Box sx={{ mt: 8, display: 'flex', flexWrap: 'wrap' }}>
-        {images.map((image) => (
+      <Typography
+        variant="h4"
+        marked="center"
+        align="center"
+        component="h2"
+        sx={{ mt: 1 }}
+      >
+        Dialed-in merch, not random swag
+      </Typography>
+
+      <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
+        {tiles.map((tile) => (
           <ImageIconButton
-            key={image.title}
-            onClick = {() => navigate(image.tab)}
-            style={{
-              width: image.width,
-            }}
+            key={tile.title}
+            onClick={() => navigate(tile.tab)}
+            style={{ width: tile.width }}
           >
             <Box
               sx={{
@@ -101,7 +115,7 @@ export default function ProductCategories() {
                 bottom: 0,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center 40%',
-                backgroundImage: `url(${image.url})`,
+                backgroundImage: `url(${tile.url})`,
               }}
             />
             <ImageBackdrop className="imageBackdrop" />
@@ -113,9 +127,11 @@ export default function ProductCategories() {
                 top: 0,
                 bottom: 0,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'common.white',
+                px: 2,
               }}
             >
               <Typography
@@ -123,9 +139,16 @@ export default function ProductCategories() {
                 variant="h6"
                 color="inherit"
                 className="imageTitle"
+                sx={{ textTransform: 'none' }}
               >
-                {image.title}
+                {tile.title}
                 <div className="imageMarked" />
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{ mt: 0.5, opacity: 0.9, maxWidth: 260 }}
+              >
+                {tile.subtitle}
               </Typography>
             </Box>
           </ImageIconButton>
