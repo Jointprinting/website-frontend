@@ -9,8 +9,11 @@ import {
   useMediaQuery,
   Collapse,
   Alert,
+  IconButton,
   Typography as MuiTypography,
 } from '@mui/material';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Typography from '../modules/components/Typography';
 import axios from 'axios';
 import config from '../config.json';
@@ -25,18 +28,17 @@ function Contact() {
   const [quantity, setQuantity] = React.useState('');
   const [inHandDate, setInHandDate] = React.useState('');
   const [notes, setNotes] = React.useState('');
-  const [files, setFiles] = React.useState([]); // design files
-
+  const [files, setFiles] = React.useState([]);
   const [success, setSuccess] = React.useState(false);
   const [selectedProducts, setSelectedProducts] = React.useState([]);
 
-  // Load selected products from sessionStorage
+  // Load selected products (if any) from sessionStorage
   React.useEffect(() => {
     try {
       const stored = window.sessionStorage.getItem('jpSelectedProducts');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           setSelectedProducts(parsed);
         }
       }
@@ -45,79 +47,51 @@ function Contact() {
     }
   }, []);
 
+  const handleFileChange = (e) => {
+    const newFiles = Array.from(e.target.files || []);
+    if (!newFiles.length) return;
+    setFiles((prev) => [...prev, ...newFiles]);
+    // allow picking the same file again if needed
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Required fields
+    // Required fields except "Anything else we should know?"
     if (!name || !companyName || !email || !phone || !quantity || !inHandDate) {
-      alert(
-        'Please fill out Name, Company Name, Email, Phone Number, Quantity, and In-hand date.'
-      );
+      alert('Please fill out all required fields.');
       return;
     }
 
+    // phone number validation 123-456-7890
     if (!phone.match(/^\d{3}-\d{3}-\d{4}$/)) {
       alert('Please enter a valid phone number in the form of 123-456-7890');
       return;
     }
 
     try {
-      const productLines =
-        selectedProducts.length > 0
-          ? selectedProducts
-              .map(
-                (p) =>
-                  `- ${p.name || 'Product'} (Style ${p.style || 'N/A'})${
-                    p.vendor ? ` — ${p.vendor}` : ''
-                  }`
-              )
-              .join('\n')
-          : 'No specific products selected.';
-
-      const message = `
-Company: ${companyName}
-
-Interested in:
-${productLines}
-
-Approximate quantities (per item):
-${quantity}
-
-Ideal in-hand date:
-${inHandDate}
-
-Anything else we should know:
-${notes || 'Not specified'}
-`.trim();
-
       const formData = new FormData();
       formData.append('name', name);
       formData.append('companyName', companyName);
       formData.append('email', email);
       formData.append('phone', phone);
-      formData.append('message', message);
       formData.append('quantity', quantity);
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
-      formData.append(
-        'selectedProducts',
-        JSON.stringify(selectedProducts || [])
-      );
+      formData.append('selectedProducts', JSON.stringify(selectedProducts || []));
 
-      // attach all design files
       files.forEach((file) => {
-        formData.append('files', file);
+        formData.append('designFiles', file);
       });
 
-      await axios.post(
-        config.backendUrl + '/api/email/send-contact',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
       setSuccess(true);
       setName('');
@@ -135,8 +109,11 @@ ${notes || 'Not specified'}
         console.error('Error clearing selected products', err);
       }
     } catch (err) {
-      console.error(err);
-      alert('There was an error sending your message. Please try again later.');
+      console.error('Error sending contact request', err?.response || err);
+      const msg =
+        err?.response?.data?.error ||
+        'There was an error sending your message. Please try again later.';
+      alert(msg);
     }
   };
 
@@ -152,11 +129,6 @@ ${notes || 'Not specified'}
     if (event.key === 'Enter') {
       event.preventDefault();
     }
-  };
-
-  const handleFileChange = (event) => {
-    const fileList = Array.from(event.target.files || []);
-    setFiles(fileList);
   };
 
   return (
@@ -180,7 +152,7 @@ ${notes || 'Not specified'}
           variant={mobile ? 'h3' : 'h1'}
           fontWeight="bold"
         >
-          REQUEST A FREE MOCKUP & QUOTE
+          Request a free mockup & quote
         </Typography>
 
         <Typography
@@ -245,108 +217,117 @@ ${notes || 'Not specified'}
             spacing={2}
             mt={mobile ? 4 : 6}
           >
-            <TextField
-              id="contact-name"
-              value={name}
-              label="Name"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              onChange={(e) => setName(e.target.value)}
-            />
-            <TextField
-              id="contact-company"
-              value={companyName}
-              label="Company Name"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              onChange={(e) => setCompanyName(e.target.value)}
-            />
-            <TextField
-              id="contact-email"
-              type="email"
-              value={email}
-              label="Email"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <TextField
-              id="contact-phone"
-              value={phone}
-              label="Phone Number"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="123-456-7890"
-            />
-            <TextField
-              id="contact-quantity"
-              value={quantity}
-              label="Quantity (for each item)"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-            <TextField
-              id="contact-inhand"
-              value={inHandDate}
-              label="In-hand date"
-              type="date"
-              variant="outlined"
-              fullWidth
-              size="small"
-              required
-              InputLabelProps={{ shrink: true }}
-              onChange={(e) => setInHandDate(e.target.value)}
-            />
-
-            {/* Design files upload */}
-            <Box width="100%">
-              <Button
+            <Stack width="100%" spacing={2}>
+              <TextField
+                id="contact-name"
+                value={name}
+                label="Name *"
                 variant="outlined"
-                component="label"
                 fullWidth
-                sx={{ justifyContent: 'flex-start' }}
-              >
-                Upload design file(s)
-                <input
-                  type="file"
-                  hidden
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </Button>
-              {files.length > 0 && (
-                <Stack mt={1} spacing={0.5}>
-                  {files.map((file, idx) => (
-                    <MuiTypography key={idx} variant="caption">
-                      {file.name}
-                    </MuiTypography>
-                  ))}
-                </Stack>
-              )}
-            </Box>
+                size="small"
+                onChange={(e) => setName(e.target.value)}
+              />
+              <TextField
+                id="contact-company"
+                value={companyName}
+                label="Company Name *"
+                variant="outlined"
+                fullWidth
+                size="small"
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+              <TextField
+                id="contact-email"
+                type="email"
+                value={email}
+                label="Email *"
+                variant="outlined"
+                fullWidth
+                size="small"
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <TextField
+                id="contact-phone"
+                value={phone}
+                label="Phone Number (123-456-7890) *"
+                variant="outlined"
+                fullWidth
+                size="small"
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <TextField
+                id="contact-quantity"
+                value={quantity}
+                label="Quantity (for each item) *"
+                variant="outlined"
+                fullWidth
+                size="small"
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+              <TextField
+                id="contact-inhand"
+                type="date"
+                value={inHandDate}
+                label="In-hand date *"
+                variant="outlined"
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                onChange={(e) => setInHandDate(e.target.value)}
+              />
 
-            <TextField
-              id="contact-notes"
-              value={notes}
-              label="Anything else we should know?"
-              variant="outlined"
-              fullWidth
-              multiline
-              minRows={3}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+              {/* File upload */}
+              <Box>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<UploadFileIcon />}
+                  sx={{ mb: 1 }}
+                >
+                  Upload design files
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    onChange={handleFileChange}
+                  />
+                </Button>
+                {files.length > 0 && (
+                  <Stack spacing={0.5}>
+                    {files.map((file, idx) => (
+                      <Stack
+                        key={idx}
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                      >
+                        <MuiTypography variant="body2">
+                          {file.name}
+                        </MuiTypography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveFile(idx)}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+
+              <TextField
+                id="contact-notes"
+                value={notes}
+                label="Anything else we should know?"
+                variant="outlined"
+                fullWidth
+                multiline
+                minRows={4}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </Stack>
+
             <Button variant="contained" color="primary" fullWidth type="submit">
               Send request
             </Button>

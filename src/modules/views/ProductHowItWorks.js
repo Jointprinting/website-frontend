@@ -1,4 +1,3 @@
-// src/modules/views/ProductHowItWorks.js
 import * as React from 'react';
 
 import Box from '@mui/material/Box';
@@ -6,9 +5,11 @@ import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
+
 import drawImage from '../images/draw.webp';
 import relaxImage from '../images/relax.webp';
 import deliveryImage from '../images/delivery.webp';
+import clothingImage from '../images/clothing.webp'; // new image so 2 & 4 aren't the same
 
 const cardBase = {
   display: 'flex',
@@ -32,7 +33,7 @@ const numberCircle = {
   width: 40,
   height: 40,
   borderRadius: '50%',
-  border: '2px solid #06752b', // secondary.main
+  border: '2px solid #06752b',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -52,30 +53,30 @@ function ProductHowItWorks() {
     {
       num: '1',
       img: drawImage,
-      title: 'Share the plan',
+      title: 'Request a free mockup',
       body:
-        'Tell us about your brand, the event or launch, and a rough idea of quantities. We’re built for teams and growing brands, not one-off personal tees.',
+        "Request a free mockup and tell us your vision — we're ready to listen around the clock.",
     },
     {
       num: '2',
-      img: relaxImage,
-      title: 'Pick a few product directions',
+      img: clothingImage,
+      title: 'Pick a few products',
       body:
-        'Pick a few products you’re into — we’ll send options from budget to premium and handle the art, so you can compare what makes sense for your budget.',
+        "Pick a few products you're into — we'll send options from budget to premium and handle the art.",
     },
     {
       num: '3',
-      img: deliveryImage,
-      title: 'Approve mockups & quote',
+      img: relaxImage,
+      title: 'Approve quote & designs',
       body:
-        'We send polished mockups and clear pricing you can share with your team. Tweak anything until it feels exactly right.',
+        'Review your mockups and quote, tweak anything you need, and lock in the final lineup.',
     },
     {
       num: '4',
-      img: relaxImage,
-      title: 'We print, ship & you look good',
+      img: deliveryImage,
+      title: 'We print & ship',
       body:
-        'We coordinate production, quality control, and shipping so your merch shows up on time and on-brand — for your team, customers, or community.',
+        'We handle production and delivery so your merch shows up on time and on-brand.',
     },
   ];
 
@@ -106,17 +107,8 @@ function ProductHowItWorks() {
           }}
         />
 
-        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 2 }}>
-          How it works for growing brands
-        </Typography>
-        <Typography
-          variant="body1"
-          align="center"
-          sx={{ mb: 10, maxWidth: 720 }}
-        >
-          We partner with businesses, teams, and organizations that want merch
-          to actually move the needle — from dispensaries and breweries to
-          agencies, startups, and more.
+        <Typography variant="h4" marked="center" component="h2" sx={{ mb: 10 }}>
+          How it works
         </Typography>
 
         <Grid container spacing={4}>
@@ -142,7 +134,7 @@ function ProductHowItWorks() {
           href="/products"
           sx={{ mt: 8 }}
         >
-          Start a mockup & quote
+          Get started
         </Button>
       </Container>
     </Box>
