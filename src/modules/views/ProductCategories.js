@@ -52,7 +52,6 @@ const ImageIconButton = styled(ButtonBase)(({ theme }) => ({
   },
 }));
 
-// Category tiles that all route into the products page
 const tiles = [
   {
     url: 'https://images.pexels.com/photos/4641825/pexels-photo-4641825.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
@@ -82,24 +81,25 @@ export default function ProductCategories() {
 
   return (
     <Container component="section" sx={{ mt: 10, mb: 12 }}>
-      <Typography
-        variant="overline"
-        align="center"
-        sx={{ letterSpacing: 3, color: 'text.secondary' }}
-      >
-        LINEUP STARTERS
-      </Typography>
-      <Typography
-        variant="h4"
-        marked="center"
-        align="center"
-        component="h2"
-        sx={{ mt: 1 }}
-      >
-        Pick your lane, then we dial in the rest.
-      </Typography>
+      <Box textAlign="center" sx={{ mb: 5 }}>
+        <Typography
+          variant="overline"
+          sx={{ letterSpacing: 3, color: 'text.secondary' }}
+        >
+          PRODUCT CATEGORIES
+        </Typography>
+        <Typography
+          variant="h4"
+          marked="center"
+          align="center"
+          component="h2"
+          sx={{ mt: 1 }}
+        >
+          Start with pieces people live in
+        </Typography>
+      </Box>
 
-      <Box sx={{ mt: 6, display: 'flex', flexWrap: 'wrap' }}>
+      <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap' }}>
         {tiles.map((tile) => (
           <ImageIconButton
             key={tile.title}
