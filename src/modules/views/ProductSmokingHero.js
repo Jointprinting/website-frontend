@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
-import Typography from '../components/Typography';
+import Typography from '@mui/material/Typography';
 import { useNavigate } from 'react-router-dom';
 
 function ProductSmokingHero() {
@@ -38,7 +38,8 @@ function ProductSmokingHero() {
         >
           <Typography
             variant="overline"
-            sx={{ letterSpacing: 3, opacity: 0.8, mb: 1 }}
+            color="inherit"
+            sx={{ letterSpacing: 3, opacity: 0.85, mb: 1 }}
           >
             PREFER TO TALK IT OUT?
           </Typography>
@@ -46,6 +47,7 @@ function ProductSmokingHero() {
           <Typography
             variant="h4"
             component="h2"
+            color="inherit"
             sx={{ mb: 2, fontWeight: 600 }}
           >
             HOP ON A QUICK CALL ABOUT YOUR NEXT DROP
@@ -53,10 +55,11 @@ function ProductSmokingHero() {
 
           <Typography
             variant="body1"
+            color="inherit"
             sx={{ mb: 4, maxWidth: 520, mx: 'auto', opacity: 0.9 }}
           >
-            15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape it
-            into a clean lineup.
+            15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape
+            it into a clean lineup.
           </Typography>
 
           <Button
@@ -74,7 +77,7 @@ function ProductSmokingHero() {
             variant="contained"
             onClick={() => navigate('/contact')}
           >
-            Request a free mockup &amp; quote
+            Talk to us about your drop
           </Button>
         </Paper>
       </Container>
