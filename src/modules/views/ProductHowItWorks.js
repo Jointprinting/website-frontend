@@ -10,7 +10,7 @@ import Typography from '../components/Typography';
 import drawImage from '../images/draw.webp';
 import relaxImage from '../images/relax.webp';
 import deliveryImage from '../images/delivery.webp';
-import clothingImage from '../images/clothing.webp'; // new image so 2 & 4 aren't the same
+import clothingImage from '../images/clothing.webp';
 
 const cardBase = {
   display: 'flex',
@@ -20,13 +20,13 @@ const cardBase = {
   p: 4,
   borderRadius: 3,
   bgcolor: 'common.white',
-  boxShadow: 2,
+  boxShadow: 1,
   minHeight: 260,
   position: 'relative',
   transition: 'transform 180ms ease-out, box-shadow 180ms ease-out',
   '&:hover': {
     transform: 'translateY(-4px)',
-    boxShadow: 6,
+    boxShadow: 5,
   },
 };
 
@@ -56,28 +56,28 @@ function ProductHowItWorks() {
       img: drawImage,
       title: 'Request a free mockup',
       body:
-        "Request a free mockup and tell us your vision — we're ready to listen around the clock.",
+        "Tell us what you're trying to do — launch, restock, or test an idea. We get the context first.",
     },
     {
       num: '2',
       img: clothingImage,
       title: 'Pick a few products',
       body:
-        "Pick a few products you're into — we'll send options from budget to premium and handle the art.",
+        "Pick a few pieces you're into. We'll bring options from budget to premium and handle the art.",
     },
     {
       num: '3',
       img: relaxImage,
       title: 'Approve quote & designs',
       body:
-        'Review your mockups and quote, tweak anything you need, and lock in the final lineup.',
+        'Review mockups and pricing, tweak anything you need, and lock in the final lineup.',
     },
     {
       num: '4',
       img: deliveryImage,
       title: 'We print & ship',
       body:
-        'We handle production and delivery so your merch shows up on time and on-brand.',
+        'We manage production and fulfillment so your merch shows up on time and on-brand.',
     },
   ];
 
@@ -86,14 +86,13 @@ function ProductHowItWorks() {
       component="section"
       sx={{
         display: 'flex',
-        bgcolor: '#0b120f',
+        bgcolor: '#f4f6f5',
         overflow: 'hidden',
-        color: 'common.white',
       }}
     >
       <Container
         sx={{
-          mt: 6,
+          mt: 8,
           mb: 10,
           position: 'relative',
           display: 'flex',
@@ -101,28 +100,16 @@ function ProductHowItWorks() {
           alignItems: 'center',
         }}
       >
-        <Box
-          component="img"
-          src="https://mui.com/static/themes/onepirate/productCurvyLines.png"
-          alt="curvy lines"
-          sx={{
-            pointerEvents: 'none',
-            position: 'absolute',
-            top: -160,
-            opacity: 0.45,
-          }}
-        />
-
         <Typography
           variant="overline"
           align="center"
-          sx={{ letterSpacing: 3, mb: 1, opacity: 0.8 }}
+          sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
         >
-          SIMPLE, BRAND-SAFE PROCESS
+          THE PROCESS
         </Typography>
 
         <Typography variant="h4" marked="center" component="h2" sx={{ mb: 8 }}>
-          How it works
+          From idea to boxes at your door
         </Typography>
 
         <Grid container spacing={4}>
@@ -134,9 +121,7 @@ function ProductHowItWorks() {
                 <Typography variant="h6" sx={{ mb: 1.5 }}>
                   {step.title}
                 </Typography>
-                <Typography variant="body1" sx={{ color: 'text.primary' }}>
-                  {step.body}
-                </Typography>
+                <Typography variant="body1">{step.body}</Typography>
               </Box>
             </Grid>
           ))}
@@ -148,9 +133,15 @@ function ProductHowItWorks() {
           variant="contained"
           component="a"
           href="/products"
-          sx={{ mt: 8, borderRadius: 999, px: 4, textTransform: 'none' }}
+          sx={{
+            mt: 8,
+            borderRadius: 999,
+            px: 4,
+            textTransform: 'none',
+            fontWeight: 600,
+          }}
         >
-          Start with a mockup
+          Start with products
         </Button>
       </Container>
     </Box>
