@@ -9,6 +9,7 @@ import {
   useMediaQuery,
   Collapse,
   Alert,
+  Typography as MuiTypography,
 } from '@mui/material';
 import Typography from '../modules/components/Typography';
 import axios from 'axios';
@@ -24,6 +25,8 @@ function Contact() {
   const [quantity, setQuantity] = React.useState('');
   const [inHandDate, setInHandDate] = React.useState('');
   const [notes, setNotes] = React.useState('');
+  const [files, setFiles] = React.useState([]); // design files
+
   const [success, setSuccess] = React.useState(false);
   const [selectedProducts, setSelectedProducts] = React.useState([]);
 
@@ -45,8 +48,11 @@ function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!name || !companyName || !email || !phone) {
-      alert('Please fill out Name, Company Name, Email, and Phone Number.');
+    // Required fields
+    if (!name || !companyName || !email || !phone || !quantity || !inHandDate) {
+      alert(
+        'Please fill out Name, Company Name, Email, Phone Number, Quantity, and In-hand date.'
+      );
       return;
     }
 
@@ -75,26 +81,43 @@ Interested in:
 ${productLines}
 
 Approximate quantities (per item):
-${quantity || 'Not specified'}
+${quantity}
 
 Ideal in-hand date:
-${inHandDate || 'Not specified'}
+${inHandDate}
 
 Anything else we should know:
 ${notes || 'Not specified'}
 `.trim();
 
-      await axios.post(config.backendUrl + '/api/email/send-contact', {
-        name,
-        email,
-        phone,
-        message,
-        selectedProducts,
-        companyName,
-        quantity,
-        inHandDate,
-        notes,
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('companyName', companyName);
+      formData.append('email', email);
+      formData.append('phone', phone);
+      formData.append('message', message);
+      formData.append('quantity', quantity);
+      formData.append('inHandDate', inHandDate);
+      formData.append('notes', notes);
+      formData.append(
+        'selectedProducts',
+        JSON.stringify(selectedProducts || [])
+      );
+
+      // attach all design files
+      files.forEach((file) => {
+        formData.append('files', file);
       });
+
+      await axios.post(
+        config.backendUrl + '/api/email/send-contact',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
 
       setSuccess(true);
       setName('');
@@ -104,6 +127,7 @@ ${notes || 'Not specified'}
       setQuantity('');
       setInHandDate('');
       setNotes('');
+      setFiles([]);
       setSelectedProducts([]);
       try {
         window.sessionStorage.removeItem('jpSelectedProducts');
@@ -128,6 +152,11 @@ ${notes || 'Not specified'}
     if (event.key === 'Enter') {
       event.preventDefault();
     }
+  };
+
+  const handleFileChange = (event) => {
+    const fileList = Array.from(event.target.files || []);
+    setFiles(fileList);
   };
 
   return (
@@ -198,10 +227,10 @@ ${notes || 'Not specified'}
             </Typography>
             <Stack spacing={0.5}>
               {selectedProducts.map((p, idx) => (
-                <Typography key={idx} align="center" variant="body2">
+                <MuiTypography key={idx} align="center" variant="body2">
                   {p.name || 'Product'} (Style {p.style || 'N/A'})
                   {p.vendor ? ` — ${p.vendor}` : ''}
-                </Typography>
+                </MuiTypography>
               ))}
             </Stack>
           </Box>
@@ -223,6 +252,7 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               onChange={(e) => setName(e.target.value)}
             />
             <TextField
@@ -232,6 +262,7 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               onChange={(e) => setCompanyName(e.target.value)}
             />
             <TextField
@@ -242,6 +273,7 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               onChange={(e) => setEmail(e.target.value)}
             />
             <TextField
@@ -251,6 +283,7 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               onChange={(e) => setPhone(e.target.value)}
               placeholder="123-456-7890"
             />
@@ -261,6 +294,7 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               onChange={(e) => setQuantity(e.target.value)}
             />
             <TextField
@@ -271,9 +305,38 @@ ${notes || 'Not specified'}
               variant="outlined"
               fullWidth
               size="small"
+              required
               InputLabelProps={{ shrink: true }}
               onChange={(e) => setInHandDate(e.target.value)}
             />
+
+            {/* Design files upload */}
+            <Box width="100%">
+              <Button
+                variant="outlined"
+                component="label"
+                fullWidth
+                sx={{ justifyContent: 'flex-start' }}
+              >
+                Upload design file(s)
+                <input
+                  type="file"
+                  hidden
+                  multiple
+                  onChange={handleFileChange}
+                />
+              </Button>
+              {files.length > 0 && (
+                <Stack mt={1} spacing={0.5}>
+                  {files.map((file, idx) => (
+                    <MuiTypography key={idx} variant="caption">
+                      {file.name}
+                    </MuiTypography>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+
             <TextField
               id="contact-notes"
               value={notes}
