@@ -148,9 +148,17 @@ function Contact() {
           alignItems: 'center',
           bgcolor: 'white',
           boxShadow: 2,
-          borderRadius: 1,
+          borderRadius: 2,
         }}
       >
+        <MuiTypography
+          variant="overline"
+          align="center"
+          sx={{ letterSpacing: 3, color: 'text.secondary', mb: 1 }}
+        >
+          STEP 2 · REQUEST YOUR MOCKUP
+        </MuiTypography>
+
         <Typography
           color="primary"
           align="center"
