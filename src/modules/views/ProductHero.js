@@ -25,11 +25,11 @@ export default function ProductHero() {
     <ProductHeroLayout
       sxBackground={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundColor: '#0e1511',
+        backgroundColor: '#101416',
         backgroundPosition: 'center',
       }}
     >
-      {/* Increase the network loading priority of the background image. */}
+      {/* Preload background */}
       <img
         style={{ display: 'none' }}
         src={backgroundImage}
@@ -45,6 +45,7 @@ export default function ProductHero() {
           animation: `${fadeUp} 700ms ease-out`,
         }}
       >
+        {/* LINE 1 */}
         <Typography
           color="inherit"
           variant="overline"
@@ -53,25 +54,33 @@ export default function ProductHero() {
           INNOVATION IN INK
         </Typography>
 
+        {/* LINE 2 */}
         <Typography
           color="inherit"
           align="center"
           variant="h2"
           marked="center"
-          sx={{ mt: 2, maxWidth: 960 }}
+          sx={{ mt: 2, maxWidth: 900 }}
         >
           Brand-first merch that actually gets worn.
         </Typography>
 
+        {/* LINE 3 */}
         <Typography
           color="inherit"
           align="center"
           variant="h5"
-          sx={{ mt: 3, mb: 4, maxWidth: 560, opacity: 0.9 }}
+          sx={{
+            mt: 3,
+            mb: 5,
+            maxWidth: 540,
+            opacity: 0.9,
+          }}
         >
           One place for blanks, art, and fulfillment — built for modern brands.
         </Typography>
 
+        {/* SINGLE BIG CTA */}
         <Button
           color="secondary"
           variant="contained"
