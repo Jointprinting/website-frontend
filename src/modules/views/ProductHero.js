@@ -11,12 +11,8 @@ export default function ProductHero() {
   return (
     <ProductHeroLayout
       sxBackground={{
-        backgroundImage: `linear-gradient(
-          to bottom,
-          rgba(0, 0, 0, 0.32),
-          rgba(0, 0, 0, 0.78)
-        ), url(${backgroundImage})`,
-        backgroundColor: '#050907',
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundColor: '#0e1511', // fallback while the image loads
         backgroundPosition: 'center',
         backgroundSize: 'cover',
       }}
@@ -28,21 +24,22 @@ export default function ProductHero() {
         alt="increase priority"
       />
 
-      {/* Top line */}
+      {/* Line 1 */}
       <Typography
         color="inherit"
         align="center"
         variant="overline"
         sx={{
           letterSpacing: 6,
+          mt: 8,
           mb: 1,
-          opacity: 0.9,
+          opacity: 0.95,
         }}
       >
         INNOVATION IN INK
       </Typography>
 
-      {/* Main headline */}
+      {/* Line 2 */}
       <Typography
         color="inherit"
         align="center"
@@ -50,7 +47,6 @@ export default function ProductHero() {
         marked="center"
         sx={{
           fontWeight: 700,
-          mt: 1,
           textTransform: 'uppercase',
           letterSpacing: 2,
         }}
@@ -58,7 +54,7 @@ export default function ProductHero() {
         CUSTOM MERCH FOR MODERN BRANDS.
       </Typography>
 
-      {/* Simple supporting line */}
+      {/* Line 3 */}
       <Typography
         color="inherit"
         align="center"
@@ -73,7 +69,7 @@ export default function ProductHero() {
         START WITH A FREE MOCKUP AND QUOTE IN UNDER 24 HOURS.
       </Typography>
 
-      {/* Single, big CTA button straight to products */}
+      {/* Primary CTA */}
       <Button
         color="secondary"
         variant="contained"
@@ -81,7 +77,6 @@ export default function ProductHero() {
         component="a"
         href="/products"
         sx={{
-          mt: 1,
           minWidth: 260,
           borderRadius: 999,
           fontSize: 18,
