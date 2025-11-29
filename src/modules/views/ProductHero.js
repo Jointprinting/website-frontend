@@ -12,56 +12,50 @@ export default function ProductHero() {
     <ProductHeroLayout
       sxBackground={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundColor: '#0e1511', // fallback while the image loads
+        backgroundColor: '#0e1511',
         backgroundPosition: 'center',
-        backgroundSize: 'cover',
       }}
     >
-      {/* Preload the background image */}
+      {/* Preload image */}
       <img
         style={{ display: 'none' }}
         src={backgroundImage}
         alt="increase priority"
       />
 
-      {/* Line 1 */}
       <Typography
-        color="inherit"
-        align="center"
         variant="overline"
+        align="center"
         sx={{
           letterSpacing: 6,
-          mt: 8,
-          mb: 1,
-          opacity: 0.95,
+          fontSize: 14,
+          opacity: 0.85,
         }}
       >
         INNOVATION IN INK
       </Typography>
 
-      {/* Line 2 */}
       <Typography
         color="inherit"
         align="center"
         variant="h2"
         marked="center"
         sx={{
-          fontWeight: 700,
+          mt: 3,
           textTransform: 'uppercase',
-          letterSpacing: 2,
+          letterSpacing: 3,
         }}
       >
-        CUSTOM MERCH FOR MODERN BRANDS.
+        CUSTOM MERCH FOR MODERN BRANDS
       </Typography>
 
-      {/* Line 3 */}
       <Typography
         color="inherit"
         align="center"
-        variant="h6"
+        variant="h5"
         sx={{
-          mt: { xs: 3, sm: 4 },
-          mb: 4,
+          mt: 3,
+          mb: 5,
           maxWidth: 640,
           mx: 'auto',
         }}
@@ -69,7 +63,6 @@ export default function ProductHero() {
         START WITH A FREE MOCKUP AND QUOTE IN UNDER 24 HOURS.
       </Typography>
 
-      {/* Primary CTA */}
       <Button
         color="secondary"
         variant="contained"
@@ -79,14 +72,11 @@ export default function ProductHero() {
         sx={{
           minWidth: 260,
           borderRadius: 999,
-          fontSize: 18,
+          fontSize: 16,
           fontWeight: 600,
-          textTransform: 'none',
-          px: 4,
-          py: 1.5,
         }}
       >
-        Get your free mockup &amp; quote
+        Get your free mockup & quote
       </Button>
     </ProductHeroLayout>
   );
