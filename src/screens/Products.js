@@ -35,7 +35,7 @@ function Products() {
   const [products, setProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
 
-  const imagesPerPage = 12; // Adjust based on your requirement
+  const imagesPerPage = 12;
 
   const open = Boolean(anchorEl);
   const openType = Boolean(anchorElType);
@@ -63,6 +63,33 @@ function Products() {
   const handleChange = (event, value) => {
     setPage(value);
   };
+
+  // Load any existing selected products from sessionStorage on first mount
+  useEffect(() => {
+    try {
+      const stored = window.sessionStorage.getItem('jpSelectedProducts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setSelectedProducts(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Could not load selected products', e);
+    }
+  }, []);
+
+  // Persist selections whenever they change
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        'jpSelectedProducts',
+        JSON.stringify(selectedProducts)
+      );
+    } catch (e) {
+      console.error('Could not save selected products', e);
+    }
+  }, [selectedProducts]);
 
   // Load products from backend
   useEffect(() => {
@@ -98,7 +125,6 @@ function Products() {
     }
   };
 
-  // Toggle a product in the "quote" selection
   const toggleSelected = (item) => {
     setSelectedProducts((current) => {
       const exists = current.some((p) => p.style === item.style);
@@ -117,16 +143,7 @@ function Products() {
     });
   };
 
-  // When user is ready, stash selected products and go to contact form
   const handleRequestQuote = () => {
-    try {
-      window.sessionStorage.setItem(
-        'jpSelectedProducts',
-        JSON.stringify(selectedProducts)
-      );
-    } catch (e) {
-      console.error('Could not save selected products', e);
-    }
     navigate('/contact');
   };
 
