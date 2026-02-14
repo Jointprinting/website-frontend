@@ -16,104 +16,196 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import boxLogo from '../modules/images/logo_white.webp';
 
 function Navbar() {
-  const mobile = useMediaQuery("(max-width: 800px)");
+  const mobile = useMediaQuery('(max-width: 800px)');
 
   const DrawerComponent = () => {
     const [openDrawer, setOpenDrawer] = React.useState(false);
+
     return (
-        <>
-        <Drawer anchor = 'right' onClose = {() => setOpenDrawer(false)} open = {openDrawer} >
-            <List>
-                <ListItem divider key={"Products"} disablePadding>
-                    <ListItemButton component={ReactRouterLink} to="/products">
-                        <ListItemText primary={"Products"} />
-                    </ListItemButton>
-                </ListItem>
-                
+      <>
+        <Drawer
+          anchor="right"
+          onClose={() => setOpenDrawer(false)}
+          open={openDrawer}
+        >
+          <List>
+            <ListItem divider key="Products" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/products"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="Products" />
+              </ListItemButton>
+            </ListItem>
 
-                <ListItem key={"About"} disablePadding>
-                    <ListItemButton component={ReactRouterLink} to="/about">
-                        <ListItemText primary={"About"} />
-                    </ListItemButton>
-                </ListItem>
+            <ListItem key="About" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/about"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="About" />
+              </ListItemButton>
+            </ListItem>
 
-                <ListItem key={"Contact"} disablePadding>
-                    <ListItemButton component={ReactRouterLink} to="/contact">
-                        <ListItemText primary={"Contact"} />
-                    </ListItemButton>
-                </ListItem>
+            <ListItem key="Contact" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/contact"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="Contact" />
+              </ListItemButton>
+            </ListItem>
 
-                <ListItem key={"FAQ"} disablePadding>
-                    <ListItemButton component={ReactRouterLink} to="/faq">
-                        <ListItemText primary={"FAQ"} />
-                    </ListItemButton>
-                </ListItem>
-            </List>
+            <ListItem key="FAQ" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/faq"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="FAQ" />
+              </ListItemButton>
+            </ListItem>
+          </List>
         </Drawer>
-        <IconButton onClick = {() => setOpenDrawer(!openDrawer)} sx={{ml:'auto'}}>
-            <MenuIcon sx={{color:'inherit', fontSize:'30px', color: 'white'}}/>
+
+        <IconButton
+          onClick={() => setOpenDrawer((prev) => !prev)}
+          sx={{ ml: 'auto' }}
+          aria-label="Open menu"
+        >
+          <MenuIcon sx={{ color: 'white', fontSize: 30 }} />
         </IconButton>
-        </>
-    )
+      </>
+    );
+  };
+
+  if (!mobile) {
+    return (
+      <div>
+        <AppBar position="fixed">
+          <Toolbar sx={{ justifyContent: 'space-between' }}>
+            <Stack
+              direction="row"
+              alignItems="center"
+              component={ReactRouterLink}
+              to="/"
+              sx={{ textDecoration: 'none' }}
+            >
+              <img src={boxLogo} alt="logo" width="60" height="auto" />
+              <Typography
+                sx={{
+                  ml: 1,
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 22,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                JOINT PRINTING
+              </Typography>
+            </Stack>
+
+            <Stack direction="row" spacing={4} alignItems="center">
+              <Typography
+                component={ReactRouterLink}
+                to="/products"
+                sx={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                PRODUCTS
+              </Typography>
+              <Typography
+                component={ReactRouterLink}
+                to="/about"
+                sx={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                ABOUT
+              </Typography>
+              <Typography
+                component={ReactRouterLink}
+                to="/contact"
+                sx={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                CONTACT
+              </Typography>
+              <Typography
+                component={ReactRouterLink}
+                to="/faq"
+                sx={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                FAQ
+              </Typography>
+            </Stack>
+          </Toolbar>
+        </AppBar>
+        <Toolbar />
+      </div>
+    );
   }
 
   return (
-    !mobile ?
-    <div>
-      <AppBar position="fixed">
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ flex: 1 }} component={ReactRouterLink} to="/"/>
-            <img src={boxLogo} alt="logo" width="60px" height="auto"/>
-            <Typography component={ReactRouterLink} to="/" 
-                sx={{ml: 1, color:"white", textDecoration: 'none', fontWeight: '900', fontSize:22, fontFamily:'Roboto Condensed'}}
-            >
-                JOINT PRINTING
-            </Typography>
-          <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-            <Stack direction="row" spacing={4}>
-                <Typography component={ReactRouterLink} to="/products" 
-                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
-                >
-                    PRODUCTS
-                </Typography>
-                <Typography component={ReactRouterLink} to="/about" 
-                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
-                >
-                    ABOUT
-                </Typography>
-                <Typography component={ReactRouterLink} to="/contact" 
-                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
-                >
-                    CONTACT
-                </Typography>
-                <Typography component={ReactRouterLink} to="/faq" 
-                    sx={{color:"white", textDecoration: 'none', fontWeight: '900', fontSize:14, fontFamily:'Roboto Condensed'}}
-                >
-                    FAQ
-                </Typography>
-            </Stack>
-            </Box>
-        </Toolbar>
-      </AppBar>
-      <Toolbar />
-    </div>
-    :
-    <Stack direction="row" alignItems="center" px={2} py={0.7} bgcolor='primary.main'>
-        {/*<Box mt={1} sx={{":hover": {cursor: 'pointer'}}}  component={ReactRouterLink} to="/"><img src={logo} alt="logo" width="40px"/></Box>
-        <Box sx={{flexGrow: 1}}/>*/}
-        <Box sx={{flexGrow: 1}}/>
-        <Stack direction="row" to="/" alignItems="center" ml='46px'>
-            <img src={boxLogo} alt="logo" width="36px" height="auto" textDecoration='none'/>
-            <Typography variant="h6" fontSize={18} align="center" component={ReactRouterLink} to="/" 
-            sx={{color: 'white', textDecoration: 'none', ml:1 }}>
-                Joint Printing
-            </Typography>
+    <Box component="nav">
+      <Stack
+        direction="row"
+        alignItems="center"
+        px={2}
+        py={0.7}
+        bgcolor="primary.main"
+      >
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Stack
+          direction="row"
+          alignItems="center"
+          component={ReactRouterLink}
+          to="/"
+          sx={{ textDecoration: 'none' }}
+        >
+          <img src={boxLogo} alt="logo" width="36" height="auto" />
+          <Typography
+            variant="h6"
+            fontSize={18}
+            align="center"
+            sx={{ color: 'white', textDecoration: 'none', ml: 1 }}
+          >
+            Joint Printing
+          </Typography>
         </Stack>
-        <Box sx={{flexGrow: 1}}/>
-        <Box flex={1} justifyContent="right">
-        <DrawerComponent/>
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flex: 1 }}>
+          <DrawerComponent />
         </Box>
-    </Stack>
+      </Stack>
+    </Box>
   );
 }
 
