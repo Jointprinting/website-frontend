@@ -12,11 +12,9 @@ import Footer from './common/Footer';
 import FAQ from './screens/FAQ';
 import Customize from './screens/Customize';
 import Admin from './screens/Admin';
+import Catalogs from './screens/Catalogs';
 
 function App() {
-
-  //const theme = useMemo(() => createTheme(theme()), []);
-
   return (
     <div className="App">
       <ThemeProvider theme={theme}>
@@ -31,6 +29,7 @@ function App() {
           <Route exact path="/faq" element={<FAQ />} />
           <Route exact path="/customize" element={<Customize />} />
           <Route exact path="/admin" element={<Admin />} />
+          <Route exact path="/catalogs" element={<Catalogs />} />
         </Routes>
         <Footer/>
       </ThemeProvider>
@@ -39,4 +38,3 @@ function App() {
 }
 
 export default App;
-//export default withAITracking(reactPlugin, App);
