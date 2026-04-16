@@ -4,11 +4,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '../components/Typography';
-import { useNavigate } from 'react-router-dom';
 
 function ProductSmokingHero() {
-  const navigate = useNavigate();
-
   return (
     <Box
       component="section"
@@ -48,7 +45,6 @@ function ProductSmokingHero() {
           >
             PREFER TO TALK IT OUT?
           </Typography>
-
           <Typography
             variant="h4"
             component="h2"
@@ -57,7 +53,6 @@ function ProductSmokingHero() {
           >
             Hop on a quick call about your next drop
           </Typography>
-
           <Typography
             variant="body1"
             color="inherit"
@@ -66,8 +61,11 @@ function ProductSmokingHero() {
             15–20 minutes. Bring your logo, ideas, or chaos — we&apos;ll shape
             it into a clean lineup.
           </Typography>
-
           <Button
+            component="a"
+            href="https://calendly.com/nate-jointprinting/30min"
+            target="_blank"
+            rel="noopener noreferrer"
             sx={{
               borderRadius: 999,
               px: 5,
@@ -79,9 +77,8 @@ function ProductSmokingHero() {
             }}
             variant="contained"
             color="secondary"
-            onClick={() => navigate('/contact')}
           >
-            Request a free mockup & quote
+            Book a free 30-min call
           </Button>
         </Box>
       </Container>
