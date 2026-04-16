@@ -1,7 +1,7 @@
 // src/screens/Contact.js
 import * as React from 'react';
 import {
-  Box, Stack, TextField, Link, Button, useMediaQuery,
+  Box, Stack, TextField, Link, Button,
   Collapse, Alert, IconButton, Typography as MuiTypography,
   Avatar, Paper, Container, Grid,
 } from '@mui/material';
@@ -27,7 +27,6 @@ const trustPoints = [
 ];
 
 function Contact() {
-  const mobile = useMediaQuery('(max-width: 800px)');
   const [name, setName] = React.useState('');
   const [companyName, setCompanyName] = React.useState('');
   const [email, setEmail] = React.useState('');
