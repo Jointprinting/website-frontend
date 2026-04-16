@@ -22,9 +22,9 @@ const teamImg =
 // person working at a desk / creative work
 
 const stats = [
-  { number: '500+', label: 'Orders fulfilled' },
-  { number: '50+', label: 'Brands served' },
-  { number: '100%', label: 'Remote & flexible' },
+  { number: '30,000+', label: 'Units delivered' },
+  { number: '10+', label: 'Industries served' },
+  { number: '6', label: 'Decoration methods' },
   { number: '3 days', label: 'Avg. mockup turnaround' },
 ];
 
@@ -304,7 +304,7 @@ function About() {
               {[
                 { icon: '🎯', text: 'Free mockups before you commit to anything' },
                 { icon: '📦', text: 'We manage vendors, timelines, and proofs end-to-end' },
-                { icon: '✉️', text: 'Direct line to Nate — no account managers or ticket queues' },
+                { icon: '✉️', text: 'Direct communication — no account managers or ticket queues' },
                 { icon: '🔄', text: 'Reorder-friendly: we keep your artwork on file' },
               ].map((item) => (
                 <Box
