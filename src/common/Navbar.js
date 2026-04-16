@@ -20,7 +20,6 @@ function Navbar() {
 
   const DrawerComponent = () => {
     const [openDrawer, setOpenDrawer] = React.useState(false);
-
     return (
       <>
         <Drawer
@@ -38,7 +37,15 @@ function Navbar() {
                 <ListItemText primary="Products" />
               </ListItemButton>
             </ListItem>
-
+            <ListItem divider key="Catalogs" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/catalogs"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="Catalogs" />
+              </ListItemButton>
+            </ListItem>
             <ListItem key="About" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
@@ -48,7 +55,6 @@ function Navbar() {
                 <ListItemText primary="About" />
               </ListItemButton>
             </ListItem>
-
             <ListItem key="Contact" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
@@ -58,7 +64,6 @@ function Navbar() {
                 <ListItemText primary="Contact" />
               </ListItemButton>
             </ListItem>
-
             <ListItem key="FAQ" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
@@ -70,7 +75,6 @@ function Navbar() {
             </ListItem>
           </List>
         </Drawer>
-
         <IconButton
           onClick={() => setOpenDrawer((prev) => !prev)}
           sx={{ ml: 'auto' }}
@@ -108,7 +112,6 @@ function Navbar() {
                 JOINT PRINTING
               </Typography>
             </Stack>
-
             <Stack direction="row" spacing={4} alignItems="center">
               <Typography
                 component={ReactRouterLink}
@@ -122,6 +125,19 @@ function Navbar() {
                 }}
               >
                 PRODUCTS
+              </Typography>
+              <Typography
+                component={ReactRouterLink}
+                to="/catalogs"
+                sx={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontWeight: 900,
+                  fontSize: 14,
+                  fontFamily: 'Roboto Condensed',
+                }}
+              >
+                CATALOGS
               </Typography>
               <Typography
                 component={ReactRouterLink}
@@ -180,7 +196,6 @@ function Navbar() {
         bgcolor="primary.main"
       >
         <Box sx={{ flexGrow: 1 }} />
-
         <Stack
           direction="row"
           alignItems="center"
@@ -198,9 +213,7 @@ function Navbar() {
             Joint Printing
           </Typography>
         </Stack>
-
         <Box sx={{ flexGrow: 1 }} />
-
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', flex: 1 }}>
           <DrawerComponent />
         </Box>
