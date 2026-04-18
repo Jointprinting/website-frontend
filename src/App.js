@@ -13,6 +13,7 @@ import FAQ from './screens/FAQ';
 import Customize from './screens/Customize';
 import Admin from './screens/Admin';
 import Catalogs from './screens/Catalogs';
+import Demos from './screens/demos';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route exact path="/customize" element={<Customize />} />
           <Route exact path="/admin" element={<Admin />} />
           <Route exact path="/catalogs" element={<Catalogs />} />
+          <Route exact path="/demos" element={<Demos />} />
         </Routes>
         <Footer/>
       </ThemeProvider>
