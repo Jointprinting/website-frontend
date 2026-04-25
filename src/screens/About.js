@@ -8,10 +8,10 @@ import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import Typography from '../modules/components/Typography';
 
-// All images verified: merch / screen print / apparel focused
+// Hero: woman wearing branded merch — focus on the merch on her.
+// Swap this URL for your own product photography whenever you have it.
 const heroImg =
-  'https://images.unsplash.com/photo-1574180566232-aaad1b5b8450?auto=format&fit=crop&w=1600&q=80';
-// screen printing press in action
+  'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1600&q=80';
 
 const processImg =
   'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=1600&q=80';
@@ -101,12 +101,13 @@ function About() {
               <Box
                 component="img"
                 src={heroImg}
-                alt="Screen printing press in action"
+                alt="Woman wearing branded merch"
                 sx={{
                   width: '100%',
-                  height: { xs: 280, md: 400 },
+                  height: { xs: 320, md: 460 },
                   objectFit: 'cover',
-                  objectPosition: 'center top',
+                  // Keep the focus on the apparel rather than the face
+                  objectPosition: 'center 35%',
                   borderRadius: '16px 16px 0 0',
                   display: 'block',
                 }}
@@ -124,7 +125,7 @@ function About() {
               <Grid item xs={6} md={3} key={s.label} sx={{ textAlign: 'center' }}>
                 <Typography
                   variant="h4"
-                  sx={{ color: '#4ade80', fontWeight: 900, lineHeight: 1, mb: 0.5 }}
+                  sx={{ color: '#4ade80', fontWeight: 900, lineHeight: 1, mb: 0.5, fontSize: { xs: 24, md: 32 } }}
                 >
                   {s.number}
                 </Typography>
@@ -198,7 +199,7 @@ function About() {
       {/* ── WHO WE SERVE ── */}
       <Box sx={{ py: { xs: 8, md: 10 }, bgcolor: 'white' }}>
         <Container maxWidth="lg">
-          <Grid container spacing={8} alignItems="center">
+          <Grid container spacing={{ xs: 4, md: 8 }} alignItems="center">
             <Grid item xs={12} md={6}>
               <Typography
                 variant="overline"
@@ -242,7 +243,7 @@ function About() {
                   alt="Branded folded apparel merch"
                   sx={{
                     width: '100%',
-                    height: { xs: 300, md: 420 },
+                    height: { xs: 260, md: 420 },
                     objectFit: 'cover',
                     objectPosition: 'center',
                     display: 'block',
@@ -258,7 +259,7 @@ function About() {
                     px: 2,
                     py: 1,
                     borderRadius: 99,
-                    fontSize: 13,
+                    fontSize: { xs: 12, md: 13 },
                     fontWeight: 700,
                     backdropFilter: 'blur(6px)',
                   }}
@@ -274,8 +275,8 @@ function About() {
       {/* ── PROCESS VISUAL ── */}
       <Box sx={{ py: { xs: 8, md: 10 }, bgcolor: '#f5f5f5' }}>
         <Container maxWidth="lg">
-          <Grid container spacing={8} alignItems="center">
-            <Grid item xs={12} md={6}>
+          <Grid container spacing={{ xs: 4, md: 8 }} alignItems="center">
+            <Grid item xs={12} md={6} order={{ xs: 2, md: 1 }}>
               <Paper elevation={4} sx={{ borderRadius: 4, overflow: 'hidden' }}>
                 <Box
                   component="img"
@@ -283,7 +284,7 @@ function About() {
                   alt="Working on a merch order"
                   sx={{
                     width: '100%',
-                    height: { xs: 260, md: 360 },
+                    height: { xs: 240, md: 360 },
                     objectFit: 'cover',
                     objectPosition: 'center top',
                     display: 'block',
@@ -291,7 +292,7 @@ function About() {
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6} order={{ xs: 1, md: 2 }}>
               <Typography
                 variant="overline"
                 sx={{ letterSpacing: 3, color: 'text.secondary', display: 'block', mb: 1 }}
