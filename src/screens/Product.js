@@ -8,7 +8,6 @@ import {
   Button,
   Rating,
   Tooltip,
-  useMediaQuery,
   CircularProgress,
   Container,
 } from '@mui/material';
@@ -16,7 +15,6 @@ import { useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 
 function Product() {
-  const mobile = useMediaQuery('(max-width: 800px)');
   const [searchParams] = useSearchParams();
   const id = searchParams.get('styleCode');
 
