@@ -1,5 +1,6 @@
 // src/screens/Contact.js
 import * as React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box, Stack, TextField, Link, Button,
   Collapse, Alert, IconButton, Typography as MuiTypography,
@@ -26,14 +27,27 @@ const trustPoints = [
   '30,000+ units delivered',
 ];
 
+// Permissive phone check: any 7-15 digit string regardless of formatting.
+function isValidPhone(s) {
+  const digits = String(s || '').replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+}
+
 function Contact() {
+  const [searchParams] = useSearchParams();
+  const isReferralContext = searchParams.get('topic') === 'referral';
+
   const [name, setName] = React.useState('');
   const [companyName, setCompanyName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
   const [quantity, setQuantity] = React.useState('');
   const [inHandDate, setInHandDate] = React.useState('');
-  const [notes, setNotes] = React.useState('');
+  const [notes, setNotes] = React.useState(
+    isReferralContext
+      ? "I'd like to refer someone (or learn more about your referral program). Details:\n\n"
+      : ''
+  );
   const [files, setFiles] = React.useState([]);
   const [success, setSuccess] = React.useState(false);
   const [selectedProducts, setSelectedProducts] = React.useState([]);
@@ -63,8 +77,8 @@ function Contact() {
       alert('Please fill out all required fields.');
       return;
     }
-    if (!phone.match(/^\d{3}-\d{3}-\d{4}$/)) {
-      alert('Please enter a valid phone number in the form of 123-456-7890');
+    if (!isValidPhone(phone)) {
+      alert('Please enter a valid phone number with at least 7 digits.');
       return;
     }
     try {
@@ -77,6 +91,7 @@ function Contact() {
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
       formData.append('selectedProducts', JSON.stringify(selectedProducts || []));
+      formData.append('website', ''); // Honeypot — bots fill this, real users don't
       files.forEach((file) => { formData.append('files', file); });
 
       await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
@@ -110,13 +125,15 @@ function Contact() {
       <Box sx={{ bgcolor: '#111816', py: { xs: 7, md: 9 }, textAlign: 'center' }}>
         <Container maxWidth="md">
           <MuiTypography variant="overline" sx={{ letterSpacing: 4, color: '#4ade80', display: 'block', mb: 2, fontSize: 12 }}>
-            STEP 2 · REQUEST YOUR MOCKUP
+            {isReferralContext ? 'REFER & EARN' : 'REQUEST A FREE MOCKUP'}
           </MuiTypography>
           <Typography variant="h3" component="h1" sx={{ color: 'white', fontWeight: 800, mb: 2, lineHeight: 1.15 }}>
-            Request a free mockup & quote
+            {isReferralContext ? "Send us a referral" : 'Request a free mockup & quote'}
           </Typography>
           <MuiTypography variant="h6" sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 300, maxWidth: 500, mx: 'auto', lineHeight: 1.7 }}>
-            Fill out the form and we'll get back to you with a mockup and clear pricing — usually within 24 hours.
+            {isReferralContext
+              ? "Drop the details in the form below — we'll take it from there and credit your account when they order."
+              : "Fill out the form and we'll get back to you with a mockup and clear pricing — usually within 24 hours."}
           </MuiTypography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} justifyContent="center" sx={{ mt: 3 }}>
             <MuiTypography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>
@@ -169,7 +186,16 @@ function Contact() {
                       <TextField type="email" value={email} label="Email *" variant="outlined" fullWidth size="small" onChange={(e) => setEmail(e.target.value)} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField value={phone} label="Phone (123-456-7890) *" variant="outlined" fullWidth size="small" onChange={(e) => setPhone(e.target.value)} />
+                      <TextField
+                        value={phone}
+                        label="Phone *"
+                        placeholder="(856) 555-1234"
+                        variant="outlined"
+                        fullWidth
+                        size="small"
+                        onChange={(e) => setPhone(e.target.value)}
+                        helperText="Any format works"
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <TextField value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small" onChange={(e) => setQuantity(e.target.value)} />
@@ -258,7 +284,6 @@ function Contact() {
               </Paper>
             </Stack>
           </Grid>
-
         </Grid>
       </Container>
     </Box>
