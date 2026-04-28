@@ -1,5 +1,5 @@
 // src/screens/Products.js
-import { React, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Stack,
@@ -59,7 +59,6 @@ function Products() {
     setPage(1);
   };
 
-  // Load any existing selected products from sessionStorage on first mount
   useEffect(() => {
     try {
       const stored = window.sessionStorage.getItem('jpSelectedProducts');
@@ -72,7 +71,6 @@ function Products() {
     }
   }, []);
 
-  // Persist selections whenever they change
   useEffect(() => {
     try {
       window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts));
@@ -81,7 +79,6 @@ function Products() {
     }
   }, [selectedProducts]);
 
-  // Load products from backend
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -137,7 +134,6 @@ function Products() {
       <Stack
         py={mobile ? 3 : 5}
         px={mobile ? 2 : '4vw'}
-        // extra bottom padding on mobile so the floating quote bar doesn't cover content
         pb={selectedProducts.length > 0 ? (mobile ? 14 : 10) : (mobile ? 3 : 5)}
         spacing={3}
         maxWidth={1240}
@@ -146,7 +142,7 @@ function Products() {
         {/* HEADER */}
         <Stack spacing={0.5}>
           <Typography variant="overline" sx={{ letterSpacing: 3, color: 'text.secondary' }}>
-            STEP 1 · PICK YOUR BLANKS
+            PICK YOUR BLANKS
           </Typography>
           <Stack
             direction={mobile ? 'column' : 'row'}
@@ -164,7 +160,7 @@ function Products() {
           </Stack>
         </Stack>
 
-        {/* FILTERS CARD */}
+        {/* FILTERS */}
         <Paper
           elevation={0}
           sx={{
@@ -195,7 +191,6 @@ function Products() {
                 </Typography>
               )}
 
-              {/* Category Filter */}
               <Button
                 id="category-button"
                 aria-controls={open ? 'category-menu' : undefined}
@@ -220,9 +215,9 @@ function Products() {
                 <MenuItem onClick={() => handleCategoryClose('Pants')}>Pants</MenuItem>
                 <MenuItem onClick={() => handleCategoryClose('Hoodies')}>Hoodies</MenuItem>
                 <MenuItem onClick={() => handleCategoryClose('Hats')}>Hats</MenuItem>
+                <MenuItem onClick={() => handleCategoryClose('Promo')}>Promo</MenuItem>
               </Menu>
 
-              {/* Type Filter */}
               <Button
                 id="type-button"
                 aria-controls={openType ? 'type-menu' : undefined}
@@ -250,7 +245,6 @@ function Products() {
               </Menu>
             </Stack>
 
-            {/* Active filters + clear */}
             <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
               {selectedCategory && (
                 <Chip label={selectedCategory} size="small" onDelete={() => setSelectedCategory('')} />
@@ -269,15 +263,27 @@ function Products() {
 
         <Divider />
 
-        {/* GRID OR LOADER */}
         {!loading ? (
           <>
             {products && products.length > 0 ? (
-              <Grid container spacing={mobile ? 2 : 3} sx={{ mt: 1 }}>
+              <Grid
+                container
+                spacing={mobile ? 2 : 3}
+                justifyContent="center"
+                sx={{ mt: 1 }}
+              >
                 {products.map((item, index) => {
                   const isSelected = selectedProducts.some((p) => p.style === item.style);
                   return (
-                    <Grid item xs={6} sm={6} md={4} lg={3} key={item._id || index}>
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      md={4}
+                      lg={3}
+                      key={item._id || index}
+                      sx={{ display: 'flex', justifyContent: 'center' }}
+                    >
                       <Paper
                         elevation={isSelected ? 6 : 2}
                         sx={{
@@ -296,9 +302,10 @@ function Products() {
                           display: 'flex',
                           flexDirection: 'column',
                           bgcolor: 'background.paper',
+                          width: '100%',
+                          maxWidth: { xs: 380, sm: 'none' },
                         }}
                       >
-                        {/* Image + tag */}
                         <Box
                           onClick={() => navigate('/product?styleCode=' + item.style)}
                           sx={{
@@ -307,7 +314,7 @@ function Products() {
                             display: 'flex',
                             justifyContent: 'center',
                             alignItems: 'center',
-                            minHeight: { xs: 180, sm: 220, md: 260 },
+                            minHeight: { xs: 240, sm: 220, md: 260 },
                           }}
                         >
                           <img
@@ -335,10 +342,9 @@ function Products() {
                           )}
                         </Box>
 
-                        {/* Content */}
                         <Box
                           sx={{
-                            p: { xs: 1.5, sm: 2.2 },
+                            p: { xs: 2, sm: 2.2 },
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 0.5,
@@ -348,7 +354,7 @@ function Products() {
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: { xs: 10, sm: 12 } }}
+                            sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: { xs: 11, sm: 12 } }}
                           >
                             {item.vendor}
                           </Typography>
@@ -357,8 +363,8 @@ function Products() {
                             variant="body1"
                             fontWeight={600}
                             sx={{
-                              minHeight: { xs: 32, sm: 40 },
-                              fontSize: { xs: 13, sm: 16 },
+                              minHeight: { xs: 40, sm: 40 },
+                              fontSize: { xs: 14, sm: 16 },
                               display: '-webkit-box',
                               WebkitLineClamp: 2,
                               WebkitBoxOrient: 'vertical',
@@ -381,7 +387,7 @@ function Products() {
                               mt: 1.5,
                               textTransform: 'none',
                               borderRadius: 999,
-                              fontSize: { xs: 12, sm: 14 },
+                              fontSize: { xs: 13, sm: 14 },
                             }}
                             onClick={() => toggleSelected(item)}
                           >
@@ -408,13 +414,11 @@ function Products() {
           </Box>
         )}
 
-        {/* PAGINATION */}
         <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
           <Pagination count={numPages} page={page} onChange={handleChange} size={mobile ? 'small' : 'medium'} />
         </Stack>
       </Stack>
 
-      {/* STICKY QUOTE BAR */}
       {selectedProducts.length > 0 && (
         <Box
           sx={{
@@ -425,7 +429,6 @@ function Products() {
             bgcolor: 'background.paper',
             boxShadow: 6,
             borderRadius: 999,
-            // shrink padding on small screens so the pill doesn't overflow
             px: { xs: 1.5, sm: 3 },
             py: { xs: 1, sm: 1.5 },
             display: 'flex',
@@ -434,7 +437,6 @@ function Products() {
             zIndex: 1300,
             border: '1px solid',
             borderColor: 'secondary.light',
-            // never overflow viewport
             maxWidth: 'calc(100vw - 24px)',
           }}
         >
