@@ -3,10 +3,12 @@
 // Password-protected admin/studio page. Hub-based navigation — pick a tool
 // from a card grid, enter it, click "Studio" to come back.
 //
-//   1) Manual entry — Alpha Broder XML product creation
-//   2) Submissions — mini-CRM for contact form leads
-//   3) Mockup Studio — launches /jpstudio/ in a new tab (no inline preview)
-//   4) Cold Calls — JPW cold call decision tree with autofill + notes
+//   Joint Printing tools:
+//     1) Manual entry — Alpha Broder XML product creation (auto-priced)
+//     2) Submissions — mini-CRM for contact form leads
+//     3) Mockup Studio — launches /jpstudio/ in a new tab
+//   JP Webworks tools:
+//     4) Cold Calls — JPW cold-call decision tree with editable script versions
 
 import * as React from 'react';
 import axios from 'axios';
@@ -39,6 +41,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Tooltip,
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LockIcon from '@mui/icons-material/Lock';
@@ -56,6 +59,10 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import CheckIcon from '@mui/icons-material/Check';
 import config from '../config.json';
 
 const TOKEN_KEY = 'jpStudioToken';
@@ -71,6 +78,9 @@ const BRAND = {
   faint:    'rgba(255,255,255,0.08)',
 };
 
+// Mirrors backend (controllers/auth.js) — display-only.
+const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
+
 const STATUS_OPTIONS = [
   { value: 'new',          label: 'New',          color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
   { value: 'contacted',    label: 'Contacted',    color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
@@ -82,6 +92,22 @@ const STATUS_OPTIONS = [
 
 const statusMeta = (s) => STATUS_OPTIONS.find((x) => x.value === s) || STATUS_OPTIONS[0];
 
+// Shared input styling: forces select text white so dropdown values don't
+// render as black-on-dark blobs (the previous bug).
+const darkInputSx = {
+  '& .MuiOutlinedInput-root': {
+    bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
+    '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
+    '&:hover fieldset': { borderColor: BRAND.green },
+    '&.Mui-focused fieldset': { borderColor: BRAND.green },
+  },
+  '& .MuiInputLabel-root': { color: BRAND.muted },
+  '& .MuiInputLabel-root.Mui-focused': { color: BRAND.green },
+  '& .MuiSvgIcon-root': { color: BRAND.muted },
+  '& .MuiSelect-select': { color: BRAND.white },
+  '& input': { color: BRAND.white },
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Login
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +116,11 @@ function Login({ onAuthed }) {
   const [show, setShow] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  // Local count of wrong-password tries this session — gives the user a
+  // heads-up like "2 attempts left" before the backend actually locks them.
+  // Resets on success.
+  const [failCount, setFailCount] = React.useState(0);
+  const [lockedMsg, setLockedMsg] = React.useState('');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,16 +131,35 @@ function Login({ onAuthed }) {
       const res = await axios.post(`${config.backendUrl}/api/auth/studio-login`, { password: pw });
       if (res.data?.token) {
         sessionStorage.setItem(TOKEN_KEY, res.data.token);
+        setFailCount(0);
+        setLockedMsg('');
         onAuthed(res.data.token);
       } else {
         setErr('Login failed.');
       }
     } catch (e) {
-      setErr(e?.response?.data?.message || 'Wrong password.');
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message || 'Wrong password.';
+      // 429 = locked out by the backend. Show the wait message prominently
+      // and stop counting locally — the timer is now backend-controlled.
+      if (status === 429) {
+        setLockedMsg(msg);
+        setErr('');
+        setFailCount(MAX_ATTEMPTS_BEFORE_LOCKOUT);
+      } else {
+        setLockedMsg('');
+        setFailCount((n) => n + 1);
+        setErr(msg);
+      }
     } finally {
       setBusy(false);
     }
   };
+
+  // After 3 wrong passwords, hint at the consequence so the user understands
+  // why the next couple of typos are a big deal.
+  const remaining = Math.max(0, MAX_ATTEMPTS_BEFORE_LOCKOUT - failCount);
+  const showWarning = !lockedMsg && failCount >= 3 && remaining > 0;
 
   return (
     <Box sx={{
@@ -164,18 +214,13 @@ function Login({ onAuthed }) {
                 type={show ? 'text' : 'password'}
                 label="Password"
                 value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                fullWidth size="medium"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
-                    '&:hover fieldset': { borderColor: BRAND.green },
-                    '&.Mui-focused fieldset': { borderColor: BRAND.green },
-                  },
-                  '& .MuiInputLabel-root': { color: BRAND.muted },
-                  '& .MuiInputLabel-root.Mui-focused': { color: BRAND.green },
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  if (err) setErr('');
                 }}
+                disabled={!!lockedMsg}
+                fullWidth size="medium"
+                sx={darkInputSx}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
@@ -186,11 +231,30 @@ function Login({ onAuthed }) {
                   ),
                 }}
               />
-              <Fade in={!!err}>
-                <Box>{err && <Alert severity="error" sx={{ borderRadius: 2 }}>{err}</Alert>}</Box>
+              <Fade in={!!err && !lockedMsg}>
+                <Box>
+                  {err && !lockedMsg && (
+                    <Alert severity="error" sx={{ borderRadius: 2 }}>
+                      {err}
+                      {showWarning && (
+                        <> · {remaining} attempt{remaining === 1 ? '' : 's'} left before a 15-min lockout.</>
+                      )}
+                    </Alert>
+                  )}
+                </Box>
+              </Fade>
+              <Fade in={!!lockedMsg}>
+                <Box>
+                  {lockedMsg && (
+                    <Alert severity="warning" icon={<LockIcon fontSize="inherit" />} sx={{ borderRadius: 2 }}>
+                      {lockedMsg}
+                    </Alert>
+                  )}
+                </Box>
               </Fade>
               <Button
-                type="submit" variant="contained" size="large" disabled={busy} fullWidth
+                type="submit" variant="contained" size="large"
+                disabled={busy || !!lockedMsg} fullWidth
                 sx={{
                   borderRadius: 2, fontWeight: 800, textTransform: 'none', py: 1.4,
                   bgcolor: BRAND.green, color: BRAND.greenDk,
@@ -476,6 +540,7 @@ function SubmissionsTab({ token }) {
                       bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
                       '& .MuiSvgIcon-root': { color: BRAND.muted },
+                      '& .MuiSelect-select': { color: BRAND.white },
                     }}
                   >
                     {STATUS_OPTIONS.map((s) => (
@@ -677,60 +742,58 @@ function Detail({ label, children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Manual entry tab
+//  Manual entry tab — simplified
+//
+//  Style Code, Category, Type only. Pricing is fetched from AlphaBroder XML
+//  and computed via the shared markup formula on the backend. Rating defaults
+//  to 5, tag to "New Arrival" automatically.
 // ─────────────────────────────────────────────────────────────────────────────
 function ManualEntryTab({ token }) {
   const mobile = useMediaQuery('(max-width: 800px)');
   const [styleCode, setStyleCode] = React.useState('');
-  const [priceRangeBottom, setPriceRangeBottom] = React.useState('');
-  const [priceRangeTop, setPriceRangeTop] = React.useState('');
-  const [rating, setRating] = React.useState(5);
-  const [tag, setTag] = React.useState('Best Seller');
   const [category, setCategory] = React.useState('Shirts');
   const [type, setType] = React.useState('Unisex');
   const [busy, setBusy] = React.useState(false);
-  const [success, setSuccess] = React.useState(false);
+  const [success, setSuccess] = React.useState(null); // { name, priceRangeBottom, priceRangeTop } | null
+  const [error, setError] = React.useState('');
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!styleCode || !priceRangeBottom || !priceRangeTop) {
-      alert('Please fill out all fields');
+    setError('');
+    setSuccess(null);
+    if (!styleCode) {
+      setError('Style code is required.');
       return;
     }
     try {
       setBusy(true);
-      await axios.post(
+      // Pricing/rating/tag intentionally omitted — backend fills from XML.
+      const res = await axios.post(
         `${config.backendUrl}/api/products/add`,
-        { styleCode, priceRangeBottom, priceRangeTop, rating, tag, category, type },
+        { styleCode, category, type },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setStyleCode(''); setPriceRangeBottom(''); setPriceRangeTop('');
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      const p = res?.data || {};
+      setSuccess({
+        name: p.name || styleCode,
+        priceRangeBottom: p.priceRangeBottom,
+        priceRangeTop: p.priceRangeTop,
+      });
+      setStyleCode('');
+      setTimeout(() => setSuccess(null), 6000);
     } catch (err) {
-      alert(`Could not add product: ${err?.response?.data?.message || 'Unknown error'}`);
+      setError(err?.response?.data?.message || 'Could not add product.');
     } finally {
       setBusy(false);
     }
   };
 
-  const inputSx = {
-    '& .MuiOutlinedInput-root': {
-      bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
-      '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
-      '&:hover fieldset': { borderColor: BRAND.green },
-      '&.Mui-focused fieldset': { borderColor: BRAND.green },
-    },
-    '& .MuiInputLabel-root': { color: BRAND.muted },
-    '& .MuiInputLabel-root.Mui-focused': { color: BRAND.green },
-    '& .MuiSvgIcon-root': { color: BRAND.muted },
-  };
-
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 3 }}>
-        Pull product data from the Alpha Broder XML feed by style code. The system
-        auto-fetches name, colors, sizes, and images.
+        Pull product data from the Alpha Broder XML feed by style code. Name,
+        colors, sizes, images, and pricing are all fetched automatically — you
+        just confirm the category and audience.
       </MuiTypography>
       <form onSubmit={submit}>
         <Stack spacing={2.5}>
@@ -741,47 +804,19 @@ function ManualEntryTab({ token }) {
             <TextField
               value={styleCode} onChange={(e) => setStyleCode(e.target.value)}
               variant="outlined" fullWidth size={mobile ? 'small' : 'medium'} required
-              placeholder="e.g. G500" sx={inputSx}
+              placeholder="e.g. G500" sx={darkInputSx}
             />
-          </Box>
-          <Box>
-            <MuiTypography variant="caption" sx={{ color: BRAND.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.7 }}>
-              Price Range ($)
+            <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', mt: 0.6, display: 'block' }}>
+              Pricing is auto-calculated using the same markup as your other
+              products.
             </MuiTypography>
-            <Stack direction="row" width="100%" spacing={2} alignItems="center">
-              <TextField value={priceRangeBottom} type="number" onChange={(e) => setPriceRangeBottom(e.target.value)} variant="outlined" size={mobile ? 'small' : 'medium'} required placeholder="Low" sx={inputSx} />
-              <MuiTypography sx={{ color: BRAND.muted, fontWeight: 700 }}>—</MuiTypography>
-              <TextField value={priceRangeTop} type="number" onChange={(e) => setPriceRangeTop(e.target.value)} variant="outlined" size={mobile ? 'small' : 'medium'} required placeholder="High" sx={inputSx} />
-            </Stack>
           </Box>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl fullWidth>
-              <MuiTypography variant="caption" sx={{ color: BRAND.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.7 }}>
-                Rating
-              </MuiTypography>
-              <Select value={rating} onChange={(e) => setRating(e.target.value)} size={mobile ? 'small' : 'medium'} sx={inputSx}>
-                {[5, 4, 3, 2, 1].map((n) => <MenuItem key={n} value={n}>{n}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <MuiTypography variant="caption" sx={{ color: BRAND.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.7 }}>
-                Tag
-              </MuiTypography>
-              <Select value={tag} onChange={(e) => setTag(e.target.value)} size={mobile ? 'small' : 'medium'} sx={inputSx}>
-                <MenuItem value="Best Seller">Best Seller</MenuItem>
-                <MenuItem value="New Arrival">New Arrival</MenuItem>
-                <MenuItem value="Clearance">Clearance</MenuItem>
-                <MenuItem value="Our Favorite">Our Favorite</MenuItem>
-                <MenuItem value="Exclusive">Exclusive</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <FormControl fullWidth>
               <MuiTypography variant="caption" sx={{ color: BRAND.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.7 }}>
                 Category
               </MuiTypography>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)} size={mobile ? 'small' : 'medium'} sx={inputSx}>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} size={mobile ? 'small' : 'medium'} sx={darkInputSx}>
                 <MenuItem value="Shirts">Shirts</MenuItem>
                 <MenuItem value="Pants">Pants</MenuItem>
                 <MenuItem value="Hoodies">Hoodies</MenuItem>
@@ -792,7 +827,7 @@ function ManualEntryTab({ token }) {
               <MuiTypography variant="caption" sx={{ color: BRAND.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.7 }}>
                 Type
               </MuiTypography>
-              <Select value={type} onChange={(e) => setType(e.target.value)} size={mobile ? 'small' : 'medium'} sx={inputSx}>
+              <Select value={type} onChange={(e) => setType(e.target.value)} size={mobile ? 'small' : 'medium'} sx={darkInputSx}>
                 <MenuItem value="Unisex">Unisex</MenuItem>
                 <MenuItem value="Male">Male</MenuItem>
                 <MenuItem value="Female">Female</MenuItem>
@@ -813,7 +848,16 @@ function ManualEntryTab({ token }) {
           >
             {busy ? 'Adding…' : 'Add product'}
           </Button>
-          <Fade in={success}>
+          <Fade in={!!error}>
+            <Box>
+              {error && (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                  {error}
+                </Alert>
+              )}
+            </Box>
+          </Fade>
+          <Fade in={!!success}>
             <Box>
               {success && (
                 <Alert severity="success" sx={{
@@ -822,7 +866,10 @@ function ManualEntryTab({ token }) {
                   border: `1px solid ${BRAND.green}40`,
                   '& .MuiAlert-icon': { color: BRAND.green },
                 }}>
-                  Product added successfully.
+                  Added <strong>{success.name}</strong>
+                  {Number.isFinite(success.priceRangeBottom) && Number.isFinite(success.priceRangeTop) && (
+                    <> — priced ${success.priceRangeBottom.toFixed(2)}–${success.priceRangeTop.toFixed(2)}</>
+                  )}.
                 </Alert>
               )}
             </Box>
@@ -832,9 +879,14 @@ function ManualEntryTab({ token }) {
     </Box>
   );
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  Cold Calls tab — JPW cold call decision tree with autofill + rebuttals
+//  Cold Calls — JPW cold call decision tree with editable script versions
+//
+//  Each node has built-in "default" content (script lines, follow-ups,
+//  voicemail). Editing a line creates a new version saved to MongoDB,
+//  scoped to that node + that field. You can switch between Default and
+//  any of your saved versions with a dropdown — current selection persists
+//  to localStorage so the call resumes where you left off.
 // ─────────────────────────────────────────────────────────────────────────────
 const COLD_CALL_NODES = {
   start: {
@@ -1137,24 +1189,220 @@ const QUICK_REBUTTALS = [
   { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Two reasons — I do the audit first so you see what I see before paying anything, and the website's $749 setup, not the $5K most guys quote. Worst case you get a free audit out of this call." },
 ];
 
-function ColdCallTab() {
+// ─────────────────────────────────────────────────────────────────────────────
+//  EditableScript — renders a list of script lines for one node+field, with
+//  inline editing + version dropdown.
+//
+//  field: 'script' | 'followUp' | 'voicemail' | 'direction'
+//  defaultLines: array of strings (or single string for voicemail/direction)
+// ─────────────────────────────────────────────────────────────────────────────
+function EditableScript({
+  nodeId, field, defaultLines, fill, sx,
+  versions, activeVersionId, onChooseVersion, onSaveNewVersion, onDeleteVersion,
+  isLoading,
+}) {
+  const isMultiline = Array.isArray(defaultLines);
+  const defaultText = isMultiline ? defaultLines.join('\n\n') : (defaultLines || '');
+
+  // Active text (what's currently shown). null = use default.
+  const activeVersion = versions.find((v) => v._id === activeVersionId);
+  const currentText = activeVersion ? activeVersion.text : defaultText;
+
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const startEdit = () => {
+    setDraft(currentText);
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft('');
+  };
+  const saveEdit = async () => {
+    if (!draft.trim() || draft === currentText) { cancelEdit(); return; }
+    setSaving(true);
+    try {
+      await onSaveNewVersion(draft);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Render lines
+  const renderedLines = isMultiline
+    ? currentText.split(/\n{2,}/).map((l) => l.trim()).filter(Boolean)
+    : [currentText];
+
+  return (
+    <Box sx={sx}>
+      {!editing ? (
+        <>
+          {renderedLines.map((line, i) => (
+            <MuiTypography
+              key={i}
+              variant="body1"
+              sx={{
+                color: 'inherit',
+                mb: i === renderedLines.length - 1 ? 0 : 1.5,
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {fill ? fill(line) : line}
+            </MuiTypography>
+          ))}
+
+          {/* Toolbar — version picker + edit button */}
+          <Stack
+            direction="row" spacing={1} alignItems="center"
+            sx={{
+              mt: 1.5, pt: 1.25, borderTop: `1px dashed ${BRAND.faint}`,
+              flexWrap: 'wrap', gap: 0.75,
+            }}
+          >
+            {versions.length > 0 && (
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <Select
+                  value={activeVersionId || 'default'}
+                  onChange={(e) => onChooseVersion(e.target.value === 'default' ? null : e.target.value)}
+                  sx={{
+                    fontSize: 12, height: 30,
+                    bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.10)' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.25)' },
+                    '& .MuiSvgIcon-root': { color: BRAND.muted },
+                    '& .MuiSelect-select': { color: BRAND.white, py: 0.6 },
+                  }}
+                >
+                  <MenuItem value="default">Default version</MenuItem>
+                  {versions.map((v) => (
+                    <MenuItem key={v._id} value={v._id}>
+                      {v.label || `Saved ${new Date(v.createdAt).toLocaleDateString()}`}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            <Tooltip title="Edit this script">
+              <Button
+                size="small"
+                startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+                onClick={startEdit}
+                sx={{
+                  textTransform: 'none', color: BRAND.muted, fontWeight: 600,
+                  fontSize: 12, py: 0.4, px: 1.25,
+                  '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+                }}
+              >Edit</Button>
+            </Tooltip>
+
+            {activeVersion && (
+              <Tooltip title="Delete this saved version (default stays available)">
+                <Button
+                  size="small"
+                  startIcon={<DeleteIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => onDeleteVersion(activeVersion._id)}
+                  sx={{
+                    textTransform: 'none', color: 'rgba(248,113,113,0.7)',
+                    fontWeight: 600, fontSize: 12, py: 0.4, px: 1.25,
+                    '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.06)' },
+                  }}
+                >Delete version</Button>
+              </Tooltip>
+            )}
+
+            {isLoading && (
+              <CircularProgress size={14} sx={{ color: BRAND.muted, ml: 0.5 }} />
+            )}
+          </Stack>
+        </>
+      ) : (
+        <Stack spacing={1.25}>
+          <TextField
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            multiline
+            minRows={isMultiline ? 4 : 2}
+            fullWidth
+            autoFocus
+            placeholder={isMultiline ? 'Separate lines with a blank line.' : ''}
+            sx={{
+              ...darkInputSx,
+              '& .MuiOutlinedInput-root': {
+                ...darkInputSx['& .MuiOutlinedInput-root'],
+                fontSize: 14, fontFamily: 'inherit',
+              },
+            }}
+          />
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small" variant="contained" disabled={saving}
+              startIcon={saving ? <CircularProgress size={14} sx={{ color: BRAND.greenDk }} /> : <SaveOutlinedIcon sx={{ fontSize: 16 }} />}
+              onClick={saveEdit}
+              sx={{
+                textTransform: 'none', fontWeight: 700, py: 0.6, fontSize: 12.5,
+                bgcolor: BRAND.green, color: BRAND.greenDk,
+                '&:hover': { bgcolor: '#22c55e' },
+                '&:disabled': { bgcolor: 'rgba(74,222,128,0.4)' },
+              }}
+            >
+              {saving ? 'Saving…' : 'Save as new version'}
+            </Button>
+            <Button
+              size="small"
+              startIcon={<CloseIcon sx={{ fontSize: 16 }} />}
+              onClick={cancelEdit}
+              sx={{
+                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
+                py: 0.6, fontSize: 12.5,
+                '&:hover': { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
+              }}
+            >Cancel</Button>
+          </Stack>
+          <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
+            Saving creates a new version — the default is always preserved and can be selected from the dropdown.
+          </MuiTypography>
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
   const [svc, setSvc] = React.useState('');
   const [history, setHistory] = React.useState(['start']);
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
 
-  // Load persisted setup + notes
+  // Versions keyed by `${nodeId}::${field}` → array of { _id, text, label, createdAt }
+  const [versionsMap, setVersionsMap] = React.useState({});
+  // Active version id keyed the same way (null = default)
+  const [activeMap, setActiveMap] = React.useState({});
+  const [versionsLoading, setVersionsLoading] = React.useState(false);
+
+  // Load persisted setup, notes, and active selections
   React.useEffect(() => {
     setBiz(localStorage.getItem('jpw_cc_biz') || '');
     setSvc(localStorage.getItem('jpw_cc_svc') || '');
     setNotes(localStorage.getItem('jpw_cc_notes') || '');
+    try {
+      const saved = JSON.parse(localStorage.getItem('jpw_cc_active_versions') || '{}');
+      if (saved && typeof saved === 'object') setActiveMap(saved);
+    } catch (e) {}
   }, []);
 
   React.useEffect(() => { localStorage.setItem('jpw_cc_biz', biz); }, [biz]);
   React.useEffect(() => { localStorage.setItem('jpw_cc_svc', svc); }, [svc]);
+  React.useEffect(() => {
+    localStorage.setItem('jpw_cc_active_versions', JSON.stringify(activeMap));
+  }, [activeMap]);
 
-  // Debounced notes save
+  // Debounced notes save to localStorage
   React.useEffect(() => {
     const t = setTimeout(() => {
       localStorage.setItem('jpw_cc_notes', notes);
@@ -1162,6 +1410,37 @@ function ColdCallTab() {
     }, 400);
     return () => clearTimeout(t);
   }, [notes]);
+
+  // Fetch all versions on mount
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token) return;
+      setVersionsLoading(true);
+      try {
+        const res = await axios.get(`${config.backendUrl}/api/script-versions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (cancelled) return;
+        const grouped = {};
+        for (const v of res.data?.versions || []) {
+          const key = `${v.nodeId}::${v.field}`;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(v);
+        }
+        // Sort each by createdAt desc
+        Object.values(grouped).forEach((arr) => arr.sort((a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt)
+        ));
+        setVersionsMap(grouped);
+      } catch (err) {
+        console.error('Could not load script versions', err);
+      } finally {
+        if (!cancelled) setVersionsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
 
   const fill = React.useCallback((text) => {
     return text
@@ -1176,15 +1455,56 @@ function ColdCallTab() {
   const goBack = () => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
   const restart = () => setHistory(['start']);
 
-  const inputSx = {
-    '& .MuiOutlinedInput-root': {
-      bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white, borderRadius: 2,
-      '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
-      '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.25)' },
-      '&.Mui-focused fieldset': { borderColor: BRAND.green },
-    },
-    '& .MuiInputLabel-root': { color: BRAND.muted },
-    '& .MuiInputLabel-root.Mui-focused': { color: BRAND.green },
+  const handleSaveVersion = async (nodeId, field, text) => {
+    try {
+      const res = await axios.post(
+        `${config.backendUrl}/api/script-versions`,
+        { nodeId, field, text },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const newVersion = res.data?.version;
+      if (newVersion) {
+        const key = `${nodeId}::${field}`;
+        setVersionsMap((m) => ({
+          ...m,
+          [key]: [newVersion, ...(m[key] || [])],
+        }));
+        // Auto-select the version you just made — that's almost always what you want
+        setActiveMap((m) => ({ ...m, [key]: newVersion._id }));
+      }
+    } catch (err) {
+      alert('Could not save: ' + (err?.response?.data?.message || err.message));
+    }
+  };
+
+  const handleChooseVersion = (nodeId, field, versionId) => {
+    const key = `${nodeId}::${field}`;
+    setActiveMap((m) => ({ ...m, [key]: versionId }));
+  };
+
+  const handleDeleteVersion = async (nodeId, field, versionId) => {
+    if (!window.confirm('Delete this saved version? The default is always preserved.')) return;
+    try {
+      await axios.delete(`${config.backendUrl}/api/script-versions/${versionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const key = `${nodeId}::${field}`;
+      setVersionsMap((m) => ({
+        ...m,
+        [key]: (m[key] || []).filter((v) => v._id !== versionId),
+      }));
+      // If the deleted version was active, fall back to default
+      setActiveMap((m) => {
+        if (m[key] === versionId) {
+          const next = { ...m };
+          delete next[key];
+          return next;
+        }
+        return m;
+      });
+    } catch (err) {
+      alert('Could not delete: ' + (err?.response?.data?.message || err.message));
+    }
   };
 
   const isEnd = !!node.end;
@@ -1198,11 +1518,16 @@ function ColdCallTab() {
     : node.end === 'warning' ? 'rgba(251,191,36,0.3)'
     : 'rgba(255,255,255,0.12)';
 
+  // Helper: get versions / active id for this node+field
+  const vKey = (field) => `${currentId}::${field}`;
+  const versionsFor = (field) => versionsMap[vKey(field)] || [];
+  const activeFor = (field) => activeMap[vKey(field)] || null;
+
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 2.5 }}>
         Live decision tree for cold calls. Type the business name and service type at the top —
-        every line autofills as you go. Saves between calls.
+        every line autofills as you go. Click any script to edit it; saved versions sync across devices.
       </MuiTypography>
 
       {/* Setup inputs */}
@@ -1214,7 +1539,7 @@ function ColdCallTab() {
           onChange={(e) => setBiz(e.target.value)}
           fullWidth
           size="small"
-          sx={inputSx}
+          sx={darkInputSx}
         />
         <TextField
           label="Service type"
@@ -1223,7 +1548,7 @@ function ColdCallTab() {
           onChange={(e) => setSvc(e.target.value)}
           fullWidth
           size="small"
-          sx={inputSx}
+          sx={darkInputSx}
         />
       </Stack>
 
@@ -1235,7 +1560,7 @@ function ColdCallTab() {
         </MuiTypography>
       </Stack>
 
-      {/* Script card — animated transition between nodes */}
+      {/* Script card */}
       <Fade in key={currentId} timeout={250}>
         <Box>
           <Paper elevation={0} sx={{
@@ -1255,20 +1580,23 @@ function ColdCallTab() {
                 }}
               />
             )}
-            {node.script.map((line, i) => (
-              <MuiTypography
-                key={i}
-                variant="body1"
-                sx={{
-                  color: isEnd ? endColor : BRAND.white,
-                  mb: i === node.script.length - 1 && !node.direction && !node.followUp && !node.voicemail ? 0 : 1.5,
-                  lineHeight: 1.6,
-                }}
-              >
-                {fill(line)}
-              </MuiTypography>
-            ))}
 
+            {/* Main script */}
+            <EditableScript
+              nodeId={currentId}
+              field="script"
+              defaultLines={node.script}
+              fill={fill}
+              sx={{ color: isEnd ? endColor : BRAND.white }}
+              versions={versionsFor('script')}
+              activeVersionId={activeFor('script')}
+              onChooseVersion={(id) => handleChooseVersion(currentId, 'script', id)}
+              onSaveNewVersion={(text) => handleSaveVersion(currentId, 'script', text)}
+              onDeleteVersion={(id) => handleDeleteVersion(currentId, 'script', id)}
+              isLoading={versionsLoading}
+            />
+
+            {/* Voicemail block */}
             {node.voicemail && (
               <Box sx={{
                 mt: 2, p: 2, borderRadius: 2,
@@ -1280,37 +1608,63 @@ function ColdCallTab() {
                 }}>
                   Voicemail script
                 </MuiTypography>
-                <MuiTypography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)', lineHeight: 1.55 }}>
-                  {fill(node.voicemail)}
-                </MuiTypography>
+                <EditableScript
+                  nodeId={currentId}
+                  field="voicemail"
+                  defaultLines={node.voicemail}
+                  fill={fill}
+                  sx={{ color: 'rgba(255,255,255,0.85)' }}
+                  versions={versionsFor('voicemail')}
+                  activeVersionId={activeFor('voicemail')}
+                  onChooseVersion={(id) => handleChooseVersion(currentId, 'voicemail', id)}
+                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'voicemail', text)}
+                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'voicemail', id)}
+                  isLoading={versionsLoading}
+                />
               </Box>
             )}
 
+            {/* Direction block */}
             {node.direction && (
               <Box sx={{
-                mt: node.script.length ? 1.5 : 0, p: 1.25, borderRadius: 1.5,
+                mt: 1.5, p: 1.25, borderRadius: 1.5,
                 bgcolor: 'rgba(255,255,255,0.04)',
                 borderLeft: `2px solid ${BRAND.green}`,
+                fontStyle: 'italic',
               }}>
-                <MuiTypography variant="body2" sx={{ color: BRAND.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
-                  {node.direction}
-                </MuiTypography>
+                <EditableScript
+                  nodeId={currentId}
+                  field="direction"
+                  defaultLines={node.direction}
+                  sx={{ color: BRAND.muted }}
+                  versions={versionsFor('direction')}
+                  activeVersionId={activeFor('direction')}
+                  onChooseVersion={(id) => handleChooseVersion(currentId, 'direction', id)}
+                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'direction', text)}
+                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'direction', id)}
+                  isLoading={versionsLoading}
+                />
               </Box>
             )}
 
-            {node.followUp && node.followUp.map((line, i) => (
-              <MuiTypography
-                key={`fu-${i}`}
-                variant="body1"
-                sx={{
-                  color: BRAND.white, mt: i === 0 ? 1.5 : 0,
-                  mb: i === node.followUp.length - 1 ? 0 : 1.5,
-                  lineHeight: 1.6,
-                }}
-              >
-                {fill(line)}
-              </MuiTypography>
-            ))}
+            {/* Follow-up block */}
+            {node.followUp && (
+              <Box sx={{ mt: 1.5 }}>
+                <EditableScript
+                  nodeId={currentId}
+                  field="followUp"
+                  defaultLines={node.followUp}
+                  fill={fill}
+                  sx={{ color: BRAND.white }}
+                  versions={versionsFor('followUp')}
+                  activeVersionId={activeFor('followUp')}
+                  onChooseVersion={(id) => handleChooseVersion(currentId, 'followUp', id)}
+                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'followUp', text)}
+                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'followUp', id)}
+                  isLoading={versionsLoading}
+                />
+              </Box>
+            )}
           </Paper>
 
           {/* Response buttons */}
@@ -1436,7 +1790,7 @@ function ColdCallTab() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Track new objections you hear, prospect details, things to follow up on. Saves automatically."
-          sx={inputSx}
+          sx={darkInputSx}
         />
         <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', mt: 0.75, display: 'block' }}>
           {savedAt ? `Saved at ${savedAt}` : 'Saved automatically'}
@@ -1447,14 +1801,29 @@ function ColdCallTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Hub — picks which tool to enter
+//  Hub — picks which tool to enter, grouped by brand
 // ─────────────────────────────────────────────────────────────────────────────
-const HUB_TOOLS = [
-  { id: 'manual',     label: 'Manual entry',   desc: 'Add Alpha Broder products by style code.',    Icon: Inventory2OutlinedIcon },
-  { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',            Icon: InboxIcon },
-  { id: 'mockup',     label: 'Mockup Studio',  desc: 'Build mockups, export PDFs for clients.',     Icon: DesignServicesIcon },
-  { id: 'coldcall',   label: 'Cold Calls',     desc: 'JPW cold call tree with autofill + notes.',   Icon: PhoneInTalkIcon },
+const HUB_GROUPS = [
+  {
+    brand: 'Joint Printing',
+    blurb: 'Apparel orders, leads, and mockup tools.',
+    tools: [
+      { id: 'manual',      label: 'Manual entry',  desc: 'Add Alpha Broder products by style code.', Icon: Inventory2OutlinedIcon },
+      { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',         Icon: InboxIcon },
+      { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs for clients.',  Icon: DesignServicesIcon },
+    ],
+  },
+  {
+    brand: 'JP Webworks',
+    blurb: 'Web services side — cold outreach and follow-ups.',
+    tools: [
+      { id: 'coldcall', label: 'Cold Calls', desc: 'JPW cold call tree with autofill + saved versions.', Icon: PhoneInTalkIcon },
+    ],
+  },
 ];
+
+// Flat list of all tools, with brand attached, for header lookups
+const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
 function HubCard({ tool, onClick, delay }) {
   const { label, desc, Icon } = tool;
@@ -1528,16 +1897,58 @@ function HubCard({ tool, onClick, delay }) {
 }
 
 function Hub({ onPick }) {
+  // One counter so the Grow animations cascade across both groups instead of
+  // resetting at each section header.
+  let cardIdx = 0;
   return (
-    <Box sx={{
-      display: 'grid',
-      gap: { xs: 1.5, sm: 2 },
-      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
-    }}>
-      {HUB_TOOLS.map((t, i) => (
-        <HubCard key={t.id} tool={t} delay={i * 80} onClick={() => onPick(t.id)} />
+    <Stack spacing={4}>
+      {HUB_GROUPS.map((group) => (
+        <Box key={group.brand}>
+          <Stack
+            direction="row"
+            alignItems="baseline"
+            spacing={1.5}
+            sx={{ mb: 1.5, flexWrap: 'wrap' }}
+          >
+            <MuiTypography
+              variant="overline"
+              sx={{
+                color: BRAND.green,
+                fontWeight: 800,
+                letterSpacing: 2.5,
+                fontSize: 11,
+              }}
+            >
+              {group.brand}
+            </MuiTypography>
+            <MuiTypography
+              variant="caption"
+              sx={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}
+            >
+              {group.blurb}
+            </MuiTypography>
+          </Stack>
+          <Box sx={{
+            display: 'grid',
+            gap: { xs: 1.5, sm: 2 },
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+          }}>
+            {group.tools.map((t) => {
+              const card = (
+                <HubCard
+                  key={t.id}
+                  tool={t}
+                  delay={cardIdx * 80}
+                  onClick={() => onPick(t.id)}
+                />
+              );
+              cardIdx += 1;
+              return card;
+            })}
+          </Box>
+        </Box>
       ))}
-    </Box>
+    </Stack>
   );
 }
 
@@ -1596,12 +2007,16 @@ function StudioBody({ token, onLogout }) {
               borderRadius: 3, overflow: 'hidden',
               bgcolor: BRAND.panel, border: `1px solid ${BRAND.border}`,
             }}>
-              {/* Tool header bar with back button */}
+              {/* Tool header bar with back button.
+                  Breadcrumb: Studio › <Brand> › <Tool>. The brand step makes
+                  it obvious that "Cold Calls" is JP Webworks, not part of the
+                  apparel workflow. */}
               <Stack
                 direction="row" alignItems="center" spacing={1.5}
                 sx={{
                   px: { xs: 2.5, sm: 3 }, py: 1.75,
                   borderBottom: `1px solid ${BRAND.faint}`,
+                  flexWrap: 'wrap',
                 }}
               >
                 <Button
@@ -1618,6 +2033,19 @@ function StudioBody({ token, onLogout }) {
                   width: 4, height: 4, borderRadius: '50%',
                   bgcolor: 'rgba(255,255,255,0.2)',
                 }} />
+                {currentTool?.brand && (
+                  <>
+                    <MuiTypography variant="caption" sx={{
+                      color: BRAND.green, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                    }}>
+                      {currentTool.brand}
+                    </MuiTypography>
+                    <Box sx={{
+                      width: 4, height: 4, borderRadius: '50%',
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                    }} />
+                  </>
+                )}
                 <MuiTypography variant="body2" sx={{
                   color: BRAND.white, fontWeight: 700,
                 }}>
@@ -1630,7 +2058,7 @@ function StudioBody({ token, onLogout }) {
                   {view === 'manual'      && <ManualEntryTab token={token} />}
                   {view === 'submissions' && <SubmissionsTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
-                  {view === 'coldcall'    && <ColdCallTab />}
+                  {view === 'coldcall'    && <ColdCallTab token={token} />}
                 </Box>
               </Fade>
             </Paper>
