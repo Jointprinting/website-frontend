@@ -70,7 +70,7 @@ export default function FAQ() {
             variant="h6"
             sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 300, maxWidth: 500, mx: 'auto', lineHeight: 1.7 }}
           >
-            Can't find your answer here? Book a 30-minute call and we'll walk through it together.
+            Can't find your answer here? Book a 15-minute call and we'll walk through it together.
           </MuiTypography>
         </Container>
       </Box>
