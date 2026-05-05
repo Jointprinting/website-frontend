@@ -194,7 +194,6 @@ function Contact() {
                         fullWidth
                         size="small"
                         onChange={(e) => setPhone(e.target.value)}
-                        helperText="Any format works"
                       />
                     </Grid>
                     <Grid item xs={12} sm={6}>
@@ -274,7 +273,7 @@ function Contact() {
               <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: '#f9fdf9', border: '1px solid #b7e4c7', textAlign: 'center' }}>
                 <MuiTypography fontWeight={700} fontSize={15} mb={1}>Prefer to talk it through?</MuiTypography>
                 <MuiTypography variant="body2" color="text.secondary" mb={2} lineHeight={1.65}>
-                  Book a free 30-min call and we'll figure out the right products and approach together.
+                  Book a free 15-min call and we'll figure out the right products and approach together.
                 </MuiTypography>
                 <Button component="a" href="https://calendly.com/nate-jointprinting/30min" target="_blank" rel="noopener noreferrer"
                   variant="outlined" fullWidth
