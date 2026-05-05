@@ -352,7 +352,7 @@ function About() {
             variant="body1"
             sx={{ color: 'rgba(255,255,255,0.6)', mb: 4, lineHeight: 1.75 }}
           >
-            Book a free 30-minute call. Bring your logo, a vibe, or just an idea
+            Book a free 15-minute call. Bring your logo, a vibe, or just an idea
             — we'll shape it into a lineup.
           </Typography>
           <Button
