@@ -6,6 +6,7 @@ import Stack from '@mui/material/Stack';
 //import TextField from '../modules/components/TextField';
 import { SocialIcon } from 'react-social-icons'
 import { useMediaQuery } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import jpstacked from '../modules/images/jpstacked.webp'
 
 export default function Footer() {
@@ -13,7 +14,7 @@ export default function Footer() {
   return (
     <Typography
       component="footer"
-      sx={{ display: 'flex', bgcolor: 'secondary.light' }}
+      sx={{ display: 'flex', bgcolor: 'secondary.light', position: 'relative' }}
     >
       <Stack direction={mobile ? "column" : "row"} spacing='10vw' width="100%" py={'6vh'} alignItems={mobile ? "center" : "start"}>
           <Box flex={1} />
@@ -72,6 +73,35 @@ export default function Footer() {
           </Stack>
           <Box flex={1} />
         </Stack>
+
+        {/* Internal staff link to the Studio sign-in. Intentionally tiny and
+            tucked into the bottom-right corner so customers don't notice it
+            but anyone with the password can find it quickly. */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 8,
+            right: 12,
+            opacity: 0.4,
+            '&:hover': { opacity: 1 },
+            transition: 'opacity 150ms ease',
+          }}
+        >
+          <Link
+            component={RouterLink}
+            to="/studio"
+            underline="none"
+            sx={{
+              fontSize: 11,
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              color: 'inherit',
+              fontWeight: 600,
+            }}
+          >
+            Studio
+          </Link>
+        </Box>
     </Typography>
   );
 }
