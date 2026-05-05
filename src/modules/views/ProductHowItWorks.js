@@ -4,6 +4,7 @@ import * as React from 'react';
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
+import { Link as RouterLink } from 'react-router-dom';
 import Button from '../components/Button';
 import Typography from '../components/Typography';
 
@@ -12,6 +13,9 @@ import relaxImage from '../images/relax.webp';
 import deliveryImage from '../images/delivery.webp';
 import clothingImage from '../images/clothing.webp';
 
+// height: '100%' (instead of minHeight) lets MUI Grid stretch every card to
+// the tallest sibling — fixes the "Approve quote & designs" card sitting
+// shorter than the rest because its body text wrapped to fewer lines.
 const cardBase = {
   display: 'flex',
   flexDirection: 'column',
@@ -21,7 +25,7 @@ const cardBase = {
   borderRadius: 3,
   bgcolor: 'common.white',
   boxShadow: 1,
-  minHeight: 260,
+  height: '100%',
   position: 'relative',
   transition: 'transform 180ms ease-out, box-shadow 180ms ease-out',
   '&:hover': {
@@ -42,6 +46,7 @@ const numberCircle = {
   color: 'secondary.main',
   mb: 2,
   bgcolor: 'secondary.light',
+  flexShrink: 0,
 };
 
 const imageStyle = {
@@ -50,13 +55,17 @@ const imageStyle = {
 };
 
 function ProductHowItWorks() {
+  // Step 1 is the entry point — clickable and links to /products. The other
+  // cards stay non-interactive so we don't imply the user can jump ahead.
   const steps = [
     {
       num: '1',
       img: drawImage,
-      title: 'Request a free mockup',
+      title: 'Start your free mockup',
       body:
-        "Tell us what you're trying to do — launch, restock, or test an idea. We get the context first.",
+        "Tell us what you're trying to do — launch, restock, or test an idea. Pick your blanks and we'll build the mockup.",
+      to: '/products',
+      ctaLabel: 'Start here →',
     },
     {
       num: '2',
@@ -112,27 +121,62 @@ function ProductHowItWorks() {
           From idea to boxes at your door
         </Typography>
 
-        <Grid container spacing={4}>
-          {steps.map((step) => (
-            <Grid item xs={12} sm={6} md={3} key={step.num}>
-              <Box sx={cardBase}>
-                <Box sx={numberCircle}>{step.num}</Box>
-                <Box component="img" src={step.img} alt={step.title} sx={imageStyle} />
-                <Typography variant="h6" sx={{ mb: 1.5 }}>
-                  {step.title}
-                </Typography>
-                <Typography variant="body1">{step.body}</Typography>
-              </Box>
-            </Grid>
-          ))}
+        <Grid container spacing={4} alignItems="stretch">
+          {steps.map((step) => {
+            const linkProps = step.to
+              ? {
+                  component: RouterLink,
+                  to: step.to,
+                  sx: {
+                    ...cardBase,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    border: '2px solid transparent',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 5,
+                      borderColor: 'secondary.main',
+                    },
+                  },
+                }
+              : { sx: cardBase };
+
+            return (
+              <Grid item xs={12} sm={6} md={3} key={step.num} sx={{ display: 'flex' }}>
+                <Box {...linkProps}>
+                  <Box sx={numberCircle}>{step.num}</Box>
+                  <Box component="img" src={step.img} alt={step.title} sx={imageStyle} />
+                  <Typography variant="h6" sx={{ mb: 1.5 }}>
+                    {step.title}
+                  </Typography>
+                  <Typography variant="body1" sx={{ flexGrow: 1 }}>
+                    {step.body}
+                  </Typography>
+                  {step.ctaLabel && (
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        mt: 2,
+                        color: 'secondary.main',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {step.ctaLabel}
+                    </Typography>
+                  )}
+                </Box>
+              </Grid>
+            );
+          })}
         </Grid>
 
         <Button
           color="secondary"
           size="large"
           variant="contained"
-          component="a"
-          href="/products"
+          component={RouterLink}
+          to="/products"
           sx={{
             mt: 8,
             borderRadius: 999,
