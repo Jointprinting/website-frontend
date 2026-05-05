@@ -16,19 +16,20 @@ import Studio from './screens/Studio';
 import Catalogs from './screens/Catalogs';
 import Demos from './screens/demos';
 
-// Routes that shouldn't show the customer-facing announcement bar.
-// Studio is admin-only — coupon banner doesn't belong there.
-const HIDE_BANNER_ON = ['/studio', '/admin'];
+// Routes that should be presented bare — no public coupon banner, no public
+// footer. Studio is admin-only (its own dark UI, internal navigation), so the
+// marketing site chrome doesn't belong on it.
+const STUDIO_ROUTES = ['/studio', '/admin'];
 
 function AppShell() {
   const { pathname } = useLocation();
-  const hideBanner = HIDE_BANNER_ON.some(
+  const isStudio = STUDIO_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
   );
 
   return (
     <>
-      {!hideBanner && <AnnouncementBar />}
+      {!isStudio && <AnnouncementBar />}
       <Navbar />
       <Routes>
         <Route exact path="/" element={<Home />} />
@@ -44,7 +45,7 @@ function AppShell() {
         <Route exact path="/catalogs" element={<Catalogs />} />
         <Route exact path="/demos" element={<Demos />} />
       </Routes>
-      <Footer />
+      {!isStudio && <Footer />}
     </>
   );
 }
