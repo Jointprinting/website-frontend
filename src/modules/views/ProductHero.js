@@ -98,7 +98,7 @@ export default function ProductHero() {
             '&:hover': { color: 'rgba(255,255,255,0.9)' },
           }}
         >
-          Prefer to talk first? Book a free 30-min call
+          Prefer to talk first? Book a free 15-min call
         </Typography>
       </Box>
 
