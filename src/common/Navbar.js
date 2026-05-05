@@ -88,101 +88,102 @@ function Navbar() {
 
   if (!mobile) {
     return (
-      <div>
-        <AppBar position="fixed">
-          <Toolbar sx={{ justifyContent: 'space-between' }}>
-            <Stack
-              direction="row"
-              alignItems="center"
-              component={ReactRouterLink}
-              to="/"
-              sx={{ textDecoration: 'none' }}
+      // position="sticky" instead of "fixed". Fixes the white-bar gap that
+      // appeared between the announcement bar and the page content. With
+      // sticky, the navbar flows in document layout (no placeholder Toolbar
+      // needed) and still pins to the top once you scroll past the banner.
+      <AppBar position="sticky">
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            component={ReactRouterLink}
+            to="/"
+            sx={{ textDecoration: 'none' }}
+          >
+            <img src={boxLogo} alt="logo" width="60" height="auto" />
+            <Typography
+              sx={{
+                ml: 1,
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 22,
+                fontFamily: 'Roboto Condensed',
+              }}
             >
-              <img src={boxLogo} alt="logo" width="60" height="auto" />
-              <Typography
-                sx={{
-                  ml: 1,
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 22,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                JOINT PRINTING
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={4} alignItems="center">
-              <Typography
-                component={ReactRouterLink}
-                to="/products"
-                sx={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                PRODUCTS
-              </Typography>
-              <Typography
-                component={ReactRouterLink}
-                to="/catalogs"
-                sx={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                CATALOGS
-              </Typography>
-              <Typography
-                component={ReactRouterLink}
-                to="/about"
-                sx={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                ABOUT
-              </Typography>
-              <Typography
-                component={ReactRouterLink}
-                to="/contact"
-                sx={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                CONTACT
-              </Typography>
-              <Typography
-                component={ReactRouterLink}
-                to="/faq"
-                sx={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  fontFamily: 'Roboto Condensed',
-                }}
-              >
-                FAQ
-              </Typography>
-            </Stack>
-          </Toolbar>
-        </AppBar>
-        <Toolbar />
-      </div>
+              JOINT PRINTING
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={4} alignItems="center">
+            <Typography
+              component={ReactRouterLink}
+              to="/products"
+              sx={{
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 14,
+                fontFamily: 'Roboto Condensed',
+              }}
+            >
+              PRODUCTS
+            </Typography>
+            <Typography
+              component={ReactRouterLink}
+              to="/catalogs"
+              sx={{
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 14,
+                fontFamily: 'Roboto Condensed',
+              }}
+            >
+              CATALOGS
+            </Typography>
+            <Typography
+              component={ReactRouterLink}
+              to="/about"
+              sx={{
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 14,
+                fontFamily: 'Roboto Condensed',
+              }}
+            >
+              ABOUT
+            </Typography>
+            <Typography
+              component={ReactRouterLink}
+              to="/contact"
+              sx={{
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 14,
+                fontFamily: 'Roboto Condensed',
+              }}
+            >
+              CONTACT
+            </Typography>
+            <Typography
+              component={ReactRouterLink}
+              to="/faq"
+              sx={{
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 900,
+                fontSize: 14,
+                fontFamily: 'Roboto Condensed',
+              }}
+            >
+              FAQ
+            </Typography>
+          </Stack>
+        </Toolbar>
+      </AppBar>
     );
   }
 
