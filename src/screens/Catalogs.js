@@ -278,7 +278,7 @@ function Catalogs() {
               textTransform: 'none',
             }}
           >
-            Book a free 30-min call
+            Book a free 15-min call
           </Button>
         </Box>
       </Container>
