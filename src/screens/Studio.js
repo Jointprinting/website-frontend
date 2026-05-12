@@ -879,13 +879,17 @@ function ManualEntryTab({ token }) {
   );
 }
 // ─────────────────────────────────────────────────────────────────────────────
-//  Cold Calls — JPW cold call decision tree with editable script versions
+//  Cold Calls — JPW cold call decision tree
+//
+//  Flow is 2-touch: (1) cold call, book a 15-min meeting on the call itself,
+//  (2) the meeting, where the pre-built audit is walked through and pricing
+//  is presented. The audit is prepped BEFORE the meeting; it's no longer a
+//  separate email touch.
 //
 //  Each node has built-in "default" content (script lines, follow-ups,
-//  voicemail). Editing a line creates a new version saved to MongoDB,
-//  scoped to that node + that field. You can switch between Default and
-//  any of your saved versions with a dropdown — current selection persists
-//  to localStorage so the call resumes where you left off.
+//  voicemail). Click "Edit" on any field to override the default for that
+//  field — overrides persist to localStorage. Click "Reset to default" to
+//  restore the original.
 // ─────────────────────────────────────────────────────────────────────────────
 const COLD_CALL_NODES = {
   start: {
@@ -900,7 +904,7 @@ const COLD_CALL_NODES = {
   },
   gatekeeper: {
     stage: 'Gatekeeper',
-    script: ["No problem — could you point me to the owner? It's about how the business is showing up online compared to others in the {{svc}} space around here. Just wanted to give them a heads up directly."],
+    script: ["No problem — could you point me to the owner? Quick heads up about something I'm doing in the {{svc}} space around here, only takes a couple minutes of their time."],
     direction: "Stay friendly and brief. Don't pitch the gatekeeper — they don't have authority and feel disrespected if you try. Get a name + best time to call back, or ask if they can grab the owner now.",
     next: [
       { label: 'Owner is here, transferring', to: 'intro' },
@@ -912,10 +916,12 @@ const COLD_CALL_NODES = {
   intro: {
     stage: 'Intro & hook',
     script: [
-      'Perfect — this is Nate with JP Webworks.',
-      "Looked you up before calling — your competitors have 80–100 Google reviews, you've got 20. I do local visibility for {{svc}} companies in South Jersey. You guys still taking on new work?",
+      "Perfect — this is Nate with JP Webworks, local guy out of Marlton.",
+      "I work with local service companies on the visibility side — how you show up online when someone in your area searches for {{svc}}.",
+      "Reason I called specifically — I only take on one {{svc}} company per area in South Jersey, and we just had an opening. Figured I'd give {{biz}} first shot before I keep dialing.",
+      "Quick question — you guys taking on new work right now?",
     ],
-    direction: "Pause. Let the gap land. Don't over-explain — the number does the work.",
+    direction: "Pause after the 'opening' line. Let the exclusivity land before the ask. Don't over-explain — the 'one company per area' frame does the work.",
     next: [
       { label: 'Yes, taking new work', to: 'discovery' },
       { label: "We're slammed / get enough work", to: 'enough_work' },
@@ -930,69 +936,69 @@ const COLD_CALL_NODES = {
   discovery: {
     stage: 'Discovery',
     script: [
-      "Got it. That's exactly why I called.",
-      "When someone in your area needs {{svc}}, the first thing they do is search. Whoever's in that 80–100 review group with a real website usually gets the call — even if you're the better operator. The 10–20 review guys never even get the chance to pitch.",
+      "Good. Quick context on why I called — when someone in your area needs {{svc}}, the first thing they do is search.",
+      "Whoever's in the 80–100 review crowd with a real website usually gets the call, even if you're the better operator. The 10–20 review guys never get the chance to pitch.",
     ],
     followUp: ['Out of curiosity — are most of your customers coming from referrals right now, or do people find you through Google too?'],
     direction: 'Then shut up. Whoever talks first loses.',
     next: [
       { label: 'Mostly referrals / word of mouth', to: 'referrals' },
       { label: 'Google / online / a mix', to: 'google' },
-      { label: "What's a digital audit?", to: 'what_is_audit' },
+      { label: "What's this call about?", to: 'what_is_audit' },
       { label: 'How much does it cost?', to: 'price_early' },
       { label: 'We have someone doing marketing', to: 'have_a_guy' },
     ],
   },
   referrals: {
-    stage: 'Referrals → audit ask',
+    stage: 'Referrals → book meeting',
     script: [
       'That makes sense. Referrals are usually the best leads.',
       "Here's the thing though — even when someone refers you, the next thing they do is Google your name. If they see 20 reviews and a barebones website while the next {{svc}} guy has 90 and looks dialed in, you can lose a referral you already earned.",
     ],
-    direction: 'Move to the audit ask.',
+    direction: 'Move to the booking ask. No middle "send the audit" step — book the meeting on this call.',
     followUp: [
-      "I'm not trying to sell you a big marketing package over the phone.",
-      'The next step would just be a quick digital audit — we look at how you show up online, what customers see before they call, and whether there are easy fixes that could help you get more calls or better jobs.',
-      "What's the best cell or email to send that to?",
+      "Here's what I'd suggest — let's grab 15 minutes on the calendar this week.",
+      "Before our call I'll pull up exactly how {{biz}} shows up online vs. the 80–100 review crowd in your area — Google profile, website, reviews, the whole picture. Then on our call I walk you through it and you decide if any of it's worth fixing. No pitch, no charge for the call.",
+      "I've got openings this week — does morning or afternoon work better for you?",
     ],
     next: [
-      { label: 'Got cell or email', to: 'success' },
-      { label: "What's a digital audit?", to: 'what_is_audit' },
+      { label: 'They gave me a time', to: 'book_meeting' },
+      { label: "What's this call about?", to: 'what_is_audit' },
       { label: 'How much does it cost?', to: 'price_early' },
       { label: 'Just send me something', to: 'send_something' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
   google: {
-    stage: 'Google → audit ask',
+    stage: 'Google → book meeting',
     script: [
       'Got it. Then the gap between you and the 80–100 review crowd is probably costing you real jobs every week.',
       "Google may show your business, but the website is what tells someone what you actually do, where you work, and why they should call you instead of the next listing. If yours looks dated or doesn't load right on a phone, they bounce.",
     ],
-    direction: 'Move to the audit ask.',
+    direction: 'Move to the booking ask. No middle "send the audit" step — book the meeting on this call.',
     followUp: [
-      "The smart move isn't guessing. I'll have my market expert run a quick digital audit first.",
-      "Then I'll send you a simple recommendation — maybe website first, Google cleanup, ads later, or nothing at all if it doesn't make sense.",
-      "What's the best cell or email?",
+      "Let me do this — grab 15 minutes on the calendar with me this week.",
+      "Before the call I'll pull up exactly what someone sees when they Google {{svc}} in your area and where {{biz}} stacks up. I walk you through it on the call — no charge, no pitch — and you decide if anything's worth fixing.",
+      "Morning or afternoon work better for you this week?",
     ],
     next: [
-      { label: 'Got cell or email', to: 'success' },
-      { label: "What's a digital audit?", to: 'what_is_audit' },
+      { label: 'They gave me a time', to: 'book_meeting' },
+      { label: "What's this call about?", to: 'what_is_audit' },
       { label: 'How much does it cost?', to: 'price_early' },
       { label: 'Just send me something', to: 'send_something' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
   what_is_audit: {
-    stage: "Objection: what's an audit?",
+    stage: "Objection: what's the call about?",
     script: [
-      'Simple version — we check what a customer sees when they search for you.',
-      'We look at whether you show up clearly, whether your services are easy to understand, whether people have a clear way to call or request a quote, and how you compare to the {{svc}} companies winning right now in your area.',
-      "Then I send a plain-English recommendation on what I'd fix first.",
+      "Simple — before our call I'll pull up what a customer sees when they search for {{svc}} in your area.",
+      'How {{biz}} shows up vs. the 80–100 review crowd, whether your services are easy to find, whether people have a clear way to call or request a quote, all of it.',
+      "Then I walk you through it for 15 minutes and tell you what I'd fix first. If nothing makes sense, I'll tell you that too. No charge, no commitment.",
     ],
-    followUp: ["What's the best cell or email to send it to?"],
+    followUp: ["Worth 15 minutes? I've got time this week — morning or afternoon better?"],
     next: [
-      { label: 'Got cell or email', to: 'success' },
+      { label: 'They gave me a time', to: 'book_meeting' },
       { label: 'How much does it cost?', to: 'price_early' },
       { label: 'Not interested', to: 'not_interested' },
     ],
@@ -1002,7 +1008,7 @@ const COLD_CALL_NODES = {
     script: [
       'We help local service businesses get more calls and leads from the online side.',
       'For a business stuck in the 10–20 review group with no real website, we usually start with a clean site that shows services, service areas, photos, and click-to-call buttons.',
-      "Then if it makes sense we can help with Google visibility, reviews, ads, tracking, follow-up. But first I'd rather audit the business and see what's actually worth fixing.",
+      "Then if it makes sense we layer on Google visibility, reviews, ads, tracking — whatever moves the needle. But I'd rather look at your business specifically first before recommending anything.",
     ],
     next: [
       { label: 'OK, sounds interesting', to: 'discovery' },
@@ -1015,13 +1021,13 @@ const COLD_CALL_NODES = {
   price_early: {
     stage: 'Objection: price',
     script: [
-      "Honest answer — depends on what we figure out you actually need. Some guys need a website rebuild, some have a site but their Google ranking is invisible, some need help getting reviews, some need ads. Each one's a different fix at a different price point.",
-      'Cheapest stuff like reviews and Google profile cleanup runs a few hundred a month. Full website builds are $749 setup and $299 a month. Ads layer on top depending on what you want to spend.',
-      "Point is, I'm not going to quote you before I look at the business. The audit tells us where the leak actually is, then I'll tell you straight what the fix costs.",
+      "Honest answer — depends what we figure out you actually need. Some guys need a website rebuild, some have a site but their Google ranking is invisible, some need reviews, some need ads. Different fixes at different price points.",
+      'Cheapest stuff like reviews and Google profile cleanup runs a few hundred a month. Full website builds are $749 setup and $299 a month. Ads layer on top.',
+      "Point is, I'm not going to quote you before I look at the business. That's exactly what the 15-minute call is for — I show you what's actually broken, then tell you straight what the fix costs. No charge for the call itself.",
     ],
-    followUp: ["What's the best cell or email to send the audit to?"],
+    followUp: ["Worth booking 15 minutes this week? Morning or afternoon?"],
     next: [
-      { label: 'Got cell or email', to: 'success' },
+      { label: 'They gave me a time', to: 'book_meeting' },
       { label: 'Too expensive either way', to: 'too_expensive' },
       { label: 'Not interested', to: 'not_interested' },
     ],
@@ -1029,29 +1035,29 @@ const COLD_CALL_NODES = {
   too_expensive: {
     stage: 'Objection: too expensive',
     script: [
-      "Totally hear you — it's a real number, especially when you don't know yet what you're actually getting back.",
-      'Think about it this way — one extra job a month from looking like the 80–100 review guys instead of the 10–20 ones usually pays for the whole year. But that\'s only if the website actually moves the needle for your specific business, which is what the audit tells us.',
+      "Totally hear you — it's a real number, especially when you don't know yet what you're getting back.",
+      "Think about it this way — one extra job a month from looking like the 80–100 review guys instead of the 10–20 ones usually pays for the whole year. But that's only if it actually moves the needle for your specific business, which is exactly what the 15 minutes tells us.",
     ],
-    followUp: ["Worth me sending the audit either way? It's free, and if a website isn't the right move for you right now I'll tell you straight up."],
-    direction: "Don't drop the price or invent a discount. The audit is the de-risker, not a smaller sticker.",
+    followUp: ["Worth booking 15 minutes anyway? It's free, and if it doesn't make sense for your business I'll tell you straight up."],
+    direction: "Don't drop the price or invent a discount. The free 15-minute consult is the de-risker, not a smaller sticker.",
     next: [
-      { label: 'OK, send the audit', to: 'audit_ask' },
+      { label: 'OK, book it', to: 'book_ask' },
       { label: 'Still a no', to: 'not_interested' },
     ],
   },
   have_a_guy: {
     stage: 'Objection: already have someone',
     script: [
-      "Good — that means you already take this stuff seriously. Most owners I call don't.",
+      "Good — means you already take this stuff seriously. Most owners I call don't.",
       "Quick question, not a trick — what's your guy actually handling? Website, Google profile, reviews, ads, all of it?",
     ],
     direction: "Listen carefully. 'My nephew built the site' is very different from 'I pay an agency $2k/month.' Adjust based on the answer.",
     followUp: [
-      "Reason I ask — most of the {{svc}} companies I call who say they have a guy are still sitting in the 10–20 review group. Either the guy isn't doing what they think he's doing, or they're paying for the wrong things. The 80–100 review crowd doesn't get there by accident.",
-      "I can run the audit either way and send it over. If everything's tight, you've got a benchmark to hold your guy accountable to. What's the best cell or email?",
+      "Reason I ask — most of the {{svc}} companies I call who say they have a guy are still sitting in the 10–20 review group. Either the guy isn't doing what they think, or they're paying for the wrong things. The 80–100 review crowd doesn't get there by accident.",
+      "Worth booking 15 minutes either way? If everything's tight, you've got a benchmark to hold your guy accountable to. If he's missing something, you'd want to know before a competitor does.",
     ],
     next: [
-      { label: 'Got cell or email', to: 'success' },
+      { label: 'They gave me a time', to: 'book_meeting' },
       { label: "He handles everything, we're good", to: 'have_a_guy_firm' },
       { label: "It's just a family member / nephew", to: 'discovery' },
       { label: 'Not interested', to: 'not_interested' },
@@ -1061,11 +1067,11 @@ const COLD_CALL_NODES = {
     stage: 'Already have someone — firm no',
     script: [
       "Fair enough — sounds like you're set up.",
-      "Mind if I send the audit anyway, no strings? Worst case it confirms your guy is doing his job. Best case you spot something he's missed before a competitor does.",
+      "Last ask — 15 minutes on the calendar, no strings. Worst case it confirms your guy is doing his job. Best case you spot something he's missed before it costs you a job.",
     ],
     direction: "If still no after this, drop it. Don't push past two soft asks — they'll remember you respected it and you can come back in 90 days.",
     next: [
-      { label: 'OK fine, send it', to: 'audit_ask' },
+      { label: 'OK fine, book it', to: 'book_ask' },
       { label: 'Still no', to: 'polite_exit' },
     ],
   },
@@ -1073,14 +1079,14 @@ const COLD_CALL_NODES = {
     stage: "Objection: don't need a website",
     script: [
       'Totally fair. Plenty of good businesses have grown without one.',
-      "But the 80–100 review guys aren't winning because they're better at the work — they're winning because they show up when someone searches and they look established. The 10–20 review group, no real website group, just gets skipped before the phone even rings.",
+      "But the 80–100 review guys aren't winning because they're better at the work — they're winning because they show up when someone searches and they look established. The no-website 10–20 review group just gets skipped before the phone even rings.",
     ],
     followUp: [
-      "Let me do this instead — I'll run a quick digital audit and show you exactly what someone sees when they Google {{svc}} in your area. If there's nothing worth fixing, I'll tell you.",
-      "What's the best email or cell?",
+      "Let me do this instead — 15 minutes on the calendar this week. I'll show you exactly what someone sees when they Google {{svc}} in your area. If there's nothing worth fixing, I'll tell you straight.",
+      "Morning or afternoon better for you this week?",
     ],
     next: [
-      { label: 'Got cell or email', to: 'success' },
+      { label: 'They gave me a time', to: 'book_meeting' },
       { label: 'Still not interested', to: 'not_interested' },
     ],
   },
@@ -1088,43 +1094,43 @@ const COLD_CALL_NODES = {
     stage: 'Objection: get enough work',
     script: [
       "That's a good problem to have.",
-      "Then I wouldn't frame this as 'you desperately need more leads.' It's more about getting better jobs — the higher-ticket ones — and making sure when someone hears about you they don't bounce because the website looks like it was built in 2014. The 80–100 review guys are pulling the bigger jobs partly because they look like they can handle them.",
+      "Then I wouldn't frame this as 'you desperately need more leads.' It's more about getting better jobs — the higher-ticket ones — and making sure when someone hears about you they don't bounce because the website looks like it was built in 2014. The 80–100 review guys pull the bigger jobs partly because they look like they can handle them.",
     ],
-    followUp: ["The audit would show whether there's actually an opportunity worth your time, or whether you're already running tight. Worth me sending it over?"],
+    followUp: ["15 minutes on the calendar would tell us whether there's actually an opportunity worth your time, or whether you're already running tight. Worth booking?"],
     next: [
-      { label: 'Yes, send it', to: 'audit_ask' },
+      { label: 'Yes, book it', to: 'book_ask' },
       { label: "No, I'm good", to: 'polite_exit' },
     ],
   },
   send_something: {
     stage: 'They asked: send me something',
-    script: ["Absolutely. I'll keep it short."],
-    followUp: ['Quick before I send it — what kind of jobs are you usually trying to get more of? Bigger residential, commercial, specific service?'],
-    direction: "They're now telling you exactly what the audit should focus on. Take notes — this is gold for the follow-up.",
+    script: ["I can do one better — I'll text you a link to grab 15 minutes on my calendar this week."],
+    followUp: ['Quick before I send it — what kind of jobs are you usually trying to land more of? Bigger residential, commercial, specific service?'],
+    direction: "They're now telling you exactly what to focus on at the meeting. Take notes — this is gold for the audit prep.",
     next: [
       { label: 'They told me what they want', to: 'send_close' },
-      { label: "They won't say / shut down", to: 'audit_ask' },
+      { label: "They won't say / shut down", to: 'book_ask' },
     ],
   },
   send_close: {
-    stage: 'Closing the audit ask',
-    script: ["Perfect. I'll build the audit around that, not just send a generic website pitch."],
-    followUp: ["What's the best cell or email?"],
+    stage: 'Closing the booking ask',
+    script: ["Perfect. I'll prep the visibility check around that specifically — not a generic pitch."],
+    followUp: ["What's the best cell to text you my Calendly link?"],
     next: [
-      { label: 'Got cell or email', to: 'success' },
-      { label: 'Hesitating', to: 'audit_ask' },
+      { label: 'Got the cell', to: 'book_meeting' },
+      { label: 'Hesitating', to: 'book_ask' },
     ],
   },
-  audit_ask: {
-    stage: 'Audit ask (clean version)',
+  book_ask: {
+    stage: 'Book the meeting',
     script: [
-      'Perfect. The next step is simple.',
-      "I'll run a quick digital audit on how your business shows up online, what customers see before they call, and where you may be losing leads.",
-      "Then I'll send a clear recommendation on what I'd fix first. If it makes sense, we'll talk through the right starting point from there.",
+      "Perfect. Here's how it works.",
+      "I'll text you my Calendly link — grab whatever 15-minute slot works for you this week.",
+      "Before our call I'll pull up exactly how {{biz}} shows up vs. the 80–100 review crowd in your area. Then we walk through it together on the call, and you decide if any of it's worth fixing. No pitch on the call itself.",
     ],
-    followUp: ["What's the best cell or email?"],
+    followUp: ["What's the best cell to text the link to?"],
     next: [
-      { label: 'Got cell or email', to: 'success' },
+      { label: 'Got the cell', to: 'book_meeting' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
@@ -1133,8 +1139,8 @@ const COLD_CALL_NODES = {
     end: 'warning',
     badge: 'Leave VM + send text',
     script: ['Leave the voicemail below, then send a follow-up text within 2 minutes while your name is fresh.'],
-    voicemail: 'Hey [name], this is Nate with JP Webworks. This is a cold call, figured you should know up front. I work with local service businesses in the Central/South Jersey area on their website and Google visibility side of things, and I had a couple thoughts after looking up {{biz}}. I\'ll shoot you a text so you\'ve got my number. Give me a call or text when you\'ve got a sec.',
-    direction: 'Cadence rule: only leave a voicemail on attempt 1 and attempt 4 (with new info). Attempts 2 and 3, just call and hang up if it goes to VM. After 5 touches with no reply, move them to a 60-day backburner.',
+    voicemail: "Hey [name], Nate with JP Webworks out of Marlton. Reason I called — I only take on one {{svc}} company per area in South Jersey, and we just had a spot open in your zip. Figured I'd give {{biz}} first shot before I keep dialing around. Shoot me a text or callback when you get a sec — I'll text you my number too. Thanks.",
+    direction: 'Cadence rule: only leave a voicemail on attempt 1 and attempt 4 (with new info). Attempts 2 and 3, just call and hang up if it goes to VM. After 5 touches with no reply, move them to a 60-day backburner. Send the follow-up text within 2 minutes — "Hey [name], Nate from JP Webworks — just left you a voicemail. Local guy out of Marlton, only takes on one {{svc}} company per area and we had an opening. No rush, just text back when you get a sec."',
   },
   callback: {
     stage: 'Callback path',
@@ -1148,7 +1154,7 @@ const COLD_CALL_NODES = {
     end: 'neutral',
     badge: 'Closed — 90-day follow-up',
     script: [
-      'No worries — I appreciate you taking the call.',
+      'No worries — appreciate you taking the call.',
       'Mind if I check back in a few months in case anything changes? No newsletter, no spam — just one call.',
     ],
     direction: 'If yes: log for 90-day follow-up. If no: respect it and move on. Either way, end warm — they remember the call. Service businesses ripen; the no today is often a yes after their slow season.',
@@ -1163,15 +1169,15 @@ const COLD_CALL_NODES = {
     ],
     direction: "Use this for soft no's where the relationship was friendly. Logs them in CRM with a 90-day reminder.",
   },
-  success: {
+  book_meeting: {
     stage: 'Win',
     end: 'success',
-    badge: 'Audit booked',
+    badge: 'Meeting booked',
     script: [
-      "Perfect, [name]. I'll have that audit over to you by [day]. Quick question — cool if I follow up with a call once you've had a chance to look at it?",
-      "Either way, you'll have something useful in your inbox. Talk soon.",
+      "Perfect, [name]. Texting you my Calendly link right now — calendly.com/nate-jointprinting/30min. Just grab whatever time works for you.",
+      "I'll have the visibility check ready for our call so we don't waste any of the 15 minutes. Talk soon.",
     ],
-    direction: 'Log in CRM. Schedule the audit follow-up. Set a reminder to call them back 2–3 days after sending.',
+    direction: "Action items right now: (1) Text the Calendly link immediately: 'Nate from JP Webworks — booking link as promised: calendly.com/nate-jointprinting/30min. Looking forward to it.' (2) Log lead in CRM with notes from the call. (3) Before the meeting, build the audit (~30 min of prep) focused on whatever pain they mentioned. (4) On the meeting itself: walk the audit, then present pricing.",
   },
 };
 
@@ -1180,36 +1186,33 @@ const QUICK_REBUTTALS = [
   { q: '"How did you get my number?"', a: 'Public records — your Google business listing. Cold call, that\'s all.' },
   { q: '"Take me off your list"', a: "No problem — won't call again. Take care." },
   { q: '"I\'m not the decision maker"', a: 'Got it — who handles the website and marketing side? Could you point me in their direction?' },
-  { q: '"We tried marketing before, didn\'t work"', a: "Yeah, lots of agencies oversell. That's why I do the audit first — if it doesn't make sense for your business, I'll tell you straight up. No charge, no commitment." },
-  { q: '"I just got a website built last year"', a: 'Good — even better. Mind if I send the audit anyway? If your guy did good work, you\'ve got a benchmark. If he missed something, you\'d want to know before it costs you jobs.' },
+  { q: '"We tried marketing before, didn\'t work"', a: "Yeah, lots of agencies oversell. That's why I do the 15-minute call first — no charge, no commitment. If it doesn't make sense for your business, I'll tell you straight up." },
+  { q: '"I just got a website built last year"', a: 'Good — even better. Worth grabbing 15 minutes anyway? If your guy did good work, you\'ve got a benchmark. If he missed something, you\'d want to know before it costs you jobs.' },
   { q: '"Are you AI / a robot?"', a: 'Ha, no — Nate, real person. Calling out of Marlton.' },
   { q: '"How long does the website take to build?"', a: "Usually 1–2 weeks from when we kick off. Then it's live and we handle updates as you need them." },
-  { q: '"Can I see examples of your work?"', a: "Absolutely — I'll send a couple links along with the audit. What's the best cell or email?" },
-  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Two reasons — I do the audit first so you see what I see before paying anything, and the website's $749 setup, not the $5K most guys quote. Worst case you get a free audit out of this call." },
+  { q: '"Can I see examples of your work?"', a: "Absolutely — I'll text you a couple links along with my Calendly. What's the best cell?" },
+  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Two reasons — I do the visibility check live with you before you pay anything, and the website's $749 setup, not the $5K most guys quote. Worst case you get free intel out of 15 minutes." },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  EditableScript — renders a list of script lines for one node+field, with
-//  inline editing + version dropdown.
+//  inline editing. One override per field, persisted in localStorage. No
+//  version naming, no dropdowns — just edit, save, it stays. Reset to wipe.
 //
 //  field: 'script' | 'followUp' | 'voicemail' | 'direction'
 //  defaultLines: array of strings (or single string for voicemail/direction)
 // ─────────────────────────────────────────────────────────────────────────────
 function EditableScript({
   nodeId, field, defaultLines, fill, sx,
-  versions, activeVersionId, onChooseVersion, onSaveNewVersion, onDeleteVersion,
-  isLoading,
+  override, onSaveOverride, onResetOverride,
 }) {
   const isMultiline = Array.isArray(defaultLines);
   const defaultText = isMultiline ? defaultLines.join('\n\n') : (defaultLines || '');
-
-  // Active text (what's currently shown). null = use default.
-  const activeVersion = versions.find((v) => v._id === activeVersionId);
-  const currentText = activeVersion ? activeVersion.text : defaultText;
+  const hasOverride = override != null && override !== '';
+  const currentText = hasOverride ? override : defaultText;
 
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState('');
-  const [saving, setSaving] = React.useState(false);
 
   const startEdit = () => {
     setDraft(currentText);
@@ -1219,15 +1222,16 @@ function EditableScript({
     setEditing(false);
     setDraft('');
   };
-  const saveEdit = async () => {
-    if (!draft.trim() || draft === currentText) { cancelEdit(); return; }
-    setSaving(true);
-    try {
-      await onSaveNewVersion(draft);
-      setEditing(false);
-    } finally {
-      setSaving(false);
+  const saveEdit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) { cancelEdit(); return; }
+    if (trimmed === defaultText) {
+      // They edited back to match the default — just clear the override.
+      onResetOverride();
+    } else {
+      onSaveOverride(trimmed);
     }
+    setEditing(false);
   };
 
   // Render lines
@@ -1254,7 +1258,7 @@ function EditableScript({
             </MuiTypography>
           ))}
 
-          {/* Toolbar — version picker + edit button */}
+          {/* Toolbar — edit + reset */}
           <Stack
             direction="row" spacing={1} alignItems="center"
             sx={{
@@ -1262,60 +1266,43 @@ function EditableScript({
               flexWrap: 'wrap', gap: 0.75,
             }}
           >
-            {versions.length > 0 && (
-              <FormControl size="small" sx={{ minWidth: 160 }}>
-                <Select
-                  value={activeVersionId || 'default'}
-                  onChange={(e) => onChooseVersion(e.target.value === 'default' ? null : e.target.value)}
+            <Button
+              size="small"
+              startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+              onClick={startEdit}
+              sx={{
+                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
+                fontSize: 12, py: 0.4, px: 1.25,
+                '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+              }}
+            >Edit</Button>
+
+            {hasOverride && (
+              <>
+                <Chip
+                  label="Edited"
+                  size="small"
                   sx={{
-                    fontSize: 12, height: 30,
-                    bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.white,
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.10)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.25)' },
-                    '& .MuiSvgIcon-root': { color: BRAND.muted },
-                    '& .MuiSelect-select': { color: BRAND.white, py: 0.6 },
+                    bgcolor: 'rgba(74,222,128,0.12)',
+                    color: BRAND.green,
+                    fontWeight: 700,
+                    height: 20,
+                    fontSize: 10,
+                    border: '1px solid rgba(74,222,128,0.3)',
                   }}
-                >
-                  <MenuItem value="default">Default version</MenuItem>
-                  {versions.map((v) => (
-                    <MenuItem key={v._id} value={v._id}>
-                      {v.label || `Saved ${new Date(v.createdAt).toLocaleDateString()}`}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-
-            <Tooltip title="Edit this script">
-              <Button
-                size="small"
-                startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
-                onClick={startEdit}
-                sx={{
-                  textTransform: 'none', color: BRAND.muted, fontWeight: 600,
-                  fontSize: 12, py: 0.4, px: 1.25,
-                  '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
-                }}
-              >Edit</Button>
-            </Tooltip>
-
-            {activeVersion && (
-              <Tooltip title="Delete this saved version (default stays available)">
+                />
                 <Button
                   size="small"
-                  startIcon={<DeleteIcon sx={{ fontSize: 14 }} />}
-                  onClick={() => onDeleteVersion(activeVersion._id)}
+                  onClick={() => {
+                    if (window.confirm('Reset this back to the default script?')) onResetOverride();
+                  }}
                   sx={{
                     textTransform: 'none', color: 'rgba(248,113,113,0.7)',
                     fontWeight: 600, fontSize: 12, py: 0.4, px: 1.25,
                     '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.06)' },
                   }}
-                >Delete version</Button>
-              </Tooltip>
-            )}
-
-            {isLoading && (
-              <CircularProgress size={14} sx={{ color: BRAND.muted, ml: 0.5 }} />
+                >Reset to default</Button>
+              </>
             )}
           </Stack>
         </>
@@ -1328,7 +1315,7 @@ function EditableScript({
             minRows={isMultiline ? 4 : 2}
             fullWidth
             autoFocus
-            placeholder={isMultiline ? 'Separate lines with a blank line.' : ''}
+            placeholder={isMultiline ? 'Separate paragraphs with a blank line.' : ''}
             sx={{
               ...darkInputSx,
               '& .MuiOutlinedInput-root': {
@@ -1339,18 +1326,15 @@ function EditableScript({
           />
           <Stack direction="row" spacing={1}>
             <Button
-              size="small" variant="contained" disabled={saving}
-              startIcon={saving ? <CircularProgress size={14} sx={{ color: BRAND.greenDk }} /> : <SaveOutlinedIcon sx={{ fontSize: 16 }} />}
+              size="small" variant="contained"
+              startIcon={<SaveOutlinedIcon sx={{ fontSize: 16 }} />}
               onClick={saveEdit}
               sx={{
                 textTransform: 'none', fontWeight: 700, py: 0.6, fontSize: 12.5,
                 bgcolor: BRAND.green, color: BRAND.greenDk,
                 '&:hover': { bgcolor: '#22c55e' },
-                '&:disabled': { bgcolor: 'rgba(74,222,128,0.4)' },
               }}
-            >
-              {saving ? 'Saving…' : 'Save as new version'}
-            </Button>
+            >Save</Button>
             <Button
               size="small"
               startIcon={<CloseIcon sx={{ fontSize: 16 }} />}
@@ -1363,7 +1347,7 @@ function EditableScript({
             >Cancel</Button>
           </Stack>
           <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
-            Saving creates a new version — the default is always preserved and can be selected from the dropdown.
+            Edits save to this device and stay until you reset. Click "Reset to default" any time to restore the original.
           </MuiTypography>
         </Stack>
       )}
@@ -1378,28 +1362,26 @@ function ColdCallTab({ token }) {
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
 
-  // Versions keyed by `${nodeId}::${field}` → array of { _id, text, label, createdAt }
-  const [versionsMap, setVersionsMap] = React.useState({});
-  // Active version id keyed the same way (null = default)
-  const [activeMap, setActiveMap] = React.useState({});
-  const [versionsLoading, setVersionsLoading] = React.useState(false);
+  // Overrides keyed by `${nodeId}::${field}` -> string (the edited text).
+  // Persisted to localStorage. One override per field. No versions.
+  const [overrides, setOverrides] = React.useState({});
 
-  // Load persisted setup, notes, and active selections
+  // Load persisted setup, notes, and overrides
   React.useEffect(() => {
     setBiz(localStorage.getItem('jpw_cc_biz') || '');
     setSvc(localStorage.getItem('jpw_cc_svc') || '');
     setNotes(localStorage.getItem('jpw_cc_notes') || '');
     try {
-      const saved = JSON.parse(localStorage.getItem('jpw_cc_active_versions') || '{}');
-      if (saved && typeof saved === 'object') setActiveMap(saved);
+      const saved = JSON.parse(localStorage.getItem('jpw_cc_overrides') || '{}');
+      if (saved && typeof saved === 'object') setOverrides(saved);
     } catch (e) {}
   }, []);
 
   React.useEffect(() => { localStorage.setItem('jpw_cc_biz', biz); }, [biz]);
   React.useEffect(() => { localStorage.setItem('jpw_cc_svc', svc); }, [svc]);
   React.useEffect(() => {
-    localStorage.setItem('jpw_cc_active_versions', JSON.stringify(activeMap));
-  }, [activeMap]);
+    localStorage.setItem('jpw_cc_overrides', JSON.stringify(overrides));
+  }, [overrides]);
 
   // Debounced notes save to localStorage
   React.useEffect(() => {
@@ -1409,37 +1391,6 @@ function ColdCallTab({ token }) {
     }, 400);
     return () => clearTimeout(t);
   }, [notes]);
-
-  // Fetch all versions on mount
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!token) return;
-      setVersionsLoading(true);
-      try {
-        const res = await axios.get(`${config.backendUrl}/api/script-versions`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (cancelled) return;
-        const grouped = {};
-        for (const v of res.data?.versions || []) {
-          const key = `${v.nodeId}::${v.field}`;
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(v);
-        }
-        // Sort each by createdAt desc
-        Object.values(grouped).forEach((arr) => arr.sort((a, b) =>
-          new Date(b.createdAt) - new Date(a.createdAt)
-        ));
-        setVersionsMap(grouped);
-      } catch (err) {
-        console.error('Could not load script versions', err);
-      } finally {
-        if (!cancelled) setVersionsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [token]);
 
   const fill = React.useCallback((text) => {
     return text
@@ -1454,56 +1405,15 @@ function ColdCallTab({ token }) {
   const goBack = () => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
   const restart = () => setHistory(['start']);
 
-  const handleSaveVersion = async (nodeId, field, text) => {
-    try {
-      const res = await axios.post(
-        `${config.backendUrl}/api/script-versions`,
-        { nodeId, field, text },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const newVersion = res.data?.version;
-      if (newVersion) {
-        const key = `${nodeId}::${field}`;
-        setVersionsMap((m) => ({
-          ...m,
-          [key]: [newVersion, ...(m[key] || [])],
-        }));
-        // Auto-select the version you just made — that's almost always what you want
-        setActiveMap((m) => ({ ...m, [key]: newVersion._id }));
-      }
-    } catch (err) {
-      alert('Could not save: ' + (err?.response?.data?.message || err.message));
-    }
+  const handleSaveOverride = (nodeId, field, text) => {
+    setOverrides((m) => ({ ...m, [`${nodeId}::${field}`]: text }));
   };
-
-  const handleChooseVersion = (nodeId, field, versionId) => {
-    const key = `${nodeId}::${field}`;
-    setActiveMap((m) => ({ ...m, [key]: versionId }));
-  };
-
-  const handleDeleteVersion = async (nodeId, field, versionId) => {
-    if (!window.confirm('Delete this saved version? The default is always preserved.')) return;
-    try {
-      await axios.delete(`${config.backendUrl}/api/script-versions/${versionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const key = `${nodeId}::${field}`;
-      setVersionsMap((m) => ({
-        ...m,
-        [key]: (m[key] || []).filter((v) => v._id !== versionId),
-      }));
-      // If the deleted version was active, fall back to default
-      setActiveMap((m) => {
-        if (m[key] === versionId) {
-          const next = { ...m };
-          delete next[key];
-          return next;
-        }
-        return m;
-      });
-    } catch (err) {
-      alert('Could not delete: ' + (err?.response?.data?.message || err.message));
-    }
+  const handleResetOverride = (nodeId, field) => {
+    setOverrides((m) => {
+      const next = { ...m };
+      delete next[`${nodeId}::${field}`];
+      return next;
+    });
   };
 
   const isEnd = !!node.end;
@@ -1517,16 +1427,14 @@ function ColdCallTab({ token }) {
     : node.end === 'warning' ? 'rgba(251,191,36,0.3)'
     : 'rgba(255,255,255,0.12)';
 
-  // Helper: get versions / active id for this node+field
-  const vKey = (field) => `${currentId}::${field}`;
-  const versionsFor = (field) => versionsMap[vKey(field)] || [];
-  const activeFor = (field) => activeMap[vKey(field)] || null;
+  // Helper: get override for this node+field
+  const overrideFor = (field) => overrides[`${currentId}::${field}`];
 
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 2.5 }}>
         Live decision tree for cold calls. Type the business name and service type at the top —
-        every line autofills as you go. Click any script to edit it; saved versions sync across devices.
+        every line autofills as you go. Click "Edit" on any script to tweak it; edits stay on this device until you reset.
       </MuiTypography>
 
       {/* Setup inputs */}
@@ -1587,12 +1495,9 @@ function ColdCallTab({ token }) {
               defaultLines={node.script}
               fill={fill}
               sx={{ color: isEnd ? endColor : BRAND.white }}
-              versions={versionsFor('script')}
-              activeVersionId={activeFor('script')}
-              onChooseVersion={(id) => handleChooseVersion(currentId, 'script', id)}
-              onSaveNewVersion={(text) => handleSaveVersion(currentId, 'script', text)}
-              onDeleteVersion={(id) => handleDeleteVersion(currentId, 'script', id)}
-              isLoading={versionsLoading}
+              override={overrideFor('script')}
+              onSaveOverride={(t) => handleSaveOverride(currentId, 'script', t)}
+              onResetOverride={() => handleResetOverride(currentId, 'script')}
             />
 
             {/* Voicemail block */}
@@ -1613,12 +1518,9 @@ function ColdCallTab({ token }) {
                   defaultLines={node.voicemail}
                   fill={fill}
                   sx={{ color: 'rgba(255,255,255,0.85)' }}
-                  versions={versionsFor('voicemail')}
-                  activeVersionId={activeFor('voicemail')}
-                  onChooseVersion={(id) => handleChooseVersion(currentId, 'voicemail', id)}
-                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'voicemail', text)}
-                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'voicemail', id)}
-                  isLoading={versionsLoading}
+                  override={overrideFor('voicemail')}
+                  onSaveOverride={(t) => handleSaveOverride(currentId, 'voicemail', t)}
+                  onResetOverride={() => handleResetOverride(currentId, 'voicemail')}
                 />
               </Box>
             )}
@@ -1636,12 +1538,9 @@ function ColdCallTab({ token }) {
                   field="direction"
                   defaultLines={node.direction}
                   sx={{ color: BRAND.muted }}
-                  versions={versionsFor('direction')}
-                  activeVersionId={activeFor('direction')}
-                  onChooseVersion={(id) => handleChooseVersion(currentId, 'direction', id)}
-                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'direction', text)}
-                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'direction', id)}
-                  isLoading={versionsLoading}
+                  override={overrideFor('direction')}
+                  onSaveOverride={(t) => handleSaveOverride(currentId, 'direction', t)}
+                  onResetOverride={() => handleResetOverride(currentId, 'direction')}
                 />
               </Box>
             )}
@@ -1655,12 +1554,9 @@ function ColdCallTab({ token }) {
                   defaultLines={node.followUp}
                   fill={fill}
                   sx={{ color: BRAND.white }}
-                  versions={versionsFor('followUp')}
-                  activeVersionId={activeFor('followUp')}
-                  onChooseVersion={(id) => handleChooseVersion(currentId, 'followUp', id)}
-                  onSaveNewVersion={(text) => handleSaveVersion(currentId, 'followUp', text)}
-                  onDeleteVersion={(id) => handleDeleteVersion(currentId, 'followUp', id)}
-                  isLoading={versionsLoading}
+                  override={overrideFor('followUp')}
+                  onSaveOverride={(t) => handleSaveOverride(currentId, 'followUp', t)}
+                  onResetOverride={() => handleResetOverride(currentId, 'followUp')}
                 />
               </Box>
             )}
