@@ -891,306 +891,482 @@ function ManualEntryTab({ token }) {
 //  restore the original.
 // ─────────────────────────────────────────────────────────────────────────────
 const COLD_CALL_NODES = {
+  // ─── ENTRY POINTS ──────────────────────────────────────────────────────
   start: {
-    stage: 'Open',
-    script: ['Hey, is this the owner of {{biz}}?'],
+    stage: 'Open the line',
+    script: ["Hey, is this {{name}}?"],
+    direction: "Using the owner's first name lands way better than 'is this the owner of {{biz}}?' — it sounds like you know them. Spend 30 seconds researching the name before you dial (Outscraper export, GBP, LinkedIn, Facebook). If you don't have a name, fall back to 'Hey, is this the owner of {{biz}}?' but make name lookup the default.",
     next: [
-      { label: 'Yes, this is the owner', to: 'intro' },
-      { label: 'No / can I help you?', to: 'gatekeeper' },
+      { label: 'Yes — got the owner', to: 'pattern_interrupt' },
+      { label: 'No / who is this? / gatekeeper', to: 'gatekeeper' },
       { label: 'Goes to voicemail', to: 'voicemail' },
       { label: 'Not a good time / hangs up', to: 'callback' },
     ],
   },
+
   gatekeeper: {
     stage: 'Gatekeeper',
-    script: ["No problem — could you point me to the owner? Quick heads up about something I'm doing in the {{svc}} space around here, only takes a couple minutes of their time."],
-    direction: "Stay friendly and brief. Don't pitch the gatekeeper — they don't have authority and feel disrespected if you try. Get a name + best time to call back, or ask if they can grab the owner now.",
+    script: [
+      "No problem — quick one. Is {{name}} around by chance? It's about something I spotted on {{biz}}'s Google listing — wanted to give them a heads-up directly.",
+    ],
+    direction: "Never pitch the gatekeeper — they have no authority and treating them like a buyer breaks rapport. The 'spotted something on their Google listing' framing gets you transferred far more often than 'I'd like to talk to them about marketing' — it sounds like a real, specific reason, not a sales call. If they push back, get the best time + a direct number.",
     next: [
-      { label: 'Owner is here, transferring', to: 'intro' },
-      { label: 'Got name + callback time', to: 'callback' },
+      { label: 'Transferring me to owner', to: 'pattern_interrupt' },
+      { label: 'Owner not in — got callback time', to: 'callback' },
       { label: 'They want me to email', to: 'send_something' },
-      { label: "Owner won't talk to cold calls", to: 'polite_exit' },
+      { label: "Owner won't take cold calls", to: 'polite_exit' },
     ],
   },
-  intro: {
-    stage: 'Intro & hook',
+
+  // ─── THE PATTERN-INTERRUPT OPENER ──────────────────────────────────────
+  pattern_interrupt: {
+    stage: 'Pattern interrupt',
     script: [
-      "Perfect — this is Nate with JP Webworks, local guy out of Marlton.",
-      "I work with local service companies on the visibility side — how you show up online when someone in your area searches for {{svc}}.",
-      "Reason I called specifically — I only take on one {{svc}} company per area in South Jersey, and we just had an opening. Figured I'd give {{biz}} first shot before I keep dialing.",
-      "Quick question — you guys taking on new work right now?",
+      "Hey {{name}}, this is Nate from JP Webworks over in Marlton. I'm gonna be straight with you — this is a cold call. You can hang up right now, totally fine, or give me 30 seconds and then decide. Which is easier?",
     ],
-    direction: "Pause after the 'opening' line. Let the exclusivity land before the ask. Don't over-explain — the 'one company per area' frame does the work.",
+    direction: "This is the single most important line in the script. Slow down. Lower your voice — calm, not enthusiastic. The honesty disarms them — 9 out of 10 owners say 'go ahead' because the framing is so unusual. The one who hangs up was never going to buy anyway and you just saved 8 minutes. DO NOT smile-call this. Calm and grounded reads as 'this person knows what they're doing.' Excited reads as 'salesperson.'",
     next: [
-      { label: 'Yes, taking new work', to: 'discovery' },
-      { label: "We're slammed / get enough work", to: 'enough_work' },
-      { label: 'We have someone doing marketing', to: 'have_a_guy' },
-      { label: 'What do you do exactly?', to: 'what_do_you_do' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: "I don't need a website", to: 'dont_need' },
-      { label: 'Just send me something', to: 'send_something' },
+      { label: '"Go ahead" / "OK, what is it?"', to: 'specific_reason' },
+      { label: '"Just send me an email"', to: 'send_something' },
+      { label: '"Not interested" / hangs up', to: 'not_interested' },
+    ],
+  },
+
+  specific_reason: {
+    stage: 'Reason + qualifier',
+    script: [
+      "Appreciate it. Real quick — I work with {{svc}} companies in South Jersey on the online side, helping them pull more jobs from Google.",
+      "I was looking at {{biz}} before I called and there are a few specific things on your listing and website that are probably costing you jobs every week — but I don't want to assume that's even a problem for you.",
+    ],
+    followUp: ["Before I get into it — are you guys actually looking to take on more {{svc}} work right now, or pretty slammed?"],
+    direction: "The qualifier question is doing a TON of work here. Notice 'slammed' is framed as an acceptable answer — that gives them permission to be honest. But here's the trick: even slammed owners almost always want better/bigger jobs. The question screens out the 5% who actually don't need help and surfaces the real pain in everyone else. Whatever they answer tells you which branch to take.",
+    next: [
+      { label: '"Yeah, we could use more work"', to: 'pain_dig' },
+      { label: '"We\'re slammed / pretty full"', to: 'slammed' },
+      { label: '"What did you see on our listing?"', to: 'curiosity_hook' },
+      { label: '"What do you do exactly?"', to: 'what_do_you_do' },
+      { label: '"What is this about? / explain the audit"', to: 'what_is_audit' },
+      { label: '"We have someone doing marketing"', to: 'have_a_guy' },
+      { label: '"How much does this cost?"', to: 'price_early' },
+      { label: '"I don\'t need a website"', to: 'dont_need' },
+      { label: '"What kind of jobs?"', to: 'pain_dig' },
+      { label: '"Just send me something"', to: 'send_something' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
-  discovery: {
-    stage: 'Discovery',
+
+  // ─── DISCOVERY: SURFACE THE PAIN ───────────────────────────────────────
+  pain_dig: {
+    stage: 'Pain dig (NEPQ)',
     script: [
-      "Good. Quick context on why I called — when someone in your area needs {{svc}}, the first thing they do is search.",
-      "Whoever's in the 80–100 review crowd with a real website usually gets the call, even if you're the better operator. The 10–20 review guys never get the chance to pitch.",
+      "Got it. Quick question that helps me know if we're even a fit — what's the bottleneck for you guys? Is it not enough calls coming in, or you're getting calls but the wrong kind of jobs?",
     ],
-    followUp: ['Out of curiosity — are most of your customers coming from referrals right now, or do people find you through Google too?'],
-    direction: 'Then shut up. Whoever talks first loses.',
+    direction: "This is the killer question. The 'either/or' frame forces them to pick — both options surface useful info, and almost nobody answers 'neither' because both options sound plausible. Listen carefully, take notes, DON'T interrupt. Whoever talks first loses — sit in the silence even if it's 10 seconds long. Their answer is the entire pitch from here forward.",
     next: [
-      { label: 'Mostly referrals / word of mouth', to: 'referrals' },
-      { label: 'Google / online / a mix', to: 'google' },
-      { label: "What's this call about?", to: 'what_is_audit' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: 'We have someone doing marketing', to: 'have_a_guy' },
+      { label: '"Not enough calls"', to: 'pain_few_calls' },
+      { label: '"Calls but wrong kind / bad leads"', to: 'pain_wrong_leads' },
+      { label: '"Both, honestly"', to: 'pain_both' },
+      { label: '"We want bigger / higher-ticket jobs"', to: 'pain_wrong_leads' },
+      { label: '"Things are actually fine"', to: 'no_pain_pivot' },
     ],
   },
-  referrals: {
-    stage: 'Referrals → book meeting',
+
+  pain_few_calls: {
+    stage: 'Pain → not enough calls',
     script: [
-      'That makes sense. Referrals are usually the best leads.',
-      "Here's the thing though — even when someone refers you, the next thing they do is Google your name. If they see 20 reviews and a barebones website while the next {{svc}} guy has 90 and looks dialed in, you can lose a referral you already earned.",
+      "Yeah, that's the most common one. And here's what most {{svc}} owners don't realize — when someone in your area needs {{svc}}, they're picking who to call within 6 minutes of searching on their phone. They call whoever shows up first, has a real website, and looks legit. If you're not in that first batch, the phone just doesn't ring. And you never know it happened.",
+      "Most {{svc}} guys I talk to are missing 3 to 5 jobs a month they can't see. The specific ones I can prove you're missing — that's what I was going to flag from your listing.",
     ],
-    direction: 'Move to the booking ask. No middle "send the audit" step — book the meeting on this call.',
-    followUp: [
-      "Here's what I'd suggest — let's grab 15 minutes on the calendar this week.",
-      "Before our call I'll pull up exactly how {{biz}} shows up online vs. the 80–100 review crowd in your area — Google profile, website, reviews, the whole picture. Then on our call I walk you through it and you decide if any of it's worth fixing. No pitch, no charge for the call.",
-      "I've got openings this week — does morning or afternoon work better for you?",
-    ],
+    direction: "You just named a pain they feel (phantom slow weeks they can't explain) and tied the cause to something concrete (online visibility). Don't pitch a product — pitch the diagnosis. Bridge straight to the meeting ask.",
     next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: "What's this call about?", to: 'what_is_audit' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: 'Just send me something', to: 'send_something' },
-      { label: 'Not interested', to: 'not_interested' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
     ],
   },
-  google: {
-    stage: 'Google → book meeting',
+
+  pain_wrong_leads: {
+    stage: 'Pain → wrong leads / wrong jobs',
     script: [
-      'Got it. Then the gap between you and the 80–100 review crowd is probably costing you real jobs every week.',
-      "Google may show your business, but the website is what tells someone what you actually do, where you work, and why they should call you instead of the next listing. If yours looks dated or doesn't load right on a phone, they bounce.",
-    ],
-    direction: 'Move to the booking ask. No middle "send the audit" step — book the meeting on this call.',
-    followUp: [
-      "Let me do this — grab 15 minutes on the calendar with me this week.",
-      "Before the call I'll pull up exactly what someone sees when they Google {{svc}} in your area and where {{biz}} stacks up. I walk you through it on the call — no charge, no pitch — and you decide if anything's worth fixing.",
-      "Morning or afternoon work better for you this week?",
+      "That's actually the harder problem to fix, but it's fixable. What's happening is your website and Google profile are attracting tire-kickers and discount-hunters instead of the real buyers. The good jobs — the bigger residential, the commercial, the insurance work — those people Google differently, and they're looking for different signals on a site before they call.",
+      "So you've got two leaks: not enough volume of the right people, and what's coming in is the wrong shape. Both fixable, both come from the same place.",
     ],
     next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: "What's this call about?", to: 'what_is_audit' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: 'Just send me something', to: 'send_something' },
-      { label: 'Not interested', to: 'not_interested' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
     ],
   },
-  what_is_audit: {
-    stage: "Objection: what's the call about?",
+
+  pain_both: {
+    stage: 'Pain → both volume and quality',
     script: [
-      "Simple — before our call I'll pull up what a customer sees when they search for {{svc}} in your area.",
-      'How {{biz}} shows up vs. the 80–100 review crowd, whether your services are easy to find, whether people have a clear way to call or request a quote, all of it.',
-      "Then I walk you through it for 15 minutes and tell you what I'd fix first. If nothing makes sense, I'll tell you that too. No charge, no commitment.",
-    ],
-    followUp: ["Worth 15 minutes? I've got time this week — morning or afternoon better?"],
-    next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: 'Not interested', to: 'not_interested' },
-    ],
-  },
-  what_do_you_do: {
-    stage: 'Objection: what do you do?',
-    script: [
-      'We help local service businesses get more calls and leads from the online side.',
-      'For a business stuck in the 10–20 review group with no real website, we usually start with a clean site that shows services, service areas, photos, and click-to-call buttons.',
-      "Then if it makes sense we layer on Google visibility, reviews, ads, tracking — whatever moves the needle. But I'd rather look at your business specifically first before recommending anything.",
+      "Yeah — those two are almost always linked. If you're showing up for the cheap commodity searches, you get the volume but it's all low-budget tire-kickers, and the higher-ticket buyers walk past because the site doesn't signal 'these guys can handle a $20K job.'",
+      "Fixing both is the same project. Make the site convert the right buyer, and Google starts showing you to the right buyer. The phantom missed jobs disappear.",
     ],
     next: [
-      { label: 'OK, sounds interesting', to: 'discovery' },
-      { label: 'How much does it cost?', to: 'price_early' },
-      { label: 'We have someone doing marketing', to: 'have_a_guy' },
-      { label: 'Just send me something', to: 'send_something' },
-      { label: 'Not interested', to: 'not_interested' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
     ],
   },
-  price_early: {
-    stage: 'Objection: price',
+
+  no_pain_pivot: {
+    stage: 'They claim no pain',
     script: [
-      "Honest answer — depends what we figure out you actually need. Some guys need a website rebuild, some have a site but their Google ranking is invisible, some need reviews, some need ads. Different fixes at different price points.",
-      'Cheapest stuff like reviews and Google profile cleanup runs a few hundred a month. Full website builds are $749 setup and $299 a month. Ads layer on top.',
-      "Point is, I'm not going to quote you before I look at the business. That's exactly what the 15-minute call is for — I show you what's actually broken, then tell you straight what the fix costs. No charge for the call itself.",
+      "Got it — that's actually great to hear. Means whatever you're doing is working.",
+      "One last question, then I'll let you go — are most of your jobs coming from referrals and repeat customers, or are you getting net-new people who Googled you and called?",
     ],
-    followUp: ["Worth booking 15 minutes this week? Morning or afternoon?"],
+    direction: "Most 'things are fine' owners are 80%+ referral-based, which means they have ZERO visibility for net-new searchers. That's the hidden pain — they don't see it because referrals mask it. If they admit it's mostly referrals, you have your wedge into the conversation.",
     next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: 'Too expensive either way', to: 'too_expensive' },
-      { label: 'Not interested', to: 'not_interested' },
+      { label: '"Mostly referrals"', to: 'referral_pivot' },
+      { label: '"Pretty even mix"', to: 'pain_few_calls' },
+      { label: '"Genuinely all set — not interested"', to: 'polite_exit' },
     ],
   },
-  too_expensive: {
-    stage: 'Objection: too expensive',
+
+  referral_pivot: {
+    stage: 'Referral business → hidden leak',
     script: [
-      "Totally hear you — it's a real number, especially when you don't know yet what you're getting back.",
-      "Think about it this way — one extra job a month from looking like the 80–100 review guys instead of the 10–20 ones usually pays for the whole year. But that's only if it actually moves the needle for your specific business, which is exactly what the 15 minutes tells us.",
+      "Cool — referrals are the best leads, no argument. Here's the catch most guys don't see: even when someone refers you, the first thing they do is Google {{biz}} to check you out. They get 6 seconds on your site before they decide if they're actually calling. If something's off — site looks dated, doesn't load on their phone, services aren't obvious — they bounce. And the referrer never finds out the referral didn't land.",
+      "You're losing referrals you already earned. Probably not a ton — but every one was a free customer you should've had. That's the wedge.",
     ],
-    followUp: ["Worth booking 15 minutes anyway? It's free, and if it doesn't make sense for your business I'll tell you straight up."],
-    direction: "Don't drop the price or invent a discount. The free 15-minute consult is the de-risker, not a smaller sticker.",
     next: [
-      { label: 'OK, book it', to: 'book_ask' },
-      { label: 'Still a no', to: 'not_interested' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
     ],
   },
+
+  slammed: {
+    stage: '"We\'re slammed"',
+    script: [
+      "Got it — good problem to have. Won't waste your time then.",
+      "One quick thing before I let you go — is it steady year-round, or do you have a slow season? Most {{svc}} guys I know go 80% capacity in summer, 40% in winter, something like that.",
+    ],
+    direction: "Almost every service business has a slow season. This question reframes 'slammed' as 'slammed RIGHT NOW' — a different thing. If they admit any seasonal dip, the pivot is: the work to fill the slow season happens NOW, not when you're already empty. If they say genuinely steady, pivot to higher-ticket angle.",
+    next: [
+      { label: '"Yeah, it slows down in [season]"', to: 'seasonal_pain' },
+      { label: '"Pretty steady all year"', to: 'higher_ticket_pivot' },
+      { label: '"Actually all set, thanks"', to: 'polite_exit' },
+    ],
+  },
+
+  seasonal_pain: {
+    stage: 'Seasonal pain pivot',
+    script: [
+      "That's most {{svc}} guys. Here's the thing — building online visibility takes 60 to 90 days to actually kick in. So if you wait until your slow season hits to start fixing it, you're already 3 months behind. The guys who don't bleed cash in the slow months are the ones who set this up while they're still busy.",
+      "I'd want to grab 15 minutes either way — not to pitch you anything, just to show you what I'd set up so when the slow season hits, you're not staring at empty trucks.",
+    ],
+    next: [
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: 'Still not interested', to: 'polite_exit' },
+    ],
+  },
+
+  higher_ticket_pivot: {
+    stage: 'Bigger jobs pivot',
+    script: [
+      "OK then I'd reframe it — it's not about MORE jobs, it's about BIGGER jobs. Same volume, higher average ticket. The bigger commercial and residential projects, the folks who don't haggle. Those buyers are Googling {{svc}} too — they're just looking for different signals on a site before they call. Most {{svc}} guys are losing those because the site looks like they only do small jobs.",
+    ],
+    next: [
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: '"Not interested, all set"', to: 'polite_exit' },
+    ],
+  },
+
+  curiosity_hook: {
+    stage: 'They asked what you saw',
+    script: [
+      "Good question. A few things — but I don't want to half-answer it over the phone because it'll sound generic. The real answer is a 15-minute screen-share where I pull up {{biz}} live, plus your top 3 {{svc}} competitors in the area, and I show you exactly where they're winning and where you're invisible.",
+      "Trying to describe it over the phone is like describing a movie — won't land. The screen-share is the whole point.",
+    ],
+    next: [
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: '"Just give me one specific thing"', to: 'one_specific' },
+    ],
+  },
+
+  one_specific: {
+    stage: 'One specific finding',
+    script: [
+      "Fair. One example — when I Googled '{{svc}} near me' from your area, you didn't show up on page one. The guys who did, half of them have worse reviews than you. That's the kind of thing that's fixable but you really have to see it side-by-side to make sense of it.",
+    ],
+    direction: "Adjust this specific based on what you actually found in your pre-call audit. If you didn't audit yet, use a generic but real observation — 'your phone number isn't tap-to-call on mobile' or 'your services page is two clicks deep' or 'no service area listed on your GBP' — these are almost always true.",
+    next: [
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+    ],
+  },
+
+  // ─── OBJECTIONS ────────────────────────────────────────────────────────
   have_a_guy: {
-    stage: 'Objection: already have someone',
+    stage: '"We have a guy"',
     script: [
-      "Good — means you already take this stuff seriously. Most owners I call don't.",
-      "Quick question, not a trick — what's your guy actually handling? Website, Google profile, reviews, ads, all of it?",
+      "Cool — that actually makes my job easier. If your guy's nailing it, the 15 minutes confirms it and you've got an outside benchmark to hold him to. If something's getting missed, you'd want to know before a competitor takes the next job. Either way you win.",
+      "Quick question, not a trick — what's he handling? Like, full picture? Website, Google profile, reviews, ads, all of it?",
     ],
-    direction: "Listen carefully. 'My nephew built the site' is very different from 'I pay an agency $2k/month.' Adjust based on the answer.",
-    followUp: [
-      "Reason I ask — most of the {{svc}} companies I call who say they have a guy are still sitting in the 10–20 review group. Either the guy isn't doing what they think, or they're paying for the wrong things. The 80–100 review crowd doesn't get there by accident.",
-      "Worth booking 15 minutes either way? If everything's tight, you've got a benchmark to hold your guy accountable to. If he's missing something, you'd want to know before a competitor does.",
-    ],
+    direction: "DON'T attack the guy. That's amateur hour and the owner will defend him reflexively. Validate the decision to hire someone, then ask what he's actually doing. Most 'have a guys' are doing 30% of what the owner thinks. That gap is where you live.",
     next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: "He handles everything, we're good", to: 'have_a_guy_firm' },
-      { label: "It's just a family member / nephew", to: 'discovery' },
+      { label: '"Just website" / "nephew built it"', to: 'gap_uncovered' },
+      { label: '"Mostly ads" / "just one piece"', to: 'gap_uncovered' },
+      { label: '"Honestly I don\'t know what he does"', to: 'gap_uncovered' },
+      { label: '"He handles everything, I\'m good"', to: 'have_a_guy_firm' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
-  have_a_guy_firm: {
-    stage: 'Already have someone — firm no',
+
+  gap_uncovered: {
+    stage: 'Gap in current coverage',
     script: [
-      "Fair enough — sounds like you're set up.",
-      "Last ask — 15 minutes on the calendar, no strings. Worst case it confirms your guy is doing his job. Best case you spot something he's missed before it costs you a job.",
+      "Yeah, that's pretty typical actually. Most 'guys' are doing one piece — usually the website OR the Google profile OR ads. Rarely all three working together. And those pieces only work when they're stitched together right.",
+      "Not a knock on him. But it means there's probably 60% of the picture he's not touching, and that's exactly where the missed jobs come from.",
     ],
-    direction: "If still no after this, drop it. Don't push past two soft asks — they'll remember you respected it and you can come back in 90 days.",
     next: [
-      { label: 'OK fine, book it', to: 'book_ask' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+    ],
+  },
+
+  have_a_guy_firm: {
+    stage: '"He handles everything" — firm',
+    script: [
+      "Fair. Last ask, then I'll let you go — 15 minutes, no strings. If your guy's got everything tight, you'll have an outside benchmark. If we spot something he missed, you can have a real conversation with him about it. Costs you nothing either way.",
+    ],
+    direction: "Don't push past TWO soft asks. Owners remember the call where you respected the no, and you can warm-follow-up in 90 days. Pushing past 2 = burned bridge. If they still say no, exit cleanly.",
+    next: [
+      { label: '"Alright, 15 minutes"', to: 'book_ask' },
       { label: 'Still no', to: 'polite_exit' },
     ],
   },
-  dont_need: {
-    stage: "Objection: don't need a website",
+
+  price_early: {
+    stage: 'Price asked early',
     script: [
-      'Totally fair. Plenty of good businesses have grown without one.',
-      "But the 80–100 review guys aren't winning because they're better at the work — they're winning because they show up when someone searches and they look established. The no-website 10–20 review group just gets skipped before the phone even rings.",
+      "Yeah, fair question. Honest answer — depends what's actually broken. Some guys need a Google profile cleanup, that's a couple hundred a month. Some need a full website rebuild — $749 setup, $299 a month after that. Some need ads, that sits on top.",
+      "Quick number — what's an average {{svc}} job worth to you? Like a typical residential one?",
     ],
-    followUp: [
-      "Let me do this instead — 15 minutes on the calendar this week. I'll show you exactly what someone sees when they Google {{svc}} in your area. If there's nothing worth fixing, I'll tell you straight.",
-      "Morning or afternoon better for you this week?",
-    ],
+    direction: "DO NOT just quote prices and stop. Make THEM tell you their average ticket. This sets up the payback math from their own number, not yours — way more persuasive. If they refuse to give a number, go to price_general.",
     next: [
-      { label: 'They gave me a time', to: 'book_meeting' },
-      { label: 'Still not interested', to: 'not_interested' },
+      { label: 'They gave me a number', to: 'payback_math' },
+      { label: '"It varies / depends"', to: 'price_general' },
+      { label: '"Too much regardless"', to: 'too_expensive' },
     ],
   },
-  enough_work: {
-    stage: 'Objection: get enough work',
+
+  payback_math: {
+    stage: 'Payback math',
     script: [
-      "That's a good problem to have.",
-      "Then I wouldn't frame this as 'you desperately need more leads.' It's more about getting better jobs — the higher-ticket ones — and making sure when someone hears about you they don't bounce because the website looks like it was built in 2014. The 80–100 review guys pull the bigger jobs partly because they look like they can handle them.",
+      "OK so let's say I'm right and we land you one extra {{svc}} job a month — people who would've called someone else. That's roughly 12 of those a year against $3,600 for the service. The math basically works on month one.",
+      "Whole point of the 15-minute call is to see if I CAN land you one more a month. If I can't, it's not worth doing — and I'll tell you that.",
     ],
-    followUp: ["15 minutes on the calendar would tell us whether there's actually an opportunity worth your time, or whether you're already running tight. Worth booking?"],
+    direction: "Do the math out loud, slowly. If their ticket is $5K, one extra job = $60K/yr against $3,600 — that's a 16x ROI and the math sells itself. Let it land in silence.",
     next: [
-      { label: 'Yes, book it', to: 'book_ask' },
-      { label: "No, I'm good", to: 'polite_exit' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: '"Still too much"', to: 'too_expensive' },
     ],
   },
-  send_something: {
-    stage: 'They asked: send me something',
-    script: ["I can do one better — I'll text you a link to grab 15 minutes on my calendar this week."],
-    followUp: ['Quick before I send it — what kind of jobs are you usually trying to land more of? Bigger residential, commercial, specific service?'],
-    direction: "They're now telling you exactly what to focus on at the meeting. Take notes — this is gold for the audit prep.",
-    next: [
-      { label: 'They told me what they want', to: 'send_close' },
-      { label: "They won't say / shut down", to: 'book_ask' },
-    ],
-  },
-  send_close: {
-    stage: 'Closing the booking ask',
-    script: ["Perfect. I'll prep the visibility check around that specifically — not a generic pitch."],
-    followUp: ["What's the best cell to text you my Calendly link?"],
-    next: [
-      { label: 'Got the cell', to: 'book_meeting' },
-      { label: 'Hesitating', to: 'book_ask' },
-    ],
-  },
-  book_ask: {
-    stage: 'Book the meeting',
+
+  price_general: {
+    stage: 'Price — they won\'t give a number',
     script: [
-      "Perfect. Here's how it works.",
-      "I'll text you my Calendly link — grab whatever 15-minute slot works for you this week.",
-      "Before our call I'll pull up exactly how {{biz}} shows up vs. the 80–100 review crowd in your area. Then we walk through it together on the call, and you decide if any of it's worth fixing. No pitch on the call itself.",
+      "All good. Roughly though — every {{svc}} owner I talk to says the same thing: even one extra job a month pays for the website for the year, easy. The real question isn't 'can I afford this,' it's 'is there a way to actually land more of those jobs.' That's what the 15 minutes is for.",
     ],
-    followUp: ["What's the best cell to text the link to?"],
     next: [
-      { label: 'Got the cell', to: 'book_meeting' },
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: '"Still not for me"', to: 'too_expensive' },
+    ],
+  },
+
+  too_expensive: {
+    stage: '"Too expensive"',
+    script: [
+      "Hear you. Quick reframe though — what's it costing you to NOT show up when someone searches {{svc}} in your zip? Most owners I talk to are missing 3-5 jobs a month they can't see. That's real money walking out the door every week, you just don't see it on your books because you never had it to begin with.",
+      "The 15 minutes is free. Worst case I tell you there's nothing to fix and you saved yourself the money. But you'd want to know if there's a leak, right?",
+    ],
+    direction: "Reframe price to cost-of-inaction, not cost-of-action. Don't drop your price — drop their objection. Hormozi: every minute you don't fix it, it's costing more than fixing it would.",
+    next: [
+      { label: '"OK, 15 minutes"', to: 'book_ask' },
+      { label: 'Hard no', to: 'not_interested' },
+    ],
+  },
+
+  what_do_you_do: {
+    stage: '"What do you do exactly?"',
+    script: [
+      "Three things, depending on the business — first, fix the website so it actually converts visitors into calls. Second, clean up the Google profile so you rank when people search {{svc}} in your area. Third, optionally run paid ads to fill capacity.",
+      "Most clients we start with just the website because that's usually where the leak is. But I'd want to look at {{biz}} specifically before recommending anything — different businesses have different leaks.",
+    ],
+    next: [
+      { label: '"Tell me more"', to: 'pain_dig' },
+      { label: '"How much?"', to: 'price_early' },
+      { label: '"We have someone"', to: 'have_a_guy' },
+      { label: '"Just send info"', to: 'send_something' },
       { label: 'Not interested', to: 'not_interested' },
     ],
   },
+
+  dont_need: {
+    stage: '"Don\'t need a website"',
+    script: [
+      "I get it — plenty of {{svc}} guys built businesses without one. But here's what changed: when someone in your area needs {{svc}} today, the first thing they do is Google it. Phone in hand, in their driveway, deciding right then. No website, you don't show up. You don't exist to that customer.",
+      "You're getting the customers who heard about you word-of-mouth. That's it. Every Google searcher walks past and calls the next guy. They don't even know to ask for you.",
+    ],
+    next: [
+      { label: '"Hmm, fair point — keep going"', to: 'book_ask' },
+      { label: '"Still don\'t care"', to: 'not_interested' },
+    ],
+  },
+
+  what_is_audit: {
+    stage: '"What\'s the call about?"',
+    script: [
+      "Simple — before our call I do what a customer does. I Google {{svc}} in your zip, screenshot the results. Where {{biz}} lands, what your site does on mobile, your Google profile, and what your top 3 competitors are doing differently. Then on a 15-minute screen-share I walk you through it.",
+      "If I find nothing worth fixing, I tell you that and we go our separate ways. Most guys I do this for, there's at least 2-3 things that surprise them. The 15 minutes is free either way.",
+    ],
+    next: [
+      { label: 'Continue to the meeting ask', to: 'book_ask' },
+      { label: '"How much would the fix cost?"', to: 'price_early' },
+    ],
+  },
+
+  send_something: {
+    stage: '"Just send me info"',
+    script: [
+      "I could, but it'd be a generic brochure and you'd toss it. The reason this works is it's specific to {{biz}}.",
+      "Quick one before I do anything — what kind of {{svc}} work are you most trying to grow? Bigger residential, commercial, a specific service?",
+    ],
+    direction: "If they answer, you just got the audit angle — pivot to send_close. If they shut down, send the Calendly link anyway — you'll have their cell for next-day follow-up.",
+    next: [
+      { label: 'They told me what they want', to: 'send_close' },
+      { label: '"Don\'t care, just send something"', to: 'send_generic' },
+      { label: 'Not interested', to: 'not_interested' },
+    ],
+  },
+
+  send_close: {
+    stage: 'Closing the soft ask',
+    script: [
+      "Perfect — I'll build the audit around exactly that. Way more useful than a generic pitch.",
+      "What's the best cell to text the Calendly link to? You can grab whatever 15-minute slot works.",
+    ],
+    next: [
+      { label: 'Got the cell', to: 'book_meeting' },
+      { label: '"Just email instead"', to: 'send_generic' },
+    ],
+  },
+
+  send_generic: {
+    stage: 'Generic info / email send',
+    script: [
+      "All good. Best email or cell to send the Calendly link plus a quick overview of what we do?",
+    ],
+    direction: "Even when they shut down on the meeting, get a contact method. Next-day text with the Calendly link converts surprisingly often — they were just busy in the moment of the call.",
+    next: [
+      { label: 'Got cell or email', to: 'book_meeting' },
+      { label: 'Refused to give contact', to: 'polite_exit' },
+    ],
+  },
+
+  // ─── THE CLOSE ─────────────────────────────────────────────────────────
+  book_ask: {
+    stage: 'Book the meeting',
+    script: [
+      "Here's what I'd suggest — grab 15 minutes on the calendar this week or next. Before our call I do the full audit, then walk you through it live. You decide if any of it's worth fixing. No pitch, no surprise sales close at the end. Worst case you get 15 minutes of free intel on {{biz}}.",
+    ],
+    followUp: [
+      "Would it be unreasonable to grab 15 minutes — Tuesday morning or Thursday afternoon, which is easier?",
+    ],
+    direction: "Two-option close beats open-ended 'what works for you' every time — it bypasses decision paralysis. 'Would it be unreasonable' (Josh Braun's move) is softer than 'would you' because it triggers a different yes-no calculation in their head. Adjust the two day-options based on your actual availability that week.",
+    next: [
+      { label: '"Tuesday morning works"', to: 'book_time_close' },
+      { label: '"Thursday afternoon works"', to: 'book_time_close' },
+      { label: '"Different day/time"', to: 'book_flexible' },
+      { label: '"Just text me the link"', to: 'book_time_close' },
+      { label: '"Send me info first"', to: 'send_close' },
+      { label: 'Not interested', to: 'not_interested' },
+    ],
+  },
+
+  book_flexible: {
+    stage: 'They want a different time',
+    script: [
+      "No problem — what window works better for you? Mornings, afternoons, evenings? Earlier in the week or later?",
+    ],
+    direction: "Narrow with two-option questions until you have a specific time. Don't accept 'sometime next week' — keep narrowing. 'Tuesday or Wednesday?' 'Morning or afternoon?' 'Before or after lunch?' Vague = ghosted.",
+    next: [
+      { label: 'Got a specific time', to: 'book_time_close' },
+      { label: 'Lost interest', to: 'not_interested' },
+    ],
+  },
+
+  book_time_close: {
+    stage: 'Confirm and close',
+    script: [
+      "Perfect. I'll text you my Calendly link in the next minute — grab that slot, you'll get a confirmation and a Google Meet link. What's the best cell to text it to?",
+    ],
+    next: [
+      { label: 'Got the cell', to: 'book_meeting' },
+      { label: 'Backed out', to: 'not_interested' },
+    ],
+  },
+
+  // ─── EXITS ─────────────────────────────────────────────────────────────
   voicemail: {
     stage: 'Voicemail',
     end: 'warning',
-    badge: 'Leave VM + send text',
-    script: ['Leave the voicemail below, then send a follow-up text within 2 minutes while your name is fresh.'],
-    voicemail: "Hey [name], Nate with JP Webworks out of Marlton. Reason I called — I only take on one {{svc}} company per area in South Jersey, and we just had a spot open in your zip. Figured I'd give {{biz}} first shot before I keep dialing around. Shoot me a text or callback when you get a sec — I'll text you my number too. Thanks.",
-    direction: 'Cadence rule: only leave a voicemail on attempt 1 and attempt 4 (with new info). Attempts 2 and 3, just call and hang up if it goes to VM. After 5 touches with no reply, move them to a 60-day backburner. Send the follow-up text within 2 minutes — "Hey [name], Nate from JP Webworks — just left you a voicemail. Local guy out of Marlton, only takes on one {{svc}} company per area and we had an opening. No rush, just text back when you get a sec."',
+    badge: 'Leave VM + send text within 2 min',
+    script: ['Leave the voicemail below, then send the follow-up text within 2 minutes while your name is still in their recent calls log.'],
+    voicemail: "Hey {{name}}, Nate from JP Webworks out of Marlton — I'll be straight, this is a cold call. I was looking at {{biz}} on Google and spotted a few specific things on your listing that are probably costing you {{svc}} jobs you don't know you're missing. Not a big pitch — happy to walk you through what I saw in 15 minutes. Shoot me a text or callback when you get a sec, I'll text you my number too.",
+    direction: 'Cadence: leave a voicemail on attempts 1 and 4 ONLY (vary the message on 4). Attempts 2 and 3 — call and hang up if VM. After 5 untouched, move to 60-day backburner. Send the follow-up text within 2 minutes — "Hey {{name}}, Nate from JP Webworks — just left you a voicemail. Saw a couple specific things on {{biz}}\'s Google listing worth flagging. No rush — text back when you can."',
   },
+
   callback: {
-    stage: 'Callback path',
+    stage: 'Callback scheduled',
     end: 'neutral',
     badge: 'Callback scheduled',
     script: ["No problem at all — when's a better time to catch you for two minutes?"],
-    direction: "Get a specific day and time. Add it to your calendar. Confirm the number to call. If they're vague ('sometime next week'), pin it down: 'Tuesday morning or afternoon better?'",
+    direction: "Get a SPECIFIC day AND time AND confirm the number. If they're vague ('next week'), narrow with two-option: 'Tuesday or Wednesday?' 'Morning or afternoon?' Vague callbacks = ghosted callbacks. Pin it down before hanging up.",
   },
+
   not_interested: {
     stage: 'Polite exit (cold)',
     end: 'neutral',
     badge: 'Closed — 90-day follow-up',
     script: [
-      'No worries — appreciate you taking the call.',
-      'Mind if I check back in a few months in case anything changes? No newsletter, no spam — just one call.',
+      "All good — appreciate you taking the call.",
+      "One quick last thing, no pressure — is it the timing, you've been burned by marketing before, or just not a fit right now? Helps me know whether to reach back out down the road.",
     ],
-    direction: 'If yes: log for 90-day follow-up. If no: respect it and move on. Either way, end warm — they remember the call. Service businesses ripen; the no today is often a yes after their slow season.',
+    direction: "This is the Columbo close — the most valuable line in the script. The no is already in; you're not flipping it, you're collecting intel for the 90-day follow-up. Owners will tell you things in this moment they wouldn't have told you 90 seconds ago. Log whatever they say verbatim. Then exit warmly.",
   },
+
   polite_exit: {
     stage: 'Polite exit (warm)',
     end: 'neutral',
     badge: 'Closed — 90-day follow-up',
     script: [
       "All good — I'll let you get back to it.",
-      "I'll check back in a few months. If anything changes on your end before then, you've got my number.",
+      "I'll check back in a few months. Anything changes on your end before then, you've got my number. Have a good one, {{name}}.",
     ],
-    direction: "Use this for soft no's where the relationship was friendly. Logs them in CRM with a 90-day reminder.",
+    direction: "Soft no's where the call stayed friendly. Log for 90-day follow-up. Using their name at goodbye is small but it lands — they remember the call as a real conversation, not a sales call.",
   },
+
   book_meeting: {
-    stage: 'Win',
+    stage: 'WIN',
     end: 'success',
     badge: 'Meeting booked',
     script: [
-      "Perfect, [name]. Texting you my Calendly link right now — calendly.com/nate-jointprinting/30min. Just grab whatever time works for you.",
-      "I'll have the visibility check ready for our call so we don't waste any of the 15 minutes. Talk soon.",
+      "Perfect, {{name}}. Texting you the Calendly link right now — calendly.com/nate-jointprinting/30min. Grab whatever 15-minute slot works for you.",
+      "I'll have the audit ready when we get on the call. Talk soon — appreciate you giving me the time today.",
     ],
-    direction: "Action items right now: (1) Text the Calendly link immediately: 'Nate from JP Webworks — booking link as promised: calendly.com/nate-jointprinting/30min. Looking forward to it.' (2) Log lead in CRM with notes from the call. (3) Before the meeting, build the audit (~30 min of prep) focused on whatever pain they mentioned. (4) On the meeting itself: walk the audit, then present pricing.",
+    direction: "Action items the second you hang up — while it's hot: (1) TEXT the Calendly link within 60 seconds: 'Hey {{name}}, Nate from JP Webworks — booking link as promised: calendly.com/nate-jointprinting/30min. Looking forward to it.' (2) Log in CRM with full call notes — what they said about pain, ticket size, current marketing. (3) Schedule 30 min in your calendar the day before the meeting to build the audit (Google their service in their zip, screenshot results, check site on mobile, identify 3 specific competitor advantages, draft 2-3 fixes). (4) On the meeting itself: walk the audit FIRST. No pricing unless they ask twice. Goal of meeting #1 is getting them to ask 'OK what would it cost to fix this?' — then quote.",
   },
 };
 
 const QUICK_REBUTTALS = [
-  { q: '"I\'m driving / in a meeting / busy right now"', a: "No problem — what's a better time to catch you for two minutes? Tomorrow morning or afternoon better?" },
-  { q: '"How did you get my number?"', a: 'Public records — your Google business listing. Cold call, that\'s all.' },
-  { q: '"Take me off your list"', a: "No problem — won't call again. Take care." },
-  { q: '"I\'m not the decision maker"', a: 'Got it — who handles the website and marketing side? Could you point me in their direction?' },
-  { q: '"We tried marketing before, didn\'t work"', a: "Yeah, lots of agencies oversell. That's why I do the 15-minute call first — no charge, no commitment. If it doesn't make sense for your business, I'll tell you straight up." },
-  { q: '"I just got a website built last year"', a: 'Good — even better. Worth grabbing 15 minutes anyway? If your guy did good work, you\'ve got a benchmark. If he missed something, you\'d want to know before it costs you jobs.' },
-  { q: '"Are you AI / a robot?"', a: 'Ha, no — Nate, real person. Calling out of Marlton.' },
-  { q: '"How long does the website take to build?"', a: "Usually 1–2 weeks from when we kick off. Then it's live and we handle updates as you need them." },
+  { q: '"I\'m driving / in a meeting / busy right now"', a: "No problem — sounds like I caught you mid-something. What's a better window — tomorrow morning or afternoon?" },
+  { q: '"How did you get my number?"', a: "Public — your Google business listing. Cold call, that's all. Take 30 seconds and tell me to get lost if it's not a fit." },
+  { q: '"Take me off your list"', a: "Won't call again — appreciate the time. Take care." },
+  { q: '"I\'m not the decision maker"', a: "Got it — who handles the website and the Google stuff for you? Best way to reach them?" },
+  { q: '"We tried marketing before, didn\'t work"', a: "Yeah, like 80% of these calls. Most agencies oversell and ghost. What specifically didn't work — were the leads not showing up, the leads were junk, or the company just stopped communicating? Helps me know if we're different or the same flavor." },
+  { q: '"I just got a website built last year"', a: "Good — you took it seriously. Quick question — is it actually pulling jobs for you, or is it just sitting there looking nice? Big difference. Worth 15 minutes either way to confirm." },
+  { q: '"Are you AI / a robot?"', a: "Ha — no, Nate, real person. Calling out of Marlton, I'm probably 10 minutes from you." },
+  { q: '"How long does the website take to build?"', a: "Usually 1–2 weeks from kickoff. Live by week three. We handle updates after that." },
   { q: '"Can I see examples of your work?"', a: "Absolutely — I'll text you a couple links along with my Calendly. What's the best cell?" },
-  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Two reasons — I do the visibility check live with you before you pay anything, and the website's $749 setup, not the $5K most guys quote. Worst case you get free intel out of 15 minutes." },
+  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question, and I'm one of those 50. Three things make me different — I'm local out of Marlton, I show you the audit live before you spend a dollar, and the website's $749 setup not the $5K agencies quote. Worst case you get 15 minutes of free intel on {{biz}}." },
+  { q: '"What\'s the catch?"', a: "Honest catch — I only take on one {{svc}} company per zip in South Jersey because the work would compete with itself. So if you do say yes, I stop calling other {{svc}} companies in your area. That's it." },
+  { q: '"I need to think about it"', a: "Totally fair. What specifically are you turning over — the timing, the price, or you're just not sure it'll work? Whichever it is, easier to give you the actual answer than have you guess." },
+  { q: '"Call me back in a few months"', a: "Sure — but real quick, is there something specific changing in a few months, or is now just not the time? Helps me know if it's a real timing thing or a polite no, no judgment either way." },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1357,6 +1533,7 @@ function EditableScript({
 function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
   const [svc, setSvc] = React.useState('');
+  const [name, setName] = React.useState('');
   const [history, setHistory] = React.useState(['start']);
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
@@ -1369,6 +1546,7 @@ function ColdCallTab({ token }) {
   React.useEffect(() => {
     setBiz(localStorage.getItem('jpw_cc_biz') || '');
     setSvc(localStorage.getItem('jpw_cc_svc') || '');
+    setName(localStorage.getItem('jpw_cc_name') || '');
     setNotes(localStorage.getItem('jpw_cc_notes') || '');
     try {
       const saved = JSON.parse(localStorage.getItem('jpw_cc_overrides') || '{}');
@@ -1378,6 +1556,7 @@ function ColdCallTab({ token }) {
 
   React.useEffect(() => { localStorage.setItem('jpw_cc_biz', biz); }, [biz]);
   React.useEffect(() => { localStorage.setItem('jpw_cc_svc', svc); }, [svc]);
+  React.useEffect(() => { localStorage.setItem('jpw_cc_name', name); }, [name]);
   React.useEffect(() => {
     localStorage.setItem('jpw_cc_overrides', JSON.stringify(overrides));
   }, [overrides]);
@@ -1394,8 +1573,9 @@ function ColdCallTab({ token }) {
   const fill = React.useCallback((text) => {
     return text
       .replace(/\{\{biz\}\}/g, biz.trim() || '[Business Name]')
-      .replace(/\{\{svc\}\}/g, svc.trim() || '[service]');
-  }, [biz, svc]);
+      .replace(/\{\{svc\}\}/g, svc.trim() || '[service]')
+      .replace(/\{\{name\}\}/g, name.trim() || '[name]');
+  }, [biz, svc, name]);
 
   const currentId = history[history.length - 1];
   const node = COLD_CALL_NODES[currentId];
@@ -1432,12 +1612,21 @@ function ColdCallTab({ token }) {
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 2.5 }}>
-        Live decision tree for cold calls. Type the business name and service type at the top —
-        every line autofills as you go. Click "Edit" on any script to tweak it; edits stay on this device until you reset.
+        Live decision tree for cold calls. Fill the owner's first name, business name, and service type at the top —
+        every line autofills as you go. The owner name is the highest-leverage one: it changes the open from "is this the owner of ABC Plumbing" to "is this Mike" — sounds like you know them. Click "Edit" on any script to tweak it; edits stay on this device until you reset.
       </MuiTypography>
 
       {/* Setup inputs */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
+        <TextField
+          label="Owner first name"
+          placeholder="Mike"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          fullWidth
+          size="small"
+          sx={darkInputSx}
+        />
         <TextField
           label="Business name"
           placeholder="ABC Plumbing"
