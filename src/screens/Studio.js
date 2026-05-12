@@ -897,7 +897,7 @@ const COLD_CALL_NODES = {
     script: ["Hey, is this {{name}}?"],
     direction: "Using the owner's first name lands way better than 'is this the owner of {{biz}}?' — it sounds like you know them. Spend 30 seconds researching the name before you dial (Outscraper export, GBP, LinkedIn, Facebook). If you don't have a name, fall back to 'Hey, is this the owner of {{biz}}?' but make name lookup the default.",
     next: [
-      { label: 'Yes — got the owner', to: 'pattern_interrupt' },
+      { label: 'Yes — got the owner', to: 'opener' },
       { label: 'No / who is this? / gatekeeper', to: 'gatekeeper' },
       { label: 'Goes to voicemail', to: 'voicemail' },
       { label: 'Not a good time / hangs up', to: 'callback' },
@@ -907,11 +907,11 @@ const COLD_CALL_NODES = {
   gatekeeper: {
     stage: 'Gatekeeper',
     script: [
-      "No problem — quick one. Is {{name}} around by chance? It's about something I spotted on {{biz}}'s Google listing — wanted to give them a heads-up directly.",
+      "No problem — quick one. Is {{name}} around? We work with one {{svc}} company per area on the online side and I'm putting together a shortlist for South Jersey — {{biz}} came up. Wanted to chat with them directly before moving on.",
     ],
-    direction: "Never pitch the gatekeeper — they have no authority and treating them like a buyer breaks rapport. The 'spotted something on their Google listing' framing gets you transferred far more often than 'I'd like to talk to them about marketing' — it sounds like a real, specific reason, not a sales call. If they push back, get the best time + a direct number.",
+    direction: "Never pitch the gatekeeper — they have no authority and treating them like a buyer breaks rapport. The 'shortlist for South Jersey' frame works because it sounds like an opportunity, not a sales call. Gatekeepers transfer opportunities; they screen out sales calls. If they push back, get the best time + a direct number.",
     next: [
-      { label: 'Transferring me to owner', to: 'pattern_interrupt' },
+      { label: 'Transferring me to owner', to: 'opener' },
       { label: 'Owner not in — got callback time', to: 'callback' },
       { label: 'They want me to email', to: 'send_something' },
       { label: "Owner won't take cold calls", to: 'polite_exit' },
@@ -919,37 +919,24 @@ const COLD_CALL_NODES = {
   },
 
   // ─── THE PATTERN-INTERRUPT OPENER ──────────────────────────────────────
-  pattern_interrupt: {
-    stage: 'Pattern interrupt',
+  opener: {
+    stage: 'Opener (selectivity hook)',
     script: [
-      "Hey {{name}}, this is Nate from JP Webworks over in Marlton. I'm gonna be straight with you — this is a cold call. You can hang up right now, totally fine, or give me 30 seconds and then decide. Which is easier?",
+      "Great — {{name}}, this is Nate with JP Webworks, I'm local out of Marlton.",
+      "I'll make it quick. We work with {{svc}} companies on the online side — basically making sure when someone searches for {{svc}} in your area, you look like the obvious company to call.",
+      "I'm reaching out because I only work with one {{svc}} company per area, and I'm looking for the right fit in South Jersey. {{biz}} looked like a good company, so I figured I'd call you before moving on.",
     ],
-    direction: "This is the single most important line in the script. Slow down. Lower your voice — calm, not enthusiastic. The honesty disarms them — 9 out of 10 owners say 'go ahead' because the framing is so unusual. The one who hangs up was never going to buy anyway and you just saved 8 minutes. DO NOT smile-call this. Calm and grounded reads as 'this person knows what they're doing.' Excited reads as 'salesperson.'",
-    next: [
-      { label: '"Go ahead" / "OK, what is it?"', to: 'specific_reason' },
-      { label: '"Just send me an email"', to: 'send_something' },
-      { label: '"Not interested" / hangs up', to: 'not_interested' },
-    ],
-  },
-
-  specific_reason: {
-    stage: 'Reason + qualifier',
-    script: [
-      "Appreciate it. Real quick — I work with {{svc}} companies in South Jersey on the online side, helping them pull more jobs from Google.",
-      "I was looking at {{biz}} before I called and there are a few specific things on your listing and website that are probably costing you jobs every week — but I don't want to assume that's even a problem for you.",
-    ],
-    followUp: ["Before I get into it — are you guys actually looking to take on more {{svc}} work right now, or pretty slammed?"],
-    direction: "The qualifier question is doing a TON of work here. Notice 'slammed' is framed as an acceptable answer — that gives them permission to be honest. But here's the trick: even slammed owners almost always want better/bigger jobs. The question screens out the 5% who actually don't need help and surfaces the real pain in everyone else. Whatever they answer tells you which branch to take.",
+    followUp: ["Are you guys taking on new work right now?"],
+    direction: "Tonality is everything. Slow down — calm, confident, selective. You're not pitching them; you're considering them for a slot. Pause after each line and let it land. 'Before moving on' is doing real work — it's soft scarcity without being pushy. The qualifier at the end is where the call really begins; their answer routes everything that follows.",
     next: [
       { label: '"Yeah, we could use more work"', to: 'pain_dig' },
       { label: '"We\'re slammed / pretty full"', to: 'slammed' },
-      { label: '"What did you see on our listing?"', to: 'curiosity_hook' },
+      { label: '"Why us specifically?"', to: 'curiosity_hook' },
       { label: '"What do you do exactly?"', to: 'what_do_you_do' },
-      { label: '"What is this about? / explain the audit"', to: 'what_is_audit' },
+      { label: '"What kind of jobs?"', to: 'pain_dig' },
       { label: '"We have someone doing marketing"', to: 'have_a_guy' },
       { label: '"How much does this cost?"', to: 'price_early' },
       { label: '"I don\'t need a website"', to: 'dont_need' },
-      { label: '"What kind of jobs?"', to: 'pain_dig' },
       { label: '"Just send me something"', to: 'send_something' },
       { label: 'Not interested', to: 'not_interested' },
     ],
@@ -1033,10 +1020,10 @@ const COLD_CALL_NODES = {
   slammed: {
     stage: '"We\'re slammed"',
     script: [
-      "Got it — good problem to have. Won't waste your time then.",
-      "One quick thing before I let you go — is it steady year-round, or do you have a slow season? Most {{svc}} guys I know go 80% capacity in summer, 40% in winter, something like that.",
+      "Got it — that's actually exactly what we look for. The companies we get the best results for are the ones already running well; we don't try to revive dead businesses, we amplify what's working.",
+      "Quick question though — is it steady year-round, or do you have a slow season? Most {{svc}} guys I know go 80% capacity in summer, 40% in winter, something like that.",
     ],
-    direction: "Almost every service business has a slow season. This question reframes 'slammed' as 'slammed RIGHT NOW' — a different thing. If they admit any seasonal dip, the pivot is: the work to fill the slow season happens NOW, not when you're already empty. If they say genuinely steady, pivot to higher-ticket angle.",
+    direction: "Don't back away just because they're busy — that's the cold-caller move. Slammed = good operator = ideal client. Reframe it as a feature. The seasonal pivot is the wedge: almost every service business has a slow window, and the work to fix it has to start NOW.",
     next: [
       { label: '"Yeah, it slows down in [season]"', to: 'seasonal_pain' },
       { label: '"Pretty steady all year"', to: 'higher_ticket_pivot' },
@@ -1068,10 +1055,10 @@ const COLD_CALL_NODES = {
   },
 
   curiosity_hook: {
-    stage: 'They asked what you saw',
+    stage: '"Why us?"',
     script: [
-      "Good question. A few things — but I don't want to half-answer it over the phone because it'll sound generic. The real answer is a 15-minute screen-share where I pull up {{biz}} live, plus your top 3 {{svc}} competitors in the area, and I show you exactly where they're winning and where you're invisible.",
-      "Trying to describe it over the phone is like describing a movie — won't land. The screen-share is the whole point.",
+      "Fair question. Couple reasons — {{biz}} came up in my list of {{svc}} companies in your area, your operation looks legit, and from what I can tell you're not the biggest player in the area yet. The companies I get the best results for are the ones with real businesses underneath who just aren't fully represented online — that fits {{biz}}.",
+      "The full answer is honestly a 15-minute screen-share where I pull up {{biz}} side by side with your top 3 competitors and walk you through exactly what I mean. Trying to describe it over the phone won't land — you really have to see it.",
     ],
     next: [
       { label: 'Continue to the meeting ask', to: 'book_ask' },
@@ -1273,6 +1260,7 @@ const COLD_CALL_NODES = {
       { label: '"Thursday afternoon works"', to: 'book_time_close' },
       { label: '"Different day/time"', to: 'book_flexible' },
       { label: '"Just text me the link"', to: 'book_time_close' },
+      { label: '"What exactly would we cover?"', to: 'what_is_audit' },
       { label: '"Send me info first"', to: 'send_close' },
       { label: 'Not interested', to: 'not_interested' },
     ],
@@ -1307,8 +1295,8 @@ const COLD_CALL_NODES = {
     end: 'warning',
     badge: 'Leave VM + send text within 2 min',
     script: ['Leave the voicemail below, then send the follow-up text within 2 minutes while your name is still in their recent calls log.'],
-    voicemail: "Hey {{name}}, Nate from JP Webworks out of Marlton — I'll be straight, this is a cold call. I was looking at {{biz}} on Google and spotted a few specific things on your listing that are probably costing you {{svc}} jobs you don't know you're missing. Not a big pitch — happy to walk you through what I saw in 15 minutes. Shoot me a text or callback when you get a sec, I'll text you my number too.",
-    direction: 'Cadence: leave a voicemail on attempts 1 and 4 ONLY (vary the message on 4). Attempts 2 and 3 — call and hang up if VM. After 5 untouched, move to 60-day backburner. Send the follow-up text within 2 minutes — "Hey {{name}}, Nate from JP Webworks — just left you a voicemail. Saw a couple specific things on {{biz}}\'s Google listing worth flagging. No rush — text back when you can."',
+    voicemail: "Hey {{name}}, Nate from JP Webworks out of Marlton. We work with one {{svc}} company per area in South Jersey on the online side, and {{biz}} came up as a good fit when I was putting together my shortlist out there. Wanted to chat before I move on to someone else. Shoot me a text or callback when you get a sec — I'll text you my number too. Thanks.",
+    direction: 'Cadence: leave a voicemail on attempts 1 and 4 ONLY (vary the message on 4). Attempts 2 and 3 — call and hang up if VM. After 5 untouched, move to 60-day backburner. Send the follow-up text within 2 minutes — "Hey {{name}}, Nate from JP Webworks — just left you a voicemail. Local out of Marlton. We only work with one {{svc}} company per area, {{biz}} is on my shortlist for South Jersey. No rush, text back when you can."',
   },
 
   callback: {
@@ -1355,16 +1343,16 @@ const COLD_CALL_NODES = {
 
 const QUICK_REBUTTALS = [
   { q: '"I\'m driving / in a meeting / busy right now"', a: "No problem — sounds like I caught you mid-something. What's a better window — tomorrow morning or afternoon?" },
-  { q: '"How did you get my number?"', a: "Public — your Google business listing. Cold call, that's all. Take 30 seconds and tell me to get lost if it's not a fit." },
+  { q: '"How did you get my number?"', a: "Your Google business listing — we were going through {{svc}} companies in South Jersey for our shortlist. Public info." },
   { q: '"Take me off your list"', a: "Won't call again — appreciate the time. Take care." },
   { q: '"I\'m not the decision maker"', a: "Got it — who handles the website and the Google stuff for you? Best way to reach them?" },
-  { q: '"We tried marketing before, didn\'t work"', a: "Yeah, like 80% of these calls. Most agencies oversell and ghost. What specifically didn't work — were the leads not showing up, the leads were junk, or the company just stopped communicating? Helps me know if we're different or the same flavor." },
+  { q: '"We tried marketing before, didn\'t work"', a: "Most of it doesn't — most agencies oversell and ghost. That's why we work with one company per area, so we actually have skin in the game. What specifically didn't work last time — were the leads not showing up, the leads were junk, or the company just stopped communicating? Helps me know if we're a different flavor or the same problem." },
   { q: '"I just got a website built last year"', a: "Good — you took it seriously. Quick question — is it actually pulling jobs for you, or is it just sitting there looking nice? Big difference. Worth 15 minutes either way to confirm." },
   { q: '"Are you AI / a robot?"', a: "Ha — no, Nate, real person. Calling out of Marlton, I'm probably 10 minutes from you." },
   { q: '"How long does the website take to build?"', a: "Usually 1–2 weeks from kickoff. Live by week three. We handle updates after that." },
   { q: '"Can I see examples of your work?"', a: "Absolutely — I'll text you a couple links along with my Calendly. What's the best cell?" },
-  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question, and I'm one of those 50. Three things make me different — I'm local out of Marlton, I show you the audit live before you spend a dollar, and the website's $749 setup not the $5K agencies quote. Worst case you get 15 minutes of free intel on {{biz}}." },
-  { q: '"What\'s the catch?"', a: "Honest catch — I only take on one {{svc}} company per zip in South Jersey because the work would compete with itself. So if you do say yes, I stop calling other {{svc}} companies in your area. That's it." },
+  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Honestly most of them are selling cookie-cutter packages they push to anyone who'll listen — that's why I only work with one {{svc}} company per area. The work proves itself before you spend a dollar. I'm local out of Marlton, you can drive to my office, and the website's $749 setup not the $5K agencies quote. Worst case you get 15 minutes of free intel on {{biz}}." },
+  { q: '"What\'s the catch?"', a: "Honest answer — the only catch is that if you say yes, I stop talking to other {{svc}} companies in your zip. So this slot's open right now and after that it's not. That's it." },
   { q: '"I need to think about it"', a: "Totally fair. What specifically are you turning over — the timing, the price, or you're just not sure it'll work? Whichever it is, easier to give you the actual answer than have you guess." },
   { q: '"Call me back in a few months"', a: "Sure — but real quick, is there something specific changing in a few months, or is now just not the time? Helps me know if it's a real timing thing or a polite no, no judgment either way." },
 ];
