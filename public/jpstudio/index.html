@@ -372,6 +372,9 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .swatch-item{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:6px 8px;display:flex;flex-direction:column;gap:4px}
 .swatch-row{display:flex;align-items:center;gap:5px}
 .swatch-hex{font-family:var(--fm);font-size:9px;color:var(--tx2);flex:1;min-width:0}
+.swatch-hex-in{background:transparent;border:1px solid var(--bd2);border-radius:3px;color:var(--tx1);font-family:var(--fm);font-size:10px;padding:3px 5px;flex:1;min-width:0;outline:none;text-transform:uppercase;transition:border-color .15s;letter-spacing:.3px}
+.swatch-hex-in:focus{border-color:var(--ac);background:var(--s0)}
+.swatch-hex-in.invalid{border-color:#e36363}
 .swatch-name-in{background:transparent;border:none;border-bottom:1px solid var(--bd2);color:var(--tx2);font-family:var(--fm);font-size:9px;padding:2px 0;outline:none;width:100%;transition:border-color .15s}
 .swatch-name-in:focus{border-color:var(--ac2)}
 .swatch-name-in::placeholder{color:var(--tx3)}
@@ -1771,7 +1774,7 @@ function renderColorSwatches(side, colors) {
     const name = typeof col==='object'?col.name:'';
     const wrap = document.createElement('div');
     wrap.className = 'swatch-item';
-    wrap.innerHTML = `<div class="swatch-row"><input type="color" value="${hex}" onchange="updateColorHex('${side}',${i},this.value)" title="${hex}" style="width:22px;height:22px;border:none;background:none;cursor:pointer;border-radius:3px;padding:0"/><span class="swatch-hex">${hex}</span><button class="btn btn-danger btn-xs" onclick="removeColor('${side}',${i})">✕</button></div><input type="text" class="swatch-name-in" placeholder="Color name…" value="${name}" oninput="updateColorName('${side}',${i},this.value)"/>`;
+    wrap.innerHTML = `<div class="swatch-row"><input type="color" value="${hex}" id="swatch-color-${side}-${i}" onchange="updateColorHex('${side}',${i},this.value)" title="Eyedropper / color picker" style="width:22px;height:22px;border:none;background:none;cursor:pointer;border-radius:3px;padding:0;flex-shrink:0"/><input type="text" class="swatch-hex-in" id="swatch-hex-${side}-${i}" value="${(hex||'').toUpperCase()}" maxlength="7" spellcheck="false" placeholder="#000000" oninput="updateColorHexText('${side}',${i},this,false)" onblur="updateColorHexText('${side}',${i},this,true)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"/><button class="btn btn-danger btn-xs" onclick="removeColor('${side}',${i})">✕</button></div><input type="text" class="swatch-name-in" placeholder="Color name…" value="${name}" oninput="updateColorName('${side}',${i},this.value)"/>`;
     c.appendChild(wrap);
   });
   const addBtn = document.createElement('button');
@@ -1780,6 +1783,34 @@ function renderColorSwatches(side, colors) {
   c.appendChild(addBtn);
 }
 function updateColorHex(side,idx,val){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(typeof arr[idx]==='object')arr[idx].hex=val;else arr[idx]={hex:val,name:''}; renderColorSwatches(side,arr); scheduleUpdate(); }
+function updateColorHexText(side,idx,el,commit){
+  const raw = (el.value||'').replace(/[^0-9a-fA-F]/g,'');
+  let cleaned = raw.slice(0,6);
+  if(cleaned.length===3) cleaned = cleaned.split('').map(c=>c+c).join('');
+  if(cleaned.length===6){
+    el.classList.remove('invalid');
+    const hex = '#'+cleaned.toLowerCase();
+    const arr = side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors;
+    if(typeof arr[idx]==='object') arr[idx].hex=hex; else arr[idx]={hex:hex,name:''};
+    // sync the native color picker preview without a full re-render (preserves text focus)
+    const cp = document.getElementById(`swatch-color-${side}-${idx}`);
+    if(cp) cp.value = hex;
+    scheduleUpdate();
+    if(commit){
+      // normalize displayed value to uppercase #RRGGBB on blur
+      el.value = '#'+cleaned.toUpperCase();
+    }
+  } else {
+    el.classList.add('invalid');
+    if(commit){
+      // invalid on blur — revert to last known good value from state
+      const arr = side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors;
+      const last = arr[idx]; const lastHex = typeof last==='object'?last.hex:last;
+      el.value = (lastHex||'#000000').toUpperCase();
+      el.classList.remove('invalid');
+    }
+  }
+}
 function updateColorName(side,idx,val){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(typeof arr[idx]==='object')arr[idx].name=val;else arr[idx]={hex:arr[idx],name:val}; scheduleUpdate(); }
 function addColor(side){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(arr.length>=12){toast('Max 12 colors');return;} arr.push({hex:'#ffffff',name:''}); renderColorSwatches(side,arr); scheduleUpdate(); }
 function removeColor(side,idx){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; arr.splice(idx,1); renderColorSwatches(side,arr); scheduleUpdate(); }
@@ -2025,7 +2056,8 @@ async function renderTemplate1(pdfDoc,page,pg) {
   // ── Logo art boxes — centered under each column ───────────────
   const maxSpecLines=Math.max(fc.length||0,bc.length||0);
   const logoAreaY=(fc.length||bc.length)? specY-14-(maxSpecLines*capLH)-10 : specY-14;
-  const boxSize=100;
+  // Logo size scales with column width; previously fixed at 100 which looked tiny.
+  const boxSize=Math.min(imgW*0.62, 170);
   const frontLogoX=frontX+imgW/2-boxSize/2;
   const backLogoX=backX+imgW/2-boxSize/2;
   if(pg.frontLogoBase64){const li=await embedImg(pdfDoc,pg.frontLogoBase64);if(li)page.drawImage(li,{x:frontLogoX,y:logoAreaY-boxSize,width:boxSize,height:boxSize});}
@@ -2033,14 +2065,14 @@ async function renderTemplate1(pdfDoc,page,pg) {
 
   // ── Color swatches — below logo boxes ────────────────────────
   const fColors=normalizeColors(pg.frontColors), bColors=normalizeColors(pg.backColors);
-  const swatchY=(pg.frontLogoBase64||pg.backLogoBase64) ? logoAreaY-boxSize-16 : logoAreaY-16;
+  const swatchY=(pg.frontLogoBase64||pg.backLogoBase64) ? logoAreaY-boxSize-18 : logoAreaY-16;
   if(fColors.length){
     page.drawText('COLORS',{x:frontX,y:swatchY,size:7,font:boldFont,color:rgb(.55,.70,.40)});
-    drawColorCircles(page,frontX,swatchY-14,fColors,13,captFont,frontX+imgW);
+    drawColorCircles(page,frontX,swatchY-16,fColors,14,captFont,frontX+imgW);
   }
   if(bColors.length){
     page.drawText('COLORS',{x:backX,y:swatchY,size:7,font:boldFont,color:rgb(.55,.70,.40)});
-    drawColorCircles(page,backX,swatchY-14,bColors,13,captFont,backX+imgW);
+    drawColorCircles(page,backX,swatchY-16,bColors,14,captFont,backX+imgW);
   }
 
   // ── Footer ────────────────────────────────────────────────────
@@ -2088,9 +2120,23 @@ async function renderTemplate2(pdfDoc,page,pg) {
   let specY=divY-16;
   const cap=buildCaption(pg.printFront);
   if(cap.length){for(const s of cap){page.drawText(s,{x:mS,y:specY,size:11,font:captFont,color:rgb(.22,.22,.22)});specY-=16;}}
-  if(pg.frontLogoBase64){const li=await embedImg(pdfDoc,pg.frontLogoBase64);if(li){const lbW=120,lbX=(PAGE_WIDTH-lbW)/2;page.drawImage(li,{x:lbX,y:specY-lbW-10,width:lbW,height:lbW});}}
+  // ── Logo art — large centered block ─────────────────────────────
   const fColors=normalizeColors(pg.frontColors);
-  drawColorCircles(page,mS,specY-138,fColors,14,captFont,PAGE_WIDTH-mS);
+  const FOOTER_H=40;
+  const padBelowSpecs=14;
+  const padAroundColors=18;
+  const colorsHeight = fColors.length ? 44 : 0; // ~28px circles + name room
+  // Available vertical space between specs and footer
+  const availV = (specY - padBelowSpecs) - (FOOTER_H + 20) - colorsHeight - padAroundColors;
+  // Logo size: scale up to fill space, capped so it doesn't get absurd on tall pages
+  const lbW = Math.max(120, Math.min(availV, PAGE_WIDTH*0.46, 300));
+  const lbX = (PAGE_WIDTH-lbW)/2;
+  const logoY = specY - padBelowSpecs - lbW; // bottom-left y of logo
+  if(pg.frontLogoBase64){const li=await embedImg(pdfDoc,pg.frontLogoBase64);if(li){page.drawImage(li,{x:lbX,y:logoY,width:lbW,height:lbW});}}
+  // Colors below logo, centered, with bigger radius to match
+  if(fColors.length){
+    drawColorCircles(page, mS, logoY - padAroundColors, fColors, 15, captFont, PAGE_WIDTH-mS);
+  }
   page.drawRectangle({x:0,y:0,width:PAGE_WIDTH,height:40,color:rgb(.06,.06,.06)});
   page.drawText('INNOVATION IN INK',{x:mS,y:13,size:11,font:boldFont,color:rgb(.55,.70,.42)});
   const mn='Mockup '+(pg.mockupNum||'');
@@ -2102,36 +2148,44 @@ function drawColorCircles(page,startX,startY,colors,radius,font,maxX) {
   if (!colors||!colors.length) return;
   const {rgb}=PDFLib;
   const step=radius*2.8;
-  let cx=startX+radius, cy=startY;
-  colors.forEach(c => {
-    const hex=typeof c==='object'?c.hex:c;
-    const name=typeof c==='object'?c.name:'';
-    if(!hex)return;
-    try{
-      const col=hexToRgb(hex);
-      const lum=.2126*col.red+.7152*col.green+.0722*col.blue;
-      const isWhite=hex.replace('#','').toLowerCase()==='ffffff';
-      // Thin border for all circles — white ones get a gray border, others match fill
-      const borderCol=isWhite ? rgb(.7,.7,.7) : col;
-      page.drawCircle({x:cx,y:cy,size:radius,color:col,borderWidth:isWhite?1:.5,borderColor:borderCol});
-      // Hex label inside circle (larger, more readable)
-      const hexLabel='#'+hex.replace('#','').toUpperCase();
-      const hfs=6;
-      const htw=font.widthOfTextAtSize(hexLabel,hfs);
-      page.drawText(hexLabel,{x:cx-htw/2,y:cy-hfs/2,size:hfs,font,color:lum<.5?rgb(.95,.95,.95):rgb(.12,.12,.12)});
-      // Color name below circle — larger and darker
-      if(name&&name.trim()){
-        const nfs=8.5;
-        const ntw=font.widthOfTextAtSize(name.trim(),nfs);
-        page.drawText(name.trim(),{x:cx-ntw/2,y:cy-radius-nfs-3,size:nfs,font,color:rgb(.22,.22,.22)});
-      }
-      cx+=step;
-      if(cx+radius>maxX){
-        cy-=radius*2+(name?.trim()?14:0)+8;
-        cx=startX+radius;
-      }
-    }catch(e){}
-  });
+  const containerW = maxX - startX;
+  // Pre-compute how many circles fit per row, then split into rows so we can center each.
+  const perRow = Math.max(1, Math.floor((containerW + (step - radius*2)) / step));
+  const rows = [];
+  for (let i=0; i<colors.length; i+=perRow) rows.push(colors.slice(i, i+perRow));
+  const anyName = colors.some(c => ((typeof c==='object'?c.name:'')||'').trim().length>0);
+  const rowGap = radius*2 + (anyName?14:0) + 10;
+  let cy = startY;
+  for (const row of rows) {
+    // True row width: span between first and last circle center, plus one radius each side.
+    const rowSpan = (row.length-1)*step + radius*2;
+    let cx = startX + (containerW - rowSpan)/2 + radius;
+    for (const c of row) {
+      const hex  = typeof c==='object'?c.hex:c;
+      const name = typeof c==='object'?c.name:'';
+      if(!hex){ cx+=step; continue; }
+      try {
+        const col=hexToRgb(hex);
+        const lum=.2126*col.red+.7152*col.green+.0722*col.blue;
+        const isWhite=hex.replace('#','').toLowerCase()==='ffffff';
+        const borderCol=isWhite ? rgb(.7,.7,.7) : col;
+        page.drawCircle({x:cx,y:cy,size:radius,color:col,borderWidth:isWhite?1:.5,borderColor:borderCol});
+        // Hex label inside circle
+        const hexLabel='#'+hex.replace('#','').toUpperCase();
+        const hfs=Math.max(6, Math.round(radius*0.46));
+        const htw=font.widthOfTextAtSize(hexLabel,hfs);
+        page.drawText(hexLabel,{x:cx-htw/2,y:cy-hfs/2,size:hfs,font,color:lum<.5?rgb(.95,.95,.95):rgb(.12,.12,.12)});
+        // Optional name below circle
+        if(name && name.trim()){
+          const nfs=Math.max(7.5, Math.round(radius*0.62));
+          const ntw=font.widthOfTextAtSize(name.trim(),nfs);
+          page.drawText(name.trim(),{x:cx-ntw/2,y:cy-radius-nfs-3,size:nfs,font,color:rgb(.22,.22,.22)});
+        }
+      } catch(e){}
+      cx += step;
+    }
+    cy -= rowGap;
+  }
 }
 
 // ── PDF Preview ───────────────────────────────────────────────────
