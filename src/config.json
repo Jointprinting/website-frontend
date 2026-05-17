@@ -1,4 +1,5 @@
 {
     "test_backendUrl": "http://localhost:8080",
-    "backendUrl": "https://jointprinting-backend.onrender.com"
+    "backendUrl": "https://jointprinting-backend.onrender.com",
+    "mapboxToken": "pk.eyJ1Ijoiam9pbnRwcmludGluZyIsImEiOiJjbXA5enN6cHYwd3J2MnpwaW44MDBkMWx4In0.QfsiB8sN8nFGo3VXQuKDPg"
 }
