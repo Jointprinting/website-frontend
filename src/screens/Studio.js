@@ -61,7 +61,9 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import config from '../config.json';
+import CatalogManagerTab from './studio/CatalogManagerTab';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -1881,6 +1883,7 @@ const HUB_GROUPS = [
     tools: [
       { id: 'manual',      label: 'Manual entry',  desc: 'Add Alpha Broder products by style code.', Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',         Icon: InboxIcon },
+      { id: 'catalogs',    label: 'Catalogs',      desc: 'Manage public catalogs and the page toast.', Icon: MenuBookOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs for clients.',  Icon: DesignServicesIcon },
     ],
   },
@@ -2128,6 +2131,7 @@ function StudioBody({ token, onLogout }) {
                 <Box>
                   {view === 'manual'      && <ManualEntryTab token={token} />}
                   {view === 'submissions' && <SubmissionsTab token={token} />}
+                  {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                 </Box>
