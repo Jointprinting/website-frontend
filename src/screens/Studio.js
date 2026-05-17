@@ -62,8 +62,10 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
+import RoadTripTab from './studio/RoadTripTab';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -1884,6 +1886,7 @@ const HUB_GROUPS = [
       { id: 'manual',      label: 'Manual entry',  desc: 'Add Alpha Broder products by style code.', Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',         Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Manage public catalogs and the page toast.', Icon: MenuBookOutlinedIcon },
+      { id: 'roadtrip',    label: 'Road Trip Recon', desc: 'Pitch routes, dispensary hunting, field ops.', Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs for clients.',  Icon: DesignServicesIcon },
     ],
   },
@@ -2033,6 +2036,58 @@ function StudioBody({ token, onLogout }) {
   const [view, setView] = React.useState('hub');
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
+
+  // Road Trip Recon needs the full viewport — break out of the Studio's
+  // maxWidth="md" container and render a slim header instead of the usual
+  // Studio chrome. Returning early keeps the rest of the function untouched.
+  if (view === 'roadtrip') {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: '#05080a' }}>
+        <Stack
+          direction="row" alignItems="center" spacing={2}
+          sx={{
+            height: 56, px: 2, borderBottom: '1px solid #1a3d2b',
+            bgcolor: '#0a0e10', color: BRAND.green,
+          }}
+        >
+          <Button
+            onClick={() => setView('hub')}
+            size="small"
+            sx={{
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              fontSize: 11, fontWeight: 800, letterSpacing: 1.5,
+              color: BRAND.green, textTransform: 'none', minWidth: 0,
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' },
+            }}
+          >
+            ← HUB
+          </Button>
+          <Box sx={{ flexGrow: 1 }} />
+          <MuiTypography sx={{
+            fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+            fontSize: 10.5, color: 'rgba(212,244,221,0.5)', letterSpacing: 1.5,
+            display: { xs: 'none', sm: 'block' },
+          }}>
+            [ JOINT PRINTING / STUDIO / ROAD_TRIP ]
+          </MuiTypography>
+          <Box sx={{ flexGrow: 1 }} />
+          <Button
+            onClick={onLogout}
+            size="small"
+            sx={{
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              fontSize: 11, fontWeight: 700, letterSpacing: 1,
+              color: 'rgba(212,244,221,0.6)', textTransform: 'none',
+              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.08)' },
+            }}
+          >
+            SIGN OUT
+          </Button>
+        </Stack>
+        <RoadTripTab token={token} />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 4, md: 6 } }}>
