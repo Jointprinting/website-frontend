@@ -30,7 +30,7 @@ function AppShell() {
   return (
     <>
       {!isStudio && <AnnouncementBar />}
-      <Navbar />
+      {!isStudio && <Navbar />}
       <Routes>
         <Route exact path="/" element={<Home />} />
         <Route exact path="/about" element={<About />} />
