@@ -58,37 +58,41 @@ const LAYERS = [
     id:    'dispensaries',
     label: 'DISPENSARIES',
     short: 'DISP',
-    color: '#4ade80',
+    color: '#4ade80', // green — cannabis association
     icon:  '🌿',
     endpoint: '/api/roadtrip/search/dispensaries',
     defaultRadius: 20000,
+    kind:  'lead',    // dispensaries are sales prospects
   },
   {
     id:    'coffee',
     label: 'COFFEE',
     short: 'CAFE',
-    color: '#d4a76a',
+    color: '#c69d6f', // warm tan — coffee beans
     icon:  '💻',
     endpoint: '/api/roadtrip/search/coffee',
     defaultRadius: 10000,
+    kind:  'stop',
   },
   {
     id:    'parks',
     label: 'PARKS',
     short: 'PARK',
-    color: '#22c55e',
+    color: '#06b6d4', // cyan — water/sky/nature, distinct from disp green
     icon:  '🌲',
     endpoint: '/api/roadtrip/search/parks',
     defaultRadius: 80000,
+    kind:  'stop',
   },
   {
     id:    'campgrounds',
     label: 'CAMPING',
     short: 'CAMP',
-    color: '#fb923c',
+    color: '#ef4444', // red — campfire, distinct from coffee tan
     icon:  '⛺',
     endpoint: '/api/roadtrip/search/campgrounds',
     defaultRadius: 50000,
+    kind:  'stop',
   },
 ];
 
@@ -219,17 +223,22 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
+  const isLeadKind = layer.kind === 'lead';
+  const saveLabel    = isLeadKind ? '＋ SAVE AS LEAD'   : '＋ ADD TO TRIP';
+  const savedLabel   = isLeadKind ? '✓ SAVED AS LEAD'  : '✓ ADDED TO TRIP';
+  const savingLabel  = isLeadKind ? 'SAVING…'          : 'ADDING…';
+
   const saveBtn = document.createElement('button');
   const savedNow = !!savedAsLeadId;
-  saveBtn.textContent = savedNow ? '✓ SAVED AS LEAD' : '＋ SAVE AS LEAD';
+  saveBtn.textContent = savedNow ? savedLabel : saveLabel;
   saveBtn.disabled   = savedNow;
   saveBtn.style.cssText = btnStyle(savedNow ? 'success' : 'primary');
   saveBtn.addEventListener('click', () => {
     saveBtn.disabled = true;
-    saveBtn.textContent = 'SAVING…';
+    saveBtn.textContent = savingLabel;
     onSave(place, layer)
-      .then(() => { saveBtn.textContent = '✓ SAVED AS LEAD'; saveBtn.style.cssText = btnStyle('success'); })
-      .catch((e) => { saveBtn.disabled = false; saveBtn.textContent = '＋ SAVE AS LEAD'; saveBtn.style.cssText = btnStyle('primary');
+      .then(() => { saveBtn.textContent = savedLabel; saveBtn.style.cssText = btnStyle('success'); })
+      .catch((e) => { saveBtn.disabled = false; saveBtn.textContent = saveLabel; saveBtn.style.cssText = btnStyle('primary');
         window.alert(e?.response?.data?.message || 'Save failed.');
       });
   });
@@ -440,11 +449,25 @@ export default function RoadTripTab({ token }) {
     return init;
   });
 
-  // Markers + active leads (so popups can show "already saved" state)
+  // Saved items (leads + stops). Full objects in state so we can render a
+  // list in the side panel. leadsByExtIdRef is derived from this — refs are
+  // used because popup builders run outside React's render cycle.
   const markersRef       = React.useRef({ dispensaries: [], coffee: [], parks: [], campgrounds: [] });
-  const leadsByExtIdRef  = React.useRef(new Map()); // externalId -> leadId
-  const [leadCount, setLeadCount] = React.useState(0);
-  const [toast, setToast] = React.useState(null); // {message, kind}
+  const leadsByExtIdRef  = React.useRef(new Map());
+  const [savedItems, setSavedItems] = React.useState([]);
+  const [toast, setToast] = React.useState(null);
+
+  // Keep the externalId map in sync with savedItems for popup logic.
+  React.useEffect(() => {
+    const m = new Map();
+    for (const s of savedItems) {
+      if (s.externalId) m.set(s.externalId, s._id);
+    }
+    leadsByExtIdRef.current = m;
+  }, [savedItems]);
+
+  const leadCount = savedItems.filter((s) => s.kind === 'lead').length;
+  const stopCount = savedItems.filter((s) => s.kind === 'stop').length;
 
   // Has the map moved since the last search? Used to show the "refresh"
   // badge. Reset whenever we kick a new search off.
@@ -493,18 +516,13 @@ export default function RoadTripTab({ token }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Initial leads load — so popups know what's already saved ────────────
+  // ── Initial saved-items load — populates the SAVED panel + popup state ──
   React.useEffect(() => {
     if (!token) return;
     axios.get(`${config.backendUrl}/api/roadtrip/leads`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((r) => {
-      const map = new Map();
-      for (const lead of r.data || []) {
-        if (lead.externalId) map.set(lead.externalId, lead._id);
-      }
-      leadsByExtIdRef.current = map;
-      setLeadCount(r.data?.length || 0);
+      setSavedItems(r.data || []);
     }).catch(() => {});
   }, [token]);
 
@@ -542,6 +560,7 @@ export default function RoadTripTab({ token }) {
                 : layer.id === 'campgrounds' ? 'campground'
                 : layer.id === 'coffee' ? 'coffee'
                 : 'dispensary',
+      kind:       layer.kind || 'lead', // dispensaries='lead', stops='stop'
       status:     'planned',
     };
     const r = await axios.post(
@@ -549,13 +568,33 @@ export default function RoadTripTab({ token }) {
       body,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    leadsByExtIdRef.current.set(place.externalId, r.data._id);
-    setLeadCount((c) => c + 1);
-    showToast(`Saved "${place.name}" as lead.`, 'success');
+    setSavedItems((prev) => [r.data, ...prev]);
+    const verb = layer.kind === 'lead' ? 'lead' : 'trip stop';
+    showToast(`Saved "${place.name}" as ${verb}.`, 'success');
   };
 
-  const onHideDispensary = async (place) => {
+  const deleteSavedItem = async (item) => {
+    if (!window.confirm(`Remove "${item.name}" from your saved list?`)) return;
     try {
+      await axios.delete(
+        `${config.backendUrl}/api/roadtrip/leads/${item._id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSavedItems((prev) => prev.filter((s) => s._id !== item._id));
+      showToast(`Removed "${item.name}".`, 'success');
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Delete failed.', 'error');
+    }
+  };
+
+  const flyToSaved = (item) => {
+    if (!mapRef.current || !isFinite(item.lat) || !isFinite(item.lng)) return;
+    mapRef.current.flyTo({
+      center: [item.lng, item.lat], zoom: 14, essential: true, duration: 1400,
+    });
+  };
+
+  const onHideDispensary = async (place) => {    try {
       await axios.post(
         `${config.backendUrl}/api/roadtrip/denylist`,
         { placeId: place.externalId, name: place.name, reason: 'not a real dispensary' },
@@ -600,7 +639,7 @@ export default function RoadTripTab({ token }) {
           .addTo(mapRef.current);
 
         const popup = new mapboxgl.Popup({
-          offset: 18, closeButton: true, closeOnClick: false, maxWidth: '340px',
+          offset: 18, closeButton: true, closeOnClick: true, maxWidth: '340px',
         });
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -773,6 +812,88 @@ export default function RoadTripTab({ token }) {
               <Stat label="LEADS"
                 value={leadCount}
                 color={leadCount > 0 ? TERM.green : TERM.text} />
+              <Stat label="STOPS"
+                value={stopCount}
+                color={stopCount > 0 ? TERM.green : TERM.text} />
+            </PanelSection>
+
+            <PanelSection title={`SAVED · ${savedItems.length}`}>
+              {savedItems.length === 0 ? (
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 10.5, color: TERM.muted,
+                  lineHeight: 1.55, py: 1, fontStyle: 'italic',
+                }}>
+                  None yet. Click a pin → save it. Items persist across refreshes
+                  and devices.
+                </Typography>
+              ) : (
+                <Box sx={{ maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
+                  {savedItems.map((item) => {
+                    // Look up the layer this item belongs to for the color/icon
+                    const layerForItem =
+                         item.type === 'dispensary'    ? LAYERS[0]
+                       : item.type === 'coffee'        ? LAYERS[1]
+                       : item.type === 'park_national' ? LAYERS[2]
+                       : item.type === 'campground'   ? LAYERS[3]
+                       : LAYERS[0];
+                    return (
+                      <Box key={item._id}
+                        sx={{
+                          position: 'relative',
+                          display: 'flex', alignItems: 'center', gap: 1,
+                          py: 0.85, px: 1, mb: 0.5,
+                          borderRadius: 0.5,
+                          border: `1px solid ${TERM.borderDim}`,
+                          bgcolor: 'rgba(255,255,255,0.02)',
+                          cursor: 'pointer', userSelect: 'none',
+                          transition: 'all 0.15s ease',
+                          '&:hover': {
+                            bgcolor: 'rgba(74,222,128,0.06)',
+                            borderColor: layerForItem.color,
+                            transform: 'translateX(2px)',
+                          },
+                          '&:hover .jp-saved-del': { opacity: 1 },
+                        }}
+                        onClick={() => flyToSaved(item)}>
+                        <Box sx={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          bgcolor: layerForItem.color, flexShrink: 0,
+                          boxShadow: `0 0 6px ${layerForItem.color}`,
+                        }} />
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography sx={{
+                            fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                            color: TERM.text, letterSpacing: 0.3,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}>
+                            {item.name}
+                          </Typography>
+                          <Typography sx={{
+                            fontFamily: MONO, fontSize: 9.5, color: TERM.muted,
+                            letterSpacing: 0.5,
+                          }}>
+                            [{(item.kind || 'lead').toUpperCase()}] {item.status?.toUpperCase()}
+                          </Typography>
+                        </Box>
+                        <Box
+                          className="jp-saved-del"
+                          role="button"
+                          onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
+                          sx={{
+                            opacity: 0, transition: 'opacity 0.15s ease',
+                            fontFamily: MONO, fontSize: 10, fontWeight: 800,
+                            color: TERM.red, px: 0.75, py: 0.25,
+                            border: `1px solid ${TERM.red}`, borderRadius: 0.25,
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'rgba(248,113,113,0.12)' },
+                          }}>
+                          ×
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </PanelSection>
 
             <PanelSection title="SYSTEM" defaultOpen={false}>
@@ -786,11 +907,11 @@ export default function RoadTripTab({ token }) {
               <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.55 }}>
                 {anyActive
                   ? <>{'>'} {LAYERS.filter((l) => layerState[l.id].active).length} LAYERS ACTIVE.<br />
-                      {'>'} CLICK A PIN FOR DETAILS.<br />
-                      {'>'} PAN MAP, HIT REFRESH TO RE-SEARCH.</>
+                      {'>'} CLICK A PIN → SAVE AS LEAD/STOP.<br />
+                      {'>'} PAN, HIT REFRESH TO RE-SEARCH.</>
                   : <>{'>'} TAP A LAYER TILE TO LOAD PINS.<br />
-                      {'>'} CHAIN DISPENSARIES SHOW W/ AMBER RING.<br />
-                      {'>'} TAP A CITY ABOVE TO FLY THE MAP.</>}
+                      {'>'} DISPENSARIES SAVE AS [LEAD].<br />
+                      {'>'} COFFEE/PARKS/CAMP SAVE AS [STOP].</>}
               </Typography>
             </Box>
           </Box>
