@@ -49,7 +49,6 @@ const TERM = {
 const MONO = 'ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace';
 const INITIAL_CENTER = [-74.5, 40.5];
 const INITIAL_ZOOM   = 6.2;
-const COORDS_COLLAPSED_KEY = 'jpRoadTripCoordsCollapsed';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer + style definitions
@@ -60,7 +59,7 @@ const LAYERS = [
     label: 'DISPENSARIES',
     short: 'DISP',
     color: '#4ade80',
-    icon:  '◉',
+    icon:  '🌿',
     endpoint: '/api/roadtrip/search/dispensaries',
     defaultRadius: 20000,
   },
@@ -69,7 +68,7 @@ const LAYERS = [
     label: 'COFFEE',
     short: 'CAFE',
     color: '#d4a76a',
-    icon:  '☕',
+    icon:  '💻',
     endpoint: '/api/roadtrip/search/coffee',
     defaultRadius: 10000,
   },
@@ -78,7 +77,7 @@ const LAYERS = [
     label: 'PARKS',
     short: 'PARK',
     color: '#22c55e',
-    icon:  '▲',
+    icon:  '🌲',
     endpoint: '/api/roadtrip/search/parks',
     defaultRadius: 80000,
   },
@@ -99,17 +98,38 @@ const MAP_STYLES = [
   { id: 'streets',   label: 'STR',  url: 'mapbox://styles/mapbox/streets-v12' },
 ];
 
+// Cities along the East Coast trip route — click one to fly the map there.
+// Edit this list freely as routes evolve. Each entry: label + center + zoom.
+const QUICK_JUMPS = [
+  { label: 'HOME · Marlton NJ',   center: [-74.9215, 39.8915], zoom: 12 },
+  { label: 'Philadelphia, PA',     center: [-75.1652, 39.9526], zoom: 11 },
+  { label: 'New York, NY',         center: [-74.0060, 40.7128], zoom: 11 },
+  { label: 'Hartford, CT',         center: [-72.6851, 41.7637], zoom: 11 },
+  { label: 'Providence, RI',       center: [-71.4128, 41.8240], zoom: 11 },
+  { label: 'Boston, MA',           center: [-71.0589, 42.3601], zoom: 11 },
+  { label: 'Portland, ME',         center: [-70.2553, 43.6591], zoom: 11 },
+  { label: 'Burlington, VT',       center: [-73.2121, 44.4759], zoom: 11 },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Marker DOM builder
+//
+// IMPORTANT: Mapbox positions markers by setting CSS `transform` on the
+// marker's outer element (e.g. `translate(-50%, -50%) translate(123px, 456px)`).
+// If we set `transform` on that same element for our hover scale, we
+// clobber Mapbox's positioning and the pin teleports to coordinate 0,0.
+//
+// Fix: outer wrapper has zero styling (Mapbox owns its transform); a child
+// `inner` element holds the dot, ring, and scale animation.
 // ─────────────────────────────────────────────────────────────────────────────
 function buildMarkerEl(layer, place) {
-  const el = document.createElement('div');
-  el.className = 'jp-marker';
-  const isChain = place.isChain;
-  const color   = layer.color;
+  const wrap = document.createElement('div');
+  wrap.className = 'jp-marker-wrap';
+  // No inline style on wrap — Mapbox manages this element's transform.
 
-  // Outer wrapper handles the chain ring + hover scale
-  el.style.cssText = `
+  const inner = document.createElement('div');
+  inner.className = 'jp-marker-inner';
+  inner.style.cssText = `
     position: relative;
     width: 22px; height: 22px;
     cursor: pointer;
@@ -118,7 +138,7 @@ function buildMarkerEl(layer, place) {
   `;
 
   // Chain ring (only on dispensary chains)
-  if (isChain) {
+  if (place.isChain) {
     const ring = document.createElement('div');
     ring.style.cssText = `
       position: absolute; inset: -4px;
@@ -126,7 +146,7 @@ function buildMarkerEl(layer, place) {
       border-radius: 50%;
       opacity: 0.85;
     `;
-    el.appendChild(ring);
+    inner.appendChild(ring);
   }
 
   // Main dot
@@ -134,23 +154,24 @@ function buildMarkerEl(layer, place) {
   dot.style.cssText = `
     width: 14px; height: 14px;
     border-radius: 50%;
-    background: ${color};
+    background: ${layer.color};
     border: 2px solid #05080a;
-    box-shadow: 0 0 0 1px ${color}, 0 0 12px ${color}80;
+    box-shadow: 0 0 0 1px ${layer.color}, 0 0 12px ${layer.color}80;
   `;
-  el.appendChild(dot);
+  inner.appendChild(dot);
 
-  // Animate in: scale from 0 to 1
-  el.animate(
+  // Drop-in animation on the inner element
+  inner.animate(
     [{ transform: 'scale(0)' }, { transform: 'scale(1.2)' }, { transform: 'scale(1)' }],
     { duration: 380, easing: 'cubic-bezier(0.34,1.56,0.64,1)' }
   );
 
-  // Hover bounce
-  el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.4)'; });
-  el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
+  // Hover bounce — scales the INNER element so we don't fight Mapbox.
+  wrap.addEventListener('mouseenter', () => { inner.style.transform = 'scale(1.4)'; });
+  wrap.addEventListener('mouseleave', () => { inner.style.transform = 'scale(1)'; });
 
-  return el;
+  wrap.appendChild(inner);
+  return wrap;
 }
 
 // Popup HTML/DOM
@@ -409,8 +430,6 @@ export default function RoadTripTab({ token }) {
   const [styleId, setStyleId]   = React.useState('dark');
   const [mapReady, setMapReady] = React.useState(false);
   const [mapError, setMapError] = React.useState('');
-  const [center, setCenter]     = React.useState({ lng: INITIAL_CENTER[0], lat: INITIAL_CENTER[1] });
-  const [zoom, setZoom]         = React.useState(INITIAL_ZOOM);
 
   // Per-layer state — just for UI counts/loading. Markers themselves live
   // in markersRef so React state churn doesn't force GC / re-render of
@@ -453,14 +472,13 @@ export default function RoadTripTab({ token }) {
         setMapError(msg);
       });
       map.on('move', () => {
-        const c = map.getCenter();
-        setCenter({ lng: c.lng, lat: c.lat });
-        setZoom(map.getZoom());
-
+        // We don't display lat/lng/zoom anymore, but we still watch how far
+        // the map has drifted from the last search center so the
+        // "↻ SEARCH THIS AREA" badge can appear at the right moment.
         if (lastSearchCenterRef.current) {
+          const c = map.getCenter();
           const dx = c.lng - lastSearchCenterRef.current.lng;
           const dy = c.lat - lastSearchCenterRef.current.lat;
-          // Crude "moved enough to warrant a refresh" threshold (~5km).
           if (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) setMapMoved(true);
         }
       });
@@ -702,10 +720,44 @@ export default function RoadTripTab({ token }) {
           overflow: 'auto',
         }}>
           <Box sx={{ p: 2 }}>
-            <PanelSection title="COORDINATES" defaultOpen={false} persistKey={COORDS_COLLAPSED_KEY}>
-              <Stat label="LON" value={center.lng.toFixed(4)} />
-              <Stat label="LAT" value={center.lat.toFixed(4)} />
-              <Stat label="ZOOM" value={zoom.toFixed(2)} color={TERM.green} />
+            <PanelSection title="QUICK JUMPS">
+              {QUICK_JUMPS.map((q) => (
+                <Box key={q.label}
+                  role="button" tabIndex={0}
+                  onClick={() => {
+                    if (mapRef.current) {
+                      mapRef.current.flyTo({
+                        center: q.center, zoom: q.zoom,
+                        essential: true, duration: 1600,
+                      });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && mapRef.current) {
+                      mapRef.current.flyTo({
+                        center: q.center, zoom: q.zoom,
+                        essential: true, duration: 1600,
+                      });
+                    }
+                  }}
+                  sx={{
+                    fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                    color: TERM.text, py: 0.85, px: 1, mb: 0.5,
+                    cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
+                    border: `1px solid transparent`,
+                    transition: 'all 0.15s ease',
+                    display: 'flex', alignItems: 'center', gap: 1,
+                    '&:hover': {
+                      color: TERM.green,
+                      bgcolor: 'rgba(74,222,128,0.08)',
+                      borderColor: TERM.borderDim,
+                      transform: 'translateX(2px)',
+                    },
+                  }}>
+                  <Box component="span" sx={{ color: TERM.green, fontSize: 10 }}>→</Box>
+                  {q.label}
+                </Box>
+              ))}
             </PanelSection>
 
             <PanelSection title="ASSETS">
@@ -738,7 +790,7 @@ export default function RoadTripTab({ token }) {
                       {'>'} PAN MAP, HIT REFRESH TO RE-SEARCH.</>
                   : <>{'>'} TAP A LAYER TILE TO LOAD PINS.<br />
                       {'>'} CHAIN DISPENSARIES SHOW W/ AMBER RING.<br />
-                      {'>'} ALL DATA STAYS IN YOUR DB.</>}
+                      {'>'} TAP A CITY ABOVE TO FLY THE MAP.</>}
               </Typography>
             </Box>
           </Box>
@@ -793,16 +845,6 @@ export default function RoadTripTab({ token }) {
               ↻ SEARCH THIS AREA
             </Box>
           )}
-
-          {/* Brand watermark */}
-          <Box sx={{
-            position: 'absolute', left: 12, bottom: 12, zIndex: 1,
-            px: 1.25, py: 0.5, borderRadius: 0.5,
-            bgcolor: 'rgba(5,8,10,0.78)', border: `1px solid ${TERM.borderDim}`,
-            fontFamily: MONO, fontSize: 10, color: TERM.green, letterSpacing: 1.5,
-          }}>
-            ◢ JP_RECON · LIVE
-          </Box>
 
           {mapError && (
             <Box sx={{ position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 2, maxWidth: 480 }}>
