@@ -81,7 +81,7 @@ const LAYERS = [
     color: '#06b6d4', // cyan — water/sky/nature, distinct from disp green
     icon:  '🌲',
     endpoint: '/api/roadtrip/search/parks',
-    defaultRadius: 80000,
+    defaultRadius: 150000, // 150km — parks worth driving to on a trip
     kind:  'stop',
   },
   {
@@ -179,7 +179,7 @@ function buildMarkerEl(layer, place) {
 }
 
 // Popup HTML/DOM
-function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAvailable }) {
+function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAvailable, currentDayLabel }) {
   const div = document.createElement('div');
   div.style.cssText = `
     font-family: ${MONO};
@@ -223,10 +223,10 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
-  const isLeadKind = layer.kind === 'lead';
-  const saveLabel    = isLeadKind ? '＋ SAVE AS LEAD'   : '＋ ADD TO TRIP';
-  const savedLabel   = isLeadKind ? '✓ SAVED AS LEAD'  : '✓ ADDED TO TRIP';
-  const savingLabel  = isLeadKind ? 'SAVING…'          : 'ADDING…';
+  const dayUpper = (currentDayLabel || 'Day 1').toUpperCase();
+  const saveLabel    = `＋ ADD TO ${dayUpper}`;
+  const savedLabel   = `✓ IN ITINERARY`;
+  const savingLabel  = 'ADDING…';
 
   const saveBtn = document.createElement('button');
   const savedNow = !!savedAsLeadId;
@@ -415,8 +415,17 @@ function PanelSection({ title, defaultOpen = true, persistKey, children }) {
   );
 }
 
-function Stat({ label, value, color = TERM.text }) {
-  return (
+// Small inline action button used by itinerary stop rows (↑/↓/→/×).
+const actionBtnSx = (color, hoverColor) => ({
+  fontFamily: MONO, fontSize: 11, fontWeight: 800,
+  color, px: 0.5, py: 0, minWidth: 16, cursor: 'pointer',
+  borderRadius: 0.25, lineHeight: 1.2,
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  border: '1px solid transparent',
+  '&:hover': { color: hoverColor, borderColor: hoverColor, bgcolor: `${hoverColor}1a` },
+});
+
+function Stat({ label, value, color = TERM.text }) {  return (
     <Stack direction="row" justifyContent="space-between" alignItems="baseline"
       sx={{ borderBottom: `1px dashed ${TERM.borderDim}`, py: 0.75 }}>
       <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, letterSpacing: 0.5 }}>
@@ -457,6 +466,25 @@ export default function RoadTripTab({ token }) {
   const [savedItems, setSavedItems] = React.useState([]);
   const [toast, setToast] = React.useState(null);
 
+  // Itinerary state — which day is currently selected for new saves, and
+  // which days have their route line drawn on the map.
+  const [currentDayLabel, setCurrentDayLabel] = React.useState('Day 1');
+  const [routesShown, setRoutesShown] = React.useState({}); // dayLabel -> true
+  // Route layer registry. Tracks the source/layer IDs we've added so we
+  // can clean them up on toggle-off or style change. Lives in a ref because
+  // it shadows the map's own state, not React's.
+  const routeLayersRef = React.useRef({}); // dayLabel -> { sourceId, layerId }
+
+  // Distinct route colors per day so multi-day overlays don't blur together.
+  const DAY_ROUTE_COLORS = ['#4ade80', '#06b6d4', '#fbbf24', '#ef4444', '#a855f7', '#f472b6', '#84cc16', '#f97316'];
+  const colorForDay = React.useCallback((label) => {
+    // Stable hash so the same day always gets the same color
+    let h = 0;
+    for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) & 0xffff;
+    return DAY_ROUTE_COLORS[h % DAY_ROUTE_COLORS.length];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep the externalId map in sync with savedItems for popup logic.
   React.useEffect(() => {
     const m = new Map();
@@ -466,8 +494,45 @@ export default function RoadTripTab({ token }) {
     leadsByExtIdRef.current = m;
   }, [savedItems]);
 
-  const leadCount = savedItems.filter((s) => s.kind === 'lead').length;
-  const stopCount = savedItems.filter((s) => s.kind === 'stop').length;
+  // Derive day groupings from savedItems
+  const itinerary = React.useMemo(() => {
+    const byDay = new Map();
+    for (const item of savedItems) {
+      const day = item.dayLabel || 'Unassigned';
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(item);
+    }
+    // Sort each day's items by sortOrder, then createdAt
+    for (const list of byDay.values()) {
+      list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                       || (new Date(a.createdAt) - new Date(b.createdAt)));
+    }
+    // Sort days: Day 1, Day 2, ... then Unassigned last
+    const dayList = Array.from(byDay.entries()).sort(([a], [b]) => {
+      if (a === 'Unassigned') return 1;
+      if (b === 'Unassigned') return -1;
+      const na = parseInt(a.replace(/[^0-9]/g, ''), 10);
+      const nb = parseInt(b.replace(/[^0-9]/g, ''), 10);
+      if (isFinite(na) && isFinite(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+    return dayList; // [['Day 1', [items]], ['Day 2', [items]], ...]
+  }, [savedItems]);
+
+  // All known day labels (used by the day picker)
+  const knownDays = React.useMemo(() => {
+    const set = new Set(itinerary.map(([d]) => d).filter((d) => d !== 'Unassigned'));
+    set.add('Day 1'); // always at least one option
+    if (currentDayLabel) set.add(currentDayLabel);
+    return Array.from(set).sort((a, b) => {
+      const na = parseInt(a.replace(/[^0-9]/g, ''), 10);
+      const nb = parseInt(b.replace(/[^0-9]/g, ''), 10);
+      if (isFinite(na) && isFinite(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+  }, [itinerary, currentDayLabel]);
+
+  const stopCount = savedItems.length;
 
   // Has the map moved since the last search? Used to show the "refresh"
   // badge. Reset whenever we kick a new search off.
@@ -531,11 +596,17 @@ export default function RoadTripTab({ token }) {
     if (!mapRef.current) return;
     const style = MAP_STYLES.find((s) => s.id === id);
     if (!style || id === styleId) return;
+
+    // Mapbox wipes all custom sources/layers when the style changes. Capture
+    // which day routes were visible so we can recreate them after load.
+    const wasShown = Object.keys(routesShown);
+    routeLayersRef.current = {};
+
     setStyleId(id);
     mapRef.current.setStyle(style.url);
-    // Re-apply markers after style finishes loading (otherwise they'd be
-    // wiped). One-shot listener.
     mapRef.current.once('style.load', () => {
+      // Re-add previously visible routes
+      wasShown.forEach((day) => { refreshRouteForDay(day); });
       // markers persist on the map automatically; nothing else to do.
     });
   };
@@ -547,6 +618,12 @@ export default function RoadTripTab({ token }) {
   };
 
   const onSaveLead = async (place, layer) => {
+    // Compute next sortOrder for current day so item lands at the end of the list
+    const existingInDay = savedItems.filter((s) => (s.dayLabel || 'Unassigned') === currentDayLabel);
+    const nextOrder = existingInDay.length === 0
+      ? 0
+      : Math.max(...existingInDay.map((s) => s.sortOrder ?? 0)) + 1;
+
     const body = {
       source:     place.source,
       externalId: place.externalId,
@@ -560,8 +637,10 @@ export default function RoadTripTab({ token }) {
                 : layer.id === 'campgrounds' ? 'campground'
                 : layer.id === 'coffee' ? 'coffee'
                 : 'dispensary',
-      kind:       layer.kind || 'lead', // dispensaries='lead', stops='stop'
+      kind:       layer.kind || 'lead',
       status:     'planned',
+      dayLabel:   currentDayLabel,
+      sortOrder:  nextOrder,
     };
     const r = await axios.post(
       `${config.backendUrl}/api/roadtrip/leads`,
@@ -569,18 +648,32 @@ export default function RoadTripTab({ token }) {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     setSavedItems((prev) => [r.data, ...prev]);
-    const verb = layer.kind === 'lead' ? 'lead' : 'trip stop';
-    showToast(`Saved "${place.name}" as ${verb}.`, 'success');
+    // If this day already has its route drawn, refresh it to include the new stop.
+    if (routesShown[currentDayLabel]) {
+      // Defer one tick so savedItems state has updated
+      setTimeout(() => refreshRouteForDay(currentDayLabel), 0);
+    }
+    showToast(`Added "${place.name}" to ${currentDayLabel}.`, 'success');
   };
 
   const deleteSavedItem = async (item) => {
-    if (!window.confirm(`Remove "${item.name}" from your saved list?`)) return;
+    if (!window.confirm(`Remove "${item.name}" from your itinerary?`)) return;
     try {
       await axios.delete(
         `${config.backendUrl}/api/roadtrip/leads/${item._id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setSavedItems((prev) => prev.filter((s) => s._id !== item._id));
+      const day = item.dayLabel || 'Unassigned';
+      // Refresh that day's route if it was shown — but only if at least 2
+      // stops remain. Else just hide it.
+      if (routesShown[day]) {
+        const remaining = savedItems.filter(
+          (s) => (s.dayLabel || 'Unassigned') === day && s._id !== item._id
+        );
+        if (remaining.length >= 2) setTimeout(() => refreshRouteForDay(day), 0);
+        else hideRouteForDay(day);
+      }
       showToast(`Removed "${item.name}".`, 'success');
     } catch (err) {
       showToast(err?.response?.data?.message || 'Delete failed.', 'error');
@@ -612,6 +705,191 @@ export default function RoadTripTab({ token }) {
     } catch (err) {
       showToast('Failed to hide.', 'error');
     }
+  };
+
+  // ── Itinerary helpers ────────────────────────────────────────────────────
+
+  /**
+   * Returns sorted stops for a given day. Pure helper — no side effects.
+   */
+  const stopsForDay = React.useCallback((dayLabel) => {
+    return savedItems
+      .filter((s) => (s.dayLabel || 'Unassigned') === dayLabel)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                   || (new Date(a.createdAt) - new Date(b.createdAt)));
+  }, [savedItems]);
+
+  /**
+   * Fetches a driving route through the given coordinates from Mapbox
+   * Directions API. Returns GeoJSON LineString plus total distance/duration.
+   */
+  const fetchRoute = async (coords) => {
+    if (!coords || coords.length < 2) return null;
+    const path = coords.map(([lng, lat]) => `${lng},${lat}`).join(';');
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${path}`
+      + `?access_token=${config.mapboxToken}&geometries=geojson&overview=full`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error(data.message || 'No route found.');
+    }
+    return data.routes[0];
+  };
+
+  /**
+   * Draws (or re-draws) the route line for a given day. Idempotent — call it
+   * again after stops change to refresh. Sets routesShown[day] = true.
+   */
+  const refreshRouteForDay = React.useCallback(async (dayLabel) => {
+    if (!mapRef.current) return;
+    const stops = savedItems
+      .filter((s) => (s.dayLabel || 'Unassigned') === dayLabel)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    if (stops.length < 2) {
+      showToast(`${dayLabel} needs at least 2 stops for a route.`, 'error');
+      return;
+    }
+    try {
+      const route = await fetchRoute(stops.map((s) => [s.lng, s.lat]));
+      const sourceId = `jp-route-src-${dayLabel.replace(/\s+/g, '-')}`;
+      const layerId  = `jp-route-layer-${dayLabel.replace(/\s+/g, '-')}`;
+      const geojson = { type: 'Feature', properties: {}, geometry: route.geometry };
+
+      // If already drawn, just update the source data. Else add fresh.
+      if (mapRef.current.getSource(sourceId)) {
+        mapRef.current.getSource(sourceId).setData(geojson);
+      } else {
+        mapRef.current.addSource(sourceId, { type: 'geojson', data: geojson });
+        mapRef.current.addLayer({
+          id: layerId, type: 'line', source: sourceId,
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': colorForDay(dayLabel),
+            'line-width': 4,
+            'line-opacity': 0.85,
+          },
+        });
+      }
+      routeLayersRef.current[dayLabel] = { sourceId, layerId };
+      setRoutesShown((prev) => ({ ...prev, [dayLabel]: true }));
+
+      // Fit the map to the route bounds
+      const coords = geojson.geometry.coordinates;
+      if (coords.length) {
+        const bounds = coords.reduce(
+          (b, c) => b.extend(c),
+          new mapboxgl.LngLatBounds(coords[0], coords[0])
+        );
+        mapRef.current.fitBounds(bounds, { padding: 60, duration: 1200 });
+      }
+    } catch (err) {
+      showToast(err.message || 'Route lookup failed.', 'error');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedItems, colorForDay]);
+
+  const hideRouteForDay = React.useCallback((dayLabel) => {
+    const reg = routeLayersRef.current[dayLabel];
+    if (reg && mapRef.current) {
+      try { if (mapRef.current.getLayer(reg.layerId))  mapRef.current.removeLayer(reg.layerId); } catch {}
+      try { if (mapRef.current.getSource(reg.sourceId)) mapRef.current.removeSource(reg.sourceId); } catch {}
+    }
+    delete routeLayersRef.current[dayLabel];
+    setRoutesShown((prev) => {
+      const next = { ...prev }; delete next[dayLabel]; return next;
+    });
+  }, []);
+
+  const toggleRouteForDay = (dayLabel) => {
+    if (routesShown[dayLabel]) hideRouteForDay(dayLabel);
+    else refreshRouteForDay(dayLabel);
+  };
+
+  /**
+   * Adds a new day at the end (Day N+1). Sets it as current so subsequent
+   * pin clicks add stops to it.
+   */
+  const addNewDay = () => {
+    const numbers = knownDays
+      .map((d) => parseInt(d.replace(/[^0-9]/g, ''), 10))
+      .filter(isFinite);
+    const next = numbers.length ? Math.max(...numbers) + 1 : 1;
+    const label = `Day ${next}`;
+    setCurrentDayLabel(label);
+    showToast(`Created ${label}. New pins will save here.`, 'success');
+  };
+
+  const moveStop = async (item, direction) => {
+    const dayStops = stopsForDay(item.dayLabel || 'Unassigned');
+    const idx = dayStops.findIndex((s) => s._id === item._id);
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= dayStops.length) return;
+    const a = dayStops[idx];
+    const b = dayStops[targetIdx];
+    try {
+      // Swap sortOrders
+      await Promise.all([
+        axios.put(`${config.backendUrl}/api/roadtrip/leads/${a._id}`,
+          { sortOrder: b.sortOrder },
+          { headers: { Authorization: `Bearer ${token}` } }),
+        axios.put(`${config.backendUrl}/api/roadtrip/leads/${b._id}`,
+          { sortOrder: a.sortOrder },
+          { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      setSavedItems((prev) => prev.map((s) =>
+        s._id === a._id ? { ...s, sortOrder: b.sortOrder }
+      : s._id === b._id ? { ...s, sortOrder: a.sortOrder }
+      : s
+      ));
+      // If route is shown, refresh
+      if (routesShown[item.dayLabel || 'Unassigned']) {
+        setTimeout(() => refreshRouteForDay(item.dayLabel || 'Unassigned'), 0);
+      }
+    } catch (err) {
+      showToast('Reorder failed.', 'error');
+    }
+  };
+
+  const moveStopToDay = async (item, newDayLabel) => {
+    try {
+      const r = await axios.put(
+        `${config.backendUrl}/api/roadtrip/leads/${item._id}`,
+        { dayLabel: newDayLabel, sortOrder: 9999 }, // bottom of new day
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSavedItems((prev) => prev.map((s) => s._id === item._id ? r.data : s));
+      const oldDay = item.dayLabel || 'Unassigned';
+      if (routesShown[oldDay])       setTimeout(() => refreshRouteForDay(oldDay), 0);
+      if (routesShown[newDayLabel])  setTimeout(() => refreshRouteForDay(newDayLabel), 0);
+      showToast(`Moved "${item.name}" to ${newDayLabel}.`, 'success');
+    } catch (err) {
+      showToast('Move failed.', 'error');
+    }
+  };
+
+  /**
+   * Flies the map to the user's current location. Uses browser geolocation.
+   * Browsers prompt once for permission; subsequent calls remember it.
+   */
+  const flyToMyLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported in this browser.', 'error');
+      return;
+    }
+    showToast('Locating…', 'info');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (!mapRef.current) return;
+        mapRef.current.flyTo({
+          center: [pos.coords.longitude, pos.coords.latitude],
+          zoom: 13, essential: true, duration: 1400,
+        });
+      },
+      (err) => {
+        showToast(`Location: ${err.message || 'denied or unavailable'}.`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
 
   // ── Layer toggle ─────────────────────────────────────────────────────────
@@ -650,6 +928,7 @@ export default function RoadTripTab({ token }) {
                  onHide: onHideDispensary,
                  savedAsLeadId: leadsByExtIdRef.current.get(place.externalId),
                  hideAvailable: layer.id === 'dispensaries',
+                 currentDayLabel,
                }))
                .addTo(mapRef.current);
         });
@@ -753,13 +1032,45 @@ export default function RoadTripTab({ token }) {
       <Box sx={{ flexGrow: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
         {/* Side panel */}
         <Box sx={{
-          width: { xs: 0, md: 280 }, flexShrink: 0,
+          width: { xs: 0, md: 300 }, flexShrink: 0,
           display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
           bgcolor: TERM.panel, borderRight: `1px solid ${TERM.border}`,
           overflow: 'auto',
+          // Custom scrollbar — thin green sliver that matches the terminal vibe
+          // instead of the chunky default OS scrollbar
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-track': { background: 'transparent' },
+          '&::-webkit-scrollbar-thumb': {
+            background: 'rgba(74,222,128,0.18)',
+            borderRadius: 3,
+          },
+          '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(74,222,128,0.4)' },
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(74,222,128,0.18) transparent',
         }}>
           <Box sx={{ p: 2 }}>
             <PanelSection title="QUICK JUMPS">
+              <Box
+                role="button" tabIndex={0}
+                onClick={flyToMyLocation}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') flyToMyLocation(); }}
+                sx={{
+                  fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                  color: TERM.green, py: 0.85, px: 1, mb: 0.5,
+                  cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
+                  border: `1px solid ${TERM.green}`,
+                  bgcolor: 'rgba(74,222,128,0.06)',
+                  transition: 'all 0.15s ease',
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  '&:hover': {
+                    bgcolor: 'rgba(74,222,128,0.14)',
+                    transform: 'translateX(2px)',
+                    boxShadow: `0 0 12px ${TERM.green}30`,
+                  },
+                }}>
+                <Box component="span" sx={{ fontSize: 12 }}>📍</Box>
+                MY LOCATION
+              </Box>
               {QUICK_JUMPS.map((q) => (
                 <Box key={q.label}
                   role="button" tabIndex={0}
@@ -809,90 +1120,166 @@ export default function RoadTripTab({ token }) {
                   color={layerState[l.id].active ? l.color : TERM.text}
                 />
               ))}
-              <Stat label="LEADS"
-                value={leadCount}
-                color={leadCount > 0 ? TERM.green : TERM.text} />
               <Stat label="STOPS"
                 value={stopCount}
                 color={stopCount > 0 ? TERM.green : TERM.text} />
             </PanelSection>
 
-            <PanelSection title={`SAVED · ${savedItems.length}`}>
-              {savedItems.length === 0 ? (
+            <PanelSection title={`ITINERARY · ${stopCount}`}>
+              {/* Day picker — which day new pin saves go to */}
+              <Box sx={{ mb: 1.5 }}>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 9.5, color: TERM.muted,
+                  letterSpacing: 1, mb: 0.75,
+                }}>
+                  ADD NEW PINS TO:
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {knownDays.map((d) => {
+                    const isCurrent = d === currentDayLabel;
+                    return (
+                      <Box key={d}
+                        role="button" tabIndex={0}
+                        onClick={() => setCurrentDayLabel(d)}
+                        sx={{
+                          fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                          px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25,
+                          color: isCurrent ? TERM.greenDk : TERM.muted,
+                          bgcolor: isCurrent ? TERM.green : 'transparent',
+                          border: `1px solid ${isCurrent ? TERM.green : TERM.borderDim}`,
+                          '&:hover': {
+                            color: isCurrent ? TERM.greenDk : TERM.green,
+                            borderColor: TERM.green,
+                          },
+                        }}>
+                        {d.replace(/^Day /, 'D')}
+                      </Box>
+                    );
+                  })}
+                  <Box
+                    role="button" tabIndex={0}
+                    onClick={addNewDay}
+                    sx={{
+                      fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                      px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25,
+                      color: TERM.amber, border: `1px dashed ${TERM.amber}`,
+                      '&:hover': { bgcolor: 'rgba(251,191,36,0.08)' },
+                    }}>
+                    + NEW
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Day groups */}
+              {itinerary.length === 0 ? (
                 <Typography sx={{
                   fontFamily: MONO, fontSize: 10.5, color: TERM.muted,
                   lineHeight: 1.55, py: 1, fontStyle: 'italic',
                 }}>
-                  None yet. Click a pin → save it. Items persist across refreshes
-                  and devices.
+                  Empty. Click any pin on the map → ADD TO {currentDayLabel.toUpperCase()}.
                 </Typography>
               ) : (
-                <Box sx={{ maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
-                  {savedItems.map((item) => {
-                    // Look up the layer this item belongs to for the color/icon
-                    const layerForItem =
-                         item.type === 'dispensary'    ? LAYERS[0]
-                       : item.type === 'coffee'        ? LAYERS[1]
-                       : item.type === 'park_national' ? LAYERS[2]
-                       : item.type === 'campground'   ? LAYERS[3]
-                       : LAYERS[0];
-                    return (
-                      <Box key={item._id}
-                        sx={{
-                          position: 'relative',
-                          display: 'flex', alignItems: 'center', gap: 1,
-                          py: 0.85, px: 1, mb: 0.5,
-                          borderRadius: 0.5,
-                          border: `1px solid ${TERM.borderDim}`,
-                          bgcolor: 'rgba(255,255,255,0.02)',
-                          cursor: 'pointer', userSelect: 'none',
-                          transition: 'all 0.15s ease',
-                          '&:hover': {
-                            bgcolor: 'rgba(74,222,128,0.06)',
-                            borderColor: layerForItem.color,
-                            transform: 'translateX(2px)',
-                          },
-                          '&:hover .jp-saved-del': { opacity: 1 },
-                        }}
-                        onClick={() => flyToSaved(item)}>
+                itinerary.map(([day, stops]) => {
+                  const isVisible = !!routesShown[day];
+                  const dayColor = colorForDay(day);
+                  return (
+                    <Box key={day} sx={{ mb: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1}
+                        sx={{ mb: 0.5, pb: 0.5, borderBottom: `1px solid ${TERM.borderDim}` }}>
                         <Box sx={{
                           width: 8, height: 8, borderRadius: '50%',
-                          bgcolor: layerForItem.color, flexShrink: 0,
-                          boxShadow: `0 0 6px ${layerForItem.color}`,
+                          bgcolor: dayColor, boxShadow: `0 0 6px ${dayColor}`,
+                          flexShrink: 0,
                         }} />
-                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                          <Typography sx={{
-                            fontFamily: MONO, fontSize: 11, fontWeight: 700,
-                            color: TERM.text, letterSpacing: 0.3,
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          }}>
-                            {item.name}
-                          </Typography>
-                          <Typography sx={{
-                            fontFamily: MONO, fontSize: 9.5, color: TERM.muted,
-                            letterSpacing: 0.5,
-                          }}>
-                            [{(item.kind || 'lead').toUpperCase()}] {item.status?.toUpperCase()}
-                          </Typography>
-                        </Box>
-                        <Box
-                          className="jp-saved-del"
-                          role="button"
-                          onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
-                          sx={{
-                            opacity: 0, transition: 'opacity 0.15s ease',
-                            fontFamily: MONO, fontSize: 10, fontWeight: 800,
-                            color: TERM.red, px: 0.75, py: 0.25,
-                            border: `1px solid ${TERM.red}`, borderRadius: 0.25,
-                            cursor: 'pointer',
-                            '&:hover': { bgcolor: 'rgba(248,113,113,0.12)' },
-                          }}>
-                          ×
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Box>
+                        <Typography sx={{
+                          fontFamily: MONO, fontSize: 11, fontWeight: 800,
+                          color: TERM.text, letterSpacing: 0.5, flexGrow: 1,
+                        }}>
+                          {day.toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 600 }}>· {stops.length}</Box>
+                        </Typography>
+                        {stops.length >= 2 && (
+                          <Box role="button" tabIndex={0}
+                            onClick={() => toggleRouteForDay(day)}
+                            sx={{
+                              fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                              px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                              color: isVisible ? TERM.greenDk : dayColor,
+                              bgcolor: isVisible ? dayColor : 'transparent',
+                              border: `1px solid ${dayColor}`,
+                              '&:hover': { opacity: 0.85 },
+                            }}>
+                            {isVisible ? '◼ HIDE' : '▶ ROUTE'}
+                          </Box>
+                        )}
+                      </Stack>
+                      {stops.map((item, i) => {
+                        const layerForItem =
+                             item.type === 'dispensary'    ? LAYERS[0]
+                           : item.type === 'coffee'        ? LAYERS[1]
+                           : item.type === 'park_national' || item.type === 'park_state' ? LAYERS[2]
+                           : item.type === 'campground'   ? LAYERS[3]
+                           : LAYERS[0];
+                        const isFirst = i === 0;
+                        const isLast  = i === stops.length - 1;
+                        return (
+                          <Box key={item._id}
+                            sx={{
+                              position: 'relative',
+                              display: 'flex', alignItems: 'center', gap: 0.75,
+                              py: 0.6, px: 0.75, mb: 0.25,
+                              borderRadius: 0.5,
+                              transition: 'all 0.15s ease',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                bgcolor: 'rgba(74,222,128,0.04)',
+                                transform: 'translateX(2px)',
+                              },
+                              '&:hover .jp-stop-actions': { opacity: 1 },
+                            }}
+                            onClick={() => flyToSaved(item)}>
+                            <Box sx={{
+                              fontFamily: MONO, fontSize: 9.5, fontWeight: 800,
+                              color: TERM.muted, minWidth: 16, textAlign: 'right',
+                            }}>{i + 1}.</Box>
+                            <Box sx={{
+                              width: 6, height: 6, borderRadius: '50%',
+                              bgcolor: layerForItem.color, flexShrink: 0,
+                            }} />
+                            <Typography sx={{
+                              flexGrow: 1, minWidth: 0,
+                              fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
+                              color: TERM.text, letterSpacing: 0.2,
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>{item.name}</Typography>
+                            <Box className="jp-stop-actions"
+                              sx={{ opacity: 0, display: 'flex', gap: 0.25, transition: 'opacity 0.15s' }}>
+                              {!isFirst && (
+                                <Box role="button"
+                                  onClick={(e) => { e.stopPropagation(); moveStop(item, 'up'); }}
+                                  sx={actionBtnSx(TERM.muted, TERM.green)}>↑</Box>
+                              )}
+                              {!isLast && (
+                                <Box role="button"
+                                  onClick={(e) => { e.stopPropagation(); moveStop(item, 'down'); }}
+                                  sx={actionBtnSx(TERM.muted, TERM.green)}>↓</Box>
+                              )}
+                              <Box role="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const target = window.prompt(`Move "${item.name}" to which day?`, currentDayLabel);
+                                  if (target && target.trim()) moveStopToDay(item, target.trim());
+                                }}
+                                sx={actionBtnSx(TERM.muted, TERM.amber)}>→</Box>
+                              <Box role="button"
+                                onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
+                                sx={actionBtnSx(TERM.red, TERM.red)}>×</Box>
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  );
+                })
               )}
             </PanelSection>
 
@@ -906,12 +1293,12 @@ export default function RoadTripTab({ token }) {
             <Box sx={{ mt: 2, p: 1.5, border: `1px dashed ${TERM.borderDim}`, borderRadius: 0.5 }}>
               <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.55 }}>
                 {anyActive
-                  ? <>{'>'} {LAYERS.filter((l) => layerState[l.id].active).length} LAYERS ACTIVE.<br />
-                      {'>'} CLICK A PIN → SAVE AS LEAD/STOP.<br />
-                      {'>'} PAN, HIT REFRESH TO RE-SEARCH.</>
+                  ? <>{'>'} CLICK A PIN → ADD TO {currentDayLabel.toUpperCase()}.<br />
+                      {'>'} HIT [ROUTE] ON A DAY TO DRAW IT.<br />
+                      {'>'} PAN, REFRESH TO RE-SEARCH AREA.</>
                   : <>{'>'} TAP A LAYER TILE TO LOAD PINS.<br />
-                      {'>'} DISPENSARIES SAVE AS [LEAD].<br />
-                      {'>'} COFFEE/PARKS/CAMP SAVE AS [STOP].</>}
+                      {'>'} CLICK PIN → ADDS TO {currentDayLabel.toUpperCase()}.<br />
+                      {'>'} BUILD DAYS, DRAW ROUTES, GO.</>}
               </Typography>
             </Box>
           </Box>
