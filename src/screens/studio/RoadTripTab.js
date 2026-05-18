@@ -140,7 +140,6 @@ const SCORE_OPTIONS = [
   { value: 'C', label: 'C', color: '#6b7280' },
   { value: '',  label: '?', color: 'rgba(212,244,221,0.18)' },
 ];
-// eslint-disable-next-line no-unused-vars
 const ITEM_TAGS = ['T-shirts','Hoodies','Staff uniforms','Hats','Tote bags','Lighters','Rolling trays','Grinders','Lanyards','Stickers','Display/signage'];
 
 // ─────────────────────────────────────────────────────────────────────────────
