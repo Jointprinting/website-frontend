@@ -210,7 +210,7 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
     onSave(place, layer)
       .then(() => { saveBtn.textContent = '✓ SAVED AS LEAD'; saveBtn.style.cssText = btnStyle('success'); })
       .catch((e) => { saveBtn.disabled = false; saveBtn.textContent = '＋ SAVE AS LEAD'; saveBtn.style.cssText = btnStyle('primary');
-        alert(e?.response?.data?.message || 'Save failed.');
+        window.alert(e?.response?.data?.message || 'Save failed.');
       });
   });
   btnRow.appendChild(saveBtn);
@@ -220,7 +220,7 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
     hideBtn.textContent = '⊘ NOT A DISPENSARY';
     hideBtn.style.cssText = btnStyle('danger');
     hideBtn.addEventListener('click', () => {
-      if (!confirm(`Hide "${place.name}" from future dispensary searches?`)) return;
+      if (!window.confirm(`Hide "${place.name}" from future dispensary searches?`)) return;
       onHide(place);
     });
     btnRow.appendChild(hideBtn);
