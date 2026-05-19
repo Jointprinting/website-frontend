@@ -1886,7 +1886,7 @@ const HUB_GROUPS = [
       { id: 'manual',      label: 'Manual entry',  desc: 'Add Alpha Broder products by style code.', Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',         Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Manage public catalogs and the page toast.', Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Road Trip Recon', desc: 'Pitch routes, dispensary hunting, field ops.', Icon: ExploreOutlinedIcon },
+      { id: 'roadtrip',    label: 'Sales Command Center', desc: 'Route planning, lead scoring, dispensary pipeline.', Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs for clients.',  Icon: DesignServicesIcon },
     ],
   },

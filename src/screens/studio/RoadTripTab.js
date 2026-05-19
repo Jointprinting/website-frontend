@@ -102,18 +102,46 @@ const MAP_STYLES = [
   { id: 'streets',   label: 'STR',  url: 'mapbox://styles/mapbox/streets-v12' },
 ];
 
-// Cities along the East Coast trip route — click one to fly the map there.
+// NJ → Burlington VT sales route — click one to fly the map there.
 // Edit this list freely as routes evolve. Each entry: label + center + zoom.
 const QUICK_JUMPS = [
-  { label: 'HOME · Marlton NJ',   center: [-74.9215, 39.8915], zoom: 12 },
-  { label: 'Philadelphia, PA',     center: [-75.1652, 39.9526], zoom: 11 },
-  { label: 'New York, NY',         center: [-74.0060, 40.7128], zoom: 11 },
-  { label: 'Hartford, CT',         center: [-72.6851, 41.7637], zoom: 11 },
-  { label: 'Providence, RI',       center: [-71.4128, 41.8240], zoom: 11 },
-  { label: 'Boston, MA',           center: [-71.0589, 42.3601], zoom: 11 },
-  { label: 'Portland, ME',         center: [-70.2553, 43.6591], zoom: 11 },
-  { label: 'Burlington, VT',       center: [-73.2121, 44.4759], zoom: 11 },
+  { label: 'HOME · Voorhees/Marlton',        center: [-74.9215, 39.8915], zoom: 12 },
+  { label: 'Princeton / New Brunswick',       center: [-74.6672, 40.4774], zoom: 11 },
+  { label: 'Morristown / Boonton',            center: [-74.4774, 40.7968], zoom: 11 },
+  { label: 'Beacon / Newburgh',               center: [-73.9607, 41.5034], zoom: 11 },
+  { label: 'Poughkeepsie / Fishkill',         center: [-73.9296, 41.7004], zoom: 11 },
+  { label: 'Kingston / Saugerties',           center: [-74.0023, 41.9279], zoom: 11 },
+  { label: 'Catskill / Hudson',               center: [-73.8629, 42.2198], zoom: 11 },
+  { label: 'Albany / Troy',                   center: [-73.7562, 42.6526], zoom: 11 },
+  { label: 'Saratoga Springs',                center: [-73.7846, 43.0831], zoom: 12 },
+  { label: 'Pittsfield / Great Barrington',   center: [-73.2529, 42.4501], zoom: 11 },
+  { label: 'Northampton / Amherst',           center: [-72.6407, 42.3251], zoom: 11 },
+  { label: 'Brattleboro / Bennington',        center: [-72.5578, 42.8509], zoom: 11 },
+  { label: 'Rutland / Killington',            center: [-72.9726, 43.6106], zoom: 11 },
+  { label: 'Middlebury',                      center: [-73.1673, 44.0153], zoom: 12 },
+  { label: 'Waterbury / Stowe / Montpelier',  center: [-72.7093, 44.3591], zoom: 11 },
+  { label: 'Burlington / Winooski',           center: [-73.2121, 44.4759], zoom: 11 },
 ];
+
+const SALES_STATUSES = [
+  { value: 'planned',          label: 'PLANNED',       color: 'rgba(212,244,221,0.5)' },
+  { value: 'visited',          label: 'VISITED',       color: '#fbbf24' },
+  { value: 'buyer_identified', label: 'BUYER ID',      color: '#06b6d4' },
+  { value: 'catalog_sent',     label: 'CATALOG SENT',  color: '#a855f7' },
+  { value: 'mockup_needed',    label: 'MOCKUP NEEDED', color: '#f97316' },
+  { value: 'quote_needed',     label: 'QUOTE NEEDED',  color: '#fbbf24' },
+  { value: 'follow_up',        label: 'FOLLOW-UP',     color: '#84cc16' },
+  { value: 'won',              label: 'WON ✓',         color: '#4ade80' },
+  { value: 'dead',             label: 'DEAD',          color: '#6b7280' },
+];
+const SCORE_OPTIONS = [
+  { value: 'A', label: 'A', color: '#4ade80' },
+  { value: 'B', label: 'B', color: '#fbbf24' },
+  { value: 'C', label: 'C', color: '#6b7280' },
+  { value: '',  label: '?', color: 'rgba(212,244,221,0.18)' },
+];
+// eslint-disable-next-line no-unused-vars
+const ITEM_TAGS = ['T-shirts','Hoodies','Staff uniforms','Hats','Tote bags','Lighters','Rolling trays','Grinders','Lanyards','Stickers','Display/signage'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Marker DOM builder
@@ -223,7 +251,7 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
-  const dayUpper = (currentDayLabel || 'Day 1').toUpperCase();
+  const dayUpper = formatDayLabel(currentDayLabel || 'Day 1').toUpperCase();
   const saveLabel    = `＋ ADD TO ${dayUpper}`;
   const savedLabel   = `✓ IN ITINERARY`;
   const savingLabel  = 'ADDING…';
@@ -281,6 +309,30 @@ function btnStyle(kind) {
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s) { return escapeHtml(s); }
 function truncate(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+function formatDayLabel(label) {
+  if (!label || label === 'Unassigned') return label;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+    const d = new Date(label + 'T12:00:00');
+    if (!isNaN(d.getTime()))
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  return label;
+}
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function nextAvailDateISO(existingDays) {
+  const dates = existingDays.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (!dates.length) return todayISO();
+  const last = new Date(dates[dates.length - 1] + 'T12:00:00');
+  last.setDate(last.getDate() + 1);
+  return last.toISOString().slice(0, 10);
+}
+function statusMeta(value) {
+  return SALES_STATUSES.find(s => s.value === value) || SALES_STATUSES[0];
+}
+function scoreMeta(value) {
+  return SCORE_OPTIONS.find(s => s.value === value) || SCORE_OPTIONS[3];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -475,6 +527,14 @@ export default function RoadTripTab({ token }) {
   // it shadows the map's own state, not React's.
   const routeLayersRef = React.useRef({}); // dayLabel -> { sourceId, layerId }
 
+  // Location search state
+  const [locationSearch, setLocationSearch] = React.useState('');
+  const [locationResults, setLocationResults] = React.useState([]);
+  const [locationSearching, setLocationSearching] = React.useState(false);
+  const [showAddCustomPin, setShowAddCustomPin] = React.useState(false);
+  const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', customType: 'friend' });
+  const [editingStop, setEditingStop] = React.useState(null); // _id of stop being edited inline
+
   // Distinct route colors per day so multi-day overlays don't blur together.
   const DAY_ROUTE_COLORS = ['#4ade80', '#06b6d4', '#fbbf24', '#ef4444', '#a855f7', '#f472b6', '#84cc16', '#f97316'];
   const colorForDay = React.useCallback((label) => {
@@ -507,10 +567,15 @@ export default function RoadTripTab({ token }) {
       list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
                        || (new Date(a.createdAt) - new Date(b.createdAt)));
     }
-    // Sort days: Day 1, Day 2, ... then Unassigned last
+    // Sort days: ISO dates first (sorted), then Day N labels, then Unassigned last
     const dayList = Array.from(byDay.entries()).sort(([a], [b]) => {
       if (a === 'Unassigned') return 1;
       if (b === 'Unassigned') return -1;
+      const aIsDate = /^\d{4}-\d{2}-\d{2}$/.test(a);
+      const bIsDate = /^\d{4}-\d{2}-\d{2}$/.test(b);
+      if (aIsDate && bIsDate) return a.localeCompare(b);
+      if (aIsDate && !bIsDate) return -1;
+      if (!aIsDate && bIsDate) return 1;
       const na = parseInt(a.replace(/[^0-9]/g, ''), 10);
       const nb = parseInt(b.replace(/[^0-9]/g, ''), 10);
       if (isFinite(na) && isFinite(nb)) return na - nb;
@@ -525,6 +590,11 @@ export default function RoadTripTab({ token }) {
     set.add('Day 1'); // always at least one option
     if (currentDayLabel) set.add(currentDayLabel);
     return Array.from(set).sort((a, b) => {
+      const aIsDate = /^\d{4}-\d{2}-\d{2}$/.test(a);
+      const bIsDate = /^\d{4}-\d{2}-\d{2}$/.test(b);
+      if (aIsDate && bIsDate) return a.localeCompare(b);
+      if (aIsDate && !bIsDate) return -1;
+      if (!aIsDate && bIsDate) return 1;
       const na = parseInt(a.replace(/[^0-9]/g, ''), 10);
       const nb = parseInt(b.replace(/[^0-9]/g, ''), 10);
       if (isFinite(na) && isFinite(nb)) return na - nb;
@@ -653,7 +723,7 @@ export default function RoadTripTab({ token }) {
       // Defer one tick so savedItems state has updated
       setTimeout(() => refreshRouteForDay(currentDayLabel), 0);
     }
-    showToast(`Added "${place.name}" to ${currentDayLabel}.`, 'success');
+    showToast(`Added "${place.name}" to ${formatDayLabel(currentDayLabel)}.`, 'success');
   };
 
   const deleteSavedItem = async (item) => {
@@ -810,13 +880,10 @@ export default function RoadTripTab({ token }) {
    * pin clicks add stops to it.
    */
   const addNewDay = () => {
-    const numbers = knownDays
-      .map((d) => parseInt(d.replace(/[^0-9]/g, ''), 10))
-      .filter(isFinite);
-    const next = numbers.length ? Math.max(...numbers) + 1 : 1;
-    const label = `Day ${next}`;
-    setCurrentDayLabel(label);
-    showToast(`Created ${label}. New pins will save here.`, 'success');
+    const allDays = knownDays;
+    const nextDate = nextAvailDateISO(allDays);
+    setCurrentDayLabel(nextDate);
+    showToast(`Added ${formatDayLabel(nextDate)}. New pins will save here.`, 'success');
   };
 
   const moveStop = async (item, direction) => {
@@ -861,9 +928,61 @@ export default function RoadTripTab({ token }) {
       const oldDay = item.dayLabel || 'Unassigned';
       if (routesShown[oldDay])       setTimeout(() => refreshRouteForDay(oldDay), 0);
       if (routesShown[newDayLabel])  setTimeout(() => refreshRouteForDay(newDayLabel), 0);
-      showToast(`Moved "${item.name}" to ${newDayLabel}.`, 'success');
+      showToast(`Moved "${item.name}" to ${formatDayLabel(newDayLabel)}.`, 'success');
     } catch (err) {
       showToast('Move failed.', 'error');
+    }
+  };
+
+  const updateStopField = async (item, updates) => {
+    try {
+      const r = await axios.put(
+        `${config.backendUrl}/api/roadtrip/leads/${item._id}`,
+        updates,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSavedItems((prev) => prev.map((s) => s._id === item._id ? r.data : s));
+    } catch {
+      showToast('Update failed.', 'error');
+    }
+  };
+
+  const addCustomPin = async () => {
+    const { name, address, customType } = customPinForm;
+    if (!name.trim()) { showToast('Name required.', 'error'); return; }
+    try {
+      let lat = mapRef.current?.getCenter().lat ?? 40.5;
+      let lng = mapRef.current?.getCenter().lng ?? -74.5;
+      // Geocode address if provided
+      if (address.trim()) {
+        const encoded = encodeURIComponent(address.trim());
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`
+          + `?access_token=${config.mapboxToken}&limit=1&country=US`;
+        const r = await fetch(url);
+        const data = await r.json();
+        if (data.features && data.features.length > 0) {
+          [lng, lat] = data.features[0].center;
+        }
+      }
+      const existingInDay = savedItems.filter((s) => (s.dayLabel || 'Unassigned') === currentDayLabel);
+      const nextOrder = existingInDay.length === 0 ? 0 : Math.max(...existingInDay.map((s) => s.sortOrder ?? 0)) + 1;
+      const body = {
+        source: 'manual', name: name.trim(), address: address.trim(),
+        lat, lng, type: 'other', kind: 'stop',
+        status: 'planned', dayLabel: currentDayLabel, sortOrder: nextOrder,
+        customType,
+      };
+      const res = await axios.post(
+        `${config.backendUrl}/api/roadtrip/leads`, body,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSavedItems((prev) => [res.data, ...prev]);
+      setShowAddCustomPin(false);
+      setCustomPinForm({ name: '', address: '', customType: 'friend' });
+      showToast(`Added "${name.trim()}" to ${formatDayLabel(currentDayLabel)}.`, 'success');
+      if (mapRef.current) mapRef.current.flyTo({ center: [lng, lat], zoom: 13, essential: true, duration: 1200 });
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Add failed.', 'error');
     }
   };
 
@@ -884,12 +1003,35 @@ export default function RoadTripTab({ token }) {
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: 13, essential: true, duration: 1400,
         });
+        showToast('Location found.', 'success');
       },
       (err) => {
-        showToast(`Location: ${err.message || 'denied or unavailable'}.`, 'error');
+        const hint = err.code === 1
+          ? 'Location permission denied — check browser settings.'
+          : err.code === 3
+          ? 'Location timed out — try again or use a quick jump.'
+          : `Location unavailable: ${err.message}`;
+        showToast(hint, 'error');
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { timeout: 12000, maximumAge: 120000 }
     );
+  };
+
+  const searchLocation = async (query) => {
+    if (!query.trim()) { setLocationResults([]); return; }
+    setLocationSearching(true);
+    try {
+      const encoded = encodeURIComponent(query.trim());
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`
+        + `?access_token=${config.mapboxToken}&limit=5&country=US`;
+      const r = await fetch(url);
+      const data = await r.json();
+      setLocationResults(data.features || []);
+    } catch {
+      setLocationResults([]);
+    } finally {
+      setLocationSearching(false);
+    }
   };
 
   // ── Layer toggle ─────────────────────────────────────────────────────────
@@ -991,7 +1133,7 @@ export default function RoadTripTab({ token }) {
             fontFamily: MONO, fontSize: 11.5, color: TERM.green, fontWeight: 700,
             letterSpacing: 1.5,
           }}>
-            JP.RECON // ROAD_TRIP_v0
+            JP.SALES // COMMAND_CENTER
           </Typography>
         </Stack>
         <Chip
@@ -1049,7 +1191,58 @@ export default function RoadTripTab({ token }) {
           scrollbarColor: 'rgba(74,222,128,0.18) transparent',
         }}>
           <Box sx={{ p: 2 }}>
-            <PanelSection title="QUICK JUMPS">
+            <PanelSection title="NAVIGATE">
+              {/* Location search */}
+              <Box sx={{ mb: 1.5 }}>
+                <Box sx={{ position: 'relative' }}>
+                  <input
+                    value={locationSearch}
+                    onChange={(e) => {
+                      setLocationSearch(e.target.value);
+                      if (e.target.value.length > 2) searchLocation(e.target.value);
+                      else setLocationResults([]);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && locationSearch.length > 1) searchLocation(locationSearch); }}
+                    placeholder="Search location…"
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${TERM.borderDim}`,
+                      borderRadius: 3, padding: '6px 8px',
+                      fontFamily: MONO, fontSize: 11, color: TERM.text,
+                      outline: 'none',
+                    }}
+                  />
+                  {locationSearching && (
+                    <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      fontSize: 10, color: TERM.amber }}>…</Box>
+                  )}
+                </Box>
+                {locationResults.length > 0 && (
+                  <Box sx={{ mt: 0.5, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, overflow: 'hidden' }}>
+                    {locationResults.map((f) => (
+                      <Box key={f.id}
+                        role="button" tabIndex={0}
+                        onClick={() => {
+                          const [lng, lat] = f.center;
+                          mapRef.current?.flyTo({ center: [lng, lat], zoom: 12, essential: true, duration: 1200 });
+                          setLocationSearch('');
+                          setLocationResults([]);
+                        }}
+                        sx={{
+                          fontFamily: MONO, fontSize: 10, color: TERM.text, px: 1.25, py: 0.75,
+                          cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
+                          '&:last-child': { borderBottom: 'none' },
+                          '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green },
+                        }}>
+                        {f.place_name}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+
+              {/* My location button */}
               <Box
                 role="button" tabIndex={0}
                 onClick={flyToMyLocation}
@@ -1071,38 +1264,21 @@ export default function RoadTripTab({ token }) {
                 <Box component="span" sx={{ fontSize: 12 }}>📍</Box>
                 MY LOCATION
               </Box>
+
+              {/* Quick jumps */}
               {QUICK_JUMPS.map((q) => (
                 <Box key={q.label}
                   role="button" tabIndex={0}
-                  onClick={() => {
-                    if (mapRef.current) {
-                      mapRef.current.flyTo({
-                        center: q.center, zoom: q.zoom,
-                        essential: true, duration: 1600,
-                      });
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && mapRef.current) {
-                      mapRef.current.flyTo({
-                        center: q.center, zoom: q.zoom,
-                        essential: true, duration: 1600,
-                      });
-                    }
-                  }}
+                  onClick={() => mapRef.current?.flyTo({ center: q.center, zoom: q.zoom, essential: true, duration: 1600 })}
+                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && mapRef.current) mapRef.current.flyTo({ center: q.center, zoom: q.zoom, essential: true, duration: 1600 }); }}
                   sx={{
-                    fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
-                    color: TERM.text, py: 0.85, px: 1, mb: 0.5,
+                    fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
+                    color: TERM.text, py: 0.75, px: 1, mb: 0.25,
                     cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
                     border: `1px solid transparent`,
                     transition: 'all 0.15s ease',
                     display: 'flex', alignItems: 'center', gap: 1,
-                    '&:hover': {
-                      color: TERM.green,
-                      bgcolor: 'rgba(74,222,128,0.08)',
-                      borderColor: TERM.borderDim,
-                      transform: 'translateX(2px)',
-                    },
+                    '&:hover': { color: TERM.green, bgcolor: 'rgba(74,222,128,0.08)', borderColor: TERM.borderDim, transform: 'translateX(2px)' },
                   }}>
                   <Box component="span" sx={{ color: TERM.green, fontSize: 10 }}>→</Box>
                   {q.label}
@@ -1125,14 +1301,14 @@ export default function RoadTripTab({ token }) {
                 color={stopCount > 0 ? TERM.green : TERM.text} />
             </PanelSection>
 
-            <PanelSection title={`ITINERARY · ${stopCount}`}>
+            <PanelSection title={`SALES · ${stopCount}`}>
               {/* Day picker — which day new pin saves go to */}
               <Box sx={{ mb: 1.5 }}>
                 <Typography sx={{
                   fontFamily: MONO, fontSize: 9.5, color: TERM.muted,
                   letterSpacing: 1, mb: 0.75,
                 }}>
-                  ADD NEW PINS TO:
+                  ADD NEW PINS TO: <Box component="span" sx={{ color: TERM.green }}>{formatDayLabel(currentDayLabel).toUpperCase()}</Box>
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {knownDays.map((d) => {
@@ -1152,7 +1328,7 @@ export default function RoadTripTab({ token }) {
                             borderColor: TERM.green,
                           },
                         }}>
-                        {d.replace(/^Day /, 'D')}
+                        {/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDayLabel(d) : d.replace(/^Day /, 'D')}
                       </Box>
                     );
                   })}
@@ -1168,6 +1344,18 @@ export default function RoadTripTab({ token }) {
                     + NEW
                   </Box>
                 </Box>
+                <Box
+                  role="button" tabIndex={0}
+                  onClick={() => setShowAddCustomPin(true)}
+                  sx={{
+                    fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                    px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25, mt: 0.75,
+                    color: '#06b6d4', border: `1px dashed #06b6d4`,
+                    width: '100%', textAlign: 'center',
+                    '&:hover': { bgcolor: 'rgba(6,182,212,0.08)' },
+                  }}>
+                  + ADD CUSTOM STOP
+                </Box>
               </Box>
 
               {/* Day groups */}
@@ -1176,7 +1364,7 @@ export default function RoadTripTab({ token }) {
                   fontFamily: MONO, fontSize: 10.5, color: TERM.muted,
                   lineHeight: 1.55, py: 1, fontStyle: 'italic',
                 }}>
-                  Empty. Click any pin on the map → ADD TO {currentDayLabel.toUpperCase()}.
+                  Empty. Click any pin on the map → ADD TO {formatDayLabel(currentDayLabel).toUpperCase()}.
                 </Typography>
               ) : (
                 itinerary.map(([day, stops]) => {
@@ -1195,7 +1383,7 @@ export default function RoadTripTab({ token }) {
                           fontFamily: MONO, fontSize: 11, fontWeight: 800,
                           color: TERM.text, letterSpacing: 0.5, flexGrow: 1,
                         }}>
-                          {day.toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 600 }}>· {stops.length}</Box>
+                          {formatDayLabel(day).toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 600 }}>· {stops.length}</Box>
                         </Typography>
                         {stops.length >= 2 && (
                           <Box role="button" tabIndex={0}
@@ -1225,29 +1413,40 @@ export default function RoadTripTab({ token }) {
                           <Box key={item._id}
                             sx={{
                               position: 'relative',
-                              display: 'flex', alignItems: 'center', gap: 0.75,
+                              display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 0.75,
                               py: 0.6, px: 0.75, mb: 0.25,
                               borderRadius: 0.5,
                               transition: 'all 0.15s ease',
                               cursor: 'pointer',
+                              bgcolor: editingStop === item._id ? 'rgba(74,222,128,0.04)' : 'transparent',
                               '&:hover': {
                                 bgcolor: 'rgba(74,222,128,0.04)',
                                 transform: 'translateX(2px)',
                               },
                               '&:hover .jp-stop-actions': { opacity: 1 },
                             }}
-                            onClick={() => flyToSaved(item)}>
+                            onClick={() => {
+                              flyToSaved(item);
+                              setEditingStop(prev => prev === item._id ? null : item._id);
+                            }}>
+                            <Box sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, color: TERM.muted, minWidth: 16, textAlign: 'right' }}>{i + 1}.</Box>
+                            {/* Score badge for dispensary leads */}
+                            {item.kind === 'lead' && (
+                              <Box sx={{
+                                fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
+                                width: 14, height: 14, borderRadius: '2px', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                bgcolor: scoreMeta(item.score).color + '33',
+                                color: scoreMeta(item.score).color,
+                                border: `1px solid ${scoreMeta(item.score).color}66`,
+                              }}>{scoreMeta(item.score).label}</Box>
+                            )}
                             <Box sx={{
-                              fontFamily: MONO, fontSize: 9.5, fontWeight: 800,
-                              color: TERM.muted, minWidth: 16, textAlign: 'right',
-                            }}>{i + 1}.</Box>
-                            <Box sx={{
-                              width: 6, height: 6, borderRadius: '50%',
-                              bgcolor: layerForItem.color, flexShrink: 0,
+                              width: 6, height: 6, borderRadius: '50%', flexShrink: 0, mt: 0.4,
+                              bgcolor: item.status && item.status !== 'planned' ? statusMeta(item.status).color : layerForItem.color,
                             }} />
                             <Typography sx={{
-                              flexGrow: 1, minWidth: 0,
-                              fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
+                              flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
                               color: TERM.text, letterSpacing: 0.2,
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                             }}>{item.name}</Typography>
@@ -1274,6 +1473,82 @@ export default function RoadTripTab({ token }) {
                                 onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
                                 sx={actionBtnSx(TERM.red, TERM.red)}>×</Box>
                             </Box>
+                            {editingStop === item._id && (
+                              <Box sx={{ width: '100%', mt: 0.5, ml: 2, pl: 1, borderLeft: `2px solid ${TERM.borderDim}` }}
+                                onClick={(e) => e.stopPropagation()}>
+                                {/* Status selector */}
+                                <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>STATUS</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1 }}>
+                                  {SALES_STATUSES.map((s) => (
+                                    <Box key={s.value}
+                                      role="button"
+                                      onClick={() => updateStopField(item, { status: s.value })}
+                                      sx={{
+                                        fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
+                                        px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                                        color: item.status === s.value ? '#000' : s.color,
+                                        bgcolor: item.status === s.value ? s.color : 'transparent',
+                                        border: `1px solid ${s.color}`,
+                                        '&:hover': { bgcolor: s.color + '22' },
+                                      }}>{s.label}</Box>
+                                  ))}
+                                </Box>
+                                {/* Score selector — dispensaries only */}
+                                {item.kind === 'lead' && (
+                                  <>
+                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SCORE</Typography>
+                                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1 }}>
+                                      {SCORE_OPTIONS.map((sc) => (
+                                        <Box key={sc.value}
+                                          role="button"
+                                          onClick={() => updateStopField(item, { score: sc.value })}
+                                          sx={{
+                                            fontFamily: MONO, fontSize: 9, fontWeight: 900, letterSpacing: 0.5,
+                                            px: 1, py: 0.4, borderRadius: 0.25, cursor: 'pointer',
+                                            color: item.score === sc.value ? '#000' : sc.color,
+                                            bgcolor: item.score === sc.value ? sc.color : 'transparent',
+                                            border: `1px solid ${sc.color}`,
+                                            '&:hover': { bgcolor: sc.color + '33' },
+                                          }}>{sc.label}</Box>
+                                      ))}
+                                    </Box>
+                                  </>
+                                )}
+                                {/* Buyer name quick capture */}
+                                <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                                  <input
+                                    placeholder="Buyer name…"
+                                    defaultValue={item.contactName || ''}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (item.contactName || ''))
+                                        updateStopField(item, { contactName: e.target.value });
+                                    }}
+                                    style={{
+                                      flex: 1, background: 'rgba(255,255,255,0.04)',
+                                      border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
+                                      padding: '3px 6px', fontFamily: MONO, fontSize: 9.5,
+                                      color: TERM.text, outline: 'none',
+                                    }}
+                                  />
+                                </Box>
+                                <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                                  <input
+                                    placeholder="Notes…"
+                                    defaultValue={item.notes || ''}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (item.notes || ''))
+                                        updateStopField(item, { notes: e.target.value });
+                                    }}
+                                    style={{
+                                      flex: 1, background: 'rgba(255,255,255,0.04)',
+                                      border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
+                                      padding: '3px 6px', fontFamily: MONO, fontSize: 9.5,
+                                      color: TERM.text, outline: 'none',
+                                    }}
+                                  />
+                                </Box>
+                              </Box>
+                            )}
                           </Box>
                         );
                       })}
@@ -1293,11 +1568,11 @@ export default function RoadTripTab({ token }) {
             <Box sx={{ mt: 2, p: 1.5, border: `1px dashed ${TERM.borderDim}`, borderRadius: 0.5 }}>
               <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.55 }}>
                 {anyActive
-                  ? <>{'>'} CLICK A PIN → ADD TO {currentDayLabel.toUpperCase()}.<br />
+                  ? <>{'>'} CLICK A PIN → ADD TO {formatDayLabel(currentDayLabel).toUpperCase()}.<br />
                       {'>'} HIT [ROUTE] ON A DAY TO DRAW IT.<br />
                       {'>'} PAN, REFRESH TO RE-SEARCH AREA.</>
                   : <>{'>'} TAP A LAYER TILE TO LOAD PINS.<br />
-                      {'>'} CLICK PIN → ADDS TO {currentDayLabel.toUpperCase()}.<br />
+                      {'>'} CLICK PIN → ADDS TO {formatDayLabel(currentDayLabel).toUpperCase()}.<br />
                       {'>'} BUILD DAYS, DRAW ROUTES, GO.</>}
               </Typography>
             </Box>
@@ -1385,6 +1660,84 @@ export default function RoadTripTab({ token }) {
           )}
         </Box>
       </Box>
+
+      {/* Add Custom Stop modal */}
+      {showAddCustomPin && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setShowAddCustomPin(false)}>
+          <Box sx={{
+            bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+            borderRadius: 1, p: 3, width: 340, fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.green, letterSpacing: 1, mb: 2 }}>
+              + ADD CUSTOM STOP
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>TYPE</Typography>
+            <Box sx={{ display: 'flex', gap: 0.75, mb: 2 }}>
+              {[
+                { value: 'friend',  label: '🏠 Friend' },
+                { value: 'client',  label: '💼 Client' },
+                { value: 'printer', label: '🖨 Printer' },
+                { value: 'other',   label: '📌 Other' },
+              ].map((t) => (
+                <Box key={t.value}
+                  role="button"
+                  onClick={() => setCustomPinForm(f => ({ ...f, customType: t.value }))}
+                  sx={{
+                    fontFamily: MONO, fontSize: 10, fontWeight: 700, px: 1, py: 0.5, borderRadius: 0.5, cursor: 'pointer',
+                    bgcolor: customPinForm.customType === t.value ? TERM.green : 'transparent',
+                    color: customPinForm.customType === t.value ? '#000' : TERM.text,
+                    border: `1px solid ${customPinForm.customType === t.value ? TERM.green : TERM.borderDim}`,
+                  }}>{t.label}</Box>
+              ))}
+            </Box>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>NAME *</Typography>
+            <input
+              value={customPinForm.name}
+              onChange={(e) => setCustomPinForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Jake's house, Green Leaf Dispensary"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
+                padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
+                outline: 'none', marginBottom: 12,
+              }}
+            />
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>ADDRESS (optional — for geocoding)</Typography>
+            <input
+              value={customPinForm.address}
+              onChange={(e) => setCustomPinForm(f => ({ ...f, address: e.target.value }))}
+              placeholder="Street address or city"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
+                padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
+                outline: 'none', marginBottom: 16,
+              }}
+            />
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box role="button" onClick={addCustomPin}
+                sx={{
+                  flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 1,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  bgcolor: TERM.green, color: '#000',
+                  '&:hover': { opacity: 0.9 },
+                }}>ADD TO {formatDayLabel(currentDayLabel).toUpperCase()}</Box>
+              <Box role="button" onClick={() => setShowAddCustomPin(false)}
+                sx={{
+                  px: 2, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  border: `1px solid ${TERM.borderDim}`, color: TERM.muted,
+                  '&:hover': { color: TERM.text },
+                }}>CANCEL</Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
