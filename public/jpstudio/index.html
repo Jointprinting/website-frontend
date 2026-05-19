@@ -304,6 +304,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   background:#07080d;display:flex;flex-direction:column;
   align-items:center;overflow:auto;padding:12px;gap:10px;position:relative;
   animation:cvIn .28s var(--ease) both;
+  min-width:0;overflow:hidden;
 }
 #canvas-area::before{
   content:'';position:absolute;top:20%;left:50%;transform:translateX(-50%);
@@ -323,6 +324,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 #pdf-canvas-wrapper{
   position:relative;box-shadow:0 20px 70px rgba(0,0,0,.88),0 4px 20px rgba(0,0,0,.5);
   border-radius:var(--r);overflow:hidden;border:1px solid var(--bd);
+  max-width:100%;overflow:auto;
 }
 #pdf-canvas{display:block;max-width:100%}
 #refresh-btn{
@@ -650,6 +652,118 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .kbd{font-family:var(--fm);font-size:8px;background:var(--s2);border:1px solid var(--bd2);border-radius:3px;padding:1px 5px;color:var(--tx3)}
 
 @media(max-width:1100px){:root{--pl:242px;--pr:264px}}
+
+/* ─── Mobile / Tablet responsive ─────────────────────────────── */
+@media(max-width:768px){
+  :root{--pl:100%;--pr:100%;--hh:44px}
+
+  /* Stack panels vertically */
+  #studio-view{
+    display:flex;
+    flex-direction:column;
+    height:auto;
+    overflow-y:auto;
+  }
+
+  /* Header — compact on mobile */
+  #header{
+    flex-wrap:wrap;
+    height:auto;
+    padding:8px 12px;
+    gap:6px;
+  }
+  .hdr-right{
+    width:100%;
+    display:flex;
+    justify-content:flex-end;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .nav-tabs{
+    order:-1;
+    width:100%;
+    justify-content:center;
+  }
+
+  /* Left panel — full width, collapsible */
+  .panel.panel-left{
+    width:100%;
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .3s ease;
+    border-right:none;
+    border-bottom:1px solid var(--bd);
+    position:relative;
+  }
+  .panel.panel-left.mobile-open{
+    max-height:600px;
+    overflow-y:auto;
+  }
+
+  /* Canvas area — full width */
+  #canvas-area{
+    flex:none;
+    width:100%;
+    min-height:300px;
+    border-left:none;
+    border-right:none;
+    border-top:1px solid var(--bd);
+    border-bottom:1px solid var(--bd);
+  }
+
+  /* Right panel — full width, collapsible */
+  .panel.panel-right{
+    width:100%;
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .3s ease;
+    border-left:none;
+    border-top:1px solid var(--bd);
+  }
+  .panel.panel-right.mobile-open{
+    max-height:700px;
+    overflow-y:auto;
+  }
+
+  /* PDF canvas */
+  #pdf-canvas{
+    max-width:100%;
+    height:auto!important;
+  }
+
+  /* Mobile panel toggle buttons */
+  .mobile-panel-toggle{
+    display:flex;
+    width:100%;
+    padding:8px 16px;
+    background:var(--s0);
+    border:none;
+    border-bottom:1px solid var(--bd);
+    color:var(--tx2);
+    font-size:12px;
+    font-weight:600;
+    cursor:pointer;
+    align-items:center;
+    justify-content:space-between;
+    font-family:var(--f);
+  }
+  .mobile-panel-toggle:hover{background:var(--s1);color:var(--tx)}
+  .mobile-panel-toggle-arrow{transition:transform .25s ease;display:inline-block}
+  .mobile-panel-toggle.open .mobile-panel-toggle-arrow{transform:rotate(180deg)}
+
+  /* Lookbook — single column on mobile */
+  #lookbook-view{
+    grid-template-columns:1fr;
+  }
+  .lb-right{
+    border-left:none;
+    border-top:1px solid var(--bd);
+    max-height:none;
+  }
+  .lb-grid{
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  }
+}
 </style>
 </head>
 <body>
@@ -679,6 +793,10 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 
   <!-- Left Panel -->
   <div class="panel panel-left">
+    <button class="mobile-panel-toggle" onclick="toggleMobilePanel('left',this)" id="left-panel-toggle">
+      <span>⬆ Garment Setup</span>
+      <span class="mobile-panel-toggle-arrow">▾</span>
+    </button>
     <div class="panel-scroll">
       <div class="psec">
         <div class="psec-hdr"><span class="psec-lbl">Garment Images</span></div>
@@ -769,6 +887,10 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 
   <!-- Right Panel -->
   <div class="panel panel-right">
+    <button class="mobile-panel-toggle" onclick="toggleMobilePanel('right',this)" id="right-panel-toggle">
+      <span>⬆ Print Details &amp; Colors</span>
+      <span class="mobile-panel-toggle-arrow">▾</span>
+    </button>
     <div class="panel-scroll">
       <div class="psec">
         <div class="psec-hdr"><span class="psec-lbl">Mockup Info</span></div>
@@ -1063,6 +1185,15 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 
 <div id="toast-container"></div>
 <script>
+// ─── Mobile panel toggle ───────────────────────────────────────────
+function toggleMobilePanel(side, btn) {
+  const panel = document.querySelector(`.panel-${side}`);
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('mobile-open');
+  btn.classList.toggle('open', isOpen);
+  btn.querySelector('.mobile-panel-toggle-arrow').style.transform = isOpen ? 'rotate(180deg)' : '';
+}
+
 // ─── S&S API via Cloudflare Worker ────────────────────────────────
 let _ssWorkerUrl = localStorage.getItem('jp_ss_worker') || '';
 let _ssLoadedFrontUrl = null;
@@ -1435,8 +1566,51 @@ let adBgColor = '#ffffff';
 let ssLoadedFront = null;
 let ssLoadedBack  = null;
 
-// ── IndexedDB ──────────────────────────────────────────────────────
+// ── IndexedDB + Cloud Sync ────────────────────────────────────────
 let db = null;
+
+function getStudioToken(){ try{ return sessionStorage.getItem('jpStudioToken'); }catch(_){ return null; } }
+function generateUUID(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); }
+
+async function apiSyncSave(store, item) {
+  const token = getStudioToken(); if (!token) return;
+  try {
+    await fetch(`${BACKEND}/api/studio/library/${store}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({ name:item.name||'', data:item.data||'', thumbnail:item.thumbnail||'', client:item.client||'', pageState:item.pageState||null, savedAt:item.savedAt||Date.now(), remoteId:item.remoteId }),
+    });
+  } catch(e) { /* best-effort */ }
+}
+async function apiSyncDelete(remoteId) {
+  const token = getStudioToken(); if (!token || !remoteId) return;
+  try {
+    await fetch(`${BACKEND}/api/studio/library/remote/${encodeURIComponent(remoteId)}`, {
+      method:'DELETE', headers:{'Authorization':'Bearer '+token},
+    });
+  } catch(e) { /* best-effort */ }
+}
+async function syncFromBackend() {
+  const token = getStudioToken(); if (!token || !db) return;
+  let synced = 0;
+  try {
+    for (const store of ['blanks','logos','mockups']) {
+      const res = await fetch(`${BACKEND}/api/studio/library/${store}`, { headers:{'Authorization':'Bearer '+token} });
+      if (!res.ok) continue;
+      const remoteItems = await res.json();
+      if (!remoteItems.length) continue;
+      const localItems = await dbGetAll(store);
+      const localIds = new Set(localItems.map(i=>i.remoteId).filter(Boolean));
+      for (const ri of remoteItems) {
+        if (ri.remoteId && localIds.has(ri.remoteId)) continue;
+        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'' };
+        try { await dbSaveRaw(store, local); synced++; } catch(e) {}
+      }
+    }
+    if (synced > 0) { refreshLibrary(); refreshLbGrid(); refreshClientSuggestions(); toast(`Synced ${synced} item(s) from cloud ☁`, 'success'); }
+  } catch(e) { /* best-effort */ }
+}
+
 function initDB() {
   return new Promise((res,rej) => {
     const req = indexedDB.open('JPMockupStudioV2',4);
@@ -1446,13 +1620,28 @@ function initDB() {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id',autoIncrement:true});
       });
     };
-    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onsuccess = e => { db = e.target.result; res(db); setTimeout(()=>syncFromBackend().catch(()=>{}), 800); };
     req.onerror = ()=>rej(req.error);
   });
 }
-function dbSave(store,data){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); const r=tx.objectStore(store).add(data); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+// dbSave: adds remoteId then saves locally + fires cloud backup
+function dbSave(store,data){
+  if (!data.remoteId) data.remoteId = generateUUID();
+  return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); const r=tx.objectStore(store).add(data); r.onsuccess=()=>{ res(r.result); apiSyncSave(store,data).catch(()=>{}); }; r.onerror=()=>rej(r.error); });
+}
+// dbSaveRaw: internal only — skips cloud sync (used when hydrating from backend)
+function dbSaveRaw(store,data){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); const r=tx.objectStore(store).add(data); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 function dbGetAll(store){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-function dbDelete(store,id){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); const r=tx.objectStore(store).delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function dbDelete(store,id){
+  return new Promise(async(res,rej)=>{
+    try {
+      const item = await dbGet(store,id);
+      const tx=db.transaction(store,'readwrite'); const r=tx.objectStore(store).delete(id);
+      r.onsuccess=()=>{ res(); if(item&&item.remoteId) apiSyncDelete(item.remoteId).catch(()=>{}); };
+      r.onerror=()=>rej(r.error);
+    } catch(e){ rej(e); }
+  });
+}
 function dbGet(store,id){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).get(id); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 
 // ── Toast ──────────────────────────────────────────────────────────
