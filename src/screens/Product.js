@@ -216,6 +216,7 @@ function Product() {
               sx={{
                 flex: { md: 1 },
                 width: '100%',
+                minWidth: 0,
               }}
             >
               <Stack
@@ -358,7 +359,7 @@ function Product() {
                 }
               />
 
-              <Typography color="charcoal" sx={{ fontSize: { xs: 14, sm: 16 } }}>
+              <Typography color="charcoal" sx={{ fontSize: { xs: 14, sm: 16 }, overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 {productDescription}
               </Typography>
             </Stack>
