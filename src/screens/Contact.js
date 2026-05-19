@@ -41,6 +41,7 @@ function Contact() {
   const [companyName, setCompanyName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
+  const [shipToState, setShipToState] = React.useState('');
   const [quantity, setQuantity] = React.useState('');
   const [inHandDate, setInHandDate] = React.useState('');
   const [notes, setNotes] = React.useState(
@@ -73,7 +74,7 @@ function Contact() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !companyName || !email || !phone || !quantity || !inHandDate) {
+    if (!name || !companyName || !email || !phone || !shipToState || !quantity || !inHandDate) {
       alert('Please fill out all required fields.');
       return;
     }
@@ -87,6 +88,7 @@ function Contact() {
       formData.append('companyName', companyName);
       formData.append('email', email);
       formData.append('phone', phone);
+      formData.append('shipToState', shipToState);
       formData.append('quantity', quantity);
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
@@ -100,7 +102,7 @@ function Contact() {
 
       setSuccess(true);
       setName(''); setCompanyName(''); setEmail(''); setPhone('');
-      setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
+      setShipToState(''); setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
       setSelectedProducts([]);
       try { window.sessionStorage.removeItem('jpSelectedProducts'); } catch (err) {}
     } catch (err) {
@@ -195,6 +197,9 @@ function Contact() {
                         size="small"
                         onChange={(e) => setPhone(e.target.value)}
                       />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField value={shipToState} label="Ship-to state / province *" variant="outlined" fullWidth size="small" onChange={(e) => setShipToState(e.target.value)} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <TextField value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small" onChange={(e) => setQuantity(e.target.value)} />
