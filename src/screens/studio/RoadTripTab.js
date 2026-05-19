@@ -520,6 +520,7 @@ export default function RoadTripTab({ token }) {
 
   // Itinerary state — which day is currently selected for new saves, and
   // which days have their route line drawn on the map.
+  const [mobilePanelOpen, setMobilePanelOpen] = React.useState(false);
   const [currentDayLabel, setCurrentDayLabel] = React.useState('Day 1');
   const [routesShown, setRoutesShown] = React.useState({}); // dayLabel -> true
   // Route layer registry. Tracks the source/layer IDs we've added so we
@@ -1156,17 +1157,21 @@ export default function RoadTripTab({ token }) {
       <Box sx={{
         flexShrink: 0, px: { xs: 1.5, sm: 2 }, py: 1.25,
         borderBottom: `1px solid ${TERM.border}`,
-        display: 'flex', gap: 1, flexWrap: { xs: 'wrap', md: 'nowrap' },
+        display: 'flex', gap: 1, flexWrap: 'nowrap',
+        overflowX: 'auto',
+        '&::-webkit-scrollbar': { display: 'none' },
+        scrollbarWidth: 'none',
       }}>
         {LAYERS.map((l) => (
-          <LayerToggleTile
-            key={l.id}
-            layer={l}
-            active={layerState[l.id].active}
-            loading={layerState[l.id].loading}
-            count={layerState[l.id].count}
-            onClick={() => toggleLayer(l)}
-          />
+          <Box key={l.id} sx={{ flexShrink: 0, minWidth: 80 }}>
+            <LayerToggleTile
+              layer={l}
+              active={layerState[l.id].active}
+              loading={layerState[l.id].loading}
+              count={layerState[l.id].count}
+              onClick={() => toggleLayer(l)}
+            />
+          </Box>
         ))}
       </Box>
 
@@ -1174,10 +1179,16 @@ export default function RoadTripTab({ token }) {
       <Box sx={{ flexGrow: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
         {/* Side panel */}
         <Box sx={{
-          width: { xs: 0, md: 300 }, flexShrink: 0,
-          display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
+          width: { xs: mobilePanelOpen ? '100%' : 0, md: 300 }, flexShrink: 0,
+          display: 'flex', flexDirection: 'column',
+          position: { xs: 'fixed', md: 'relative' },
+          zIndex: { xs: 10, md: 'auto' },
+          top: { xs: 0, md: 'auto' },
+          left: { xs: 0, md: 'auto' },
+          bottom: { xs: 0, md: 'auto' },
+          transition: 'width 0.25s ease',
+          overflow: mobilePanelOpen ? 'auto' : 'hidden',
           bgcolor: TERM.panel, borderRight: `1px solid ${TERM.border}`,
-          overflow: 'auto',
           // Custom scrollbar — thin green sliver that matches the terminal vibe
           // instead of the chunky default OS scrollbar
           '&::-webkit-scrollbar': { width: 6 },
@@ -1190,6 +1201,11 @@ export default function RoadTripTab({ token }) {
           scrollbarWidth: 'thin',
           scrollbarColor: 'rgba(74,222,128,0.18) transparent',
         }}>
+          {/* Mobile close backdrop */}
+          <Box
+            sx={{ display: { xs: mobilePanelOpen ? 'block' : 'none', md: 'none' }, position: 'fixed', inset: 0, zIndex: -1, bgcolor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setMobilePanelOpen(false)}
+          />
           <Box sx={{ p: 2 }}>
             <PanelSection title="NAVIGATE">
               {/* Location search */}
@@ -1602,6 +1618,26 @@ export default function RoadTripTab({ token }) {
               },
             }}
           />
+
+          {/* Mobile panel toggle — only shown on small screens */}
+          <Box
+            role="button"
+            onClick={() => setMobilePanelOpen(p => !p)}
+            sx={{
+              display: { xs: 'flex', md: 'none' },
+              position: 'absolute', bottom: 80, right: 16, zIndex: 11,
+              width: 48, height: 48, borderRadius: '50%',
+              bgcolor: mobilePanelOpen ? TERM.green : TERM.panel,
+              color: mobilePanelOpen ? '#000' : TERM.green,
+              border: `2px solid ${TERM.green}`,
+              alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: `0 4px 20px rgba(0,0,0,0.6), 0 0 12px ${TERM.green}40`,
+              fontFamily: MONO, fontSize: 18, fontWeight: 800,
+              transition: 'all 0.2s ease',
+            }}>
+            {mobilePanelOpen ? '×' : '☰'}
+          </Box>
 
           <MapStyleSwitcher current={styleId} onChange={onStyleChange} />
 
