@@ -1886,7 +1886,7 @@ const HUB_GROUPS = [
       { id: 'manual',      label: 'Product Entry',        Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Sales Command Center', Icon: ExploreOutlinedIcon },
+      { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
     ],
   },
@@ -2049,7 +2049,7 @@ function StudioBody({ token, onLogout }) {
             fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
             fontSize: 12, color: BRAND.green, fontWeight: 700,
           }}>
-            Sales Command Center
+            Field Map
           </MuiTypography>
           <Box sx={{ flexGrow: 1 }} />
           <Button

@@ -1100,12 +1100,10 @@ export default function RoadTripTab({ token }) {
           [lng, lat] = data.features[0].center;
         }
       }
-      const existingInDay = savedItems.filter((s) => (s.dayLabel || 'Unassigned') === currentDayLabel);
-      const nextOrder = existingInDay.length === 0 ? 0 : Math.max(...existingInDay.map((s) => s.sortOrder ?? 0)) + 1;
       const body = {
         source: 'manual', name: name.trim(), address: address.trim(),
         lat, lng, type: 'other', kind: 'stop',
-        status: 'planned', dayLabel: currentDayLabel, sortOrder: nextOrder,
+        status: 'planned', dayLabel: '', sortOrder: 0,
         customType, notes: notes.trim(),
       };
       const res = await axios.post(
@@ -1115,7 +1113,7 @@ export default function RoadTripTab({ token }) {
       setSavedItems((prev) => [res.data, ...prev]);
       setShowAddCustomPin(false);
       setCustomPinForm({ name: '', address: '', notes: '', customType: 'friend' });
-      showToast(`Added "${name.trim()}" to ${formatDayLabel(currentDayLabel)}.`, 'success');
+      showToast(`Added "${name.trim()}" to map.`, 'success');
       if (mapRef.current) mapRef.current.flyTo({ center: [lng, lat], zoom: 13, essential: true, duration: 1200 });
     } catch (err) {
       showToast(err?.response?.data?.message || 'Add failed.', 'error');
@@ -1837,17 +1835,6 @@ export default function RoadTripTab({ token }) {
               )}
             </PanelSection>
 
-            <Box sx={{ mt: 1.5, p: 1.25, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, bgcolor: 'rgba(74,222,128,0.02)' }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, lineHeight: 1.65 }}>
-                {anyActive
-                  ? <>{'>'} CLICK A PIN → SAVE AS LEAD<br />
-                      {'>'} TAP STOP → EXPAND TO EDIT<br />
-                      {'>'} PAN MAP, THEN REFRESH</>
-                  : <>{'>'} TAP LAYER TILE TO LOAD PINS<br />
-                      {'>'} CLICK PIN → ADD TO DAY<br />
-                      {'>'} EXPAND STOP → UPDATE STATUS</>}
-              </Typography>
-            </Box>
           </Box>
         </Box>
 
@@ -2338,7 +2325,7 @@ export default function RoadTripTab({ token }) {
             <input
               value={customPinForm.name}
               onChange={(e) => setCustomPinForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Jake's house, Green Leaf Dispensary"
+              placeholder=""
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: 'rgba(255,255,255,0.04)',
@@ -2347,11 +2334,11 @@ export default function RoadTripTab({ token }) {
                 outline: 'none', marginBottom: 12,
               }}
             />
-            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>ADDRESS (optional — for geocoding)</Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>ADDRESS</Typography>
             <input
               value={customPinForm.address}
               onChange={(e) => setCustomPinForm(f => ({ ...f, address: e.target.value }))}
-              placeholder="Street address or city"
+              placeholder=""
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: 'rgba(255,255,255,0.04)',
@@ -2364,7 +2351,7 @@ export default function RoadTripTab({ token }) {
             <textarea
               value={customPinForm.notes}
               onChange={(e) => setCustomPinForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Hours, who to ask for, what to bring…"
+              placeholder=""
               rows={3}
               style={{
                 width: '100%', boxSizing: 'border-box',
@@ -2381,7 +2368,7 @@ export default function RoadTripTab({ token }) {
                   py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
                   bgcolor: TERM.green, color: '#000',
                   '&:hover': { opacity: 0.9 },
-                }}>ADD TO {formatDayLabel(currentDayLabel).toUpperCase()}</Box>
+                }}>ADD TO MAP</Box>
               <Box role="button" onClick={() => setShowAddCustomPin(false)}
                 sx={{
                   px: 2, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
