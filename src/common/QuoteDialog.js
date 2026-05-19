@@ -23,6 +23,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [shipToState, setShipToState] = useState('');
   const [quantity, setQuantity] = useState('');
   const [inHandDate, setInHandDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -48,7 +49,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
 
   const reset = () => {
     setName(''); setCompanyName(''); setEmail(''); setPhone('');
-    setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
+    setShipToState(''); setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
     setSuccess(false); setSubmitting(false);
   };
 
@@ -60,7 +61,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !companyName || !email || !phone || !quantity || !inHandDate) {
+    if (!name || !companyName || !email || !phone || !shipToState || !quantity || !inHandDate) {
       alert('Please fill out all required fields.');
       return;
     }
@@ -75,6 +76,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
       formData.append('companyName', companyName);
       formData.append('email', email);
       formData.append('phone', phone);
+      formData.append('shipToState', shipToState);
       formData.append('quantity', quantity);
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
@@ -170,6 +172,12 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
               <TextField
                 value={phone} label="Phone *" placeholder="(856) 555-1234" variant="outlined" fullWidth size="small"
                 onChange={(e) => setPhone(e.target.value)} disabled={submitting || success}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                value={shipToState} label="Ship-to state / province *" variant="outlined" fullWidth size="small"
+                onChange={(e) => setShipToState(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>

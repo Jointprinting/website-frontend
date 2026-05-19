@@ -41,6 +41,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Badge,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -1901,7 +1902,7 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay }) {
+function HubCard({ tool, onClick, delay, badgeCount }) {
   const { label, Icon } = tool;
   return (
     <Grow in timeout={400 + delay}>
@@ -1931,18 +1932,24 @@ function HubCard({ tool, onClick, delay }) {
         }}
       >
         <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box
-            className="hub-icon"
-            sx={{
-              flexShrink: 0,
-              width: 38, height: 38, borderRadius: 1.5,
-              bgcolor: BRAND.greenDk, color: BRAND.green,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.18s ease',
-            }}
+          <Badge
+            badgeContent={badgeCount || 0}
+            color="error"
+            invisible={!badgeCount}
+            sx={{ flexShrink: 0 }}
           >
-            <Icon sx={{ fontSize: 20 }} />
-          </Box>
+            <Box
+              className="hub-icon"
+              sx={{
+                width: 38, height: 38, borderRadius: 1.5,
+                bgcolor: BRAND.greenDk, color: BRAND.green,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.18s ease',
+              }}
+            >
+              <Icon sx={{ fontSize: 20 }} />
+            </Box>
+          </Badge>
           <MuiTypography fontWeight={700} sx={{
             color: BRAND.white, fontSize: 14.5, flexGrow: 1,
           }}>
@@ -1963,7 +1970,7 @@ function HubCard({ tool, onClick, delay }) {
   );
 }
 
-function Hub({ onPick }) {
+function Hub({ onPick, unseenCount }) {
   let cardIdx = 0;
   return (
     <Stack spacing={3}>
@@ -1990,6 +1997,7 @@ function Hub({ onPick }) {
                   tool={t}
                   delay={cardIdx * 60}
                   onClick={() => onPick(t.id)}
+                  badgeCount={t.id === 'submissions' ? unseenCount : 0}
                 />
               );
               cardIdx += 1;
@@ -2010,10 +2018,37 @@ function StudioBody({ token, onLogout }) {
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
+  const [unseenCount, setUnseenCount] = React.useState(0);
+
+  // Poll for unseen submissions every 30 seconds while token is valid
+  React.useEffect(() => {
+    if (!token) return;
+    const fetchUnseen = () => {
+      axios
+        .get(`${config.backendUrl}/api/submissions/unseen-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => setUnseenCount(res.data.count || 0))
+        .catch(() => {});
+    };
+    fetchUnseen();
+    const interval = setInterval(fetchUnseen, 30_000);
+    return () => clearInterval(interval);
+  }, [token]);
+
   const handlePick = (id) => {
     if (id === 'mockup') {
       window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
       return;
+    }
+    if (id === 'submissions') {
+      // Mark all seen when entering submissions tab
+      axios
+        .post(`${config.backendUrl}/api/submissions/mark-all-seen`, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then(() => setUnseenCount(0))
+        .catch(() => {});
     }
     setView(id);
   };
@@ -2100,7 +2135,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} />
+          <Hub onPick={handlePick} unseenCount={unseenCount} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
