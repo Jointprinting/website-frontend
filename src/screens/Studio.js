@@ -193,20 +193,22 @@ function Login({ onAuthed }) {
           bgcolor: BRAND.panel, border: `1px solid ${BRAND.border}`,
           position: 'relative', zIndex: 1,
         }}>
-          <Stack spacing={2} alignItems="center" mb={3}>
+          <Stack spacing={1.5} alignItems="center" mb={3}>
             <Box sx={{
               bgcolor: BRAND.greenDk, color: BRAND.green,
-              width: 56, height: 56, borderRadius: 2.5,
+              width: 48, height: 48, borderRadius: 2,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 0 6px rgba(74,222,128,0.06)',
+              boxShadow: '0 0 0 5px rgba(74,222,128,0.07)',
             }}>
-              <LockIcon sx={{ fontSize: 28 }} />
+              <LockIcon sx={{ fontSize: 22 }} />
             </Box>
-            <MuiTypography variant="h5" fontWeight={800} sx={{ color: BRAND.white }}>
-              Joint Printing · Studio
-            </MuiTypography>
-            <MuiTypography variant="body2" sx={{ color: BRAND.muted, textAlign: 'center' }}>
-              Enter your studio password to continue.
+            <MuiTypography
+              sx={{
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+                fontSize: 16, fontWeight: 800, color: BRAND.white, letterSpacing: 1,
+              }}
+            >
+              JP <Box component="span" sx={{ color: BRAND.green }}>STUDIO</Box>
             </MuiTypography>
           </Stack>
           <form onSubmit={submit}>
@@ -1881,20 +1883,18 @@ function ColdCallTab({ token }) {
 const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
-    blurb: 'Apparel orders, leads, and mockup tools.',
     tools: [
-      { id: 'manual',      label: 'Manual entry',  desc: 'Add Alpha Broder products by style code.', Icon: Inventory2OutlinedIcon },
-      { id: 'submissions', label: 'Submissions',   desc: 'Mini-CRM for contact form leads.',         Icon: InboxIcon },
-      { id: 'catalogs',    label: 'Catalogs',      desc: 'Manage public catalogs and the page toast.', Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Sales Command Center', desc: 'Route planning, lead scoring, dispensary pipeline.', Icon: ExploreOutlinedIcon },
-      { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs for clients.',  Icon: DesignServicesIcon },
+      { id: 'manual',      label: 'Product Entry',        Icon: Inventory2OutlinedIcon },
+      { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
+      { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
+      { id: 'roadtrip',    label: 'Sales Command Center', Icon: ExploreOutlinedIcon },
+      { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
     ],
   },
   {
     brand: 'JP Webworks',
-    blurb: 'Web services side — cold outreach and follow-ups.',
     tools: [
-      { id: 'coldcall', label: 'Cold Calls', desc: 'JPW cold call tree with autofill + saved versions.', Icon: PhoneInTalkIcon },
+      { id: 'coldcall', label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
     ],
   },
 ];
@@ -1903,7 +1903,7 @@ const HUB_GROUPS = [
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
 function HubCard({ tool, onClick, delay }) {
-  const { label, desc, Icon } = tool;
+  const { label, Icon } = tool;
   return (
     <Grow in timeout={400 + delay}>
       <Paper
@@ -1913,19 +1913,16 @@ function HubCard({ tool, onClick, delay }) {
           cursor: 'pointer',
           bgcolor: BRAND.panel,
           border: `1px solid ${BRAND.border}`,
-          borderRadius: 3,
-          p: { xs: 2.5, sm: 3 },
+          borderRadius: 2,
+          p: { xs: 1.75, sm: 2 },
           transition: 'all 0.18s ease',
-          position: 'relative',
-          overflow: 'hidden',
           '&:hover': {
             borderColor: BRAND.green,
-            transform: 'translateY(-3px)',
-            boxShadow: '0 12px 32px -16px rgba(74,222,128,0.35)',
+            transform: 'translateY(-2px)',
+            boxShadow: '0 8px 24px -12px rgba(74,222,128,0.35)',
             '& .hub-icon': {
               bgcolor: BRAND.green,
               color: BRAND.greenDk,
-              transform: 'scale(1.05)',
             },
             '& .hub-arrow': {
               opacity: 1,
@@ -1934,37 +1931,31 @@ function HubCard({ tool, onClick, delay }) {
           },
         }}
       >
-        <Stack direction="row" alignItems="flex-start" spacing={2}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
           <Box
             className="hub-icon"
             sx={{
               flexShrink: 0,
-              width: 48, height: 48, borderRadius: 2,
+              width: 38, height: 38, borderRadius: 1.5,
               bgcolor: BRAND.greenDk, color: BRAND.green,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.18s ease',
             }}
           >
-            <Icon sx={{ fontSize: 24 }} />
+            <Icon sx={{ fontSize: 20 }} />
           </Box>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <MuiTypography variant="h6" fontWeight={800} sx={{
-              color: BRAND.white, mb: 0.5, fontSize: 17,
-            }}>
-              {label}
-            </MuiTypography>
-            <MuiTypography variant="body2" sx={{ color: BRAND.muted, lineHeight: 1.5 }}>
-              {desc}
-            </MuiTypography>
-          </Box>
+          <MuiTypography fontWeight={700} sx={{
+            color: BRAND.white, fontSize: 14.5, flexGrow: 1,
+          }}>
+            {label}
+          </MuiTypography>
           <ChevronRightIcon
             className="hub-arrow"
             sx={{
-              color: BRAND.green,
+              color: BRAND.green, fontSize: 18,
               opacity: 0,
-              transform: 'translateX(-6px)',
+              transform: 'translateX(-4px)',
               transition: 'all 0.18s ease',
-              alignSelf: 'center',
             }}
           />
         </Stack>
@@ -1974,48 +1965,31 @@ function HubCard({ tool, onClick, delay }) {
 }
 
 function Hub({ onPick }) {
-  // One counter so the Grow animations cascade across both groups instead of
-  // resetting at each section header.
   let cardIdx = 0;
   return (
-    <Stack spacing={4}>
+    <Stack spacing={3}>
       {HUB_GROUPS.map((group) => (
         <Box key={group.brand}>
-          <Stack
-            direction="row"
-            alignItems="baseline"
-            spacing={1.5}
-            sx={{ mb: 1.5, flexWrap: 'wrap' }}
+          <MuiTypography
+            variant="overline"
+            sx={{
+              color: BRAND.green, fontWeight: 800, letterSpacing: 2.5,
+              fontSize: 10, display: 'block', mb: 1,
+            }}
           >
-            <MuiTypography
-              variant="overline"
-              sx={{
-                color: BRAND.green,
-                fontWeight: 800,
-                letterSpacing: 2.5,
-                fontSize: 11,
-              }}
-            >
-              {group.brand}
-            </MuiTypography>
-            <MuiTypography
-              variant="caption"
-              sx={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}
-            >
-              {group.blurb}
-            </MuiTypography>
-          </Stack>
+            {group.brand}
+          </MuiTypography>
           <Box sx={{
             display: 'grid',
-            gap: { xs: 1.5, sm: 2 },
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+            gap: 1,
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
           }}>
             {group.tools.map((t) => {
               const card = (
                 <HubCard
                   key={t.id}
                   tool={t}
-                  delay={cardIdx * 80}
+                  delay={cardIdx * 60}
                   onClick={() => onPick(t.id)}
                 />
               );
@@ -2037,6 +2011,14 @@ function StudioBody({ token, onLogout }) {
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
+  const handlePick = (id) => {
+    if (id === 'mockup') {
+      window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setView(id);
+  };
+
   // Road Trip Recon needs the full viewport — break out of the Studio's
   // maxWidth="md" container and render a slim header instead of the usual
   // Studio chrome. Returning early keeps the rest of the function untouched.
@@ -2052,23 +2034,23 @@ function StudioBody({ token, onLogout }) {
         >
           <Button
             onClick={() => setView('hub')}
+            startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />}
             size="small"
             sx={{
               fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-              fontSize: 11, fontWeight: 800, letterSpacing: 1.5,
-              color: BRAND.green, textTransform: 'none', minWidth: 0,
-              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' },
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+              color: BRAND.muted, textTransform: 'none', minWidth: 0,
+              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.08)' },
             }}
           >
-            ← HUB
+            Studio
           </Button>
-          <Box sx={{ flexGrow: 1 }} />
+          <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.2)' }} />
           <MuiTypography sx={{
             fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-            fontSize: 10.5, color: 'rgba(212,244,221,0.5)', letterSpacing: 1.5,
-            display: { xs: 'none', sm: 'block' },
+            fontSize: 12, color: BRAND.green, fontWeight: 700,
           }}>
-            [ JOINT PRINTING / STUDIO / ROAD_TRIP ]
+            Sales Command Center
           </MuiTypography>
           <Box sx={{ flexGrow: 1 }} />
           <Button
@@ -2090,94 +2072,61 @@ function StudioBody({ token, onLogout }) {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 4, md: 6 } }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 3, md: 5 } }}>
       <Container maxWidth="md">
         <Fade in timeout={350}>
           <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            alignItems={{ sm: 'center' }} justifyContent="space-between"
-            spacing={2} sx={{ mb: 3 }}
+            direction="row"
+            alignItems="center" justifyContent="space-between"
+            sx={{ mb: { xs: 2.5, md: 3.5 } }}
           >
-            <Box>
-              <MuiTypography variant="overline" sx={{
-                color: BRAND.green, fontWeight: 800, letterSpacing: 3, fontSize: 11,
-              }}>
-                ADMIN · STUDIO
-              </MuiTypography>
-              <MuiTypography variant="h3" fontWeight={900} sx={{
-                color: BRAND.white, lineHeight: 1.1, fontSize: { xs: 30, md: 38 },
-              }}>
-                Studio
-              </MuiTypography>
-              <MuiTypography variant="body2" sx={{ color: BRAND.muted, mt: 0.5 }}>
-                {isHub ? 'Pick a tool to get started.' : 'Manage products, leads, and mockups.'}
-              </MuiTypography>
-            </Box>
-            <Button
-              onClick={onLogout} startIcon={<LogoutIcon />} variant="outlined" size="small"
+            <MuiTypography
               sx={{
-                borderRadius: 999, textTransform: 'none', fontWeight: 700,
-                px: 2.5, py: 0.8, alignSelf: { xs: 'flex-start', sm: 'auto' },
-                color: BRAND.muted, borderColor: 'rgba(255,255,255,0.15)',
-                '&:hover': {
-                  color: BRAND.white, borderColor: BRAND.white,
-                  bgcolor: 'rgba(255,255,255,0.04)',
-                },
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+                fontSize: { xs: 15, md: 17 }, fontWeight: 800,
+                color: BRAND.white, letterSpacing: 1,
+              }}
+            >
+              JP <Box component="span" sx={{ color: BRAND.green }}>STUDIO</Box>
+            </MuiTypography>
+            <Button
+              onClick={onLogout} size="small"
+              sx={{
+                textTransform: 'none', fontWeight: 600, fontSize: 12,
+                color: BRAND.muted,
+                '&:hover': { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
               }}
             >Sign out</Button>
           </Stack>
         </Fade>
 
         {isHub ? (
-          <Hub onPick={setView} />
+          <Hub onPick={handlePick} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
               borderRadius: 3, overflow: 'hidden',
               bgcolor: BRAND.panel, border: `1px solid ${BRAND.border}`,
             }}>
-              {/* Tool header bar with back button.
-                  Breadcrumb: Studio › <Brand> › <Tool>. The brand step makes
-                  it obvious that "Cold Calls" is JP Webworks, not part of the
-                  apparel workflow. */}
               <Stack
                 direction="row" alignItems="center" spacing={1.5}
                 sx={{
-                  px: { xs: 2.5, sm: 3 }, py: 1.75,
+                  px: { xs: 2, sm: 2.5 }, py: 1.5,
                   borderBottom: `1px solid ${BRAND.faint}`,
-                  flexWrap: 'wrap',
                 }}
               >
                 <Button
                   onClick={() => setView('hub')}
-                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 12 }} />}
+                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />}
                   size="small"
                   sx={{
                     textTransform: 'none', color: BRAND.muted, fontWeight: 600,
-                    minWidth: 'auto', px: 1.5,
+                    minWidth: 'auto', px: 1, fontSize: 12,
                     '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
                   }}
                 >Studio</Button>
-                <Box sx={{
-                  width: 4, height: 4, borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                }} />
-                {currentTool?.brand && (
-                  <>
-                    <MuiTypography variant="caption" sx={{
-                      color: BRAND.green, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
-                    }}>
-                      {currentTool.brand}
-                    </MuiTypography>
-                    <Box sx={{
-                      width: 4, height: 4, borderRadius: '50%',
-                      bgcolor: 'rgba(255,255,255,0.2)',
-                    }} />
-                  </>
-                )}
-                <MuiTypography variant="body2" sx={{
-                  color: BRAND.white, fontWeight: 700,
-                }}>
+                <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.2)' }} />
+                <MuiTypography sx={{ color: BRAND.green, fontWeight: 700, fontSize: 13 }}>
                   {currentTool?.label}
                 </MuiTypography>
               </Stack>
