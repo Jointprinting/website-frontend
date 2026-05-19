@@ -188,7 +188,7 @@ function buildMarkerEl(layer, place) {
 }
 
 // Popup HTML/DOM
-function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAvailable, currentDayLabel }) {
+function buildPopupContent({ place, layer, onSave, onHide, onError, savedAsLeadId, hideAvailable }) {
   const div = document.createElement('div');
   div.style.cssText = `
     font-family: ${MONO};
@@ -198,7 +198,7 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
     border-radius: 4px;
     padding: 12px 14px;
     min-width: 240px;
-    max-width: 320px;
+    max-width: min(340px, calc(100vw - 24px));
   `;
 
   const chainBadge = place.chainName
@@ -232,10 +232,9 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
-  const dayUpper = formatDayLabel(currentDayLabel || 'Day 1').toUpperCase();
-  const saveLabel    = `＋ ADD TO ${dayUpper}`;
-  const savedLabel   = `✓ IN ITINERARY`;
-  const savingLabel  = 'ADDING…';
+  const saveLabel   = '＋ ADD TO TODAY';
+  const savedLabel  = '✓ IN ITINERARY';
+  const savingLabel = 'ADDING…';
 
   const saveBtn = document.createElement('button');
   const savedNow = !!savedAsLeadId;
@@ -247,19 +246,33 @@ function buildPopupContent({ place, layer, onSave, onHide, savedAsLeadId, hideAv
     saveBtn.textContent = savingLabel;
     onSave(place, layer)
       .then(() => { saveBtn.textContent = savedLabel; saveBtn.style.cssText = btnStyle('success'); })
-      .catch((e) => { saveBtn.disabled = false; saveBtn.textContent = saveLabel; saveBtn.style.cssText = btnStyle('primary');
-        window.alert(e?.response?.data?.message || 'Save failed.');
+      .catch((e) => {
+        saveBtn.disabled = false; saveBtn.textContent = saveLabel; saveBtn.style.cssText = btnStyle('primary');
+        if (onError) onError(e?.response?.data?.message || 'Save failed.');
       });
   });
   btnRow.appendChild(saveBtn);
 
   if (hideAvailable) {
     const hideBtn = document.createElement('button');
+    let hidePending = false;
+    let hidePendingTimer = null;
     hideBtn.textContent = '⊘ NOT A DISPENSARY';
     hideBtn.style.cssText = btnStyle('danger');
     hideBtn.addEventListener('click', () => {
-      if (!window.confirm(`Hide "${place.name}" from future dispensary searches?`)) return;
-      onHide(place);
+      if (!hidePending) {
+        hidePending = true;
+        hideBtn.textContent = '⚠ CONFIRM?';
+        hideBtn.style.cssText = btnStyle('danger') + 'background:rgba(248,113,113,0.18);';
+        hidePendingTimer = setTimeout(() => {
+          hidePending = false;
+          hideBtn.textContent = '⊘ NOT A DISPENSARY';
+          hideBtn.style.cssText = btnStyle('danger');
+        }, 3000);
+      } else {
+        clearTimeout(hidePendingTimer);
+        onHide(place);
+      }
     });
     btnRow.appendChild(hideBtn);
   }
@@ -501,7 +514,9 @@ export default function RoadTripTab({ token }) {
 
   // Itinerary state — which day is currently selected for new saves, and
   // which days have their route line drawn on the map.
-  const [mobilePanelOpen, setMobilePanelOpen] = React.useState(false);
+  const [mobileTab, setMobileTab] = React.useState('map');
+  const [pendingDeleteId, setPendingDeleteId] = React.useState(null);
+  const pendingDeleteTimerRef = React.useRef(null);
   const [currentDayLabel, setCurrentDayLabel] = React.useState(todayISO);
   const [routesShown, setRoutesShown] = React.useState({}); // dayLabel -> true
   // Route layer registry. Tracks the source/layer IDs we've added so we
@@ -710,7 +725,14 @@ export default function RoadTripTab({ token }) {
   };
 
   const deleteSavedItem = async (item) => {
-    if (!window.confirm(`Remove "${item.name}" from your itinerary?`)) return;
+    if (pendingDeleteId !== item._id) {
+      if (pendingDeleteTimerRef.current) clearTimeout(pendingDeleteTimerRef.current);
+      setPendingDeleteId(item._id);
+      pendingDeleteTimerRef.current = setTimeout(() => setPendingDeleteId(null), 2500);
+      return;
+    }
+    setPendingDeleteId(null);
+    if (pendingDeleteTimerRef.current) clearTimeout(pendingDeleteTimerRef.current);
     try {
       await axios.delete(
         `${config.backendUrl}/api/roadtrip/leads/${item._id}`,
@@ -1051,9 +1073,9 @@ export default function RoadTripTab({ token }) {
                  place, layer,
                  onSave: onSaveLead,
                  onHide: onHideDispensary,
+                 onError: (msg) => showToast(msg, 'error'),
                  savedAsLeadId: leadsByExtIdRef.current.get(place.externalId),
                  hideAvailable: layer.id === 'dispensaries',
-                 currentDayLabel,
                }))
                .addTo(mapRef.current);
         });
@@ -1137,57 +1159,39 @@ export default function RoadTripTab({ token }) {
 
       {/* ── Layer toggle tiles ─────────────────────────────────────────── */}
       <Box sx={{
-        flexShrink: 0, px: { xs: 1.5, sm: 2 }, py: 1.25,
+        flexShrink: 0, px: { xs: 1, sm: 2 }, py: { xs: 0.75, sm: 1.25 },
         borderBottom: `1px solid ${TERM.border}`,
-        display: 'flex', gap: 1, flexWrap: 'nowrap',
-        overflowX: 'auto',
-        '&::-webkit-scrollbar': { display: 'none' },
-        scrollbarWidth: 'none',
+        display: 'grid',
+        gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+        gap: { xs: 0.5, sm: 1 },
       }}>
         {LAYERS.map((l) => (
-          <Box key={l.id} sx={{ flexShrink: 0, minWidth: 80 }}>
-            <LayerToggleTile
-              layer={l}
-              active={layerState[l.id].active}
-              loading={layerState[l.id].loading}
-              count={layerState[l.id].count}
-              onClick={() => toggleLayer(l)}
-            />
-          </Box>
+          <LayerToggleTile
+            key={l.id}
+            layer={l}
+            active={layerState[l.id].active}
+            loading={layerState[l.id].loading}
+            count={layerState[l.id].count}
+            onClick={() => toggleLayer(l)}
+          />
         ))}
       </Box>
 
       {/* ── Body: map + side panel ─────────────────────────────────────── */}
-      <Box sx={{ flexGrow: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-        {/* Side panel */}
+      <Box sx={{ flexGrow: 1, display: 'flex', minHeight: 0, position: 'relative', pb: { xs: '56px', md: 0 } }}>
+        {/* Side panel — desktop only */}
         <Box sx={{
-          width: { xs: mobilePanelOpen ? '100%' : 0, md: 300 }, flexShrink: 0,
-          display: 'flex', flexDirection: 'column',
-          position: { xs: 'fixed', md: 'relative' },
-          zIndex: { xs: 10, md: 'auto' },
-          top: { xs: 0, md: 'auto' },
-          left: { xs: 0, md: 'auto' },
-          bottom: { xs: 0, md: 'auto' },
-          transition: 'width 0.25s ease',
-          overflow: mobilePanelOpen ? 'auto' : 'hidden',
+          width: 300, flexShrink: 0,
+          display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
+          overflow: 'auto',
           bgcolor: TERM.panel, borderRight: `1px solid ${TERM.border}`,
-          // Custom scrollbar — thin green sliver that matches the terminal vibe
-          // instead of the chunky default OS scrollbar
           '&::-webkit-scrollbar': { width: 6 },
           '&::-webkit-scrollbar-track': { background: 'transparent' },
-          '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(74,222,128,0.18)',
-            borderRadius: 3,
-          },
+          '&::-webkit-scrollbar-thumb': { background: 'rgba(74,222,128,0.18)', borderRadius: 3 },
           '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(74,222,128,0.4)' },
           scrollbarWidth: 'thin',
           scrollbarColor: 'rgba(74,222,128,0.18) transparent',
         }}>
-          {/* Mobile close backdrop */}
-          <Box
-            sx={{ display: { xs: mobilePanelOpen ? 'block' : 'none', md: 'none' }, position: 'fixed', inset: 0, zIndex: -1, bgcolor: 'rgba(0,0,0,0.5)' }}
-            onClick={() => setMobilePanelOpen(false)}
-          />
           <Box sx={{ p: 2 }}>
             <PanelSection title="NAVIGATE">
               {/* Location search */}
@@ -1497,7 +1501,15 @@ export default function RoadTripTab({ token }) {
                                 sx={actionBtnSx(movingStopId === item._id ? TERM.amber : TERM.muted, TERM.amber)}>→</Box>
                               <Box role="button"
                                 onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
-                                sx={actionBtnSx(TERM.red, TERM.red)}>×</Box>
+                                sx={{
+                                  ...actionBtnSx(TERM.red, TERM.red),
+                                  bgcolor: pendingDeleteId === item._id ? 'rgba(248,113,113,0.18)' : 'transparent',
+                                  borderColor: pendingDeleteId === item._id ? TERM.red : 'transparent',
+                                  px: pendingDeleteId === item._id ? 1 : 0.5,
+                                  fontSize: pendingDeleteId === item._id ? 9 : 11,
+                                }}>
+                                {pendingDeleteId === item._id ? '✓?' : '×'}
+                              </Box>
                             </Box>
                             {movingStopId === item._id && (
                               <Box sx={{ width: '100%', mt: 0.5 }} onClick={(e) => e.stopPropagation()}>
@@ -1690,26 +1702,6 @@ export default function RoadTripTab({ token }) {
             }}
           />
 
-          {/* Mobile panel toggle — only shown on small screens */}
-          <Box
-            role="button"
-            onClick={() => setMobilePanelOpen(p => !p)}
-            sx={{
-              display: { xs: 'flex', md: 'none' },
-              position: 'absolute', bottom: 80, right: 16, zIndex: 11,
-              width: 48, height: 48, borderRadius: '50%',
-              bgcolor: mobilePanelOpen ? TERM.green : TERM.panel,
-              color: mobilePanelOpen ? '#000' : TERM.green,
-              border: `2px solid ${TERM.green}`,
-              alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: `0 4px 20px rgba(0,0,0,0.6), 0 0 12px ${TERM.green}40`,
-              fontFamily: MONO, fontSize: 18, fontWeight: 800,
-              transition: 'all 0.2s ease',
-            }}>
-            {mobilePanelOpen ? '×' : '☰'}
-          </Box>
-
           <MapStyleSwitcher current={styleId} onChange={onStyleChange} />
 
           {/* "Refresh this area" badge */}
@@ -1748,7 +1740,7 @@ export default function RoadTripTab({ token }) {
           {/* Toast */}
           {toast && (
             <Box sx={{
-              position: 'absolute', bottom: 50, left: '50%', transform: 'translateX(-50%)',
+              position: 'absolute', bottom: { xs: 70, sm: 50 }, left: '50%', transform: 'translateX(-50%)',
               zIndex: 3,
               bgcolor: 'rgba(5,8,10,0.95)',
               border: `1px solid ${toast.kind === 'error' ? TERM.red : toast.kind === 'success' ? TERM.green : TERM.borderDim}`,
@@ -1766,6 +1758,317 @@ export default function RoadTripTab({ token }) {
             </Box>
           )}
         </Box>
+      </Box>
+
+      {/* ── Mobile PLAN overlay ───────────────────────────────────────── */}
+      {mobileTab === 'plan' && (
+        <Box sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
+          bgcolor: TERM.panel, flexDirection: 'column', overflow: 'auto',
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-thumb': { background: 'rgba(74,222,128,0.18)', borderRadius: 3 },
+        }}>
+          <Box sx={{ p: 2 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, letterSpacing: 1.5, mb: 1.5 }}>
+              ─── NAVIGATE ───
+            </Typography>
+            <Box sx={{ mb: 1.25 }}>
+              <Box sx={{ position: 'relative', display: 'flex', gap: 0.5 }}>
+                <Box sx={{ position: 'relative', flexGrow: 1 }}>
+                  <input
+                    value={locationSearch}
+                    onChange={(e) => {
+                      setLocationSearch(e.target.value);
+                      if (e.target.value.length > 2) searchLocation(e.target.value);
+                      else setLocationResults([]);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && locationSearch.length > 1) searchLocation(locationSearch); }}
+                    placeholder="Search city or address…"
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      background: 'rgba(74,222,128,0.04)',
+                      border: `1.5px solid ${TERM.border}`,
+                      borderRadius: 4, padding: '10px 32px 10px 10px',
+                      fontFamily: MONO, fontSize: 13, color: TERM.text,
+                      outline: 'none', letterSpacing: 0.3,
+                    }}
+                  />
+                  {locationSearching && (
+                    <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      fontSize: 11, color: TERM.amber, fontFamily: MONO }}>…</Box>
+                  )}
+                </Box>
+                <Box role="button" tabIndex={0}
+                  onClick={() => { if (locationSearch.length > 1) searchLocation(locationSearch); }}
+                  sx={{
+                    fontFamily: MONO, fontSize: 11, fontWeight: 900, letterSpacing: 1,
+                    color: TERM.greenDk, px: 1.5, flexShrink: 0,
+                    cursor: 'pointer', borderRadius: 0.5,
+                    bgcolor: TERM.green, border: `1.5px solid ${TERM.green}`,
+                    display: 'flex', alignItems: 'center',
+                    '&:hover': { opacity: 0.88 },
+                  }}>
+                  GO
+                </Box>
+              </Box>
+              {locationResults.length > 0 && (
+                <Box sx={{ mt: 0.5, border: `1px solid ${TERM.border}`, borderRadius: 0.5, overflow: 'hidden' }}>
+                  {locationResults.map((f) => (
+                    <Box key={f.id} role="button" tabIndex={0}
+                      onClick={() => {
+                        const [lng, lat] = f.center;
+                        mapRef.current?.flyTo({ center: [lng, lat], zoom: 12, essential: true, duration: 1200 });
+                        setLocationSearch('');
+                        setLocationResults([]);
+                        setMobileTab('map');
+                      }}
+                      sx={{
+                        fontFamily: MONO, fontSize: 11, color: TERM.text, px: 1.25, py: 1,
+                        cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
+                        '&:last-child': { borderBottom: 'none' },
+                        '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green },
+                      }}>
+                      {f.place_name}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+            <Box role="button" tabIndex={0}
+              onClick={() => { flyToMyLocation(); setMobileTab('map'); }}
+              sx={{
+                fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: 1,
+                color: TERM.green, py: 1.25, px: 1.25, mb: 2,
+                cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
+                border: `1.5px solid ${TERM.green}`,
+                bgcolor: 'rgba(74,222,128,0.06)',
+                display: 'flex', alignItems: 'center', gap: 1,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.14)' },
+              }}>
+              <Box component="span" sx={{ fontSize: 16 }}>📍</Box>
+              MY LOCATION
+            </Box>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, letterSpacing: 1.5, mb: 1 }}>
+              ─── DAY PLANNER ───
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>
+              ADDING PINS TO: <Box component="span" sx={{ color: TERM.green }}>{formatDayLabel(currentDayLabel).toUpperCase()}</Box>
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
+              {knownDays.map((d) => {
+                const isCurrent = d === currentDayLabel;
+                return (
+                  <Box key={d} role="button" tabIndex={0}
+                    onClick={() => setCurrentDayLabel(d)}
+                    sx={{
+                      fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                      px: 1.25, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
+                      color: isCurrent ? TERM.greenDk : TERM.muted,
+                      bgcolor: isCurrent ? TERM.green : 'transparent',
+                      border: `1px solid ${isCurrent ? TERM.green : TERM.borderDim}`,
+                      '&:hover': { color: isCurrent ? TERM.greenDk : TERM.green, borderColor: TERM.green },
+                    }}>
+                    {/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDayLabel(d) : d.replace(/^Day /, 'D')}
+                    {(() => { const cnt = savedItems.filter(s => (s.dayLabel || 'Unassigned') === d).length; return cnt > 0 ? <Box component="span" sx={{ ml: 0.5, opacity: 0.7, fontSize: 9 }}>·{cnt}</Box> : null; })()}
+                  </Box>
+                );
+              })}
+              <Box role="button" tabIndex={0}
+                onClick={addNewDay}
+                sx={{
+                  fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                  px: 1.25, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
+                  color: TERM.amber, border: `1px dashed ${TERM.amber}`,
+                  '&:hover': { bgcolor: 'rgba(251,191,36,0.08)' },
+                }}>+ NEW DAY</Box>
+            </Box>
+
+            <Box role="button" tabIndex={0}
+              onClick={() => setShowAddCustomPin(true)}
+              sx={{
+                fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: 1,
+                px: 1.25, py: 1, cursor: 'pointer', borderRadius: 0.5,
+                color: '#06b6d4', border: `1px dashed #06b6d4`,
+                width: '100%', textAlign: 'center',
+                '&:hover': { bgcolor: 'rgba(6,182,212,0.08)' },
+              }}>+ ADD CUSTOM STOP</Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Mobile STOPS overlay ──────────────────────────────────────── */}
+      {mobileTab === 'stops' && (
+        <Box sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
+          bgcolor: TERM.panel, flexDirection: 'column', overflow: 'auto',
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-thumb': { background: 'rgba(74,222,128,0.18)', borderRadius: 3 },
+        }}>
+          <Box sx={{ p: 2 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, letterSpacing: 1.5, mb: 1.5 }}>
+              ─── TODAY'S STOPS · {savedItems.filter(s => (s.dayLabel || 'Unassigned') === todayISO()).length} ───
+            </Typography>
+            {(() => {
+              const todayStops = savedItems
+                .filter(s => (s.dayLabel || 'Unassigned') === todayISO())
+                .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (new Date(a.createdAt) - new Date(b.createdAt)));
+              if (todayStops.length === 0) return (
+                <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, fontStyle: 'italic', py: 1 }}>
+                  No stops planned for today. Tap MAP → layer pins to add some.
+                </Typography>
+              );
+              return (
+                <>
+                  <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+                    {todayStops.length >= 2 && (
+                      <Box role="button" tabIndex={0}
+                        onClick={() => { toggleRouteForDay(todayISO()); setMobileTab('map'); }}
+                        sx={{
+                          fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                          px: 1.25, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
+                          color: routesShown[todayISO()] ? TERM.greenDk : TERM.green,
+                          bgcolor: routesShown[todayISO()] ? TERM.green : 'transparent',
+                          border: `1px solid ${TERM.green}`,
+                          '&:hover': { opacity: 0.85 },
+                        }}>
+                        {routesShown[todayISO()] ? '◼ HIDE ROUTE' : '▶ SHOW ROUTE'}
+                      </Box>
+                    )}
+                    <Box role="button" tabIndex={0}
+                      onClick={() => {
+                        const coords = todayStops.map(s => `${s.lat},${s.lng}`).join('/');
+                        window.open(`https://www.google.com/maps/dir/${coords}`, '_blank', 'noopener');
+                      }}
+                      sx={{
+                        fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                        px: 1.25, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
+                        color: '#06b6d4', border: '1px solid #06b6d4',
+                        '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+                      }}>⤴ GOOGLE MAPS</Box>
+                  </Stack>
+                  {todayStops.map((item, i) => {
+                    const sm = statusMeta(item.status);
+                    return (
+                      <Box key={item._id}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 1,
+                          py: 1, px: 0.75, mb: 0.5, borderRadius: 0.5,
+                          cursor: 'pointer',
+                          bgcolor: editingStop === item._id ? 'rgba(74,222,128,0.04)' : 'transparent',
+                          '&:hover': { bgcolor: 'rgba(74,222,128,0.04)' },
+                        }}
+                        onClick={() => { flyToSaved(item); setEditingStop(prev => prev === item._id ? null : item._id); setMobileTab('map'); }}>
+                        <Box sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, minWidth: 18, textAlign: 'right' }}>{i + 1}.</Box>
+                        <Box role="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.kind === 'lead') {
+                              const idx = SALES_STATUSES.findIndex(s => s.value === item.status);
+                              updateStopField(item, { status: SALES_STATUSES[(idx + 1) % SALES_STATUSES.length].value });
+                            } else if (item.customType === 'printer') {
+                              const PS = ['planned','pre_called','visited','won'];
+                              updateStopField(item, { status: PS[(PS.indexOf(item.status) + 1) % PS.length] });
+                            } else {
+                              updateStopField(item, { status: item.status === 'visited' ? 'planned' : 'visited' });
+                            }
+                          }}
+                          sx={{
+                            width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                            bgcolor: sm.color,
+                            cursor: 'pointer',
+                            '&:hover': { transform: 'scale(1.5)' },
+                          }} />
+                        <Typography sx={{
+                          flexGrow: 1, fontFamily: MONO, fontSize: 12, fontWeight: 600,
+                          color: TERM.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>{item.name}</Typography>
+                        <Box sx={{ fontFamily: MONO, fontSize: 9, color: sm.color, letterSpacing: 0.5, flexShrink: 0 }}>
+                          {sm.label}
+                        </Box>
+                        <Box role="button"
+                          onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
+                          sx={{
+                            fontFamily: MONO, fontSize: 14, color: TERM.red,
+                            px: 0.5, cursor: 'pointer', flexShrink: 0,
+                            bgcolor: pendingDeleteId === item._id ? 'rgba(248,113,113,0.18)' : 'transparent',
+                            borderRadius: 0.25,
+                          }}>
+                          {pendingDeleteId === item._id ? '✓?' : '×'}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
+            {itinerary.length > 0 && (
+              <>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, letterSpacing: 1.5, mt: 2, mb: 1 }}>
+                  ─── ALL DAYS ───
+                </Typography>
+                {itinerary.map(([day, stops]) => {
+                  const dayColor = colorForDay(day);
+                  return (
+                    <Box key={day} sx={{ mb: 1.5 }}>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: dayColor, flexShrink: 0 }} />
+                        <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, color: TERM.text, flexGrow: 1 }}>
+                          {formatDayLabel(day).toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 500 }}>· {stops.length}</Box>
+                        </Typography>
+                        <Box role="button"
+                          onClick={() => { toggleRouteForDay(day); setMobileTab('map'); }}
+                          sx={{
+                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                            color: routesShown[day] ? TERM.greenDk : dayColor,
+                            bgcolor: routesShown[day] ? dayColor : 'transparent',
+                            border: `1px solid ${dayColor}`,
+                          }}>
+                          {routesShown[day] ? '◼' : '▶'}
+                        </Box>
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </>
+            )}
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Mobile tab bar ────────────────────────────────────────────── */}
+      <Box sx={{
+        display: { xs: 'flex', md: 'none' },
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
+        height: 56,
+        bgcolor: TERM.panel,
+        borderTop: `1px solid ${TERM.border}`,
+      }}>
+        {[
+          { id: 'map',   label: 'MAP',   icon: '⊕' },
+          { id: 'plan',  label: 'PLAN',  icon: '⊞' },
+          { id: 'stops', label: 'STOPS', icon: '◉' },
+        ].map((tab) => (
+          <Box key={tab.id} role="button" tabIndex={0}
+            onClick={() => setMobileTab(tab.id)}
+            sx={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              color: mobileTab === tab.id ? TERM.green : TERM.muted,
+              bgcolor: mobileTab === tab.id ? 'rgba(74,222,128,0.08)' : 'transparent',
+              borderTop: `2px solid ${mobileTab === tab.id ? TERM.green : 'transparent'}`,
+              transition: 'all 0.15s ease',
+              gap: 0.25,
+            }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 16, lineHeight: 1 }}>{tab.icon}</Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>{tab.label}</Typography>
+          </Box>
+        ))}
       </Box>
 
       {/* Add Custom Stop modal */}

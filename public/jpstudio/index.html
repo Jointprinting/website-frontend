@@ -941,9 +941,9 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <input type="text" id="lb-filename" class="lb-eb-input lb-eb-filename" placeholder="lookbook.pdf" style="width:130px" />
       <div style="display:flex;gap:4px;align-items:center">
         <span style="font-size:9px;font-family:var(--fm);color:var(--tx4);letter-spacing:.08em;white-space:nowrap">LAYOUT</span>
-        <button id="lb-preset-2up" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbPreset('2up')">2/page</button>
-        <button id="lb-preset-1up" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('1up')">1/page</button>
-        <button id="lb-preset-4up" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('4up')">4/page</button>
+        <button id="lb-preset-grid" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbPreset('grid')" title="Up to 6 per page in a clean 3×2 grid">GRID</button>
+        <button id="lb-preset-hero" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('hero')" title="First mockup large, rest smaller below">HERO</button>
+        <button id="lb-preset-spotlight" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('spotlight')" title="Big feature left, column of detail shots right">SPOTLIGHT</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="clearLookbookQueue()">Clear</button>
       <button class="btn btn-ac" onclick="exportLookbook()">↓ Export PDF</button>
@@ -2547,7 +2547,7 @@ function applyPickerSelection(item) {
 function closeLibraryPicker(){ document.getElementById('library-picker-overlay').classList.remove('open'); }
 
 // ── Lookbook ──────────────────────────────────────────────────────
-let lbLayoutPreset = '2up';
+let lbLayoutPreset = 'grid';
 function setLbPreset(p) {
   lbLayoutPreset = p;
   document.querySelectorAll('.lb-preset').forEach(b => b.classList.toggle('active', b.id === 'lb-preset-' + p));
@@ -2678,137 +2678,162 @@ async function exportLookbookGrid() {
   try {
     const {PDFDocument,rgb,StandardFonts}=PDFLib;
     const pdfDoc=await PDFDocument.create();
-    const PW=612,PH=792; // standard US Letter
+    const PW=612,PH=792; // US Letter
     const boldFont=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
     const deckSub=(document.getElementById('lb-subtitle')?.value||'').trim();
     const filename=(document.getElementById('lb-filename')?.value||'').trim()||'lookbook.pdf';
-    const preset=lbLayoutPreset||'2up';
-    const M=32; // margin
-    const HDR=24; // thin top bar height
-    const FTR=22; // footer height
+    const preset=lbLayoutPreset||'grid';
+    const M=28,G=10; // margin, gutter
+    const HDR=24,FTR=22;
     const count=lbQueue.length;
     const dateStr=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const contentTop=PH-HDR-M;
+    const contentBot=FTR+M;
+    const contentH=contentTop-contentBot;
+    const contentW=PW-M*2;
 
-    // Helper: draw a page's header + footer chrome
     function drawChrome(page,pageNum,total){
-      // Header: thin dark bar
       page.drawRectangle({x:0,y:PH-HDR,width:PW,height:HDR,color:rgb(.06,.08,.06)});
-      page.drawText('JOINT PRINTING',{x:M,y:PH-HDR+6,size:8,font:boldFont,color:rgb(.25,.55,.30)});
+      page.drawText('JOINT PRINTING',{x:M,y:PH-HDR+7,size:8,font:boldFont,color:rgb(.25,.55,.30)});
       const siteW=regFont.widthOfTextAtSize('jointprinting.com',7);
       page.drawText('jointprinting.com',{x:PW-M-siteW,y:PH-HDR+7,size:7,font:regFont,color:rgb(.35,.45,.35)});
       if(deckSub&&pageNum===1){
         const sw=regFont.widthOfTextAtSize(deckSub,10);
         page.drawText(deckSub,{x:(PW-sw)/2,y:PH-HDR+7,size:10,font:regFont,color:rgb(.55,.55,.55)});
       }
-      // Footer: page number
       page.drawRectangle({x:0,y:0,width:PW,height:FTR,color:rgb(.04,.06,.04)});
-      const pgStr=total>1?`${pageNum} / ${total}`:'';
-      if(pgStr){const pw=regFont.widthOfTextAtSize(pgStr,7);page.drawText(pgStr,{x:(PW-pw)/2,y:7,size:7,font:regFont,color:rgb(.30,.30,.30)});}
+      if(total>1){const ps=`${pageNum} / ${total}`;const pw=regFont.widthOfTextAtSize(ps,7);page.drawText(ps,{x:(PW-pw)/2,y:7,size:7,font:regFont,color:rgb(.30,.30,.30)});}
       page.drawText(dateStr,{x:M,y:7,size:7,font:regFont,color:rgb(.28,.28,.28)});
     }
 
-    // Helper: embed and draw one mockup in a cell rect {x,y,w,h}
-    async function drawMockupCell(page,item,cx,cy,cw,ch){
+    async function drawCell(page,item,cx,cy,cw,ch){
       const hasBack=!!item.backSrc;
-      const pad=8;
-      const labelH=20; // space at bottom for name
-      const imgAreaH=ch-labelH-pad*2;
-      const imgAreaW=cw-pad*2;
-
+      const pad=7,labelH=18;
+      const iaH=ch-labelH-pad*2,iaW=cw-pad*2;
       if(item.frontSrc){
         const img=await embedImg(pdfDoc,item.frontSrc);
         if(img){
           const d=img.scale(1);
-          const fw=hasBack?imgAreaW*0.57:imgAreaW;
-          const scale=Math.min(fw/d.width,imgAreaH/d.height);
-          const iw=d.width*scale,ih=d.height*scale;
-          const ix=cx+pad+(fw-iw)/2;
-          const iy=cy+labelH+(imgAreaH-ih)/2;
-          page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});
+          const fw=hasBack?iaW*0.57:iaW;
+          const sc=Math.min(fw/d.width,iaH/d.height);
+          const iw=d.width*sc,ih=d.height*sc;
+          page.drawImage(img,{x:cx+pad+(fw-iw)/2,y:cy+labelH+(iaH-ih)/2,width:iw,height:ih});
         }
       }
       if(hasBack&&item.backSrc){
         const img=await embedImg(pdfDoc,item.backSrc);
         if(img){
-          const d=img.scale(1);
-          const bw=imgAreaW*0.38;
-          const scale=Math.min(bw/d.width,imgAreaH/d.height);
-          const iw=d.width*scale,ih=d.height*scale;
-          const ix=cx+cw-pad-iw;
-          const iy=cy+labelH+(imgAreaH-ih)/2;
-          page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});
+          const d=img.scale(1);const bw=iaW*0.38;
+          const sc=Math.min(bw/d.width,iaH/d.height);
+          const iw=d.width*sc,ih=d.height*sc;
+          page.drawImage(img,{x:cx+cw-pad-iw,y:cy+labelH+(iaH-ih)/2,width:iw,height:ih});
         }
       }
-      // Style name label
       if(item.name){
-        let label=item.name;const lfs=9;
+        let label=item.name;const lfs=8;
         while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cw-pad*2)label=label.slice(0,-1);
-        page.drawText(label,{x:cx+pad,y:cy+6,size:lfs,font:boldFont,color:rgb(.18,.18,.18)});
-        if(item.styleCode&&item.styleCode!==item.name){
-          let sub=item.styleCode;const sfs=7;
-          while(sub.length>2&&regFont.widthOfTextAtSize(sub,sfs)>cw-80)sub=sub.slice(0,-1);
-          const subW=regFont.widthOfTextAtSize(sub,sfs);
-          page.drawText(sub,{x:cx+cw-pad-subW,y:cy+7,size:sfs,font:regFont,color:rgb(.50,.50,.50)});
-        }
+        page.drawText(label,{x:cx+pad,y:cy+5,size:lfs,font:boldFont,color:rgb(.18,.18,.18)});
       }
-      // Thin separator line between front and back labels
       if(hasBack){
-        const sepX=cx+cw-pad-imgAreaW*0.39;
+        const sepX=cx+cw-pad-iaW*0.39;
         page.drawLine({start:{x:sepX,y:cy+labelH},end:{x:sepX,y:cy+ch-pad},thickness:.3,color:rgb(.85,.85,.85)});
       }
     }
 
-    // ── Build pages based on preset ──
-    const contentTop=PH-HDR-M;
-    const contentBot=FTR+M;
-    const contentH=contentTop-contentBot;
-    const contentW=PW-M*2;
+    // Shared helper: draw a 3×2 grid page starting at queue index `startIdx`
+    async function drawGridPage(page,startIdx){
+      const cols=3,rows=2,perPage=6;
+      const cw=(contentW-(cols-1)*G)/cols;
+      const ch=(contentH-(rows-1)*G)/rows;
+      for(let i=0;i<perPage;i++){
+        const idx=startIdx+i;if(idx>=count)break;
+        const col=i%cols,row=Math.floor(i/cols);
+        const cx=M+col*(cw+G);
+        const cy=contentTop-ch-row*(ch+G);
+        page.drawRectangle({x:cx,y:cy,width:cw,height:ch,color:rgb(.985,.985,.985)});
+        await drawCell(page,lbQueue[idx],cx,cy,cw,ch);
+      }
+    }
 
-    let totalPages;
-    if(preset==='1up') totalPages=count;
-    else if(preset==='4up') totalPages=Math.ceil(count/4);
-    else totalPages=Math.ceil(count/2); // 2up default
+    // ── GRID: up to 6 per page in 3×2, overflow to next pages ──────
+    if(preset==='grid'){
+      const totalPages=Math.ceil(count/6);
+      for(let p=0;p<totalPages;p++){
+        const page=pdfDoc.addPage([PW,PH]);
+        drawChrome(page,p+1,totalPages);
+        await drawGridPage(page,p*6);
+      }
 
-    for(let p=0;p<totalPages;p++){
-      const page=pdfDoc.addPage([PW,PH]);
-      drawChrome(page,p+1,totalPages);
-
-      if(preset==='1up'){
-        // Full page: one mockup centered
-        const item=lbQueue[p];
-        const gutter=M;
-        page.drawRectangle({x:M,y:contentBot,width:contentW,height:contentH,color:rgb(.98,.98,.98)});
-        await drawMockupCell(page,item,M+gutter,contentBot+gutter,contentW-gutter*2,contentH-gutter*2);
-      } else if(preset==='4up'){
-        // 2×2 grid
-        const startIdx=p*4;
-        const cols=2,rows=2;
-        const cw=(contentW-M)/cols;
-        const ch=(contentH-M/2)/rows;
-        for(let i=0;i<4;i++){
-          const idx=startIdx+i;
-          if(idx>=count) break;
-          const col=i%cols,row=Math.floor(i/cols);
-          const cx=M+col*(cw+M/cols);
-          const cy=contentTop-ch-row*(ch+M/rows);
-          page.drawRectangle({x:cx,y:cy,width:cw,height:ch,color:rgb(.98,.98,.98)});
-          await drawMockupCell(page,lbQueue[idx],cx,cy,cw,ch);
+    // ── HERO: page 1 = big hero top + 3 small bottom; rest = 3×2 ──
+    } else if(preset==='hero'){
+      const rest=Math.max(0,count-4);
+      const totalPages=1+Math.ceil(rest/6);
+      // Page 1
+      {
+        const page=pdfDoc.addPage([PW,PH]);
+        drawChrome(page,1,totalPages);
+        const heroH=Math.round(contentH*0.55);
+        const smallH=contentH-heroH-G;
+        const smallCols=Math.min(3,count-1);
+        // Hero (index 0)
+        page.drawRectangle({x:M,y:contentTop-heroH,width:contentW,height:heroH,color:rgb(.985,.985,.985)});
+        if(count>0) await drawCell(page,lbQueue[0],M,contentTop-heroH,contentW,heroH);
+        // Smalls (index 1-3)
+        if(smallCols>0){
+          const scw=(contentW-(smallCols-1)*G)/smallCols;
+          for(let i=0;i<smallCols;i++){
+            const idx=i+1;if(idx>=count)break;
+            const cx=M+i*(scw+G);
+            const cy=contentBot;
+            page.drawRectangle({x:cx,y:cy,width:scw,height:smallH,color:rgb(.985,.985,.985)});
+            await drawCell(page,lbQueue[idx],cx,cy,scw,smallH);
+          }
         }
-      } else {
-        // 2up: two items stacked, separated by a divider line
-        const rowH=(contentH-M/2)/2;
-        for(let r=0;r<2;r++){
-          const idx=p*2+r;
-          if(idx>=count) break;
-          const cy=contentTop-rowH-r*(rowH+M/2);
-          page.drawRectangle({x:M,y:cy,width:contentW,height:rowH,color:rgb(.98,.98,.98)});
-          await drawMockupCell(page,lbQueue[idx],M,cy,contentW,rowH);
+      }
+      // Overflow pages
+      for(let p=1;p<totalPages;p++){
+        const page=pdfDoc.addPage([PW,PH]);
+        drawChrome(page,p+1,totalPages);
+        await drawGridPage(page,4+(p-1)*6);
+      }
+
+    // ── SPOTLIGHT: big left + 3-col right; rest = 3×2 ─────────────
+    } else if(preset==='spotlight'){
+      const rest=Math.max(0,count-4);
+      const totalPages=1+Math.ceil(rest/6);
+      // Page 1
+      {
+        const page=pdfDoc.addPage([PW,PH]);
+        drawChrome(page,1,totalPages);
+        const featureW=Math.round(contentW*0.56);
+        const colW=contentW-featureW-G;
+        const smallCount=Math.min(3,count-1);
+        // Feature (index 0)
+        page.drawRectangle({x:M,y:contentBot,width:featureW,height:contentH,color:rgb(.985,.985,.985)});
+        if(count>0) await drawCell(page,lbQueue[0],M,contentBot,featureW,contentH);
+        // Right column (index 1-3)
+        if(smallCount>0){
+          const sch=(contentH-(smallCount-1)*G)/smallCount;
+          for(let i=0;i<smallCount;i++){
+            const idx=i+1;if(idx>=count)break;
+            const cx=M+featureW+G;
+            const cy=contentTop-sch-i*(sch+G);
+            page.drawRectangle({x:cx,y:cy,width:colW,height:sch,color:rgb(.985,.985,.985)});
+            await drawCell(page,lbQueue[idx],cx,cy,colW,sch);
+          }
         }
+      }
+      // Overflow pages
+      for(let p=1;p<totalPages;p++){
+        const page=pdfDoc.addPage([PW,PH]);
+        drawChrome(page,p+1,totalPages);
+        await drawGridPage(page,4+(p-1)*6);
       }
     }
 
     const pdfBytes=await pdfDoc.save();
+    const totalPages=pdfDoc.getPageCount();
     downloadBlob(pdfBytes,filename);
     toast(`Lookbook exported — ${count} mockup${count!==1?'s':''} · ${totalPages}pg ✓`,'success');
   } catch(e){console.error(e);toast('Export failed: '+e.message,'error');}
