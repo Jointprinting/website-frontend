@@ -52,7 +52,7 @@ function AppShell() {
 
 function App() {
   return (
-    <div className="App">
+    <div className="App" style={{ overflowX: 'hidden' }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AppShell />

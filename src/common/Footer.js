@@ -16,7 +16,7 @@ export default function Footer() {
       component="footer"
       sx={{ display: 'flex', bgcolor: 'secondary.light', position: 'relative' }}
     >
-      <Stack direction={mobile ? "column" : "row"} spacing='10vw' width="100%" py={'6vh'} alignItems={mobile ? "center" : "start"}>
+      <Stack direction={mobile ? "column" : "row"} spacing={{ xs: 4, sm: 6, md: 8 }} width="100%" py={'6vh'} alignItems={mobile ? "center" : "start"} sx={{ overflowX: 'hidden' }}>
           <Box flex={1} />
           <Stack spacing='2vh'>
             <Stack direction="row" alignItems="center" spacing={1}>
