@@ -1034,6 +1034,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
         <button class="btn btn-secondary btn-sm" onclick="promptSaveBlank()">+ Blank</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveLogo()">+ Logo</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveMockupImage()">+ Mockup Image</button>
+        <button class="btn btn-ghost btn-sm" title="Pull items saved on other devices" onclick="syncFromBackend().catch(()=>toast('Sync failed','error'))">☁ Sync</button>
       </div>
     </div>
     <div class="lib-section">
