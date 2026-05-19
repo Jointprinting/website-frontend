@@ -339,16 +339,23 @@ function Product() {
                 open={quoteDialogOpen}
                 onClose={(submitted) => {
                   setQuoteDialogOpen(false);
-                  if (submitted) {
-                    setSelectedProducts([]);
-                  }
+                  if (submitted) setSelectedProducts([]);
                 }}
-                products={[{
-                  style: productStyle,
-                  name: productTitle,
-                  vendor: productVendor,
-                  thumbnail: productFrontImages?.[productIndex] || '',
-                }]}
+                products={
+                  // Always include the current product in the dialog, plus anything
+                  // else already in the tray from other pages.
+                  selectedProducts.some((p) => p.style === productStyle)
+                    ? selectedProducts
+                    : [
+                        ...selectedProducts,
+                        {
+                          style: productStyle,
+                          name: productTitle,
+                          vendor: productVendor,
+                          thumbnail: productFrontImages?.[productIndex] || '',
+                        },
+                      ]
+                }
               />
 
               <Typography color="charcoal" sx={{ fontSize: { xs: 14, sm: 16 } }}>
