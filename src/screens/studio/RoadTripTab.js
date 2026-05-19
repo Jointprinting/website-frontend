@@ -514,8 +514,9 @@ export default function RoadTripTab({ token }) {
   const [locationResults, setLocationResults] = React.useState([]);
   const [locationSearching, setLocationSearching] = React.useState(false);
   const [showAddCustomPin, setShowAddCustomPin] = React.useState(false);
-  const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', customType: 'friend' });
-  const [editingStop, setEditingStop] = React.useState(null); // _id of stop being edited inline
+  const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', notes: '', customType: 'friend' });
+  const [editingStop, setEditingStop] = React.useState(null);
+  const [movingStopId, setMovingStopId] = React.useState(null);
 
   // Distinct route colors per day so multi-day overlays don't blur together.
   const DAY_ROUTE_COLORS = ['#4ade80', '#06b6d4', '#fbbf24', '#ef4444', '#a855f7', '#f472b6', '#84cc16', '#f97316'];
@@ -930,7 +931,7 @@ export default function RoadTripTab({ token }) {
   };
 
   const addCustomPin = async () => {
-    const { name, address, customType } = customPinForm;
+    const { name, address, notes, customType } = customPinForm;
     if (!name.trim()) { showToast('Name required.', 'error'); return; }
     try {
       let lat = mapRef.current?.getCenter().lat ?? 40.5;
@@ -952,7 +953,7 @@ export default function RoadTripTab({ token }) {
         source: 'manual', name: name.trim(), address: address.trim(),
         lat, lng, type: 'other', kind: 'stop',
         status: 'planned', dayLabel: currentDayLabel, sortOrder: nextOrder,
-        customType,
+        customType, notes: notes.trim(),
       };
       const res = await axios.post(
         `${config.backendUrl}/api/roadtrip/leads`, body,
@@ -960,7 +961,7 @@ export default function RoadTripTab({ token }) {
       );
       setSavedItems((prev) => [res.data, ...prev]);
       setShowAddCustomPin(false);
-      setCustomPinForm({ name: '', address: '', customType: 'friend' });
+      setCustomPinForm({ name: '', address: '', notes: '', customType: 'friend' });
       showToast(`Added "${name.trim()}" to ${formatDayLabel(currentDayLabel)}.`, 'success');
       if (mapRef.current) mapRef.current.flyTo({ center: [lng, lat], zoom: 13, essential: true, duration: 1200 });
     } catch (err) {
@@ -1322,6 +1323,7 @@ export default function RoadTripTab({ token }) {
                           },
                         }}>
                         {/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDayLabel(d) : d.replace(/^Day /, 'D')}
+                        {(() => { const cnt = savedItems.filter(s => (s.dayLabel || 'Unassigned') === d).length; return cnt > 0 ? <Box component="span" sx={{ ml: 0.5, opacity: 0.7, fontSize: 9 }}>·{cnt}</Box> : null; })()}
                       </Box>
                     );
                   })}
@@ -1490,14 +1492,30 @@ export default function RoadTripTab({ token }) {
                               <Box role="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const target = window.prompt(`Move "${item.name}" to which day?`, currentDayLabel);
-                                  if (target && target.trim()) moveStopToDay(item, target.trim());
+                                  setMovingStopId(prev => prev === item._id ? null : item._id);
                                 }}
-                                sx={actionBtnSx(TERM.muted, TERM.amber)}>→</Box>
+                                sx={actionBtnSx(movingStopId === item._id ? TERM.amber : TERM.muted, TERM.amber)}>→</Box>
                               <Box role="button"
                                 onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
                                 sx={actionBtnSx(TERM.red, TERM.red)}>×</Box>
                             </Box>
+                            {movingStopId === item._id && (
+                              <Box sx={{ width: '100%', mt: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                                <Typography sx={{ fontFamily: MONO, fontSize: 8, color: TERM.amber, letterSpacing: 1, mb: 0.4 }}>MOVE TO DAY</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+                                  {knownDays.filter(d => d !== (item.dayLabel || 'Unassigned')).map(d => (
+                                    <Box key={d} role="button"
+                                      onClick={() => { moveStopToDay(item, d); setMovingStopId(null); }}
+                                      sx={{
+                                        fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.5,
+                                        px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                                        color: TERM.amber, border: `1px solid ${TERM.amber}55`,
+                                        '&:hover': { bgcolor: 'rgba(251,191,36,0.12)', borderColor: TERM.amber },
+                                      }}>{/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDayLabel(d) : d}</Box>
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
                             {editingStop === item._id && (
                               <Box sx={{ width: '100%', mt: 0.5, ml: 2, pl: 1, borderLeft: `2px solid ${TERM.borderDim}` }}
                                 onClick={(e) => e.stopPropagation()}>
@@ -1538,9 +1556,9 @@ export default function RoadTripTab({ token }) {
                                       <input placeholder="Buyer name…" defaultValue={item.contactName || ''}
                                         onBlur={(e) => { if (e.target.value !== (item.contactName || '')) updateStopField(item, { contactName: e.target.value }); }}
                                         style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
-                                      <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                      <textarea placeholder="Notes…" defaultValue={item.notes || ''} rows={3}
                                         onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
-                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', resize: 'vertical', minHeight: 54 }} />
                                     </Box>
                                     <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.4 }}>INTERESTS</Typography>
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.5 }}>
@@ -1593,9 +1611,9 @@ export default function RoadTripTab({ token }) {
                                       <input placeholder="Phone…" defaultValue={item.phone || ''}
                                         onBlur={(e) => { if (e.target.value !== (item.phone || '')) updateStopField(item, { phone: e.target.value }); }}
                                         style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
-                                      <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                      <textarea placeholder="Notes…" defaultValue={item.notes || ''} rows={3}
                                         onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
-                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', resize: 'vertical', minHeight: 54 }} />
                                     </Box>
                                   </>
                                 ) : (
@@ -1618,9 +1636,9 @@ export default function RoadTripTab({ token }) {
                                           }}>{s.label}</Box>
                                       ))}
                                     </Box>
-                                    <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                    <textarea placeholder="Notes…" defaultValue={item.notes || ''} rows={3}
                                       onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
-                                      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', marginBottom: 4 }} />
+                                      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', resize: 'vertical', minHeight: 54, marginBottom: 4 }} />
                                   </>
                                 )}
                               </Box>
@@ -1805,7 +1823,21 @@ export default function RoadTripTab({ token }) {
                 background: 'rgba(255,255,255,0.04)',
                 border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
                 padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
-                outline: 'none', marginBottom: 16,
+                outline: 'none', marginBottom: 12,
+              }}
+            />
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>NOTES (optional)</Typography>
+            <textarea
+              value={customPinForm.notes}
+              onChange={(e) => setCustomPinForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Hours, who to ask for, what to bring…"
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
+                padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
+                outline: 'none', resize: 'vertical', minHeight: 62, marginBottom: 16,
               }}
             />
             <Box sx={{ display: 'flex', gap: 1 }}>
