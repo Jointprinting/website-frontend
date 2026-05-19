@@ -104,12 +104,14 @@ const MAP_STYLES = [
 
 const SALES_STATUSES = [
   { value: 'planned',          label: 'PLANNED',       color: 'rgba(212,244,221,0.5)' },
+  { value: 'pre_called',       label: 'PRE-CALLED',    color: '#84cc16' },
   { value: 'visited',          label: 'VISITED',       color: '#fbbf24' },
   { value: 'buyer_identified', label: 'BUYER ID',      color: '#06b6d4' },
+  { value: 'pitched',          label: 'PITCHED',       color: '#a78bfa' },
   { value: 'catalog_sent',     label: 'CATALOG SENT',  color: '#a855f7' },
   { value: 'mockup_needed',    label: 'MOCKUP NEEDED', color: '#f97316' },
   { value: 'quote_needed',     label: 'QUOTE NEEDED',  color: '#fbbf24' },
-  { value: 'follow_up',        label: 'FOLLOW-UP',     color: '#84cc16' },
+  { value: 'follow_up',        label: 'FOLLOW-UP',     color: '#4ade80' },
   { value: 'won',              label: 'WON ✓',         color: '#4ade80' },
   { value: 'dead',             label: 'DEAD',          color: '#6b7280' },
 ];
@@ -989,11 +991,11 @@ export default function RoadTripTab({ token }) {
         const hint = err.code === 1
           ? 'Location permission denied — check browser settings.'
           : err.code === 3
-          ? 'Location timed out — try again or use a quick jump.'
+          ? 'Location timed out — move outdoors or try again.'
           : `Location unavailable: ${err.message}`;
         showToast(hint, 'error');
       },
-      { timeout: 12000, maximumAge: 120000 }
+      { timeout: 30000, maximumAge: 120000, enableHighAccuracy: false }
     );
   };
 
@@ -1388,6 +1390,21 @@ export default function RoadTripTab({ token }) {
                               '&:hover': { opacity: 0.85 },
                             }}>
                             {isVisible ? '◼ HIDE' : '▶ ROUTE'}
+                          </Box>
+                        )}
+                        {stops.length >= 1 && (
+                          <Box role="button" tabIndex={0}
+                            onClick={() => {
+                              const coords = stops.map((s) => `${s.lat},${s.lng}`).join('/');
+                              window.open(`https://www.google.com/maps/dir/${coords}`, '_blank', 'noopener');
+                            }}
+                            sx={{
+                              fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                              px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                              color: '#06b6d4', border: '1px solid #06b6d4',
+                              '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+                            }}>
+                            ⤴ MAPS
                           </Box>
                         )}
                       </Stack>
