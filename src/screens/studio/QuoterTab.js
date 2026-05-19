@@ -19,7 +19,6 @@ import RadioButtonUncheckedIcon   from '@mui/icons-material/RadioButtonUnchecked
 import PrintOutlinedIcon          from '@mui/icons-material/PrintOutlined';
 import ExpandMoreIcon             from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon             from '@mui/icons-material/ExpandLess';
-import RefreshIcon                from '@mui/icons-material/Refresh';
 import AddIcon                    from '@mui/icons-material/Add';
 import RemoveIcon                 from '@mui/icons-material/Remove';
 import LocalShippingOutlinedIcon  from '@mui/icons-material/LocalShippingOutlined';
@@ -80,20 +79,21 @@ const PAYMENT_LABELS = {
   other: 'Other / No fee',
 };
 
-// Approximate weight (lbs) per piece by garment type — used by shipping estimator
+// Approximate weight (lbs) per piece by garment type — used by shipping estimator.
+// Intentionally biased slightly high so estimates don't eat into margins.
 const GARMENT_WEIGHT_LB = {
-  'T-Shirt':           0.40,
-  'Long Sleeve Shirt': 0.55,
-  'Polo':              0.45,
-  'Hoodie':            1.50,
-  'Crewneck':          1.20,
-  'Zip-Up Hoodie':     1.60,
-  'Quarter-Zip':       1.30,
-  'Sweatpant':         1.20,
-  'Hat':               0.35,
-  'Beanie':            0.25,
-  'Tote Bag':          0.40,
-  'Other':             0.50,
+  'T-Shirt':           0.45,
+  'Long Sleeve Shirt': 0.60,
+  'Polo':              0.50,
+  'Hoodie':            1.60,
+  'Crewneck':          1.30,
+  'Zip-Up Hoodie':     1.75,
+  'Quarter-Zip':       1.40,
+  'Sweatpant':         1.30,
+  'Hat':               0.40,
+  'Beanie':            0.30,
+  'Tote Bag':          0.50,
+  'Other':             0.75, // promo/misc — heavier default to avoid under-estimating
 };
 
 // Simple ground shipping rate card (UPS/FedEx rough averages)
