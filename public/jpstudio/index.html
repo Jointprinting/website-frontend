@@ -412,6 +412,8 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .lb-eb-input{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--f);font-size:12px;padding:5px 9px;outline:none;transition:border-color .15s,box-shadow .15s;height:30px}
 .lb-eb-input:focus{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac-dim)}
 .lb-eb-input::placeholder{color:var(--tx4)}
+.lb-preset{padding:3px 8px!important;font-size:9px!important;letter-spacing:.06em;opacity:.55;transition:opacity .15s,background .15s}
+.lb-preset.active{opacity:1;border-color:var(--ac)!important;color:var(--ac)!important}
 .lb-eb-filename{width:150px;flex-shrink:0}
 
 /* Stagger-in animation for grid items */
@@ -935,8 +937,14 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     </div>
     <div class="lb-export-bar" id="lb-export-bar">
       <span class="lb-eb-count" id="lb-eb-count">0 mockups</span>
-      <input type="text" id="lb-subtitle" class="lb-eb-input" placeholder="Collection subtitle (optional)" style="flex:1;min-width:0" />
-      <input type="text" id="lb-filename" class="lb-eb-input lb-eb-filename" placeholder="lookbook.pdf" />
+      <input type="text" id="lb-subtitle" class="lb-eb-input" placeholder="Collection subtitle (optional)" style="flex:1;min-width:120px" />
+      <input type="text" id="lb-filename" class="lb-eb-input lb-eb-filename" placeholder="lookbook.pdf" style="width:130px" />
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="font-size:9px;font-family:var(--fm);color:var(--tx4);letter-spacing:.08em;white-space:nowrap">LAYOUT</span>
+        <button id="lb-preset-2up" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbPreset('2up')">2/page</button>
+        <button id="lb-preset-1up" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('1up')">1/page</button>
+        <button id="lb-preset-4up" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('4up')">4/page</button>
+      </div>
       <button class="btn btn-ghost btn-sm" onclick="clearLookbookQueue()">Clear</button>
       <button class="btn btn-ac" onclick="exportLookbook()">↓ Export PDF</button>
     </div>
@@ -2539,6 +2547,12 @@ function applyPickerSelection(item) {
 function closeLibraryPicker(){ document.getElementById('library-picker-overlay').classList.remove('open'); }
 
 // ── Lookbook ──────────────────────────────────────────────────────
+let lbLayoutPreset = '2up';
+function setLbPreset(p) {
+  lbLayoutPreset = p;
+  document.querySelectorAll('.lb-preset').forEach(b => b.classList.toggle('active', b.id === 'lb-preset-' + p));
+}
+
 async function refreshLbGrid() {
   if (!db) return;
   let mockups = await dbGetAll('mockups');
@@ -2566,24 +2580,29 @@ async function refreshLbGrid() {
     return;
   }
 
-  // Group by name prefix (before "/" or "–")
+  // Group by client
   const groups = {};
   mockups.forEach(m => {
-    const seg = (m.name || '').split(/[\/\-–]/)[0].trim() || 'Other';
-    if (!groups[seg]) groups[seg] = [];
-    groups[seg].push(m);
+    const key = (m.client || '').trim() || '— No Client —';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
   });
-  const groupKeys = Object.keys(groups).sort();
+  // Sort: named clients first (alpha), then no-client
+  const groupKeys = Object.keys(groups).sort((a, b) => {
+    if (a === '— No Client —') return 1;
+    if (b === '— No Client —') return -1;
+    return a.localeCompare(b);
+  });
 
   grid.innerHTML = '';
   let globalIdx = 0;
   groupKeys.forEach(gk => {
-    if (groupKeys.length > 1) {
-      const hdr = document.createElement('div');
-      hdr.style.cssText = 'grid-column:1/-1;font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--tx3);text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid var(--bd);margin-bottom:2px;font-family:var(--fm)';
-      hdr.textContent = gk;
-      grid.appendChild(hdr);
-    }
+    // Client header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:8px 0 4px;';
+    hdr.innerHTML = `<span style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--ac);text-transform:uppercase;font-family:var(--fm)">${gk.replace(/</g,'&lt;')}</span><span style="flex:1;height:1px;background:var(--bd)"></span><span style="font-size:8px;color:var(--tx4);font-family:var(--fm)">${groups[gk].length} mockup${groups[gk].length!==1?'s':''}</span>`;
+    grid.appendChild(hdr);
+
     groups[gk].forEach(item => {
       const idx = globalIdx++;
       const isSelected = lbQueue.some(q => q.mockupId === item.id);
@@ -2659,63 +2678,139 @@ async function exportLookbookGrid() {
   try {
     const {PDFDocument,rgb,StandardFonts}=PDFLib;
     const pdfDoc=await PDFDocument.create();
-    const PW=792,PH=1008;
+    const PW=612,PH=792; // standard US Letter
     const boldFont=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const titleFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const captionFont=await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+    const regFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
     const deckSub=(document.getElementById('lb-subtitle')?.value||'').trim();
     const filename=(document.getElementById('lb-filename')?.value||'').trim()||'lookbook.pdf';
-    const margin=28;
-    const headerH=72;
-
-    const page=pdfDoc.addPage([PW,PH]);
-    // Green header bar
-    page.drawRectangle({x:0,y:PH-headerH,width:PW,height:headerH,color:rgb(.18,.28,.12)});
-    // JP logo left
-    const jpLogoB64=await getJpLogo();
-    if(jpLogoB64){const ji=await embedImg(pdfDoc,jpLogoB64);if(ji){const s=ji.scale(.55);page.drawImage(ji,{x:20,y:PH-headerH+(headerH-s.height)/2,width:s.width,height:s.height});}}
-    // Website right
-    const siteStr='www.jointprinting.com',sitefs=10;
-    const siteW=boldFont.widthOfTextAtSize(siteStr,sitefs);
-    page.drawText(siteStr,{x:PW-margin-siteW,y:PH-headerH+headerH/2-sitefs/2,size:sitefs,font:boldFont,color:rgb(.55,.65,.50)});
-    // Subtitle below header
-    let textY=PH-headerH-22;
-    if(deckSub){page.drawText(deckSub,{x:margin,y:textY,size:13,font:titleFont,color:rgb(.45,.45,.45)});textY-=18;}
-    textY-=6;
-    // Grid
-    const gridAreaY=42,gridH=textY-gridAreaY,gridW=PW-margin*2;
+    const preset=lbLayoutPreset||'2up';
+    const M=32; // margin
+    const HDR=24; // thin top bar height
+    const FTR=22; // footer height
     const count=lbQueue.length;
-    const cols=count<=2?count:count<=6?3:Math.min(count,4);
-    const rows=Math.ceil(count/cols);
-    const cellW=gridW/cols,cellH=gridH/rows;
-    const imgPad=10,imgMaxH=cellH-34;
-    for(let i=0;i<count;i++){
-      const item=lbQueue[i];
-      const col=i%cols,row=Math.floor(i/cols);
-      const cellX=margin+col*cellW,cellY=textY-(row+1)*cellH;
-      page.drawRectangle({x:cellX+3,y:cellY+3,width:cellW-6,height:cellH-6,borderColor:rgb(.88,.88,.88),borderWidth:.4});
+    const dateStr=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+
+    // Helper: draw a page's header + footer chrome
+    function drawChrome(page,pageNum,total){
+      // Header: thin dark bar
+      page.drawRectangle({x:0,y:PH-HDR,width:PW,height:HDR,color:rgb(.06,.08,.06)});
+      page.drawText('JOINT PRINTING',{x:M,y:PH-HDR+6,size:8,font:boldFont,color:rgb(.25,.55,.30)});
+      const siteW=regFont.widthOfTextAtSize('jointprinting.com',7);
+      page.drawText('jointprinting.com',{x:PW-M-siteW,y:PH-HDR+7,size:7,font:regFont,color:rgb(.35,.45,.35)});
+      if(deckSub&&pageNum===1){
+        const sw=regFont.widthOfTextAtSize(deckSub,10);
+        page.drawText(deckSub,{x:(PW-sw)/2,y:PH-HDR+7,size:10,font:regFont,color:rgb(.55,.55,.55)});
+      }
+      // Footer: page number
+      page.drawRectangle({x:0,y:0,width:PW,height:FTR,color:rgb(.04,.06,.04)});
+      const pgStr=total>1?`${pageNum} / ${total}`:'';
+      if(pgStr){const pw=regFont.widthOfTextAtSize(pgStr,7);page.drawText(pgStr,{x:(PW-pw)/2,y:7,size:7,font:regFont,color:rgb(.30,.30,.30)});}
+      page.drawText(dateStr,{x:M,y:7,size:7,font:regFont,color:rgb(.28,.28,.28)});
+    }
+
+    // Helper: embed and draw one mockup in a cell rect {x,y,w,h}
+    async function drawMockupCell(page,item,cx,cy,cw,ch){
       const hasBack=!!item.backSrc;
-      const frontW=hasBack?(cellW-imgPad*2)*0.60:(cellW-imgPad*2);
-      const backW=hasBack?(cellW-imgPad*2)*0.38:0;
+      const pad=8;
+      const labelH=20; // space at bottom for name
+      const imgAreaH=ch-labelH-pad*2;
+      const imgAreaW=cw-pad*2;
+
       if(item.frontSrc){
         const img=await embedImg(pdfDoc,item.frontSrc);
-        if(img){const dims=img.scale(1);const scale=Math.min(frontW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+imgPad,iy=cellY+cellH-26-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
+        if(img){
+          const d=img.scale(1);
+          const fw=hasBack?imgAreaW*0.57:imgAreaW;
+          const scale=Math.min(fw/d.width,imgAreaH/d.height);
+          const iw=d.width*scale,ih=d.height*scale;
+          const ix=cx+pad+(fw-iw)/2;
+          const iy=cy+labelH+(imgAreaH-ih)/2;
+          page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});
+        }
       }
-      if(hasBack){
+      if(hasBack&&item.backSrc){
         const img=await embedImg(pdfDoc,item.backSrc);
-        if(img){const dims=img.scale(1);const scale=Math.min(backW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+cellW-imgPad-iw,iy=cellY+cellH-26-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
+        if(img){
+          const d=img.scale(1);
+          const bw=imgAreaW*0.38;
+          const scale=Math.min(bw/d.width,imgAreaH/d.height);
+          const iw=d.width*scale,ih=d.height*scale;
+          const ix=cx+cw-pad-iw;
+          const iy=cy+labelH+(imgAreaH-ih)/2;
+          page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});
+        }
       }
-      if(item.name){let label=item.name;const lfs=7.5;while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cellW-10)label=label.slice(0,-1);const lw=boldFont.widthOfTextAtSize(label,lfs);page.drawText(label,{x:cellX+(cellW-lw)/2,y:cellY+9,size:lfs,font:boldFont,color:rgb(.42,.42,.42)});}
+      // Style name label
+      if(item.name){
+        let label=item.name;const lfs=9;
+        while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cw-pad*2)label=label.slice(0,-1);
+        page.drawText(label,{x:cx+pad,y:cy+6,size:lfs,font:boldFont,color:rgb(.18,.18,.18)});
+        if(item.styleCode&&item.styleCode!==item.name){
+          let sub=item.styleCode;const sfs=7;
+          while(sub.length>2&&regFont.widthOfTextAtSize(sub,sfs)>cw-80)sub=sub.slice(0,-1);
+          const subW=regFont.widthOfTextAtSize(sub,sfs);
+          page.drawText(sub,{x:cx+cw-pad-subW,y:cy+7,size:sfs,font:regFont,color:rgb(.50,.50,.50)});
+        }
+      }
+      // Thin separator line between front and back labels
+      if(hasBack){
+        const sepX=cx+cw-pad-imgAreaW*0.39;
+        page.drawLine({start:{x:sepX,y:cy+labelH},end:{x:sepX,y:cy+ch-pad},thickness:.3,color:rgb(.85,.85,.85)});
+      }
     }
-    // Footer bar
-    page.drawRectangle({x:0,y:0,width:PW,height:40,color:rgb(.06,.06,.06)});
-    page.drawText('INNOVATION IN INK',{x:margin,y:13,size:11,font:boldFont,color:rgb(.35,.35,.35)});
-    const dateStr=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-    const dW=captionFont.widthOfTextAtSize(dateStr,9);
-    page.drawText(dateStr,{x:PW-margin-dW,y:14,size:9,font:captionFont,color:rgb(.45,.45,.45)});
+
+    // ── Build pages based on preset ──
+    const contentTop=PH-HDR-M;
+    const contentBot=FTR+M;
+    const contentH=contentTop-contentBot;
+    const contentW=PW-M*2;
+
+    let totalPages;
+    if(preset==='1up') totalPages=count;
+    else if(preset==='4up') totalPages=Math.ceil(count/4);
+    else totalPages=Math.ceil(count/2); // 2up default
+
+    for(let p=0;p<totalPages;p++){
+      const page=pdfDoc.addPage([PW,PH]);
+      drawChrome(page,p+1,totalPages);
+
+      if(preset==='1up'){
+        // Full page: one mockup centered
+        const item=lbQueue[p];
+        const gutter=M;
+        page.drawRectangle({x:M,y:contentBot,width:contentW,height:contentH,color:rgb(.98,.98,.98)});
+        await drawMockupCell(page,item,M+gutter,contentBot+gutter,contentW-gutter*2,contentH-gutter*2);
+      } else if(preset==='4up'){
+        // 2×2 grid
+        const startIdx=p*4;
+        const cols=2,rows=2;
+        const cw=(contentW-M)/cols;
+        const ch=(contentH-M/2)/rows;
+        for(let i=0;i<4;i++){
+          const idx=startIdx+i;
+          if(idx>=count) break;
+          const col=i%cols,row=Math.floor(i/cols);
+          const cx=M+col*(cw+M/cols);
+          const cy=contentTop-ch-row*(ch+M/rows);
+          page.drawRectangle({x:cx,y:cy,width:cw,height:ch,color:rgb(.98,.98,.98)});
+          await drawMockupCell(page,lbQueue[idx],cx,cy,cw,ch);
+        }
+      } else {
+        // 2up: two items stacked, separated by a divider line
+        const rowH=(contentH-M/2)/2;
+        for(let r=0;r<2;r++){
+          const idx=p*2+r;
+          if(idx>=count) break;
+          const cy=contentTop-rowH-r*(rowH+M/2);
+          page.drawRectangle({x:M,y:cy,width:contentW,height:rowH,color:rgb(.98,.98,.98)});
+          await drawMockupCell(page,lbQueue[idx],M,cy,contentW,rowH);
+        }
+      }
+    }
+
     const pdfBytes=await pdfDoc.save();
     downloadBlob(pdfBytes,filename);
-    toast(`Lookbook exported — ${count} item${count!==1?'s':''} ✓`,'success');
+    toast(`Lookbook exported — ${count} mockup${count!==1?'s':''} · ${totalPages}pg ✓`,'success');
   } catch(e){console.error(e);toast('Export failed: '+e.message,'error');}
   finally{setLoading(false);}
 }
@@ -2738,13 +2833,6 @@ document.addEventListener('keydown', e=>{
   if(e.key==='s'&&(e.ctrlKey||e.metaKey)){e.preventDefault();saveMockupToLibrary();}
   if(e.key==='Escape'){closeLogoEditor();closeSsModal();closeLibraryPicker();}
 });
-
-// ── Lookbook mode descriptions ────────────────────────────────────
-const LB_MODE_DESCS = {
-  grid:'Exports a single-page PDF with all selected mockups in a clean grid. Great for showing a full collection at a glance.',
-  color:'Show the same garment in multiple color options side-by-side. Perfect for color selection presentations.',
-  ad:'Clean, magazine-style pages — one garment per page, logo tastefully placed, no spec details. Looks like a real catalog or ad.',
-};
 
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {

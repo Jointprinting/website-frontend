@@ -502,7 +502,7 @@ export default function RoadTripTab({ token }) {
   // Itinerary state — which day is currently selected for new saves, and
   // which days have their route line drawn on the map.
   const [mobilePanelOpen, setMobilePanelOpen] = React.useState(false);
-  const [currentDayLabel, setCurrentDayLabel] = React.useState('Day 1');
+  const [currentDayLabel, setCurrentDayLabel] = React.useState(todayISO);
   const [routesShown, setRoutesShown] = React.useState({}); // dayLabel -> true
   // Route layer registry. Tracks the source/layer IDs we've added so we
   // can clean them up on toggle-off or style change. Lives in a ref because
@@ -569,7 +569,7 @@ export default function RoadTripTab({ token }) {
   // All known day labels (used by the day picker)
   const knownDays = React.useMemo(() => {
     const set = new Set(itinerary.map(([d]) => d).filter((d) => d !== 'Unassigned'));
-    set.add('Day 1'); // always at least one option
+    set.add(todayISO()); // always at least one option
     if (currentDayLabel) set.add(currentDayLabel);
     return Array.from(set).sort((a, b) => {
       const aIsDate = /^\d{4}-\d{2}-\d{2}$/.test(a);
@@ -1449,10 +1449,27 @@ export default function RoadTripTab({ token }) {
                                 border: `1px solid ${scoreMeta(item.score).color}66`,
                               }}>{scoreMeta(item.score).label}</Box>
                             )}
-                            <Box sx={{
-                              width: 6, height: 6, borderRadius: '50%', flexShrink: 0, mt: 0.4,
-                              bgcolor: item.status && item.status !== 'planned' ? statusMeta(item.status).color : layerForItem.color,
-                            }} />
+                            <Box role="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.kind === 'lead') {
+                                  const idx = SALES_STATUSES.findIndex(s => s.value === item.status);
+                                  const next = SALES_STATUSES[(idx + 1) % SALES_STATUSES.length];
+                                  updateStopField(item, { status: next.value });
+                                } else if (item.customType === 'printer') {
+                                  const PRINTER_S = ['planned','pre_called','visited','won'];
+                                  const idx = PRINTER_S.indexOf(item.status);
+                                  updateStopField(item, { status: PRINTER_S[(idx + 1) % PRINTER_S.length] });
+                                } else {
+                                  updateStopField(item, { status: item.status === 'visited' ? 'planned' : 'visited' });
+                                }
+                              }}
+                              sx={{
+                                width: 7, height: 7, borderRadius: '50%', flexShrink: 0, mt: 0.35,
+                                bgcolor: item.status && item.status !== 'planned' ? statusMeta(item.status).color : layerForItem.color,
+                                cursor: 'pointer', transition: 'transform 0.12s',
+                                '&:hover': { transform: 'scale(1.6)' },
+                              }} />
                             <Typography sx={{
                               flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
                               color: TERM.text, letterSpacing: 0.2,
@@ -1484,31 +1501,28 @@ export default function RoadTripTab({ token }) {
                             {editingStop === item._id && (
                               <Box sx={{ width: '100%', mt: 0.5, ml: 2, pl: 1, borderLeft: `2px solid ${TERM.borderDim}` }}
                                 onClick={(e) => e.stopPropagation()}>
-                                {/* Status selector */}
-                                <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>STATUS</Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1 }}>
-                                  {SALES_STATUSES.map((s) => (
-                                    <Box key={s.value}
-                                      role="button"
-                                      onClick={() => updateStopField(item, { status: s.value })}
-                                      sx={{
-                                        fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
-                                        px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
-                                        color: item.status === s.value ? '#000' : s.color,
-                                        bgcolor: item.status === s.value ? s.color : 'transparent',
-                                        border: `1px solid ${s.color}`,
-                                        '&:hover': { bgcolor: s.color + '22' },
-                                      }}>{s.label}</Box>
-                                  ))}
-                                </Box>
-                                {/* Score selector — dispensaries only */}
-                                {item.kind === 'lead' && (
+                                {item.kind === 'lead' ? (
+                                  /* ── Full sales pipeline editor ── */
                                   <>
+                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>STATUS</Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1 }}>
+                                      {SALES_STATUSES.map((s) => (
+                                        <Box key={s.value} role="button"
+                                          onClick={() => updateStopField(item, { status: s.value })}
+                                          sx={{
+                                            fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
+                                            px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                                            color: item.status === s.value ? '#000' : s.color,
+                                            bgcolor: item.status === s.value ? s.color : 'transparent',
+                                            border: `1px solid ${s.color}`,
+                                            '&:hover': { bgcolor: s.color + '22' },
+                                          }}>{s.label}</Box>
+                                      ))}
+                                    </Box>
                                     <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SCORE</Typography>
                                     <Box sx={{ display: 'flex', gap: 0.5, mb: 1 }}>
                                       {SCORE_OPTIONS.map((sc) => (
-                                        <Box key={sc.value}
-                                          role="button"
+                                        <Box key={sc.value} role="button"
                                           onClick={() => updateStopField(item, { score: sc.value })}
                                           sx={{
                                             fontFamily: MONO, fontSize: 9, fontWeight: 900, letterSpacing: 0.5,
@@ -1520,42 +1534,14 @@ export default function RoadTripTab({ token }) {
                                           }}>{sc.label}</Box>
                                       ))}
                                     </Box>
-                                  </>
-                                )}
-                                {/* Buyer name + notes */}
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4, mb: 0.75 }}>
-                                  <input
-                                    placeholder="Buyer name…"
-                                    defaultValue={item.contactName || ''}
-                                    onBlur={(e) => {
-                                      if (e.target.value !== (item.contactName || ''))
-                                        updateStopField(item, { contactName: e.target.value });
-                                    }}
-                                    style={{
-                                      background: 'rgba(255,255,255,0.04)',
-                                      border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
-                                      padding: '4px 7px', fontFamily: MONO, fontSize: 9.5,
-                                      color: TERM.text, outline: 'none', width: '100%',
-                                    }}
-                                  />
-                                  <input
-                                    placeholder="Notes…"
-                                    defaultValue={item.notes || ''}
-                                    onBlur={(e) => {
-                                      if (e.target.value !== (item.notes || ''))
-                                        updateStopField(item, { notes: e.target.value });
-                                    }}
-                                    style={{
-                                      background: 'rgba(255,255,255,0.04)',
-                                      border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
-                                      padding: '4px 7px', fontFamily: MONO, fontSize: 9.5,
-                                      color: TERM.text, outline: 'none', width: '100%',
-                                    }}
-                                  />
-                                </Box>
-                                {/* Interest tag chips */}
-                                {item.kind === 'lead' && (
-                                  <>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4, mb: 0.75 }}>
+                                      <input placeholder="Buyer name…" defaultValue={item.contactName || ''}
+                                        onBlur={(e) => { if (e.target.value !== (item.contactName || '')) updateStopField(item, { contactName: e.target.value }); }}
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                      <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                        onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                    </Box>
                                     <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.4 }}>INTERESTS</Typography>
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.5 }}>
                                       {ITEM_TAGS.map((tag) => {
@@ -1579,6 +1565,62 @@ export default function RoadTripTab({ token }) {
                                         );
                                       })}
                                     </Box>
+                                  </>
+                                ) : item.customType === 'printer' ? (
+                                  /* ── Printer: logistics only ── */
+                                  <>
+                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>STATUS</Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1 }}>
+                                      {[
+                                        { value: 'planned',   label: 'TO VISIT',     color: 'rgba(212,244,221,0.5)' },
+                                        { value: 'pre_called',label: 'CALLED AHEAD', color: '#84cc16' },
+                                        { value: 'visited',   label: 'VISITED',      color: '#fbbf24' },
+                                        { value: 'won',       label: 'ORDER PLACED', color: '#4ade80' },
+                                      ].map((s) => (
+                                        <Box key={s.value} role="button"
+                                          onClick={() => updateStopField(item, { status: s.value })}
+                                          sx={{
+                                            fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
+                                            px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                                            color: item.status === s.value ? '#000' : s.color,
+                                            bgcolor: item.status === s.value ? s.color : 'transparent',
+                                            border: `1px solid ${s.color}`,
+                                            '&:hover': { bgcolor: s.color + '22' },
+                                          }}>{s.label}</Box>
+                                      ))}
+                                    </Box>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4, mb: 0.75 }}>
+                                      <input placeholder="Phone…" defaultValue={item.phone || ''}
+                                        onBlur={(e) => { if (e.target.value !== (item.phone || '')) updateStopField(item, { phone: e.target.value }); }}
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                      <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                        onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
+                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
+                                    </Box>
+                                  </>
+                                ) : (
+                                  /* ── Friend / client / waypoint: simple ── */
+                                  <>
+                                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1 }}>
+                                      {[
+                                        { value: 'planned', label: 'PLANNED',  color: 'rgba(212,244,221,0.5)' },
+                                        { value: 'visited', label: 'VISITED',  color: '#fbbf24' },
+                                      ].map((s) => (
+                                        <Box key={s.value} role="button"
+                                          onClick={() => updateStopField(item, { status: s.value })}
+                                          sx={{
+                                            fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
+                                            px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                                            color: item.status === s.value ? '#000' : s.color,
+                                            bgcolor: item.status === s.value ? s.color : 'transparent',
+                                            border: `1px solid ${s.color}`,
+                                            '&:hover': { bgcolor: s.color + '22' },
+                                          }}>{s.label}</Box>
+                                      ))}
+                                    </Box>
+                                    <input placeholder="Notes…" defaultValue={item.notes || ''}
+                                      onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
+                                      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', marginBottom: 4 }} />
                                   </>
                                 )}
                               </Box>
