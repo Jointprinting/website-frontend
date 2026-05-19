@@ -386,12 +386,33 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 /* ─── Lookbook ────────────────────────────────────────────────── */
 #lookbook-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow:hidden}
 #lookbook-view-wrapper.active{display:flex}
-#lookbook-view{display:grid;grid-template-columns:1fr 330px;height:100%;width:100%;overflow:hidden}
-.lb-left{padding:20px 22px;overflow-y:auto;background:var(--bg)}
-.lb-right{border-left:1px solid var(--bd);background:var(--s0);padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
-.lb-hdr{margin-bottom:18px}
-.lb-hdr h2{font-family:var(--fb);font-size:21px;letter-spacing:.07em;color:var(--tx)}
-.lb-hdr p{font-size:11px;color:var(--tx2);margin-top:3px}
+#lookbook-wrap{display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden}
+.lb-topbar{display:flex;align-items:center;gap:8px;padding:0 16px;height:46px;background:var(--s0);border-bottom:1px solid var(--bd);flex-shrink:0}
+.lb-topbar-search{flex:1;background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--f);font-size:12px;padding:5px 10px;outline:none;transition:border-color .15s,box-shadow .15s;height:30px}
+.lb-topbar-search:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-dim)}
+.lb-topbar-search::placeholder{color:var(--tx4)}
+.lb-topbar-select{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx2);font-family:var(--f);font-size:11px;padding:5px 8px;outline:none;cursor:pointer;height:30px;flex-shrink:0}
+.lb-topbar-select:focus{border-color:var(--ac)}
+.lb-sel-label{font-family:var(--fm);font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0}
+.lb-grid{flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;align-content:start}
+.lb-card{background:var(--s1);border:1.5px solid var(--bd);border-radius:var(--rl);cursor:pointer;overflow:hidden;transition:all .18s var(--ease);position:relative}
+.lb-card:hover{border-color:var(--tx3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.lb-card.selected{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac-glow),0 8px 24px rgba(0,0,0,.4);transform:translateY(-2px)}
+.lb-card-check{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:var(--s3);border:1.5px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:11px;color:transparent;transition:all .15s var(--spring);z-index:2}
+.lb-card.selected .lb-card-check{background:var(--ac);border-color:var(--ac);color:#0a1204;font-weight:700;box-shadow:0 0 10px var(--ac-glow)}
+.lb-card-imgs{display:flex;gap:2px;background:var(--bg);min-height:150px;align-items:center;justify-content:center;padding:10px}
+.lb-card-img{flex:1;max-height:150px;object-fit:contain}
+.lb-card-ph{flex:1;min-height:80px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--tx4);font-family:var(--fm)}
+.lb-card-body{padding:8px 10px 10px}
+.lb-card-name{font-size:11px;font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.lb-card-date{font-size:9px;color:var(--tx3);font-family:var(--fm)}
+.lb-export-bar{flex-shrink:0;background:rgba(15,17,25,.97);backdrop-filter:blur(14px);border-top:1px solid var(--bd2);padding:10px 16px;display:flex;align-items:center;gap:8px;transform:translateY(100%);transition:transform .28s var(--ease-out)}
+.lb-export-bar.visible{transform:translateY(0)}
+.lb-eb-count{font-family:var(--fm);font-size:11px;color:var(--ac);font-weight:700;white-space:nowrap;margin-right:4px}
+.lb-eb-input{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--f);font-size:12px;padding:5px 9px;outline:none;transition:border-color .15s,box-shadow .15s;height:30px}
+.lb-eb-input:focus{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac-dim)}
+.lb-eb-input::placeholder{color:var(--tx4)}
+.lb-eb-filename{width:150px;flex-shrink:0}
 
 /* Stagger-in animation for grid items */
 @keyframes fadeSlideIn {
@@ -419,60 +440,6 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   font-family: var(--f);
   text-transform: none;
 }
-.lb-client-badge {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: rgba(184,242,86,.12);
-  color: var(--ac);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: .03em;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(184,242,86,.3);
-  max-width: calc(100% - 32px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-  font-family: var(--fm);
-  z-index: 1;
-}
-
-.lb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
-.lb-card{
-  background:var(--s0);border:1.5px solid var(--bd);border-radius:var(--rl);
-  cursor:pointer;overflow:hidden;transition:all .18s var(--ease);position:relative;
-}
-.lb-card:hover{border-color:var(--tx3);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.5)}
-.lb-card.selected{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac-glow),0 4px 18px rgba(0,0,0,.3);transform:translateY(-2px)}
-.lb-check-dot{
-  position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:50%;
-  background:var(--s3);border:1.5px solid var(--bd2);
-  display:flex;align-items:center;justify-content:center;font-size:8px;color:transparent;
-  transition:all .15s;
-  z-index:2;
-}
-.lb-card.selected .lb-check-dot{background:var(--ac);border-color:var(--ac);color:#0c1a03;animation:pulseGlow 1.4s ease-out 1}
-.lb-thumbs{display:flex;gap:2px;background:var(--s2);padding:10px}
-.lb-thumb-img{flex:1;aspect-ratio:1;object-fit:contain}
-.lb-thumb-ph{flex:1;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--tx3);font-family:var(--fm)}
-.lb-name{padding:6px 8px 2px;font-size:9.5px;font-weight:500;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lb-date{padding:0 8px 6px;font-size:8px;color:var(--tx3);font-family:var(--fm)}
-.lb-rlbl{font-family:var(--fm);font-size:9px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3);display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
-.lb-count{color:var(--ac);font-size:11px;font-weight:600}
-.lb-queue{display:flex;flex-direction:column;gap:4px}
-.lb-queue-item{display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:7px 8px;cursor:grab;transition:border-color .15s}
-.lb-queue-item.drag-over{border-color:var(--ac);background:var(--ac-dim)}
-.drag-handle{color:var(--tx3);font-size:14px;cursor:grab;user-select:none;flex-shrink:0}
-.lb-q-thumb{width:30px;height:30px;object-fit:contain;border-radius:3px;background:var(--s2);flex-shrink:0}
-.lb-q-info{flex:1;min-width:0}
-.lb-q-name{font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lb-q-sub{font-size:8.5px;color:var(--tx3);margin-top:1px;font-family:var(--fm)}
-.lb-q-rm{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:12px;padding:2px 4px;border-radius:3px;flex-shrink:0;transition:all .15s}
-.lb-q-rm:hover{color:var(--red);background:var(--red-dim)}
-.lb-empty{border:1px dashed var(--bd2);border-radius:var(--rl);padding:20px;text-align:center;font-size:11px;color:var(--tx3);line-height:1.6}
 
 /* ─── Library ─────────────────────────────────────────────────── */
 #library-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow:hidden}
@@ -651,6 +618,8 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .sec-note{font-size:10px;color:var(--tx3);line-height:1.5;margin-bottom:8px}
 .kbd{font-family:var(--fm);font-size:8px;background:var(--s2);border:1px solid var(--bd2);border-radius:3px;padding:1px 5px;color:var(--tx3)}
 
+.mobile-panel-toggle{display:none}
+
 @media(max-width:1100px){:root{--pl:242px;--pr:264px}}
 
 /* ─── Mobile / Tablet responsive ─────────────────────────────── */
@@ -751,18 +720,12 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   .mobile-panel-toggle-arrow{transition:transform .25s ease;display:inline-block}
   .mobile-panel-toggle.open .mobile-panel-toggle-arrow{transform:rotate(180deg)}
 
-  /* Lookbook — single column on mobile */
-  #lookbook-view{
-    grid-template-columns:1fr;
-  }
-  .lb-right{
-    border-left:none;
-    border-top:1px solid var(--bd);
-    max-height:none;
-  }
-  .lb-grid{
-    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-  }
+  /* Lookbook — compact on mobile */
+  .lb-topbar{flex-wrap:wrap;height:auto;padding:8px 12px}
+  .lb-topbar-search{min-width:0}
+  .lb-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));padding:10px}
+  .lb-export-bar{flex-wrap:wrap}
+  .lb-eb-filename{width:100%}
 }
 </style>
 </head>
@@ -959,68 +922,23 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 
 <!-- LOOKBOOK -->
 <div id="lookbook-view-wrapper">
-  <div id="lookbook-view">
-    <div class="lb-left">
-      <div class="lb-hdr">
-        <h2>Lookbook Builder</h2>
-        <p>Click mockups to select, then export as a collection PDF</p>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
-          <label style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:1px">Filter</label>
-          <select id="lb-client-filter" onchange="refreshLbGrid()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 10px;font-size:12px;font-family:var(--f);cursor:pointer;min-width:160px">
-            <option value="">All clients</option>
-          </select>
-          <input type="text" id="lb-search" oninput="refreshLbGrid()" placeholder="Search by name…" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 10px;font-size:12px;font-family:var(--f);flex:1;min-width:140px"/>
-        </div>
-      </div>
-      <div class="lb-grid" id="lb-mockup-grid">
-        <div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Build and save mockups in the Studio tab first.</div>
-      </div>
+  <div id="lookbook-wrap">
+    <div class="lb-topbar">
+      <input type="text" id="lb-search" class="lb-topbar-search" oninput="refreshLbGrid()" placeholder="Search mockups…" />
+      <select id="lb-client-filter" class="lb-topbar-select" onchange="refreshLbGrid()">
+        <option value="">All clients</option>
+      </select>
+      <span class="lb-sel-label" id="lb-sel-label">0 selected</span>
     </div>
-    <div class="lb-right">
-      <div>
-        <div class="lb-rlbl">Collection Details</div>
-        <div class="field" style="margin-bottom:7px"><label>Client / Name</label><input type="text" id="lb-client-name" placeholder="Acme Co. – Spring 2025"/></div>
-        <div class="field"><label>Subtitle</label><input type="text" id="lb-subtitle" placeholder="Custom Merch Collection"/></div>
-      </div>
-      <div class="divider"></div>
-      <div>
-        <div class="lb-rlbl" style="margin-bottom:8px">Client Logo</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div class="upload-zone" id="zone-lb-logo1" style="min-height:52px">
-            <input type="file" accept="image/png,image/jpeg" onchange="handleLbLogoUpload(event,0)"/>
-            <div id="thumb-lb-logo1" style="display:none" class="uz-wrap"><img class="uz-thumb" id="img-lb-logo1"/></div>
-            <div id="text-lb-logo1" style="font-size:10px;color:var(--tx3)">+ Primary</div>
-          </div>
-          <div class="upload-zone" id="zone-lb-logo2" style="min-height:52px">
-            <input type="file" accept="image/png,image/jpeg" onchange="handleLbLogoUpload(event,1)"/>
-            <div id="thumb-lb-logo2" style="display:none" class="uz-wrap"><img class="uz-thumb" id="img-lb-logo2"/></div>
-            <div id="text-lb-logo2" style="font-size:10px;color:var(--tx3)">+ Secondary</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-xs" onclick="useFromLibrary('lbLogo1')">↑ P</button>
-          <button class="btn btn-ghost btn-xs" onclick="useFromLibrary('lbLogo2')">↑ S</button>
-          <button class="btn btn-danger btn-xs" onclick="clearLbLogo(0)">✕ P</button>
-          <button class="btn btn-danger btn-xs" onclick="clearLbLogo(1)">✕ S</button>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div>
-        <div class="lb-rlbl">Selected <span class="lb-count" id="lb-selected-count">0</span></div>
-        <div class="lb-queue" id="lb-queue">
-          <div class="lb-empty" id="lb-queue-empty">Click mockups to add them.<br>Drag to reorder.</div>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div>
-        <div class="field" style="margin-bottom:8px"><label>PDF Filename</label><input type="text" id="lb-filename" placeholder="client-lookbook.pdf"/></div>
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-          <input type="checkbox" id="lb-show-labels" checked style="accent-color:var(--ac)"/>
-          <label for="lb-show-labels" style="font-size:11px;color:var(--tx2);cursor:pointer">Show item labels in PDF</label>
-        </div>
-      </div>
-      <button class="btn btn-ac btn-full" onclick="exportLookbook()">↓ Export Lookbook PDF</button>
-      <button class="btn btn-ghost btn-sm btn-full" onclick="clearLookbookQueue()" style="margin-top:4px">Clear Selection</button>
+    <div class="lb-grid" id="lb-mockup-grid">
+      <div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Build and save mockups in the Studio tab first.</div>
+    </div>
+    <div class="lb-export-bar" id="lb-export-bar">
+      <span class="lb-eb-count" id="lb-eb-count">0 mockups</span>
+      <input type="text" id="lb-subtitle" class="lb-eb-input" placeholder="Collection subtitle (optional)" style="flex:1;min-width:0" />
+      <input type="text" id="lb-filename" class="lb-eb-input lb-eb-filename" placeholder="lookbook.pdf" />
+      <button class="btn btn-ghost btn-sm" onclick="clearLookbookQueue()">Clear</button>
+      <button class="btn btn-ac" onclick="exportLookbook()">↓ Export PDF</button>
     </div>
   </div>
 </div>
@@ -1558,10 +1476,7 @@ let pickerTarget = null;
 let pendingPreset = null;
 
 // Lookbook state
-let lbQueue  = [];
-let lbLogos  = [null, null];
-let lbMode   = 'grid'; // 'grid' | 'color' | 'ad'
-let adBgColor = '#ffffff';
+let lbQueue = [];
 
 // S&S state
 let ssLoadedFront = null;
@@ -2619,40 +2534,17 @@ function applyPickerSelection(item) {
   } else if(t==='frontLogo'||t==='backLogo'){
     pg[t+'Base64']=item.base64; pg[t.includes('front')?'frontCompositeBase64':'backCompositeBase64']=null;
     updateThumb(t,item.base64); scheduleUpdate(); toast('Logo loaded ✓');
-  } else if(t==='lbLogo1'){
-    lbLogos[0]=item.base64; updateLbLogoThumb(0,item.base64); toast('Primary logo set ✓');
-  } else if(t==='lbLogo2'){
-    lbLogos[1]=item.base64; updateLbLogoThumb(1,item.base64); toast('Secondary logo set ✓');
   }
 }
 function closeLibraryPicker(){ document.getElementById('library-picker-overlay').classList.remove('open'); }
 
 // ── Lookbook ──────────────────────────────────────────────────────
-function setLbMode(mode, btn) {
-  lbMode = mode;
-  document.querySelectorAll('.lb-mode-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  const descs={
-    grid:'Exports a single-page PDF with all selected mockups in a clean grid. Great for showing a full collection at a glance.',
-    color:'Show the same garment in multiple color options side-by-side. Perfect for color selection presentations.',
-    ad:'Clean, magazine-style pages — one garment per page, logo tastefully placed, no spec details. Looks like a real catalog or ad.',
-  };
-  // mode descriptions removed (simplified lookbook)
-}
-function setAdBg(color,el) {
-  adBgColor=color;
-  document.querySelectorAll('.ad-bg-selector .bg-opt').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-}
-function setAdBgCustom(color){ adBgColor=color; document.querySelectorAll('.ad-bg-selector .bg-opt').forEach(e=>e.classList.remove('active')); }
-
 async function refreshLbGrid() {
   if (!db) return;
-  let mockups=await dbGetAll('mockups');
-  // Refresh client suggestions silently in case new mockups were added
+  let mockups = await dbGetAll('mockups');
   await refreshClientSuggestions();
 
-  const grid=document.getElementById('lb-mockup-grid');
+  const grid = document.getElementById('lb-mockup-grid');
   const clientFilter = (document.getElementById('lb-client-filter')?.value || '').trim();
   const search = (document.getElementById('lb-search')?.value || '').trim().toLowerCase();
 
@@ -2664,131 +2556,97 @@ async function refreshLbGrid() {
       ((m.pageState && m.pageState.subtitle) || '').toLowerCase().includes(search)
     );
   }
-
-  // Sort: most recent first
   mockups.sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
 
-  if(!mockups.length){
+  if (!mockups.length) {
     grid.innerHTML = clientFilter || search
-      ? `<div class="empty-state" style="grid-column:1/-1">No mockups match this filter.<br><span style="color:var(--tx3);font-size:11px">Try clearing the search or client filter.</span></div>`
-      : `<div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Build and save mockups in the Studio tab first.</div>`;
+      ? `<div class="empty-state" style="grid-column:1/-1">No mockups match this filter.</div>`
+      : `<div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Save mockups in the Studio tab first.</div>`;
+    updateLbBar();
     return;
   }
-  // Group mockups by first segment of name (before "/" or "-")
+
+  // Group by name prefix (before "/" or "–")
   const groups = {};
   mockups.forEach(m => {
-    const seg = (m.name || '').split(/[\/\-]/)[0].trim() || 'Unsorted';
+    const seg = (m.name || '').split(/[\/\-–]/)[0].trim() || 'Other';
     if (!groups[seg]) groups[seg] = [];
     groups[seg].push(m);
   });
   const groupKeys = Object.keys(groups).sort();
 
-  grid.innerHTML='';
+  grid.innerHTML = '';
   let globalIdx = 0;
   groupKeys.forEach(gk => {
     if (groupKeys.length > 1) {
       const hdr = document.createElement('div');
-      hdr.style.cssText = 'grid-column:1/-1;font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--tx3);text-transform:uppercase;padding:4px 0 2px;border-bottom:1px solid var(--bd);margin-bottom:4px;font-family:var(--fm)';
+      hdr.style.cssText = 'grid-column:1/-1;font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--tx3);text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid var(--bd);margin-bottom:2px;font-family:var(--fm)';
       hdr.textContent = gk;
       grid.appendChild(hdr);
     }
     groups[gk].forEach(item => {
       const idx = globalIdx++;
-      const isSelected=lbQueue.some(q=>q.mockupId===item.id);
-      const card=document.createElement('div');
-      card.className='lb-card'+(isSelected?' selected':'');
-      card.style.animation = `fadeSlideIn .25s ease-out ${Math.min(idx*30, 400)}ms backwards`;
-      const pg=item.pageState||{};
-      const frontSrc=pg.frontCompositeBase64||pg.frontBlankBase64||null;
-      const backSrc =pg.backCompositeBase64 ||pg.backBlankBase64 ||null;
-      const clientBadge = item.client ? `<div class="lb-client-badge">${item.client.replace(/</g,'&lt;')}</div>` : '';
-      card.innerHTML=`
-        <div class="lb-check-dot">${isSelected?'✓':''}</div>
-        ${clientBadge}
-        <div class="lb-thumbs">
-          ${frontSrc?`<img class="lb-thumb-img" src="${frontSrc}" style="flex:1;aspect-ratio:1;object-fit:contain"/>`:'<div class="lb-thumb-ph">F</div>'}
-          ${backSrc?`<img class="lb-thumb-img" src="${backSrc}" style="flex:1;aspect-ratio:1;object-fit:contain"/>`:'<div class="lb-thumb-ph">B</div>'}
+      const isSelected = lbQueue.some(q => q.mockupId === item.id);
+      const card = document.createElement('div');
+      card.className = 'lb-card' + (isSelected ? ' selected' : '');
+      card.dataset.mockupId = item.id;
+      card.style.animation = `fadeSlideIn .22s ease-out ${Math.min(idx * 25, 350)}ms backwards`;
+      const pg = item.pageState || {};
+      const frontSrc = pg.frontCompositeBase64 || pg.frontBlankBase64 || null;
+      const backSrc = pg.backCompositeBase64 || pg.backBlankBase64 || null;
+      card.innerHTML = `
+        <div class="lb-card-check">${isSelected ? '✓' : ''}</div>
+        <div class="lb-card-imgs">
+          ${frontSrc ? `<img class="lb-card-img" src="${frontSrc}" />` : '<div class="lb-card-ph">FRONT</div>'}
+          ${backSrc ? `<img class="lb-card-img" src="${backSrc}" style="opacity:.75" />` : ''}
         </div>
-        <div class="lb-name">${(item.name||'').replace(/</g,'&lt;')}</div>
-        <div class="lb-date">${new Date(item.savedAt).toLocaleDateString()}</div>
+        <div class="lb-card-body">
+          <div class="lb-card-name">${(item.name || '').replace(/</g,'&lt;')}</div>
+          <div class="lb-card-date">${new Date(item.savedAt).toLocaleDateString()}</div>
+        </div>
       `;
-      card.onclick=()=>toggleLbItem(item,card);
+      card.onclick = () => toggleLbItem(item, card);
       grid.appendChild(card);
     });
   });
+  updateLbBar();
 }
-function toggleLbItem(item,card) {
-  const idx=lbQueue.findIndex(q=>q.mockupId===item.id);
-  if(idx>=0){lbQueue.splice(idx,1);card.classList.remove('selected');card.querySelector('.lb-check-dot').textContent='';}
-  else{
-    const pg=item.pageState||{};
+
+function toggleLbItem(item, card) {
+  const idx = lbQueue.findIndex(q => q.mockupId === item.id);
+  if (idx >= 0) {
+    lbQueue.splice(idx, 1);
+    card.classList.remove('selected');
+    card.querySelector('.lb-card-check').textContent = '';
+  } else {
+    const pg = item.pageState || {};
     lbQueue.push({
-      mockupId:item.id,name:item.name,
-      thumbnail:item.thumbnail,
-      frontSrc:pg.frontCompositeBase64||pg.frontBlankBase64||null,
-      backSrc:pg.backCompositeBase64||pg.backBlankBase64||null,
-      frontLogoBase64:pg.frontLogoBase64||null,
-      colors:pg.frontColors||[],
-      subtitle:pg.subtitle||'',
-      styleCode:pg.title||item.name,
+      mockupId: item.id, name: item.name,
+      frontSrc: pg.frontCompositeBase64 || pg.frontBlankBase64 || null,
+      backSrc: pg.backCompositeBase64 || pg.backBlankBase64 || null,
+      subtitle: pg.subtitle || '',
+      styleCode: pg.title || item.name,
     });
     card.classList.add('selected');
-    card.querySelector('.lb-check-dot').textContent='✓';
+    const check = card.querySelector('.lb-card-check');
+    check.textContent = '✓';
+    card.style.transform = 'translateY(-4px) scale(1.02)';
+    setTimeout(() => { card.style.transform = ''; }, 220);
   }
-  renderLbQueue();
+  updateLbBar();
 }
-function renderLbQueue() {
-  const qContainer=document.getElementById('lb-queue');
-  const emptyEl=document.getElementById('lb-queue-empty');
-  document.getElementById('lb-selected-count').textContent=lbQueue.length;
-  if(!lbQueue.length){qContainer.innerHTML='<div class="lb-empty" id="lb-queue-empty">No items selected.<br>Click mockups on the left to add.</div>';return;}
-  qContainer.innerHTML='';
-  lbQueue.forEach((item,i)=>{
-    const el=document.createElement('div');
-    el.className='lb-queue-item';
-    el.draggable=true;
-    el.dataset.idx=i;
-    el.innerHTML=`
-      <span class="drag-handle">⠿</span>
-      ${item.thumbnail?`<img class="lb-q-thumb" src="${item.thumbnail}"/>`:'<div class="lb-q-thumb" style="font-size:18px;display:flex;align-items:center;justify-content:center">📋</div>'}
-      <div class="lb-q-info"><div class="lb-q-name">${item.name}</div><div class="lb-q-sub">${item.subtitle||''}</div></div>
-      <button class="lb-q-rm" onclick="removeLbQueueItem(${i})">✕</button>
-    `;
-    el.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);});
-    el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag-over');});
-    el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
-    el.addEventListener('drop',e=>{
-      e.preventDefault(); el.classList.remove('drag-over');
-      const from=parseInt(e.dataTransfer.getData('text/plain'));
-      const to=i;
-      if(from===to)return;
-      const [moved]=lbQueue.splice(from,1);
-      lbQueue.splice(to,0,moved);
-      renderLbQueue();
-    });
-    qContainer.appendChild(el);
-  });
-}
-function removeLbQueueItem(i){ lbQueue.splice(i,1); refreshLbGrid(); renderLbQueue(); }
-function clearLookbookQueue(){ lbQueue=[]; refreshLbGrid(); renderLbQueue(); }
 
-function handleLbLogoUpload(e,idx) {
-  const file=e.target.files[0]; if(!file)return;
-  const reader=new FileReader();
-  reader.onload=ev=>{lbLogos[idx]=ev.target.result;updateLbLogoThumb(idx,ev.target.result);};
-  reader.readAsDataURL(file);
+function updateLbBar() {
+  const bar = document.getElementById('lb-export-bar');
+  const cnt = document.getElementById('lb-eb-count');
+  const lbl = document.getElementById('lb-sel-label');
+  const n = lbQueue.length;
+  if (cnt) cnt.textContent = n + (n === 1 ? ' mockup' : ' mockups');
+  if (lbl) lbl.textContent = n + ' selected';
+  if (bar) bar.classList.toggle('visible', n > 0);
 }
-function updateLbLogoThumb(idx,b64) {
-  const thumbId=`thumb-lb-logo${idx+1}`;
-  const textId=`text-lb-logo${idx+1}`;
-  const imgId=`img-lb-logo${idx+1}`;
-  const zoneId=`zone-lb-logo${idx+1}`;
-  const thumb=document.getElementById(thumbId),textEl=document.getElementById(textId),imgEl=document.getElementById(imgId),zone=document.getElementById(zoneId);
-  if(!thumb)return;
-  if(b64){imgEl.src=b64;thumb.style.display='flex';if(textEl)textEl.style.display='none';if(zone)zone.classList.add('has-image');}
-  else{thumb.style.display='none';if(textEl)textEl.style.display='';if(zone)zone.classList.remove('has-image');}
-}
-function clearLbLogo(idx){ lbLogos[idx]=null; updateLbLogoThumb(idx,null); }
+
+function clearLookbookQueue() { lbQueue = []; updateLbBar(); refreshLbGrid(); }
 
 // ── Lookbook Export ───────────────────────────────────────────────
 async function exportLookbook() {
@@ -2805,64 +2663,51 @@ async function exportLookbookGrid() {
     const boldFont=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const titleFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
     const captionFont=await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
-    const clientName=document.getElementById('lb-client-name').value.trim()||'Collection';
-    const deckSub=document.getElementById('lb-subtitle').value.trim();
-    const showLabels=document.getElementById('lb-show-labels').checked;
-    const filename=document.getElementById('lb-filename').value.trim()||`${clientName.toLowerCase().replace(/\s+/g,'-')}-lookbook.pdf`;
-    const page=pdfDoc.addPage([PW,PH]);
-    // Header
+    const deckSub=(document.getElementById('lb-subtitle')?.value||'').trim();
+    const filename=(document.getElementById('lb-filename')?.value||'').trim()||'lookbook.pdf';
+    const margin=28;
     const headerH=72;
+
+    const page=pdfDoc.addPage([PW,PH]);
+    // Green header bar
     page.drawRectangle({x:0,y:PH-headerH,width:PW,height:headerH,color:rgb(.18,.28,.12)});
+    // JP logo left
     const jpLogoB64=await getJpLogo();
     if(jpLogoB64){const ji=await embedImg(pdfDoc,jpLogoB64);if(ji){const s=ji.scale(.55);page.drawImage(ji,{x:20,y:PH-headerH+(headerH-s.height)/2,width:s.width,height:s.height});}}
-    const margin=28;
-    // Client logos
-    const clientLogos=lbLogos.filter(Boolean);
-    if(clientLogos.length){
-      const logoAreaW=PW*.36,logoAreaX=(PW-logoAreaW)/2,logoAreaY=PH-headerH+10,logoAreaH=headerH-20,logoSlotW=logoAreaW/clientLogos.length-8;
-      for(let li=0;li<clientLogos.length;li++){
-        const img=await embedImg(pdfDoc,clientLogos[li]);if(!img)continue;
-        const dims=img.scale(1);const scale=Math.min(logoSlotW/dims.width,logoAreaH/dims.height,1);
-        const lw=dims.width*scale,lh=dims.height*scale;
-        const lx=logoAreaX+li*(logoSlotW+8)+(logoSlotW-lw)/2;const ly=logoAreaY+(logoAreaH-lh)/2;
-        page.drawImage(img,{x:lx,y:ly,width:lw,height:lh});
-      }
-    } // (client name not drawn as text — use client logo instead)
-    // JP website in header
+    // Website right
     const siteStr='www.jointprinting.com',sitefs=10;
     const siteW=boldFont.widthOfTextAtSize(siteStr,sitefs);
-    page.drawText(siteStr,{x:PW-margin-siteW,y:PH-headerH+(headerH)/2,size:sitefs,font:boldFont,color:rgb(.55,.65,.50)});
-    // Title area — only show subtitle, not client name
+    page.drawText(siteStr,{x:PW-margin-siteW,y:PH-headerH+headerH/2-sitefs/2,size:sitefs,font:boldFont,color:rgb(.55,.65,.50)});
+    // Subtitle below header
     let textY=PH-headerH-22;
-    if(deckSub){page.drawText(deckSub,{x:margin,y:textY,size:12,font:titleFont,color:rgb(.5,.5,.5)});textY-=16;}
-    textY-=8;
+    if(deckSub){page.drawText(deckSub,{x:margin,y:textY,size:13,font:titleFont,color:rgb(.45,.45,.45)});textY-=18;}
+    textY-=6;
     // Grid
-    const gridAreaY=48,gridH=textY-gridAreaY,gridW=PW-margin*2;
+    const gridAreaY=42,gridH=textY-gridAreaY,gridW=PW-margin*2;
     const count=lbQueue.length;
-    const cols=count<=2?count:count<=4?Math.min(count,4):count<=6?3:Math.min(count,5);
+    const cols=count<=2?count:count<=6?3:Math.min(count,4);
     const rows=Math.ceil(count/cols);
     const cellW=gridW/cols,cellH=gridH/rows;
-    const imgPad=10,imgMaxH=cellH-(showLabels?34:imgPad*2);
+    const imgPad=10,imgMaxH=cellH-34;
     for(let i=0;i<count;i++){
       const item=lbQueue[i];
       const col=i%cols,row=Math.floor(i/cols);
       const cellX=margin+col*cellW,cellY=textY-(row+1)*cellH;
-      page.drawRectangle({x:cellX+3,y:cellY+3,width:cellW-6,height:cellH-(showLabels?18:6),borderColor:rgb(.88,.88,.88),borderWidth:.4});
+      page.drawRectangle({x:cellX+3,y:cellY+3,width:cellW-6,height:cellH-6,borderColor:rgb(.88,.88,.88),borderWidth:.4});
       const hasBack=!!item.backSrc;
-      // Draw front (60% width if back exists, else full width)
       const frontW=hasBack?(cellW-imgPad*2)*0.60:(cellW-imgPad*2);
       const backW=hasBack?(cellW-imgPad*2)*0.38:0;
       if(item.frontSrc){
         const img=await embedImg(pdfDoc,item.frontSrc);
-        if(img){const dims=img.scale(1);const scale=Math.min(frontW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+imgPad,iy=cellY+cellH-(showLabels?30:imgPad)-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
+        if(img){const dims=img.scale(1);const scale=Math.min(frontW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+imgPad,iy=cellY+cellH-26-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
       }
       if(hasBack){
         const img=await embedImg(pdfDoc,item.backSrc);
-        if(img){const dims=img.scale(1);const scale=Math.min(backW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+cellW-imgPad-iw,iy=cellY+cellH-(showLabels?30:imgPad)-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
+        if(img){const dims=img.scale(1);const scale=Math.min(backW/dims.width,imgMaxH/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cellX+cellW-imgPad-iw,iy=cellY+cellH-26-ih;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}
       }
-      if(showLabels&&item.name){let label=item.name;const lfs=8;while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cellW-10)label=label.slice(0,-1);const lw2=boldFont.widthOfTextAtSize(label,lfs);page.drawText(label,{x:cellX+(cellW-lw2)/2,y:cellY+8,size:lfs,font:boldFont,color:rgb(.4,.4,.4)});}
+      if(item.name){let label=item.name;const lfs=7.5;while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cellW-10)label=label.slice(0,-1);const lw=boldFont.widthOfTextAtSize(label,lfs);page.drawText(label,{x:cellX+(cellW-lw)/2,y:cellY+9,size:lfs,font:boldFont,color:rgb(.42,.42,.42)});}
     }
-    // Footer
+    // Footer bar
     page.drawRectangle({x:0,y:0,width:PW,height:40,color:rgb(.06,.06,.06)});
     page.drawText('INNOVATION IN INK',{x:margin,y:13,size:11,font:boldFont,color:rgb(.35,.35,.35)});
     const dateStr=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
@@ -2870,154 +2715,12 @@ async function exportLookbookGrid() {
     page.drawText(dateStr,{x:PW-margin-dW,y:14,size:9,font:captionFont,color:rgb(.45,.45,.45)});
     const pdfBytes=await pdfDoc.save();
     downloadBlob(pdfBytes,filename);
-    toast(`Lookbook exported (${count} items) ✓`,'success');
-  } catch(e){console.error(e);toast('Lookbook export failed: '+e.message,'error');}
-  finally{setLoading(false);}
-}
-
-async function exportLookbookColorCompare() {
-  setLoading(true);
-  try {
-    const {PDFDocument,rgb,StandardFonts}=PDFLib;
-    const pdfDoc=await PDFDocument.create();
-    const PW=1008,PH=756; // landscape
-    const boldFont=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const titleFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const captFont=await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
-    const clientName=document.getElementById('lb-client-name').value.trim()||'Color Options';
-    const deckSub=document.getElementById('lb-subtitle').value.trim();
-    const filename=document.getElementById('lb-filename').value.trim()||`${clientName.toLowerCase().replace(/\s+/g,'-')}-colors.pdf`;
-    const page=pdfDoc.addPage([PW,PH]);
-    page.drawRectangle({x:0,y:0,width:PW,height:PH,color:rgb(1,1,1)});
-    const headerH=56;
-    page.drawRectangle({x:0,y:PH-headerH,width:PW,height:headerH,color:rgb(.18,.28,.12)});
-    const jpLogoB64=await getJpLogo();
-    if(jpLogoB64){const ji=await embedImg(pdfDoc,jpLogoB64);if(ji){const s=ji.scale(.50);page.drawImage(ji,{x:18,y:PH-headerH+(headerH-s.height)/2,width:s.width,height:s.height});}}
-    // Client logo or name in header center
-    const clientLogos=lbLogos.filter(Boolean);
-    if(clientLogos.length){
-      const img=await embedImg(pdfDoc,clientLogos[0]);if(img){const dims=img.scale(1);const scale=Math.min(220/dims.width,(headerH-12)/dims.height,1);const lw=dims.width*scale,lh=dims.height*scale;page.drawImage(img,{x:(PW-lw)/2,y:PH-headerH+(headerH-lh)/2,width:lw,height:lh});}
-    } else {
-      const cnFs=18,cnW=boldFont.widthOfTextAtSize(clientName,cnFs);
-      page.drawText(clientName,{x:(PW-cnW)/2,y:PH-headerH+(headerH-cnFs)/2+2,size:cnFs,font:boldFont,color:rgb(.87,.94,.75)});
-    }
-    page.drawText('www.jointprinting.com',{x:PW-160,y:PH-headerH+(headerH)/2-4,size:9,font:boldFont,color:rgb(.55,.65,.50)});
-    // Title
-    const margin=28;
-    let textY=PH-headerH-20;
-    if(deckSub){page.drawText(deckSub,{x:margin,y:textY,size:13,font:titleFont,color:rgb(.45,.45,.45)});textY-=18;}
-    textY-=8;
-    // Color comparison grid - items side by side
-    const count=lbQueue.length;
-    const cols=Math.min(count,5);
-    const colW=(PW-margin*2)/cols;
-    const imgH=Math.min(textY-80, 440);
-    const imgW=colW*.82;
-    const imgY=textY-imgH;
-    for(let i=0;i<count&&i<cols*3;i++){
-      const item=lbQueue[i];
-      const col=i%cols,row=Math.floor(i/cols);
-      const cx=margin+col*colW+colW/2;
-      const cy=textY-row*(imgH+48);
-      const imgX=cx-imgW/2;
-      const src=item.frontSrc;
-      if(src){const img=await embedImg(pdfDoc,src);if(img){const dims=img.scale(1);const scale=Math.min(imgW/dims.width,(imgH-40)/dims.height);const iw=dims.width*scale,ih=dims.height*scale;const ix=cx-iw/2,iy=cy-ih-20;page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});}}
-      // Color swatch strip under each garment
-      if(item.colors&&item.colors.length){
-        const swatchY=cy-imgH-24;const swatchR=8;let sx=cx-(item.colors.length*(swatchR*2+4))/2+swatchR;
-        item.colors.forEach(c=>{
-          const hex=typeof c==='object'?c.hex:c;
-          try{const col2=hexToRgb(hex);const lum=.2126*col2.red+.7152*col2.green+.0722*col2.blue;const bord=hex.replace('#','').toLowerCase()==='ffffff'?rgb(0,0,0):col2;page.drawCircle({x:sx,y:swatchY,size:swatchR,color:col2,borderWidth:.6,borderColor:bord});}catch(e){}
-          sx+=swatchR*2+4;
-        });
-      }
-      // Item name/style code
-      const lbl=item.styleCode||item.name;const lfs=10;let label=lbl;while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>colW-8)label=label.slice(0,-1);const lblW=boldFont.widthOfTextAtSize(label,lfs);
-      page.drawText(label,{x:cx-lblW/2,y:imgY-4,size:lfs,font:boldFont,color:rgb(.2,.2,.2)});
-      if(item.subtitle){const slbl=item.subtitle;const slblW=captFont.widthOfTextAtSize(slbl,9);page.drawText(slbl,{x:cx-slblW/2,y:imgY-16,size:9,font:captFont,color:rgb(.55,.55,.55)});}
-    }
-    page.drawRectangle({x:0,y:0,width:PW,height:32,color:rgb(.06,.06,.06)});
-    page.drawText('INNOVATION IN INK',{x:margin,y:10,size:10,font:boldFont,color:rgb(.35,.35,.35)});
-    const pdfBytes=await pdfDoc.save();
-    downloadBlob(pdfBytes,filename);
-    toast(`Color comparison exported (${Math.min(count,cols*3)} items) ✓`,'success');
+    toast(`Lookbook exported — ${count} item${count!==1?'s':''} ✓`,'success');
   } catch(e){console.error(e);toast('Export failed: '+e.message,'error');}
   finally{setLoading(false);}
 }
 
-async function exportLookbookAdStyle() {
-  setLoading(true);
-  try {
-    const {PDFDocument,rgb,StandardFonts}=PDFLib;
-    const pdfDoc=await PDFDocument.create();
-    const PW=816,PH=1056; // letter portrait
-    const boldFont=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const titleFont=await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const clientName=document.getElementById('lb-client-name').value.trim()||'';
-    const showTagline=document.getElementById('ad-show-tagline').checked;
-    const showStyle=document.getElementById('ad-show-style').checked;
-    const filename=document.getElementById('lb-filename').value.trim()||`${clientName.toLowerCase().replace(/\s+/g,'-')||'lookbook'}-adstyle.pdf`;
-    const clientLogos=lbLogos.filter(Boolean);
-    // Parse bg color
-    const bgHex=adBgColor.replace('#','');
-    const bgR=parseInt(bgHex.substring(0,2),16)/255||0;
-    const bgG=parseInt(bgHex.substring(2,4),16)/255||0;
-    const bgB=parseInt(bgHex.substring(4,6),16)/255||0;
-    const bgLum=.2126*bgR+.7152*bgG+.0722*bgB;
-    const isLight=bgLum>.5;
-    const textColFg=isLight?rgb(.08,.08,.08):rgb(.95,.95,.95);
-    const textColMuted=isLight?rgb(.35,.35,.35):rgb(.6,.6,.6);
-    const accentCol=isLight?rgb(.18,.28,.12):rgb(.55,.78,.35);
-    for (const item of lbQueue) {
-      const page=pdfDoc.addPage([PW,PH]);
-      page.drawRectangle({x:0,y:0,width:PW,height:PH,color:rgb(bgR,bgG,bgB)});
-      // Large garment image - centered, occupying most of the page
-      const src=item.frontSrc;
-      const margin=40;
-      const imgAreaX=margin,imgAreaY=60,imgAreaW=PW-margin*2,imgAreaH=PH-120;
-      if(src){
-        const img=await embedImg(pdfDoc,src);
-        if(img){
-          const dims=img.scale(1);
-          const scale=Math.min(imgAreaW/dims.width,imgAreaH/dims.height)*.88;
-          const iw=dims.width*scale,ih=dims.height*scale;
-          const ix=(PW-iw)/2,iy=(PH-ih)/2+10;
-          page.drawImage(img,{x:ix,y:iy,width:iw,height:ih});
-        }
-      }
-      // Client logo - top right corner, small
-      if(clientLogos.length){
-        const cli=await embedImg(pdfDoc,clientLogos[0]);
-        if(cli){
-          const cliDims=cli.scale(1);
-          const cliScale=Math.min(120/cliDims.width,48/cliDims.height,1);
-          const cliW=cliDims.width*cliScale,cliH=cliDims.height*cliScale;
-          page.drawImage(cli,{x:PW-margin-cliW,y:PH-margin-cliH,width:cliW,height:cliH});
-        }
-      } else if(clientName) {
-        const cnFs=16,cnW=boldFont.widthOfTextAtSize(clientName,cnFs);
-        page.drawText(clientName,{x:PW-margin-cnW,y:PH-margin-cnFs,size:cnFs,font:boldFont,color:textColFg});
-      }
-      // JP Logo - bottom left, small
-      const jpLogoB64=await getJpLogo();
-      if(jpLogoB64){const ji=await embedImg(pdfDoc,jpLogoB64);if(ji){const s=ji.scale(.38);page.drawImage(ji,{x:margin,y:margin,width:s.width,height:s.height});}}
-      // Optional tagline
-      if(showTagline){
-        const tag='INNOVATION IN INK';const tfs=9;const tW=boldFont.widthOfTextAtSize(tag,tfs);
-        page.drawText(tag,{x:PW/2-tW/2,y:margin+8,size:tfs,font:boldFont,color:textColMuted});
-      }
-      // Optional style code
-      if(showStyle&&item.styleCode){
-        const stfs=9;const stW=titleFont.widthOfTextAtSize(item.styleCode,stfs);
-        page.drawText(item.styleCode,{x:PW/2-stW/2,y:PH-margin-22,size:stfs,font:titleFont,color:textColMuted});
-      }
-    }
-    const pdfBytes=await pdfDoc.save();
-    downloadBlob(pdfBytes,filename);
-    toast(`Ad-style lookbook exported (${lbQueue.length} pages) ✓`,'success');
-  } catch(e){console.error(e);toast('Export failed: '+e.message,'error');}
-  finally{setLoading(false);}
-}
+
 
 function downloadBlob(bytes,filename) {
   const blob=new Blob([bytes],{type:'application/pdf'});

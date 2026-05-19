@@ -102,27 +102,6 @@ const MAP_STYLES = [
   { id: 'streets',   label: 'STR',  url: 'mapbox://styles/mapbox/streets-v12' },
 ];
 
-// NJ → Burlington VT sales route — click one to fly the map there.
-// Edit this list freely as routes evolve. Each entry: label + center + zoom.
-const QUICK_JUMPS = [
-  { label: 'HOME · Voorhees/Marlton',        center: [-74.9215, 39.8915], zoom: 12 },
-  { label: 'Princeton / New Brunswick',       center: [-74.6672, 40.4774], zoom: 11 },
-  { label: 'Morristown / Boonton',            center: [-74.4774, 40.7968], zoom: 11 },
-  { label: 'Beacon / Newburgh',               center: [-73.9607, 41.5034], zoom: 11 },
-  { label: 'Poughkeepsie / Fishkill',         center: [-73.9296, 41.7004], zoom: 11 },
-  { label: 'Kingston / Saugerties',           center: [-74.0023, 41.9279], zoom: 11 },
-  { label: 'Catskill / Hudson',               center: [-73.8629, 42.2198], zoom: 11 },
-  { label: 'Albany / Troy',                   center: [-73.7562, 42.6526], zoom: 11 },
-  { label: 'Saratoga Springs',                center: [-73.7846, 43.0831], zoom: 12 },
-  { label: 'Pittsfield / Great Barrington',   center: [-73.2529, 42.4501], zoom: 11 },
-  { label: 'Northampton / Amherst',           center: [-72.6407, 42.3251], zoom: 11 },
-  { label: 'Brattleboro / Bennington',        center: [-72.5578, 42.8509], zoom: 11 },
-  { label: 'Rutland / Killington',            center: [-72.9726, 43.6106], zoom: 11 },
-  { label: 'Middlebury',                      center: [-73.1673, 44.0153], zoom: 12 },
-  { label: 'Waterbury / Stowe / Montpelier',  center: [-72.7093, 44.3591], zoom: 11 },
-  { label: 'Burlington / Winooski',           center: [-73.2121, 44.4759], zoom: 11 },
-];
-
 const SALES_STATUSES = [
   { value: 'planned',          label: 'PLANNED',       color: 'rgba(212,244,221,0.5)' },
   { value: 'visited',          label: 'VISITED',       color: '#fbbf24' },
@@ -140,7 +119,6 @@ const SCORE_OPTIONS = [
   { value: 'C', label: 'C', color: '#6b7280' },
   { value: '',  label: '?', color: 'rgba(212,244,221,0.18)' },
 ];
-// eslint-disable-next-line no-unused-vars
 const ITEM_TAGS = ['T-shirts','Hoodies','Staff uniforms','Hats','Tote bags','Lighters','Rolling trays','Grinders','Lanyards','Stickers','Display/signage'];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1209,33 +1187,50 @@ export default function RoadTripTab({ token }) {
           <Box sx={{ p: 2 }}>
             <PanelSection title="NAVIGATE">
               {/* Location search */}
-              <Box sx={{ mb: 1.5 }}>
-                <Box sx={{ position: 'relative' }}>
-                  <input
-                    value={locationSearch}
-                    onChange={(e) => {
-                      setLocationSearch(e.target.value);
-                      if (e.target.value.length > 2) searchLocation(e.target.value);
-                      else setLocationResults([]);
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && locationSearch.length > 1) searchLocation(locationSearch); }}
-                    placeholder="Search location…"
-                    style={{
-                      width: '100%', boxSizing: 'border-box',
-                      background: 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${TERM.borderDim}`,
-                      borderRadius: 3, padding: '6px 8px',
-                      fontFamily: MONO, fontSize: 11, color: TERM.text,
-                      outline: 'none',
-                    }}
-                  />
-                  {locationSearching && (
-                    <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                      fontSize: 10, color: TERM.amber }}>…</Box>
-                  )}
+              <Box sx={{ mb: 1.25 }}>
+                <Box sx={{ position: 'relative', display: 'flex', gap: 0.5 }}>
+                  <Box sx={{ position: 'relative', flexGrow: 1 }}>
+                    <input
+                      value={locationSearch}
+                      onChange={(e) => {
+                        setLocationSearch(e.target.value);
+                        if (e.target.value.length > 2) searchLocation(e.target.value);
+                        else setLocationResults([]);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && locationSearch.length > 1) searchLocation(locationSearch); }}
+                      placeholder="Search city or address…"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        background: 'rgba(74,222,128,0.04)',
+                        border: `1.5px solid ${TERM.border}`,
+                        borderRadius: 4, padding: '8px 32px 8px 10px',
+                        fontFamily: MONO, fontSize: 11.5, color: TERM.text,
+                        outline: 'none',
+                        letterSpacing: 0.3,
+                      }}
+                    />
+                    {locationSearching && (
+                      <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 11, color: TERM.amber, fontFamily: MONO }}>…</Box>
+                    )}
+                  </Box>
+                  <Box
+                    role="button" tabIndex={0}
+                    onClick={() => { if (locationSearch.length > 1) searchLocation(locationSearch); }}
+                    sx={{
+                      fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
+                      color: TERM.greenDk, px: 1.25, flexShrink: 0,
+                      cursor: 'pointer', borderRadius: 0.5,
+                      bgcolor: TERM.green,
+                      border: `1.5px solid ${TERM.green}`,
+                      display: 'flex', alignItems: 'center',
+                      '&:hover': { opacity: 0.88 },
+                    }}>
+                    GO
+                  </Box>
                 </Box>
                 {locationResults.length > 0 && (
-                  <Box sx={{ mt: 0.5, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, overflow: 'hidden' }}>
+                  <Box sx={{ mt: 0.5, border: `1px solid ${TERM.border}`, borderRadius: 0.5, overflow: 'hidden' }}>
                     {locationResults.map((f) => (
                       <Box key={f.id}
                         role="button" tabIndex={0}
@@ -1246,7 +1241,7 @@ export default function RoadTripTab({ token }) {
                           setLocationResults([]);
                         }}
                         sx={{
-                          fontFamily: MONO, fontSize: 10, color: TERM.text, px: 1.25, py: 0.75,
+                          fontFamily: MONO, fontSize: 10.5, color: TERM.text, px: 1.25, py: 0.85,
                           cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
                           '&:last-child': { borderBottom: 'none' },
                           '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green },
@@ -1264,42 +1259,21 @@ export default function RoadTripTab({ token }) {
                 onClick={flyToMyLocation}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') flyToMyLocation(); }}
                 sx={{
-                  fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
-                  color: TERM.green, py: 0.85, px: 1, mb: 0.5,
+                  fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: 1,
+                  color: TERM.green, py: 1, px: 1.25, mb: 0.5,
                   cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
-                  border: `1px solid ${TERM.green}`,
+                  border: `1.5px solid ${TERM.green}`,
                   bgcolor: 'rgba(74,222,128,0.06)',
                   transition: 'all 0.15s ease',
                   display: 'flex', alignItems: 'center', gap: 1,
                   '&:hover': {
                     bgcolor: 'rgba(74,222,128,0.14)',
-                    transform: 'translateX(2px)',
-                    boxShadow: `0 0 12px ${TERM.green}30`,
+                    boxShadow: `0 0 14px ${TERM.green}30`,
                   },
                 }}>
-                <Box component="span" sx={{ fontSize: 12 }}>📍</Box>
+                <Box component="span" sx={{ fontSize: 14 }}>📍</Box>
                 MY LOCATION
               </Box>
-
-              {/* Quick jumps */}
-              {QUICK_JUMPS.map((q) => (
-                <Box key={q.label}
-                  role="button" tabIndex={0}
-                  onClick={() => mapRef.current?.flyTo({ center: q.center, zoom: q.zoom, essential: true, duration: 1600 })}
-                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && mapRef.current) mapRef.current.flyTo({ center: q.center, zoom: q.zoom, essential: true, duration: 1600 }); }}
-                  sx={{
-                    fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
-                    color: TERM.text, py: 0.75, px: 1, mb: 0.25,
-                    cursor: 'pointer', borderRadius: 0.5, userSelect: 'none',
-                    border: `1px solid transparent`,
-                    transition: 'all 0.15s ease',
-                    display: 'flex', alignItems: 'center', gap: 1,
-                    '&:hover': { color: TERM.green, bgcolor: 'rgba(74,222,128,0.08)', borderColor: TERM.borderDim, transform: 'translateX(2px)' },
-                  }}>
-                  <Box component="span" sx={{ color: TERM.green, fontSize: 10 }}>→</Box>
-                  {q.label}
-                </Box>
-              ))}
             </PanelSection>
 
             <PanelSection title="ASSETS">
@@ -1530,8 +1504,8 @@ export default function RoadTripTab({ token }) {
                                     </Box>
                                   </>
                                 )}
-                                {/* Buyer name quick capture */}
-                                <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                                {/* Buyer name + notes */}
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4, mb: 0.75 }}>
                                   <input
                                     placeholder="Buyer name…"
                                     defaultValue={item.contactName || ''}
@@ -1540,14 +1514,12 @@ export default function RoadTripTab({ token }) {
                                         updateStopField(item, { contactName: e.target.value });
                                     }}
                                     style={{
-                                      flex: 1, background: 'rgba(255,255,255,0.04)',
+                                      background: 'rgba(255,255,255,0.04)',
                                       border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
-                                      padding: '3px 6px', fontFamily: MONO, fontSize: 9.5,
-                                      color: TERM.text, outline: 'none',
+                                      padding: '4px 7px', fontFamily: MONO, fontSize: 9.5,
+                                      color: TERM.text, outline: 'none', width: '100%',
                                     }}
                                   />
-                                </Box>
-                                <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
                                   <input
                                     placeholder="Notes…"
                                     defaultValue={item.notes || ''}
@@ -1556,13 +1528,41 @@ export default function RoadTripTab({ token }) {
                                         updateStopField(item, { notes: e.target.value });
                                     }}
                                     style={{
-                                      flex: 1, background: 'rgba(255,255,255,0.04)',
+                                      background: 'rgba(255,255,255,0.04)',
                                       border: `1px solid ${TERM.borderDim}`, borderRadius: 2,
-                                      padding: '3px 6px', fontFamily: MONO, fontSize: 9.5,
-                                      color: TERM.text, outline: 'none',
+                                      padding: '4px 7px', fontFamily: MONO, fontSize: 9.5,
+                                      color: TERM.text, outline: 'none', width: '100%',
                                     }}
                                   />
                                 </Box>
+                                {/* Interest tag chips */}
+                                {item.kind === 'lead' && (
+                                  <>
+                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.4 }}>INTERESTS</Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.5 }}>
+                                      {ITEM_TAGS.map((tag) => {
+                                        const active = (item.itemInterests || []).includes(tag);
+                                        return (
+                                          <Box key={tag} role="button"
+                                            onClick={() => {
+                                              const cur = item.itemInterests || [];
+                                              const next = active ? cur.filter(t => t !== tag) : [...cur, tag];
+                                              updateStopField(item, { itemInterests: next });
+                                            }}
+                                            sx={{
+                                              fontFamily: MONO, fontSize: 8, px: 0.7, py: 0.2,
+                                              borderRadius: 0.25, cursor: 'pointer',
+                                              border: `1px solid ${active ? TERM.green : TERM.borderDim}`,
+                                              color: active ? TERM.green : TERM.muted,
+                                              bgcolor: active ? 'rgba(74,222,128,0.1)' : 'transparent',
+                                              transition: 'all 0.12s',
+                                              '&:hover': { borderColor: TERM.green, color: TERM.green },
+                                            }}>{tag}</Box>
+                                        );
+                                      })}
+                                    </Box>
+                                  </>
+                                )}
                               </Box>
                             )}
                           </Box>
@@ -1574,22 +1574,15 @@ export default function RoadTripTab({ token }) {
               )}
             </PanelSection>
 
-            <PanelSection title="SYSTEM" defaultOpen={false}>
-              <Stat label="STYLE" value={styleId.toUpperCase()} color={TERM.green} />
-              <Stat label="STATUS" value={mapReady ? 'OPERATIONAL' : 'INIT'}
-                color={mapReady ? TERM.green : TERM.amber} />
-              <Stat label="PHASE" value="3b/4" color={TERM.amber} />
-            </PanelSection>
-
-            <Box sx={{ mt: 2, p: 1.5, border: `1px dashed ${TERM.borderDim}`, borderRadius: 0.5 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.55 }}>
+            <Box sx={{ mt: 1.5, p: 1.25, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, bgcolor: 'rgba(74,222,128,0.02)' }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, lineHeight: 1.65 }}>
                 {anyActive
-                  ? <>{'>'} CLICK A PIN → ADD TO {formatDayLabel(currentDayLabel).toUpperCase()}.<br />
-                      {'>'} HIT [ROUTE] ON A DAY TO DRAW IT.<br />
-                      {'>'} PAN, REFRESH TO RE-SEARCH AREA.</>
-                  : <>{'>'} TAP A LAYER TILE TO LOAD PINS.<br />
-                      {'>'} CLICK PIN → ADDS TO {formatDayLabel(currentDayLabel).toUpperCase()}.<br />
-                      {'>'} BUILD DAYS, DRAW ROUTES, GO.</>}
+                  ? <>{'>'} CLICK A PIN → SAVE AS LEAD<br />
+                      {'>'} TAP STOP → EXPAND TO EDIT<br />
+                      {'>'} PAN MAP, THEN REFRESH</>
+                  : <>{'>'} TAP LAYER TILE TO LOAD PINS<br />
+                      {'>'} CLICK PIN → ADD TO DAY<br />
+                      {'>'} EXPAND STOP → UPDATE STATUS</>}
               </Typography>
             </Box>
           </Box>
