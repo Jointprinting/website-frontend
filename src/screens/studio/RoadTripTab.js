@@ -487,6 +487,9 @@ function Stat({ label, value, color = TERM.text }) {  return (
 // ─────────────────────────────────────────────────────────────────────────────
 // Main tab
 // ─────────────────────────────────────────────────────────────────────────────
+const HEATMAP_SOURCE = 'jp-heatmap-src';
+const HEATMAP_LAYER  = 'jp-heatmap';
+
 export default function RoadTripTab({ token }) {
   const mapContainerRef = React.useRef(null);
   const mapRef          = React.useRef(null);
@@ -509,6 +512,8 @@ export default function RoadTripTab({ token }) {
   // used because popup builders run outside React's render cycle.
   const markersRef       = React.useRef({ dispensaries: [], coffee: [], parks: [], campgrounds: [] });
   const leadsByExtIdRef  = React.useRef(new Map());
+  const heatmapPointsRef = React.useRef([]); // dispensary lat/lngs for heatmap
+  const [heatmapOn, setHeatmapOn] = React.useState(false);
   const [savedItems, setSavedItems] = React.useState([]);
   const [toast, setToast] = React.useState(null);
 
@@ -673,9 +678,9 @@ export default function RoadTripTab({ token }) {
     setStyleId(id);
     mapRef.current.setStyle(style.url);
     mapRef.current.once('style.load', () => {
-      // Re-add previously visible routes
       wasShown.forEach((day) => { refreshRouteForDay(day); });
-      // markers persist on the map automatically; nothing else to do.
+      // Heatmap layer is wiped by style change — re-add it if it was on.
+      if (heatmapOn && heatmapPointsRef.current.length) addHeatmapLayer();
     });
   };
 
@@ -684,6 +689,57 @@ export default function RoadTripTab({ token }) {
     setToast({ message, kind });
     setTimeout(() => setToast(null), 2400);
   };
+
+  const addHeatmapLayer = React.useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const pts = heatmapPointsRef.current;
+    if (!pts.length) return;
+    const geojson = {
+      type: 'FeatureCollection',
+      features: pts.map((p) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: {},
+      })),
+    };
+    if (map.getSource(HEATMAP_SOURCE)) {
+      map.getSource(HEATMAP_SOURCE).setData(geojson);
+    } else {
+      map.addSource(HEATMAP_SOURCE, { type: 'geojson', data: geojson });
+      map.addLayer({
+        id: HEATMAP_LAYER, type: 'heatmap', source: HEATMAP_SOURCE,
+        paint: {
+          'heatmap-weight': 1,
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 12, 2],
+          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 22, 10, 38],
+          'heatmap-opacity': 0.72,
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0,   'rgba(0,0,0,0)',
+            0.2, 'rgba(74,222,128,0.25)',
+            0.5, 'rgba(251,191,36,0.65)',
+            0.8, 'rgba(248,113,113,0.85)',
+            1,   'rgba(248,113,113,1)',
+          ],
+        },
+      }, 'waterway-label'); // insert below labels so city names stay readable
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const removeHeatmapLayer = React.useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    try { if (map.getLayer(HEATMAP_LAYER))   map.removeLayer(HEATMAP_LAYER); } catch {}
+    try { if (map.getSource(HEATMAP_SOURCE)) map.removeSource(HEATMAP_SOURCE); } catch {}
+  }, []);
+
+  React.useEffect(() => {
+    if (!mapReady) return;
+    if (heatmapOn) addHeatmapLayer();
+    else removeHeatmapLayer();
+  }, [heatmapOn, mapReady, addHeatmapLayer, removeHeatmapLayer]);
 
   const onSaveLead = async (place, layer) => {
     // Compute next sortOrder for current day so item lands at the end of the list
@@ -1082,6 +1138,15 @@ export default function RoadTripTab({ token }) {
         markersRef.current[layer.id].push({ marker, __placeId: place.externalId });
       }
 
+      // For dispensaries, save coordinates so the heatmap can render them.
+      if (layer.id === 'dispensaries') {
+        const pts = results.filter((p) => isFinite(p.lat) && isFinite(p.lng)).map((p) => ({ lat: p.lat, lng: p.lng }));
+        heatmapPointsRef.current = pts;
+        // Auto-enable heatmap on first dispensary load (user can toggle off).
+        if (pts.length && !heatmapOn) setHeatmapOn(true);
+        else if (pts.length && heatmapOn) addHeatmapLayer();
+      }
+
       lastSearchCenterRef.current = { lng: c.lng, lat: c.lat };
       setMapMoved(false);
       setLayerState((s) => ({
@@ -1101,6 +1166,11 @@ export default function RoadTripTab({ token }) {
     if (cur.active) {
       clearLayerMarkers(layer.id);
       setLayerState((s) => ({ ...s, [layer.id]: { active: false, loading: false, count: 0, lastSearchAt: null } }));
+      if (layer.id === 'dispensaries') {
+        heatmapPointsRef.current = [];
+        setHeatmapOn(false);
+        removeHeatmapLayer();
+      }
     } else {
       dropLayerPins(layer);
     }
@@ -1704,6 +1774,33 @@ export default function RoadTripTab({ token }) {
 
           <MapStyleSwitcher current={styleId} onChange={onStyleChange} />
 
+          {/* Heatmap toggle — only visible when dispensaries are loaded */}
+          {layerState.dispensaries.active && (
+            <Box
+              role="button" tabIndex={0}
+              onClick={() => setHeatmapOn((v) => !v)}
+              sx={{
+                position: 'absolute', top: 48, left: 12, zIndex: 2,
+                cursor: 'pointer',
+                bgcolor: heatmapOn ? 'rgba(248,113,113,0.18)' : 'rgba(5,8,10,0.82)',
+                border: `1px solid ${heatmapOn ? '#f87171' : TERM.borderDim}`,
+                color: heatmapOn ? '#f87171' : TERM.muted,
+                px: 1, py: 0.4, borderRadius: 0.5,
+                fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2,
+                display: 'flex', alignItems: 'center', gap: 0.6,
+                transition: 'all 0.15s ease',
+                '&:hover': { borderColor: '#f87171', color: '#f87171', bgcolor: 'rgba(248,113,113,0.12)' },
+              }}>
+              <Box sx={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: heatmapOn
+                  ? 'radial-gradient(circle, #f87171 0%, #fbbf24 50%, #4ade80 100%)'
+                  : TERM.muted,
+              }} />
+              DENSITY
+            </Box>
+          )}
+
           {/* "Refresh this area" badge */}
           {anyActive && mapMoved && (
             <Box
@@ -1949,6 +2046,37 @@ export default function RoadTripTab({ token }) {
                         '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
                       }}>⤴ GOOGLE MAPS</Box>
                   </Stack>
+                  {/* Camp Tonight — fly to last stop and load campgrounds */}
+                  {(() => {
+                    const lastStop = todayStops[todayStops.length - 1];
+                    if (!lastStop) return null;
+                    const campingActive = layerState.campgrounds?.active;
+                    return (
+                      <Box role="button" tabIndex={0}
+                        onClick={() => {
+                          if (lastStop && isFinite(lastStop.lat) && isFinite(lastStop.lng)) {
+                            mapRef.current?.flyTo({ center: [lastStop.lng, lastStop.lat], zoom: 11, essential: true, duration: 1400 });
+                          }
+                          const campLayer = LAYERS.find(l => l.id === 'campgrounds');
+                          if (campLayer && !layerState.campgrounds?.active) dropLayerPins(campLayer);
+                          setMobileTab('map');
+                          showToast('Searching campgrounds near your last stop…', 'info');
+                        }}
+                        sx={{
+                          fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                          px: 1.25, py: 0.75, mb: 1.5, cursor: 'pointer', borderRadius: 0.5,
+                          color: campingActive ? TERM.greenDk : TERM.amber,
+                          bgcolor: campingActive ? TERM.green : 'rgba(251,191,36,0.08)',
+                          border: `1px solid ${campingActive ? TERM.green : TERM.amber}`,
+                          display: 'flex', alignItems: 'center', gap: 0.75,
+                          '&:hover': { bgcolor: campingActive ? TERM.green : 'rgba(251,191,36,0.15)' },
+                        }}>
+                        <Box component="span" sx={{ fontSize: 13 }}>⛺</Box>
+                        {campingActive ? 'CAMP LOADED' : 'CAMP TONIGHT'}
+                      </Box>
+                    );
+                  })()}
+
                   {todayStops.map((item, i) => {
                     const sm = statusMeta(item.status);
                     return (
