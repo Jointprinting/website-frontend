@@ -201,8 +201,6 @@ function Products() {
     });
   };
 
-  const getTagCode = (tag) => TAG_COLOR[tag] || 'info';
-
   const handleClearFilters = () => {
     setSelectedCategory(''); setSelectedType(''); setSearch(''); setSearchInput(''); setPage(1);
   };
