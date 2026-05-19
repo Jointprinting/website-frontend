@@ -38,6 +38,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SendIcon from '@mui/icons-material/Send';
 import SearchIcon from '@mui/icons-material/Search';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import BoltIcon from '@mui/icons-material/Bolt';
 import config from '../../config.json';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,6 +123,10 @@ function makeApi(token) {
     import:     (body) => base.post('/import', body).then((r) => r.data),
     rescore:    (body) => base.post('/rescore', body).then((r) => r.data),
     bulkStatus: (body) => base.post('/bulk-status', body).then((r) => r.data),
+    auditLead:  (id) => base.post(`/leads/${id}/audit`).then((r) => r.data),
+    auditBatch: (body) => base.post('/audit-batch', body).then((r) => r.data),
+    searchPlaces: (body) => base.post('/search/places', body).then((r) => r.data),
+    usage:      () => base.get('/usage').then((r) => r.data),
     exportCsvUrl: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return `${config.backendUrl}/api/jpw/export.csv${q ? `?${q}` : ''}`;
@@ -185,6 +191,102 @@ function KpiTile({ label, value, sub, accent }) {
         </Typography>
       )}
     </Paper>
+  );
+}
+
+// Checklist of audit signals. ✓ = present, ✗ = missing, "?" = not audited.
+// Grouped into Conversion / SEO / Trust so the user can read at a glance
+// which bucket is weak.
+const AUDIT_GROUPS = [
+  ['Conversion', [
+    ['has_click_to_call',    'Click-to-call link'],
+    ['has_visible_phone',    'Visible phone number'],
+    ['has_quote_cta',        'Quote / "free estimate" CTA'],
+    ['has_contact_form',     'Contact form'],
+    ['has_cta_above_fold',   'CTA above the fold'],
+  ]],
+  ['SEO & local', [
+    ['has_title',                'Title tag'],
+    ['has_meta_description',     'Meta description'],
+    ['has_h1',                   'H1 heading'],
+    ['has_mobile_viewport',      'Mobile viewport'],
+    ['has_localbusiness_schema', 'LocalBusiness schema'],
+    ['has_service_area_terms',   'Service-area towns listed'],
+    ['has_google_map_embed',     'Google map embed'],
+  ]],
+  ['Trust & proof', [
+    ['has_reviews_on_site',  'Reviews / testimonials on site'],
+    ['has_gallery',          'Gallery / before-after'],
+    ['ssl_valid',            'SSL (https)'],
+  ]],
+  ['Marketing tells', [
+    ['has_tracking_pixels',         'Tracking pixels installed'],
+    ['has_landing_page_structure',  'Landing-page style site'],
+  ]],
+];
+
+function CheckMark({ value }) {
+  if (value === true) return <Box component="span" sx={{ color: TERM.green, fontFamily: MONO, fontWeight: 700 }}>✓</Box>;
+  if (value === false) return <Box component="span" sx={{ color: TERM.red, fontFamily: MONO, fontWeight: 700 }}>✗</Box>;
+  return <Box component="span" sx={{ color: TERM.muted, fontFamily: MONO }}>—</Box>;
+}
+
+function AuditChecklist({ audit }) {
+  if (!audit) return null;
+  return (
+    <Box>
+      {/* Header line: status, CMS, copyright */}
+      <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        <Chip size="small" label={`HTTP ${audit.status_code || '—'}`} sx={{
+          fontFamily: MONO, fontSize: 10, height: 20,
+          bgcolor: audit.loads_successfully ? `${TERM.green}20` : `${TERM.red}20`,
+          color: audit.loads_successfully ? TERM.green : TERM.red,
+          border: `1px solid ${audit.loads_successfully ? TERM.green : TERM.red}40`,
+        }} />
+        {audit.cms_detected && (
+          <Chip size="small" label={audit.cms_detected} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.copyright_year && (
+          <Chip size="small" label={`© ${audit.copyright_year}${audit.outdated_copyright ? ' (stale)' : ''}`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: audit.outdated_copyright ? `${TERM.amber}20` : TERM.greenSoft,
+            color: audit.outdated_copyright ? TERM.amber : TERM.text,
+            border: `1px solid ${audit.outdated_copyright ? TERM.amber : TERM.borderDim}40`,
+          }} />
+        )}
+        {audit.service_area_count > 0 && (
+          <Chip size="small" label={`${audit.service_area_count} SJ towns mentioned`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
+          }} />
+        )}
+      </Stack>
+      {audit.notes && (
+        <Alert severity="info" sx={{ mb: 1, fontFamily: MONO, fontSize: 11, py: 0.4 }}>
+          {audit.notes}
+        </Alert>
+      )}
+      {AUDIT_GROUPS.map(([group, items]) => (
+        <Box key={group} sx={{ mb: 1 }}>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
+            fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
+          }}>{group}</Typography>
+          {items.map(([key, label]) => (
+            <Stack key={key} direction="row" alignItems="center" spacing={0.8} sx={{ mb: 0.15 }}>
+              <Box sx={{ width: 12, textAlign: 'center' }}><CheckMark value={audit[key]} /></Box>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 11.5,
+                color: audit[key] === false ? TERM.amber : TERM.text,
+              }}>{label}</Typography>
+            </Stack>
+          ))}
+        </Box>
+      ))}
+    </Box>
   );
 }
 
@@ -379,6 +481,17 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
     } finally { setBusy(false); }
   };
 
+  const runAudit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const updated = await api.auditLead(lead._id);
+      setDraft(updated);
+      onSaved(updated);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    } finally { setBusy(false); }
+  };
+
   const copy = (text) => navigator.clipboard?.writeText(text || '');
 
   return (
@@ -543,6 +656,45 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
             Disqualifiers: {score.disqualifiers.join(', ')}
           </Alert>
         )}
+
+        {/* Website audit */}
+        <Paper elevation={0} sx={{
+          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+          borderRadius: 1.5, p: 1.5, mb: 1.5,
+        }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+              Website audit
+              {draft.website_audit?.audited_at && (
+                <Box component="span" sx={{ ml: 1, color: TERM.muted, opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>
+                  {new Date(draft.website_audit.audited_at).toLocaleString()}
+                </Box>
+              )}
+            </Typography>
+            <Button
+              size="small" onClick={runAudit} disabled={busy || !draft.website_url}
+              sx={{
+                color: TERM.green, border: `1px solid ${TERM.green}40`,
+                fontFamily: MONO, fontSize: 10.5, fontWeight: 700,
+                px: 1, py: 0.2, minWidth: 0,
+                '&:hover': { bgcolor: `${TERM.green}10` },
+              }}
+            >{draft.website_audit?.audited_at ? 'Re-audit' : 'Audit site'}</Button>
+          </Stack>
+          {!draft.website_url ? (
+            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+              No website on file — nothing to audit.
+            </Typography>
+          ) : !draft.website_audit?.audited_at ? (
+            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+              Not audited yet. Click "Audit site" to fetch and analyze.
+            </Typography>
+          ) : (
+            <Box>
+              <AuditChecklist audit={draft.website_audit} />
+            </Box>
+          )}
+        </Paper>
 
         {/* Editable section */}
         <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.6 }}>
@@ -799,6 +951,102 @@ function ImportDialog({ open, onClose, api, onDone }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Search Google Places dialog
+// ─────────────────────────────────────────────────────────────────────────────
+function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
+  const [form, setForm] = React.useState({ category: '', town: '', county: '', extra_query: '' });
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [result, setResult] = React.useState(null);
+  const [usage, setUsage] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setErr(''); setResult(null);
+    api.usage().then(setUsage).catch(() => {});
+  }, [open, api]);
+
+  const submit = async () => {
+    if (!form.category) { setErr('Pick a category.'); return; }
+    setBusy(true); setErr(''); setResult(null);
+    try {
+      const r = await api.searchPlaces(form);
+      setResult(r);
+      setUsage((u) => u ? { ...u, places_calls_today: r.usage_today } : u);
+      onDone();
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
+      <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
+        Search Google Places
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        {usage && (
+          <Alert
+            severity={usage.places_key_configured ? 'info' : 'warning'}
+            sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}
+          >
+            {usage.places_key_configured
+              ? `Today: ${usage.places_calls_today} / ${usage.daily_cap} Places calls`
+              : 'GOOGLE_PLACES_KEY is not set on the backend — this will fail.'}
+          </Alert>
+        )}
+        {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
+        {result && (
+          <Alert severity="success" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}>
+            "{result.query}" → received {result.received}, created {result.created},
+            merged {result.merged}, skipped {result.skipped}.
+          </Alert>
+        )}
+        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
+          Searches a single category × town/county. Results are deduped against your existing leads
+          and scored automatically. One call uses one quota slot — re-running the same query updates
+          stale rating/review counts.
+        </Typography>
+        <Stack spacing={1.5}>
+          <TextField select required label="Category" size="small" sx={darkInputSx}
+            value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            {(reference?.categories || []).filter((c) => c.tier !== 'disqualify').map((c) => (
+              <MenuItem key={c.name} value={c.name}>
+                {c.name}{c.tier === 'high' ? ' · high-ticket' : ''}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Stack direction="row" spacing={1}>
+            <TextField select label="Town" size="small" sx={{ ...darkInputSx, flex: 1 }}
+              value={form.town} onChange={(e) => setForm({ ...form, town: e.target.value, county: '' })}>
+              <MenuItem value="">—</MenuItem>
+              {(reference?.towns || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </TextField>
+            <TextField select label="County (used if no town)" size="small" sx={{ ...darkInputSx, flex: 1 }}
+              value={form.county} onChange={(e) => setForm({ ...form, county: e.target.value })}
+              disabled={!!form.town}>
+              <MenuItem value="">—</MenuItem>
+              {(reference?.counties || []).map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+            </TextField>
+          </Stack>
+          <TextField label="Extra query (optional)" size="small" sx={darkInputSx}
+            value={form.extra_query} onChange={(e) => setForm({ ...form, extra_query: e.target.value })}
+            placeholder='e.g. "emergency" or "residential"' />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
+        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>Close</Button>
+        <Button onClick={submit} disabled={busy || !form.category} variant="contained"
+          sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
+          {busy ? <CircularProgress size={18} /> : 'Search & ingest'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main tab
 // ─────────────────────────────────────────────────────────────────────────────
 export default function JpwReconTab({ token }) {
@@ -813,6 +1061,9 @@ export default function JpwReconTab({ token }) {
   const [selected, setSelected] = React.useState(null);
   const [addOpen, setAddOpen] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [auditingBatch, setAuditingBatch] = React.useState(false);
+  const [usage, setUsage] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filters, setFilters] = React.useState({ grade: '', call_status: '', category: '', county: '', recommended_offer: '' });
 
@@ -849,6 +1100,24 @@ export default function JpwReconTab({ token }) {
     try { await api.rescore({}); await loadAll(); }
     catch (e) { setErr(e?.response?.data?.message || e.message); }
   };
+
+  const auditUnaudited = async () => {
+    if (!window.confirm('Audit up to 50 leads that have a website but no audit yet. Takes ~30s.')) return;
+    setAuditingBatch(true); setErr('');
+    try {
+      const r = await api.auditBatch({ only_unaudited: true, limit: 50, concurrency: 4 });
+      await loadAll();
+      window.alert(`Audited ${r.audited} of ${r.requested}. ${r.errors ? `${r.errors} errors.` : ''}`);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    } finally { setAuditingBatch(false); }
+  };
+
+  // Refresh usage when this tab is opened
+  React.useEffect(() => {
+    api.usage().then(setUsage).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onLeadSaved = (updated) => {
     setLeads((cur) => cur.map((l) => (l._id === updated._id ? updated : l)));
@@ -896,26 +1165,53 @@ export default function JpwReconTab({ token }) {
         <IconButton onClick={loadAll} sx={{ color: TERM.muted, border: `1px solid ${TERM.borderDim}`, borderRadius: 1 }}>
           <RefreshIcon sx={{ fontSize: 18 }} />
         </IconButton>
+        <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
+          onClick={() => setSearchOpen(true)}
+          sx={{ color: TERM.green, border: `1px solid ${TERM.green}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
+          Search Places
+        </Button>
         <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
           onClick={() => setAddOpen(true)}
-          sx={{ color: TERM.green, border: `1px solid ${TERM.green}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Add Lead
+          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
+          Add
         </Button>
         <Button size="small" startIcon={<UploadFileIcon sx={{ fontSize: 14 }} />}
           onClick={() => setImportOpen(true)}
           sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
           Import
         </Button>
+        <Button size="small" startIcon={auditingBatch ? <CircularProgress size={14} sx={{ color: TERM.green }} /> : <BoltIcon sx={{ fontSize: 14 }} />}
+          onClick={auditUnaudited} disabled={auditingBatch}
+          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
+          Audit batch
+        </Button>
         <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 14 }} />}
           component="a" href={api.exportCsvUrl()} download
           sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Export CSV
+          Export
         </Button>
         <Button size="small" onClick={rescoreAll}
           sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 11 }}>
           Re-score
         </Button>
       </Stack>
+
+      {/* Usage strip */}
+      {usage && (
+        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
+            Places API today: <Box component="span" sx={{ color: TERM.text, fontWeight: 700 }}>{usage.places_calls_today}</Box> / {usage.daily_cap}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
+            · Audits run today: <Box component="span" sx={{ color: TERM.text, fontWeight: 700 }}>{usage.audits_run_today}</Box>
+          </Typography>
+          {!usage.places_key_configured && (
+            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.amber }}>
+              · GOOGLE_PLACES_KEY not set
+            </Typography>
+          )}
+        </Stack>
+      )}
 
       {/* Filters bar (All Leads only) */}
       {view === 'all' && (
@@ -992,6 +1288,11 @@ export default function JpwReconTab({ token }) {
       <ImportDialog
         open={importOpen} onClose={() => setImportOpen(false)} api={api}
         onDone={loadAll}
+      />
+      <SearchPlacesDialog
+        open={searchOpen} onClose={() => setSearchOpen(false)} api={api}
+        reference={reference}
+        onDone={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
       />
     </Box>
   );
