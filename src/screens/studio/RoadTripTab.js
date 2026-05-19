@@ -197,7 +197,6 @@ function buildPopupContent({ place, layer, onSave, onHide, onError, savedAsLeadI
     border: 1px solid ${TERM.border};
     border-radius: 4px;
     padding: 12px 14px;
-    min-width: 240px;
     max-width: min(340px, calc(100vw - 24px));
   `;
 
@@ -490,6 +489,57 @@ function Stat({ label, value, color = TERM.text }) {  return (
 const HEATMAP_SOURCE = 'jp-heatmap-src';
 const HEATMAP_LAYER  = 'jp-heatmap';
 
+const CUSTOM_TYPE_COLORS = {
+  friend:  '#06b6d4',
+  client:  '#a855f7',
+  printer: '#f97316',
+  other:   '#94a3b8',
+};
+const CUSTOM_TYPE_LABELS = { friend: 'FRIEND', client: 'CLIENT', printer: 'PRINTER', other: 'WAYPOINT' };
+
+function buildCustomMarkerEl(item) {
+  const color = CUSTOM_TYPE_COLORS[item.customType] || CUSTOM_TYPE_COLORS.other;
+  const wrap = document.createElement('div');
+  wrap.className = 'jp-marker-wrap';
+  const inner = document.createElement('div');
+  inner.style.cssText = `
+    position:relative;width:14px;height:14px;cursor:pointer;
+    transform:rotate(45deg);
+    transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    background:${color};border:2px solid #05080a;border-radius:2px;
+    box-shadow:0 0 0 1px ${color},0 0 8px ${color}80;
+  `;
+  inner.animate(
+    [{ transform:'rotate(45deg) scale(0)' },{ transform:'rotate(45deg) scale(1.2)' },{ transform:'rotate(45deg) scale(1)' }],
+    { duration:380, easing:'cubic-bezier(0.34,1.56,0.64,1)' }
+  );
+  wrap.addEventListener('mouseenter', () => { inner.style.transform = 'rotate(45deg) scale(1.5)'; });
+  wrap.addEventListener('mouseleave', () => { inner.style.transform = 'rotate(45deg) scale(1)'; });
+  wrap.appendChild(inner);
+  return wrap;
+}
+
+function buildCustomStopPopup(item) {
+  const color = CUSTOM_TYPE_COLORS[item.customType] || CUSTOM_TYPE_COLORS.other;
+  const typeLabel = CUSTOM_TYPE_LABELS[item.customType] || 'STOP';
+  const div = document.createElement('div');
+  div.style.cssText = `
+    font-family:${MONO};color:${TERM.text};background:${TERM.panel};
+    border:1px solid ${color}55;border-left:3px solid ${color};
+    border-radius:4px;padding:10px 12px;
+    max-width:min(300px,calc(100vw - 24px));
+  `;
+  const lines = [
+    `<div style="font-weight:800;font-size:12px;color:${color};letter-spacing:0.5px;margin-bottom:4px;">${escapeHtml(item.name)}</div>`,
+    `<div style="font-size:9.5px;color:${color};letter-spacing:1px;opacity:0.7;margin-bottom:5px;">[${typeLabel}]${item.dayLabel ? ` · ${escapeHtml(formatDayLabel(item.dayLabel)).toUpperCase()}` : ''}</div>`,
+  ];
+  if (item.address) lines.push(`<div style="font-size:11px;color:${TERM.muted};margin-bottom:3px;">${escapeHtml(item.address)}</div>`);
+  if (item.phone)   lines.push(`<div style="font-size:11px;margin-bottom:2px;">[TEL] <a href="tel:${escapeAttr(item.phone)}" style="color:${color};text-decoration:none;">${escapeHtml(item.phone)}</a></div>`);
+  if (item.notes)   lines.push(`<div style="font-size:11px;color:${TERM.muted};margin-top:6px;padding-top:6px;border-top:1px solid ${TERM.borderDim};line-height:1.5;">${escapeHtml(item.notes)}</div>`);
+  div.innerHTML = lines.join('');
+  return div;
+}
+
 export default function RoadTripTab({ token }) {
   const mapContainerRef = React.useRef(null);
   const mapRef          = React.useRef(null);
@@ -514,6 +564,8 @@ export default function RoadTripTab({ token }) {
   const leadsByExtIdRef  = React.useRef(new Map());
   const heatmapPointsRef = React.useRef([]); // dispensary lat/lngs for heatmap
   const [heatmapOn, setHeatmapOn] = React.useState(false);
+  const customMarkersRef = React.useRef([]);
+  const [layerTilesOpen, setLayerTilesOpen] = React.useState(true);
   const [savedItems, setSavedItems] = React.useState([]);
   const [toast, setToast] = React.useState(null);
 
@@ -556,6 +608,29 @@ export default function RoadTripTab({ token }) {
     }
     leadsByExtIdRef.current = m;
   }, [savedItems]);
+
+  // Sync custom-stop diamond markers on the map.
+  React.useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    for (const m of customMarkersRef.current) { try { m.remove(); } catch {} }
+    customMarkersRef.current = [];
+    for (const item of savedItems) {
+      if (item.source !== 'manual') continue;
+      if (!isFinite(item.lat) || !isFinite(item.lng)) continue;
+      const el = buildCustomMarkerEl(item);
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([item.lng, item.lat])
+        .addTo(mapRef.current);
+      const popup = new mapboxgl.Popup({ offset: 16, closeButton: true, closeOnClick: true });
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popup.setLngLat([item.lng, item.lat])
+             .setDOMContent(buildCustomStopPopup(item))
+             .addTo(mapRef.current);
+      });
+      customMarkersRef.current.push(marker);
+    }
+  }, [savedItems, mapReady]);
 
   // Derive day groupings from savedItems
   const itinerary = React.useMemo(() => {
@@ -1120,7 +1195,8 @@ export default function RoadTripTab({ token }) {
           .addTo(mapRef.current);
 
         const popup = new mapboxgl.Popup({
-          offset: 18, closeButton: true, closeOnClick: true, maxWidth: '340px',
+          offset: 18, closeButton: true, closeOnClick: true,
+          maxWidth: 'min(340px, calc(100vw - 24px))',
         });
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1228,23 +1304,50 @@ export default function RoadTripTab({ token }) {
       </Box>
 
       {/* ── Layer toggle tiles ─────────────────────────────────────────── */}
-      <Box sx={{
-        flexShrink: 0, px: { xs: 1, sm: 2 }, py: { xs: 0.75, sm: 1.25 },
-        borderBottom: `1px solid ${TERM.border}`,
-        display: 'grid',
-        gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
-        gap: { xs: 0.5, sm: 1 },
-      }}>
-        {LAYERS.map((l) => (
-          <LayerToggleTile
-            key={l.id}
-            layer={l}
-            active={layerState[l.id].active}
-            loading={layerState[l.id].loading}
-            count={layerState[l.id].count}
-            onClick={() => toggleLayer(l)}
-          />
-        ))}
+      <Box sx={{ flexShrink: 0, borderBottom: `1px solid ${TERM.border}` }}>
+        {/* Mobile collapse toggle */}
+        <Box
+          role="button" tabIndex={0}
+          onClick={() => setLayerTilesOpen((v) => !v)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setLayerTilesOpen((v) => !v); }}
+          sx={{
+            display: { xs: 'flex', md: 'none' },
+            alignItems: 'center', px: 1.5, py: 0.75,
+            cursor: 'pointer', userSelect: 'none',
+            fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1.5, color: TERM.muted,
+            gap: 1,
+            '&:hover': { color: TERM.green },
+          }}>
+          <Box component="span" sx={{ color: TERM.green, fontSize: 9 }}>◉</Box>
+          LAYERS
+          {/* Active layer dots when collapsed */}
+          {!layerTilesOpen && LAYERS.filter((l) => layerState[l.id].active).map((l) => (
+            <Box key={l.id} sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: l.color, boxShadow: `0 0 5px ${l.color}` }} />
+          ))}
+          <Box component="span" sx={{
+            ml: 'auto', fontSize: 9, transition: 'transform 0.18s ease',
+            transform: layerTilesOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+          }}>▼</Box>
+        </Box>
+
+        {/* Tile grid */}
+        <Box sx={{
+          display: { xs: layerTilesOpen ? 'grid' : 'none', md: 'grid' },
+          px: { xs: 1, sm: 2 }, py: { xs: 0.75, sm: 1.25 },
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+          gap: { xs: 0.5, sm: 1 },
+        }}>
+          {LAYERS.map((l) => (
+            <LayerToggleTile
+              key={l.id}
+              layer={l}
+              active={layerState[l.id].active}
+              loading={layerState[l.id].loading}
+              count={layerState[l.id].count}
+              onClick={() => toggleLayer(l)}
+            />
+          ))}
+        </Box>
       </Box>
 
       {/* ── Body: map + side panel ─────────────────────────────────────── */}

@@ -941,9 +941,19 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <input type="text" id="lb-filename" class="lb-eb-input lb-eb-filename" placeholder="lookbook.pdf" style="width:130px" />
       <div style="display:flex;gap:4px;align-items:center">
         <span style="font-size:9px;font-family:var(--fm);color:var(--tx4);letter-spacing:.08em;white-space:nowrap">LAYOUT</span>
-        <button id="lb-preset-grid" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbPreset('grid')" title="Up to 6 per page in a clean 3×2 grid">GRID</button>
-        <button id="lb-preset-hero" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('hero')" title="First mockup large, rest smaller below">HERO</button>
-        <button id="lb-preset-spotlight" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('spotlight')" title="Big feature left, column of detail shots right">SPOTLIGHT</button>
+        <button id="lb-preset-grid" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbPreset('grid')" title="Grid layout, overflow pages">GRID</button>
+        <button id="lb-preset-hero" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('hero')" title="Hero top + smaller below">HERO</button>
+        <button id="lb-preset-spotlight" class="btn btn-ghost btn-sm lb-preset" onclick="setLbPreset('spotlight')" title="Big left + column right">SPOTLIGHT</button>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="font-size:9px;font-family:var(--fm);color:var(--tx4);letter-spacing:.08em;white-space:nowrap">COLS</span>
+        <button id="lb-cols-2" class="btn btn-ghost btn-sm lb-preset" onclick="setLbCols(2)" title="2 columns — less whitespace for portrait mockups">2</button>
+        <button id="lb-cols-3" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbCols(3)" title="3 columns — more per page">3</button>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="font-size:9px;font-family:var(--fm);color:var(--tx4);letter-spacing:.08em;white-space:nowrap">LABELS</span>
+        <button id="lb-labels-on" class="btn btn-ghost btn-sm lb-preset active" onclick="setLbLabels(true)">ON</button>
+        <button id="lb-labels-off" class="btn btn-ghost btn-sm lb-preset" onclick="setLbLabels(false)">OFF</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="clearLookbookQueue()">Clear</button>
       <button class="btn btn-ac" onclick="exportLookbook()">↓ Export PDF</button>
@@ -2548,9 +2558,21 @@ function closeLibraryPicker(){ document.getElementById('library-picker-overlay')
 
 // ── Lookbook ──────────────────────────────────────────────────────
 let lbLayoutPreset = 'grid';
+let lbGridCols = 3;
+let lbShowLabels = true;
+
 function setLbPreset(p) {
   lbLayoutPreset = p;
   document.querySelectorAll('.lb-preset').forEach(b => b.classList.toggle('active', b.id === 'lb-preset-' + p));
+}
+function setLbCols(n) {
+  lbGridCols = n;
+  document.querySelectorAll('#lb-cols-2,#lb-cols-3').forEach(b => b.classList.toggle('active', b.id === 'lb-cols-' + n));
+}
+function setLbLabels(v) {
+  lbShowLabels = v;
+  document.getElementById('lb-labels-on').classList.toggle('active', v);
+  document.getElementById('lb-labels-off').classList.toggle('active', !v);
 }
 
 async function refreshLbGrid() {
@@ -2709,41 +2731,49 @@ async function exportLookbookGrid() {
 
     async function drawCell(page,item,cx,cy,cw,ch){
       const hasBack=!!item.backSrc;
-      const pad=7,labelH=18;
-      const iaH=ch-labelH-pad*2,iaW=cw-pad*2;
+      const pad=4; // minimal padding — images fill the cell
+      const labelH=lbShowLabels?16:0;
+      const iaH=ch-pad*2,iaW=cw-pad*2;
+      // Image area (full cell minus padding; label overlays the bottom)
       if(item.frontSrc){
         const img=await embedImg(pdfDoc,item.frontSrc);
         if(img){
           const d=img.scale(1);
-          const fw=hasBack?iaW*0.57:iaW;
+          const fw=hasBack?iaW*0.58:iaW;
           const sc=Math.min(fw/d.width,iaH/d.height);
           const iw=d.width*sc,ih=d.height*sc;
-          page.drawImage(img,{x:cx+pad+(fw-iw)/2,y:cy+labelH+(iaH-ih)/2,width:iw,height:ih});
+          page.drawImage(img,{x:cx+pad+(fw-iw)/2,y:cy+pad+(iaH-ih)/2,width:iw,height:ih});
         }
       }
       if(hasBack&&item.backSrc){
         const img=await embedImg(pdfDoc,item.backSrc);
         if(img){
-          const d=img.scale(1);const bw=iaW*0.38;
+          const d=img.scale(1);const bw=iaW*0.37;
           const sc=Math.min(bw/d.width,iaH/d.height);
           const iw=d.width*sc,ih=d.height*sc;
-          page.drawImage(img,{x:cx+cw-pad-iw,y:cy+labelH+(iaH-ih)/2,width:iw,height:ih});
+          page.drawImage(img,{x:cx+cw-pad-iw,y:cy+pad+(iaH-ih)/2,width:iw,height:ih});
         }
       }
-      if(item.name){
-        let label=item.name;const lfs=8;
-        while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cw-pad*2)label=label.slice(0,-1);
-        page.drawText(label,{x:cx+pad,y:cy+5,size:lfs,font:boldFont,color:rgb(.18,.18,.18)});
+      // Label overlay at bottom (subtitle = product name + color; falls back to styleCode)
+      if(lbShowLabels){
+        const rawLabel=(item.subtitle||item.styleCode||item.name||'').trim();
+        if(rawLabel){
+          // Subtle frosted bar
+          page.drawRectangle({x:cx,y:cy,width:cw,height:labelH,color:rgb(.97,.97,.97),opacity:.92});
+          let label=rawLabel;const lfs=7.5;
+          while(label.length>2&&boldFont.widthOfTextAtSize(label,lfs)>cw-pad*2) label=label.slice(0,-1);
+          page.drawText(label,{x:cx+pad,y:cy+4,size:lfs,font:boldFont,color:rgb(.2,.2,.2)});
+        }
       }
       if(hasBack){
-        const sepX=cx+cw-pad-iaW*0.39;
-        page.drawLine({start:{x:sepX,y:cy+labelH},end:{x:sepX,y:cy+ch-pad},thickness:.3,color:rgb(.85,.85,.85)});
+        const sepX=cx+cw-pad-iaW*0.37;
+        page.drawLine({start:{x:sepX,y:cy+(lbShowLabels?labelH:0)},end:{x:sepX,y:cy+ch-pad},thickness:.3,color:rgb(.82,.82,.82)});
       }
     }
 
-    // Shared helper: draw a 3×2 grid page starting at queue index `startIdx`
+    // Shared helper: draw a cols×rows grid page starting at queue index `startIdx`
     async function drawGridPage(page,startIdx){
-      const cols=3,rows=2,perPage=6;
+      const cols=lbGridCols, rows=cols===2?3:2, perPage=cols*rows;
       const cw=(contentW-(cols-1)*G)/cols;
       const ch=(contentH-(rows-1)*G)/rows;
       for(let i=0;i<perPage;i++){

@@ -42,7 +42,6 @@ import {
   AccordionSummary,
   AccordionDetails,
 } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout';
 import LockIcon from '@mui/icons-material/Lock';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
