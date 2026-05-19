@@ -41,7 +41,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Badge,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -54,7 +53,6 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
-import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -69,7 +67,6 @@ import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import QuoterTab from './studio/QuoterTab';
-import JpwReconTab from './studio/JpwReconTab';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -136,7 +133,7 @@ function Login({ onAuthed }) {
     try {
       const res = await axios.post(`${config.backendUrl}/api/auth/studio-login`, { password: pw });
       if (res.data?.token) {
-        sessionStorage.setItem(TOKEN_KEY, res.data.token);
+        localStorage.setItem(TOKEN_KEY, res.data.token);
         setFailCount(0);
         setLockedMsg('');
         onAuthed(res.data.token);
@@ -1899,8 +1896,7 @@ const HUB_GROUPS = [
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
-      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
+      { id: 'coldcall', label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
     ],
   },
 ];
@@ -1908,7 +1904,7 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay, badgeCount }) {
+function HubCard({ tool, onClick, delay }) {
   const { label, Icon } = tool;
   return (
     <Grow in timeout={400 + delay}>
@@ -1938,24 +1934,18 @@ function HubCard({ tool, onClick, delay, badgeCount }) {
         }}
       >
         <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Badge
-            badgeContent={badgeCount || 0}
-            color="error"
-            invisible={!badgeCount}
-            sx={{ flexShrink: 0 }}
+          <Box
+            className="hub-icon"
+            sx={{
+              flexShrink: 0,
+              width: 38, height: 38, borderRadius: 1.5,
+              bgcolor: BRAND.greenDk, color: BRAND.green,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.18s ease',
+            }}
           >
-            <Box
-              className="hub-icon"
-              sx={{
-                width: 38, height: 38, borderRadius: 1.5,
-                bgcolor: BRAND.greenDk, color: BRAND.green,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.18s ease',
-              }}
-            >
-              <Icon sx={{ fontSize: 20 }} />
-            </Box>
-          </Badge>
+            <Icon sx={{ fontSize: 20 }} />
+          </Box>
           <MuiTypography fontWeight={700} sx={{
             color: BRAND.white, fontSize: 14.5, flexGrow: 1,
           }}>
@@ -1976,7 +1966,7 @@ function HubCard({ tool, onClick, delay, badgeCount }) {
   );
 }
 
-function Hub({ onPick, unseenCount }) {
+function Hub({ onPick }) {
   let cardIdx = 0;
   return (
     <Stack spacing={3}>
@@ -2003,7 +1993,6 @@ function Hub({ onPick, unseenCount }) {
                   tool={t}
                   delay={cardIdx * 60}
                   onClick={() => onPick(t.id)}
-                  badgeCount={t.id === 'submissions' ? unseenCount : 0}
                 />
               );
               cardIdx += 1;
@@ -2024,37 +2013,10 @@ function StudioBody({ token, onLogout }) {
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
-  const [unseenCount, setUnseenCount] = React.useState(0);
-
-  // Poll for unseen submissions every 30 seconds while token is valid
-  React.useEffect(() => {
-    if (!token) return;
-    const fetchUnseen = () => {
-      axios
-        .get(`${config.backendUrl}/api/submissions/unseen-count`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        .then((res) => setUnseenCount(res.data.count || 0))
-        .catch(() => {});
-    };
-    fetchUnseen();
-    const interval = setInterval(fetchUnseen, 30_000);
-    return () => clearInterval(interval);
-  }, [token]);
-
   const handlePick = (id) => {
     if (id === 'mockup') {
       window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
       return;
-    }
-    if (id === 'submissions') {
-      // Mark all seen when entering submissions tab
-      axios
-        .post(`${config.backendUrl}/api/submissions/mark-all-seen`, {}, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        .then(() => setUnseenCount(0))
-        .catch(() => {});
     }
     setView(id);
   };
@@ -2111,6 +2073,10 @@ function StudioBody({ token, onLogout }) {
     );
   }
 
+  if (view === 'quoter') {
+    return <QuoterTab token={token} onBack={() => setView('hub')} />;
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 3, md: 5 } }}>
       <Container maxWidth="md">
@@ -2141,7 +2107,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} unseenCount={unseenCount} />
+          <Hub onPick={handlePick} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
@@ -2175,11 +2141,9 @@ function StudioBody({ token, onLogout }) {
                 <Box>
                   {view === 'manual'      && <ManualEntryTab token={token} />}
                   {view === 'submissions' && <SubmissionsTab token={token} />}
-                  {view === 'quoter'      && <QuoterTab token={token} />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
-                  {view === 'jpwrecon'    && <JpwReconTab token={token} />}
                 </Box>
               </Fade>
             </Paper>
@@ -2194,20 +2158,20 @@ export default function Studio() {
   const [token, setToken] = React.useState(null);
 
   React.useEffect(() => {
-    const t = sessionStorage.getItem(TOKEN_KEY);
+    const t = localStorage.getItem(TOKEN_KEY);
     if (t) {
       axios
         .get(`${config.backendUrl}/api/auth/verify`, { headers: { Authorization: `Bearer ${t}` } })
         .then(() => setToken(t))
         .catch(() => {
-          sessionStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(TOKEN_KEY);
           setToken(null);
         });
     }
   }, []);
 
   const handleLogout = () => {
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     setToken(null);
   };
 
