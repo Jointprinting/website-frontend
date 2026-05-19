@@ -20,6 +20,7 @@ import {
 import AvatarGroup from '@mui/material/AvatarGroup';
 import { useNavigate } from 'react-router-dom';
 import config from '../config.json';
+import QuoteDialog from '../common/QuoteDialog';
 
 function Products() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ function Products() {
   const [selectedType, setSelectedType] = useState('');
   const [products, setProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
 
   const imagesPerPage = 12;
 
@@ -130,7 +132,7 @@ function Products() {
     });
   };
 
-  const handleRequestQuote = () => navigate('/contact');
+  const handleRequestQuote = () => setQuoteDialogOpen(true);
 
   return (
     <Box bgcolor="#f5f5f5" minHeight="100vh">
@@ -372,6 +374,21 @@ function Products() {
                             <Rating name="read-only" value={item.rating} readOnly size="small" />
                           </Stack>
 
+                          {(item.priceRangeBottom || item.priceRangeTop) && (
+                            <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.75 }}>
+                              <Typography
+                                variant="body2"
+                                fontWeight={700}
+                                sx={{ fontSize: { xs: 13, sm: 15 }, color: 'text.primary' }}
+                              >
+                                ${item.priceRangeBottom} – ${item.priceRangeTop}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
+                                est.
+                              </Typography>
+                            </Stack>
+                          )}
+
                           <Box sx={{ flexGrow: 1 }} />
 
                           <Button
@@ -385,7 +402,7 @@ function Products() {
                             }}
                             onClick={() => toggleSelected(item)}
                           >
-                            {isSelected ? 'Remove' : '+ Add to quote'}
+                            {isSelected ? '✓ Added' : '+ Add to quote'}
                           </Button>
                         </Box>
                       </Paper>
@@ -425,7 +442,6 @@ function Products() {
             bgcolor: 'background.paper',
             boxShadow: 6,
             borderRadius: 999,
-            // shrink padding on small screens so the pill doesn't overflow
             px: { xs: 1.5, sm: 3 },
             py: { xs: 1, sm: 1.5 },
             display: 'flex',
@@ -434,7 +450,6 @@ function Products() {
             zIndex: 1300,
             border: '1px solid',
             borderColor: 'secondary.light',
-            // never overflow viewport
             maxWidth: 'calc(100vw - 24px)',
           }}
         >
@@ -472,6 +487,15 @@ function Products() {
           </Button>
         </Box>
       )}
+
+      <QuoteDialog
+        open={quoteDialogOpen}
+        onClose={(submitted) => {
+          setQuoteDialogOpen(false);
+          if (submitted) setSelectedProducts([]);
+        }}
+        products={selectedProducts}
+      />
     </Box>
   );
 }

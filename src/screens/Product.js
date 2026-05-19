@@ -12,6 +12,7 @@ import {
   Container,
 } from '@mui/material';
 import { useSearchParams } from 'react-router-dom';
+import QuoteDialog from '../common/QuoteDialog';
 import config from '../config.json';
 
 function Product() {
@@ -40,6 +41,7 @@ function Product() {
   const [loading, setLoading] = useState(true);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
 
   const getTagCode = (tag) => {
     switch (tag) {
@@ -296,9 +298,9 @@ function Product() {
                 </Box>
               </Box>
 
-              <Stack spacing={1}>
+              <Stack spacing={1.5}>
                 <Button
-                  variant="contained"
+                  variant={isSelected ? 'contained' : 'outlined'}
                   size="large"
                   sx={{
                     width: '100%',
@@ -310,12 +312,44 @@ function Product() {
                   }}
                   onClick={toggleQuoteForCurrent}
                 >
-                  {isSelected ? 'Remove from quote / mockup request' : 'Add to quote / mockup request'}
+                  {isSelected ? '✓ Added to quote tray' : 'Add to quote tray'}
                 </Button>
-                <Typography fontSize={12}>
-                  Free mockup & quote within <b>24 hours.</b>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="large"
+                  sx={{
+                    width: '100%',
+                    borderRadius: 2,
+                    py: 1.5,
+                    fontWeight: 700,
+                    textTransform: 'none',
+                    fontSize: { xs: 14, sm: 16 },
+                  }}
+                  onClick={() => setQuoteDialogOpen(true)}
+                >
+                  Request quote now →
+                </Button>
+                <Typography fontSize={12} color="text.secondary">
+                  Free mockup & quote within <b>24 hours.</b> No commitment required.
                 </Typography>
               </Stack>
+
+              <QuoteDialog
+                open={quoteDialogOpen}
+                onClose={(submitted) => {
+                  setQuoteDialogOpen(false);
+                  if (submitted) {
+                    setSelectedProducts([]);
+                  }
+                }}
+                products={[{
+                  style: productStyle,
+                  name: productTitle,
+                  vendor: productVendor,
+                  thumbnail: productFrontImages?.[productIndex] || '',
+                }]}
+              />
 
               <Typography color="charcoal" sx={{ fontSize: { xs: 14, sm: 16 } }}>
                 {productDescription}
