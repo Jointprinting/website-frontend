@@ -12,13 +12,14 @@ import {
   Menu,
   Button,
   MenuItem,
+  Tooltip,
   useMediaQuery,
   Grid,
   Paper,
   Avatar,
 } from '@mui/material';
-import AvatarGroup from '@mui/material/AvatarGroup';
 import { useNavigate } from 'react-router-dom';
+import CloseIcon from '@mui/icons-material/Close';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
@@ -453,27 +454,50 @@ function Products() {
             maxWidth: 'calc(100vw - 24px)',
           }}
         >
-          <AvatarGroup
-            max={mobile ? 3 : 4}
-            sx={{
-              '& .MuiAvatar-root': {
-                width: mobile ? 26 : 30,
-                height: mobile ? 26 : 30,
-                fontSize: 12,
-              },
-            }}
-          >
-            {selectedProducts.map((p) => (
-              <Avatar key={p.style} src={p.thumbnail || undefined}>
-                {p.name ? p.name.charAt(0) : '?'}
-              </Avatar>
+          {/* Avatars — click any to remove that product from the tray */}
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            {selectedProducts.slice(0, mobile ? 3 : 4).map((p) => (
+              <Tooltip key={p.style} title={`Remove ${p.name || 'product'}`} arrow placement="top">
+                <Box
+                  onClick={() => setSelectedProducts((cur) => cur.filter((x) => x.style !== p.style))}
+                  sx={{
+                    position: 'relative',
+                    cursor: 'pointer',
+                    borderRadius: '50%',
+                    '&:hover .remove-x': { opacity: 1 },
+                  }}
+                >
+                  <Avatar
+                    src={p.thumbnail || undefined}
+                    sx={{ width: mobile ? 26 : 30, height: mobile ? 26 : 30, fontSize: 12 }}
+                  >
+                    {p.name ? p.name.charAt(0) : '?'}
+                  </Avatar>
+                  <Box
+                    className="remove-x"
+                    sx={{
+                      position: 'absolute', inset: 0, borderRadius: '50%',
+                      bgcolor: 'rgba(0,0,0,0.55)', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      opacity: 0, transition: 'opacity 150ms',
+                    }}
+                  >
+                    <CloseIcon sx={{ color: 'white', fontSize: 14 }} />
+                  </Box>
+                </Box>
+              </Tooltip>
             ))}
-          </AvatarGroup>
+            {selectedProducts.length > (mobile ? 3 : 4) && (
+              <Avatar sx={{ width: mobile ? 26 : 30, height: mobile ? 26 : 30, fontSize: 11, bgcolor: 'grey.400' }}>
+                +{selectedProducts.length - (mobile ? 3 : 4)}
+              </Avatar>
+            )}
+          </Stack>
 
           <Typography variant="body2" sx={{ fontSize: { xs: 12, sm: 14 }, whiteSpace: 'nowrap' }}>
             {mobile
               ? `${selectedProducts.length} item${selectedProducts.length > 1 ? 's' : ''}`
-              : `${selectedProducts.length} product${selectedProducts.length > 1 ? 's' : ''} in your quote tray`}
+              : `${selectedProducts.length} product${selectedProducts.length > 1 ? 's' : ''} in tray`}
           </Typography>
           {!mobile && <Divider orientation="vertical" flexItem />}
           <Button

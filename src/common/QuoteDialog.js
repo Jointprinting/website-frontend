@@ -1,13 +1,14 @@
 // src/common/QuoteDialog.js
-// Reusable quick-quote dialog used on both the Products grid and Product detail pages.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Stack, TextField, Button, Typography, Box,
-  Collapse, Alert, Grid, IconButton, Paper,
+  Collapse, Alert, Grid, IconButton, Paper, Chip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
 import config from '../config.json';
 
@@ -17,6 +18,7 @@ function isValidPhone(s) {
 }
 
 export default function QuoteDialog({ open, onClose, products = [] }) {
+  const [localProducts, setLocalProducts] = useState([]);
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,12 +26,29 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
   const [quantity, setQuantity] = useState('');
   const [inHandDate, setInHandDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [files, setFiles] = useState([]);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Sync product list from parent whenever the dialog opens
+  useEffect(() => {
+    if (open) setLocalProducts(products);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const removeProduct = (style) =>
+    setLocalProducts((prev) => prev.filter((p) => p.style !== style));
+
+  const handleFileChange = (e) => {
+    const incoming = Array.from(e.target.files || []);
+    if (incoming.length) setFiles((prev) => [...prev, ...incoming]);
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
   const reset = () => {
     setName(''); setCompanyName(''); setEmail(''); setPhone('');
-    setQuantity(''); setInHandDate(''); setNotes('');
+    setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
     setSuccess(false); setSubmitting(false);
   };
 
@@ -59,8 +78,9 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
       formData.append('quantity', quantity);
       formData.append('inHandDate', inHandDate);
       formData.append('notes', notes);
-      formData.append('selectedProducts', JSON.stringify(products));
+      formData.append('selectedProducts', JSON.stringify(localProducts));
       formData.append('website', ''); // honeypot
+      files.forEach((file) => formData.append('files', file));
 
       await axios.post(config.backendUrl + '/api/email/send-contact', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -71,7 +91,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
 
       setTimeout(() => {
         reset();
-        onClose(true); // true signals a successful submission to the parent
+        onClose(true);
       }, 2500);
     } catch (err) {
       setSubmitting(false);
@@ -96,20 +116,31 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
       </DialogTitle>
 
       <DialogContent sx={{ pt: 1.5 }}>
-        {products.length > 0 && (
+        {/* ── Product list with remove buttons ── */}
+        {localProducts.length > 0 && (
           <Paper
             elevation={0}
             sx={{ mb: 2.5, bgcolor: '#e5f4ea', borderRadius: 2, p: 2, border: '1px solid #b7e4c7' }}
           >
-            <Typography fontWeight={700} fontSize={13} mb={0.75} color="#1a4a2e">
-              {products.length === 1 ? 'Product in your quote:' : 'Products in your quote:'}
+            <Typography fontWeight={700} fontSize={13} mb={1} color="#1a4a2e">
+              {localProducts.length === 1 ? 'Product in your quote:' : 'Products in your quote:'}
             </Typography>
-            <Stack spacing={0.4}>
-              {products.map((p, i) => (
-                <Typography key={i} variant="body2" color="text.primary">
-                  {p.name || 'Product'}{p.vendor ? ` — ${p.vendor}` : ''}
-                  {p.style ? ` (Style #${p.style})` : ''}
-                </Typography>
+            <Stack spacing={0.75}>
+              {localProducts.map((p) => (
+                <Stack key={p.style} direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="body2" color="text.primary">
+                    {p.name || 'Product'}{p.vendor ? ` — ${p.vendor}` : ''}
+                    {p.style ? ` (Style #${p.style})` : ''}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => removeProduct(p.style)}
+                    disabled={submitting || success}
+                    sx={{ ml: 1, color: 'text.secondary', flexShrink: 0, '&:hover': { color: 'error.main' } }}
+                  >
+                    <CloseIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Stack>
               ))}
             </Stack>
           </Paper>
@@ -119,84 +150,80 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <TextField
-                value={name}
-                label="Your name *"
-                variant="outlined"
-                fullWidth
-                size="small"
-                onChange={(e) => setName(e.target.value)}
-                disabled={submitting || success}
+                value={name} label="Your name *" variant="outlined" fullWidth size="small"
+                onChange={(e) => setName(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                value={companyName}
-                label="Company / Organization *"
-                variant="outlined"
-                fullWidth
-                size="small"
-                onChange={(e) => setCompanyName(e.target.value)}
-                disabled={submitting || success}
+                value={companyName} label="Company / Organization *" variant="outlined" fullWidth size="small"
+                onChange={(e) => setCompanyName(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                type="email"
-                value={email}
-                label="Email *"
-                variant="outlined"
-                fullWidth
-                size="small"
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={submitting || success}
+                type="email" value={email} label="Email *" variant="outlined" fullWidth size="small"
+                onChange={(e) => setEmail(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                value={phone}
-                label="Phone *"
-                placeholder="(856) 555-1234"
-                variant="outlined"
-                fullWidth
-                size="small"
-                onChange={(e) => setPhone(e.target.value)}
-                disabled={submitting || success}
+                value={phone} label="Phone *" placeholder="(856) 555-1234" variant="outlined" fullWidth size="small"
+                onChange={(e) => setPhone(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                value={quantity}
-                label="Quantity per item *"
-                variant="outlined"
-                fullWidth
-                size="small"
-                onChange={(e) => setQuantity(e.target.value)}
-                disabled={submitting || success}
+                value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small"
+                onChange={(e) => setQuantity(e.target.value)} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                type="date"
-                value={inHandDate}
-                label="In-hand date *"
-                variant="outlined"
-                fullWidth
-                size="small"
+                type="date" value={inHandDate} label="In-hand date *" variant="outlined" fullWidth size="small"
                 InputLabelProps={{ shrink: true }}
-                onChange={(e) => setInHandDate(e.target.value)}
-                disabled={submitting || success}
+                onChange={(e) => setInHandDate(e.target.value)} disabled={submitting || success}
               />
             </Grid>
+
+            {/* ── File upload ── */}
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<UploadFileIcon />}
+                disabled={submitting || success}
+                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+              >
+                Attach design files (optional)
+                <input type="file" hidden multiple onChange={handleFileChange} />
+              </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Any file type accepted · 25 MB max per file
+              </Typography>
+              {files.length > 0 && (
+                <Stack spacing={0.5} mt={1}>
+                  {files.map((file, idx) => (
+                    <Stack key={idx} direction="row" alignItems="center" spacing={1}>
+                      <Chip
+                        label={file.name}
+                        size="small"
+                        variant="outlined"
+                        onDelete={() => handleRemoveFile(idx)}
+                        deleteIcon={<DeleteIcon />}
+                        sx={{ maxWidth: 280, fontSize: 12 }}
+                      />
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </Grid>
+
             <Grid item xs={12}>
               <TextField
-                value={notes}
-                label="Anything else we should know? (optional)"
-                variant="outlined"
-                fullWidth
-                multiline
-                minRows={3}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={submitting || success}
+                value={notes} label="Anything else we should know? (optional)"
+                variant="outlined" fullWidth multiline minRows={3}
+                onChange={(e) => setNotes(e.target.value)} disabled={submitting || success}
               />
             </Grid>
           </Grid>
