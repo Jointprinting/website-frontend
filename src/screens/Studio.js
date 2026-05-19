@@ -62,9 +62,11 @@ import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
+import QuoterTab from './studio/QuoterTab';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -1885,6 +1887,7 @@ const HUB_GROUPS = [
     tools: [
       { id: 'manual',      label: 'Product Entry',        Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
+      { id: 'quoter',      label: 'CEO Quoter',           Icon: RequestQuoteOutlinedIcon },
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
       { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
@@ -2134,6 +2137,7 @@ function StudioBody({ token, onLogout }) {
                 <Box>
                   {view === 'manual'      && <ManualEntryTab token={token} />}
                   {view === 'submissions' && <SubmissionsTab token={token} />}
+                  {view === 'quoter'      && <QuoterTab token={token} />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
