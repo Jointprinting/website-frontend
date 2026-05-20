@@ -41,15 +41,6 @@ const STATUS_META = {
 };
 const STATUS_OPTIONS = Object.entries(STATUS_META).map(([value, m]) => ({ value, ...m }));
 
-// Warmth derived from last order date
-function getWarmth(lastOrderDate) {
-  if (!lastOrderDate) return { color: '#60a5fa', label: 'New' };
-  const days = (Date.now() - new Date(lastOrderDate).getTime()) / 86400000;
-  if (days <= 90)  return { color: '#4ade80', label: 'Active' };
-  if (days <= 365) return { color: '#fbbf24', label: 'Cooling' };
-  return { color: '#6b7280', label: 'Dormant' };
-}
-
 const darkInput = {
   '& .MuiOutlinedInput-root': {
     bgcolor: 'rgba(255,255,255,0.04)', color: B.white,
@@ -278,7 +269,7 @@ export default function ClientHubTab({ token, onBack }) {
           <ArrowBackIosNewIcon fontSize="small" />
         </IconButton>
         <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 16, letterSpacing: 0.5 }}>
-          CLIENTS
+          ORDER TRACKER
         </Typography>
         <TextField
           size="small" placeholder="Search clients…" value={search}
@@ -375,25 +366,15 @@ export default function ClientHubTab({ token, onBack }) {
               {/* Client header */}
               <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2.5} flexWrap="wrap" gap={1}>
                 <Box>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 24 }}>
-                      {selectedClient.companyName || selectedClient.clientName}
-                    </Typography>
-                    {(() => {
-                      const w = getWarmth(selectedClient.lastOrderDate);
-                      return (
-                        <Tooltip title={w.label}>
-                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: w.color, flexShrink: 0 }} />
-                        </Tooltip>
-                      );
-                    })()}
-                  </Stack>
+                  <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 24 }}>
+                    {selectedClient.companyName || selectedClient.clientName}
+                  </Typography>
                   {selectedClient.companyName && selectedClient.clientName && (
                     <Typography sx={{ color: B.muted, fontSize: 14, mt: 0.25 }}>{selectedClient.clientName}</Typography>
                   )}
                 </Box>
                 <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-                  <StatBadge label="Orders" value={selectedClient.orderCount || 0} />
+                  <StatBadge label="Orders" value={selectedClient.allOrderCount || selectedClient.orderCount || 0} />
                   <StatBadge label="Revenue" value={fmt(selectedClient.totalRevenue)} />
                   {selectedClient.lastOrderDate && (
                     <StatBadge label="Last Order" value={fmtDate(selectedClient.lastOrderDate)} />
@@ -467,9 +448,9 @@ function StatBadge({ label, value }) {
 }
 
 function ClientListItem({ client, selected, onClick }) {
-  const name = client.companyName || client.clientName;
-  const sub  = client.companyName && client.clientName ? client.clientName : null;
-  const w    = getWarmth(client.lastOrderDate);
+  const name      = client.companyName || client.clientName;
+  const sub       = client.companyName && client.clientName ? client.clientName : null;
+  const totalOrds = client.allOrderCount || client.orderCount || 0;
   return (
     <Tooltip title={name} placement="right" disableHoverListener={name.length < 28}>
       <Box
@@ -482,20 +463,17 @@ function ClientListItem({ client, selected, onClick }) {
           transition: 'all 0.12s',
         }}
       >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: w.color, flexShrink: 0 }} />
-          <Typography sx={{
-            color: B.white, fontWeight: selected ? 700 : 500, fontSize: 13.5,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-          }}>
-            {name}
-          </Typography>
-        </Stack>
-        {sub && <Typography sx={{ color: B.muted, fontSize: 11.5, ml: '16px', mt: 0.2 }}>{sub}</Typography>}
-        <Stack direction="row" spacing={1} mt={0.3} ml="16px" alignItems="center">
-          {client.orderCount > 0 && (
+        <Typography sx={{
+          color: B.white, fontWeight: selected ? 700 : 500, fontSize: 13.5,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {name}
+        </Typography>
+        {sub && <Typography sx={{ color: B.muted, fontSize: 11.5, mt: 0.2 }}>{sub}</Typography>}
+        <Stack direction="row" spacing={1} mt={0.3} alignItems="center">
+          {totalOrds > 0 && (
             <Typography sx={{ color: B.muted, fontSize: 11, fontFamily: 'monospace' }}>
-              {client.orderCount} order{client.orderCount !== 1 ? 's' : ''}
+              {totalOrds} order{totalOrds !== 1 ? 's' : ''}
             </Typography>
           )}
           {client.lastOrderDate && (

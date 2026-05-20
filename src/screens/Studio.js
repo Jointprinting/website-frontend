@@ -1910,7 +1910,7 @@ const HUB_GROUPS = [
       { id: 'manual',      label: 'Product Entry',        Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
       { id: 'quoter',      label: 'Quoter',               Icon: RequestQuoteOutlinedIcon },
-      { id: 'clients',     label: 'Clients',              Icon: PeopleOutlineIcon },
+      { id: 'clients',     label: 'Order Tracker',         Icon: PeopleOutlineIcon },
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
       { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
