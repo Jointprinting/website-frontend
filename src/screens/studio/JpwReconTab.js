@@ -1285,10 +1285,16 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
                 Now searching: <Box component="span" sx={{ color: TERM.text }}>{status.current_pair}</Box>
               </Typography>
             )}
-            {status.halted_reason && (
+            {status.halted_reason && status.status !== 'failed' && (
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.amber, mt: 0.5 }}>
                 Halted: {status.halted_reason}
               </Typography>
+            )}
+            {status.status === 'failed' && (
+              <Alert severity="error" sx={{ mt: 1, fontFamily: MONO, fontSize: 11 }}>
+                <Box sx={{ fontWeight: 700, mb: 0.3 }}>Sweep failed</Box>
+                {status.error || status.halted_reason || 'Unknown error'}
+              </Alert>
             )}
             {isRunning && (
               <Button onClick={stopSweep} size="small" sx={{
@@ -1355,8 +1361,6 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
   const [search, setSearch] = React.useState('');
   const [filters, setFilters] = React.useState({ grade: '', pushed: '', category: '', county: '', recommended_offer: '' });
 
-  const [queueIsFallback, setQueueIsFallback] = React.useState(false);
-
   const loadAll = React.useCallback(async () => {
     setLoading(true); setErr('');
     try {
@@ -1366,27 +1370,17 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
         ? { grade: 'A+', sort: 'score_desc', limit: 500 }
         : { ...filters, sort: 'score_desc', limit: 500 };
       if (view === 'queue') {
-        // A+/A first. If both are empty (early in the lifecycle, before
-        // audits have populated Pain scores, or in a thin-results area),
-        // fall back to the top 30 unpushed leads by score so the user
-        // always has something to evaluate.
+        // A+/A only. If empty, the empty state will explain why — we do NOT
+        // fall back to lower-grade leads. The point of the queue is to only
+        // surface leads worth Nate's time.
         const [a1, a2] = await Promise.all([
           api.listLeads({ grade: 'A+', sort: 'score_desc' }),
           api.listLeads({ grade: 'A',  sort: 'score_desc' }),
         ]);
-        const combined = [...(a1.leads || []), ...(a2.leads || [])];
-        if (combined.length === 0) {
-          const top = await api.listLeads({ sort: 'score_desc', limit: 30 });
-          setLeads(top.leads || []);
-          setQueueIsFallback(true);
-        } else {
-          setLeads(combined);
-          setQueueIsFallback(false);
-        }
+        setLeads([...(a1.leads || []), ...(a2.leads || [])]);
       } else {
         const r = await api.listLeads(params);
         setLeads(r.leads || []);
-        setQueueIsFallback(false);
       }
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
@@ -1605,33 +1599,39 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
               bgcolor: TERM.panel, border: `1px dashed ${TERM.borderDim}`,
               borderRadius: 1.5, p: 4, textAlign: 'center',
             }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.muted, mb: 1 }}>
-                {view === 'queue' ? 'No leads ingested yet.' : 'No leads match these filters.'}
-              </Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
-                {view === 'queue'
-                  ? 'Click Run Sweep above to start pulling leads from Google Places.'
-                  : 'Adjust filters or run a sweep to populate.'}
-              </Typography>
+              {view === 'queue' ? (
+                <>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.text, mb: 1, fontWeight: 700 }}>
+                    No A+/A leads in your pool right now.
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.muted, lineHeight: 1.7, maxWidth: 520, mx: 'auto' }}>
+                    {(stats?.total || 0) === 0 ? (
+                      <>You haven't run any sweeps yet. Click <b style={{ color: TERM.green }}>Run Sweep</b> in the toolbar to start ingesting leads from Google Places.</>
+                    ) : (
+                      <>
+                        You have {stats?.total || 0} total leads, but none have climbed to A+/A grade.
+                        This usually means either (a) auto-audit hasn't finished on recently-swept leads — click <b style={{ color: TERM.green }}>Audit batch</b> in the toolbar or wait a few minutes, or (b) your current pool genuinely doesn't contain ideal-fit businesses. Try running another sweep — the smart queue rotates through different categories and towns each time.
+                      </>
+                    )}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.muted, mb: 1 }}>
+                    No leads match these filters.
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+                    Adjust filters or run a sweep to populate.
+                  </Typography>
+                </>
+              )}
             </Paper>
           ) : (
-            <>
-              {view === 'queue' && queueIsFallback && (
-                <Alert severity="info" sx={{
-                  mb: 1.5, fontFamily: MONO, fontSize: 11,
-                  bgcolor: 'rgba(96,165,250,0.06)', color: TERM.text,
-                  border: `1px solid ${TERM.blue}40`,
-                }}>
-                  No A+/A leads in your pool right now. Showing top {filteredLeads.length} by score so you've got something to look at.
-                  More leads grade up as the auto-audit finishes on freshly-swept results — try refreshing in a minute.
-                </Alert>
-              )}
-              <Stack spacing={0.75}>
-                {filteredLeads.map((l) => (
-                  <LeadRow key={l._id} lead={l} onOpen={setSelected} />
-                ))}
-              </Stack>
-            </>
+            <Stack spacing={0.75}>
+              {filteredLeads.map((l) => (
+                <LeadRow key={l._id} lead={l} onOpen={setSelected} />
+              ))}
+            </Stack>
           )}
         </Box>
       )}
