@@ -1,326 +1,520 @@
 // src/screens/Products.js
-import { React, useState, useEffect } from 'react';
+import { React, useState, useEffect, useCallback } from 'react';
 import {
   Box, Stack, Typography, Chip, Divider, Rating, Pagination,
-  CircularProgress, Menu, Button, MenuItem, Tooltip,
-  TextField, InputAdornment, useMediaQuery, Grid, Paper, Avatar,
+  CircularProgress, Button, Tooltip, TextField, InputAdornment,
+  useMediaQuery, Grid, Paper, Avatar, IconButton, Drawer,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import { useNavigate } from 'react-router-dom';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
+import { useNavigate } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
+// ─── constants ───────────────────────────────────────────────────────────────
+const BRAND = { bg: '#0c1a11', panel: '#0f2218', green: '#4ade80', muted: 'rgba(255,255,255,0.6)' };
+
+const CATEGORIES = ['All', 'Shirts', 'Hoodies', 'Hats', 'Pants'];
+
+const SS_BRANDS = [
+  'Bella + Canvas', 'Gildan', 'Port & Company', 'Port Authority',
+  'Sport-Tek', 'Next Level', 'Alternative Apparel', 'Hanes',
+  'District', 'Carhartt', 'Jerzees', 'Champion',
+  'Independent Trading Co.', 'Comfort Colors', 'LAT Apparel',
+];
+
 const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favorite': 'warning' };
 
+// ─── ProductCard ─────────────────────────────────────────────────────────────
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
+  const imgSrc = item.image || item.productFrontImages?.[0];
   return (
     <Paper
-      elevation={isSelected ? 6 : 2}
+      elevation={isSelected ? 5 : 1}
       sx={{
-        borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative',
+        borderRadius: 2.5, overflow: 'hidden', position: 'relative',
         border: isSelected ? '2px solid' : '1px solid',
-        borderColor: isSelected ? 'secondary.main' : 'divider',
-        transition: 'transform 160ms ease-out, box-shadow 160ms ease-out, border-color 160ms ease-out',
-        '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
-        display: 'flex', flexDirection: 'column', bgcolor: 'background.paper',
+        borderColor: isSelected ? '#4ade80' : 'divider',
+        transition: 'transform 150ms, box-shadow 150ms, border-color 150ms',
+        '&:hover': { transform: 'translateY(-3px)', boxShadow: 5 },
+        display: 'flex', flexDirection: 'column', bgcolor: '#fff',
       }}
     >
       <Box
         onClick={onNavigate}
         sx={{
-          position: 'relative', bgcolor: '#f5f5f5', display: 'flex',
-          justifyContent: 'center', alignItems: 'center',
-          minHeight: { xs: 180, sm: 220, md: 260 },
+          cursor: onNavigate ? 'pointer' : 'default',
+          position: 'relative', bgcolor: '#f7f7f7',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          minHeight: { xs: 170, sm: 210 },
         }}
       >
-        {(item.productFrontImages && item.productFrontImages[0]) ? (
+        {imgSrc ? (
           <img
-            src={item.productFrontImages[0]}
-            alt={item.name}
-            loading="lazy"
-            style={{ maxHeight: 260, width: '100%', objectFit: 'contain' }}
+            src={imgSrc} alt={item.name} loading="lazy"
+            style={{ maxHeight: 220, width: '100%', objectFit: 'contain' }}
           />
         ) : (
-          <Box sx={{ width: '100%', height: 220, bgcolor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography variant="caption" color="text.secondary">{item.style}</Typography>
+          <Box sx={{ width: '100%', height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="caption" color="text.disabled">{item.style}</Typography>
           </Box>
         )}
         {item.tag && (
           <Chip
-            label={item.tag}
-            color={TAG_COLOR[item.tag] || 'info'}
-            size="small"
-            sx={{ position: 'absolute', top: 12, left: 12, fontWeight: 600 }}
+            label={item.tag} size="small" color={TAG_COLOR[item.tag] || 'info'}
+            sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 700, fontSize: 11 }}
           />
         )}
       </Box>
 
-      <Box sx={{ p: { xs: 1.5, sm: 2.2 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: { xs: 10, sm: 12 } }}>
+      <Box sx={{ p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
+        <Typography variant="caption" color="text.secondary"
+          sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
           {item.vendor}
         </Typography>
-        <Typography variant="body1" fontWeight={600} sx={{
-          minHeight: { xs: 32, sm: 40 }, fontSize: { xs: 13, sm: 16 },
+        <Typography fontWeight={600} sx={{
+          fontSize: { xs: 13, sm: 15 }, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          minHeight: { xs: 34, sm: 40 },
         }}>
           {item.name}
         </Typography>
-        <Stack direction="row" alignItems="center" sx={{ mt: 0.5 }}>
-          <Rating value={item.rating || 4.5} readOnly size="small" precision={0.5} />
-        </Stack>
+        <Rating value={item.rating || 4.5} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
         {(item.priceRangeBottom || item.priceRangeTop) && (
-          <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.75 }}>
-            <Typography variant="body2" fontWeight={700} sx={{ fontSize: { xs: 13, sm: 15 }, color: 'text.primary' }}>
+          <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.5 }}>
+            <Typography fontWeight={700} sx={{ fontSize: { xs: 13, sm: 14 } }}>
               ${item.priceRangeBottom} – ${item.priceRangeTop}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>est.</Typography>
+            <Typography variant="caption" color="text.secondary" fontSize={10}>est.</Typography>
           </Stack>
         )}
-        <Box sx={{ flexGrow: 1 }} />
+        <Box flexGrow={1} />
         <Button
           variant={isSelected ? 'contained' : 'outlined'}
-          size="small"
-          sx={{ mt: 1.5, textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 14 } }}
+          size="small" fullWidth
+          sx={{
+            mt: 1.5, textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 13 },
+            ...(isSelected ? { bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' } } : {}),
+          }}
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
         >
-          {isSelected ? '✓ Added' : '+ Add to quote'}
+          {isSelected ? '✓ Added to quote' : '+ Add to quote'}
         </Button>
       </Box>
     </Paper>
   );
 }
 
+// ─── Sidebar content ──────────────────────────────────────────────────────────
+function SidebarContent({ category, setCategory, activeBrand, setActiveBrand, onClose }) {
+  return (
+    <Stack sx={{ height: '100%', bgcolor: BRAND.bg, color: '#fff', p: 3, minWidth: 220 }} spacing={3}>
+      {onClose && (
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography fontWeight={800} sx={{ color: BRAND.green, letterSpacing: 1 }}>Filters</Typography>
+          <IconButton onClick={onClose} size="small" sx={{ color: BRAND.muted }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      )}
+
+      {/* Category */}
+      <Box>
+        <Typography variant="overline" sx={{ color: BRAND.muted, letterSpacing: 2, fontSize: 10, display: 'block', mb: 1 }}>
+          Category
+        </Typography>
+        <Stack spacing={0.5}>
+          {CATEGORIES.map((cat) => (
+            <Button
+              key={cat}
+              onClick={() => { setCategory(cat); onClose?.(); }}
+              sx={{
+                justifyContent: 'flex-start', textTransform: 'none', fontWeight: 600,
+                fontSize: 14, px: 1.5, borderRadius: 1.5,
+                color: category === cat ? BRAND.green : BRAND.muted,
+                bgcolor: category === cat ? 'rgba(74,222,128,0.1)' : 'transparent',
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: '#fff' },
+              }}
+            >
+              {cat}
+            </Button>
+          ))}
+        </Stack>
+      </Box>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+
+      {/* Brands */}
+      <Box>
+        <Typography variant="overline" sx={{ color: BRAND.muted, letterSpacing: 2, fontSize: 10, display: 'block', mb: 1 }}>
+          Browse Brand
+        </Typography>
+        <Stack spacing={0.25}>
+          <Button
+            onClick={() => { setActiveBrand(''); onClose?.(); }}
+            sx={{
+              justifyContent: 'flex-start', textTransform: 'none', fontWeight: 600,
+              fontSize: 13, px: 1.5, borderRadius: 1.5,
+              color: activeBrand === '' ? BRAND.green : BRAND.muted,
+              bgcolor: activeBrand === '' ? 'rgba(74,222,128,0.1)' : 'transparent',
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: '#fff' },
+            }}
+          >
+            Our Featured Picks
+          </Button>
+          {SS_BRANDS.map((b) => (
+            <Button
+              key={b}
+              onClick={() => { setActiveBrand(b); onClose?.(); }}
+              sx={{
+                justifyContent: 'flex-start', textTransform: 'none', fontWeight: 500,
+                fontSize: 12, px: 1.5, borderRadius: 1.5,
+                color: activeBrand === b ? BRAND.green : BRAND.muted,
+                bgcolor: activeBrand === b ? 'rgba(74,222,128,0.1)' : 'transparent',
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: '#fff' },
+              }}
+            >
+              {b}
+            </Button>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Decorative brand mark */}
+      <Box sx={{ flexGrow: 1 }} />
+      <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.06)', pt: 2 }}>
+        <Typography sx={{
+          fontFamily: 'ui-monospace, "SF Mono", monospace',
+          fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.18)',
+          textTransform: 'uppercase', lineHeight: 1.8,
+        }}>
+          JOINT<br />PRINTING
+        </Typography>
+      </Box>
+    </Stack>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 function Products() {
   const navigate = useNavigate();
-  const mobile = useMediaQuery('(max-width: 600px)');
+  const isMobile = useMediaQuery('(max-width:768px)');
 
-  const [page, setPage] = useState(1);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [anchorElType, setAnchorElType] = useState(null);
-  const [numPages, setNumPages] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedType, setSelectedType] = useState('');
-  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('All');
+  const [activeBrand, setActiveBrand] = useState('');     // '' = our DB products
   const [searchInput, setSearchInput] = useState('');
-  const [products, setProducts] = useState([]);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // DB products (featured picks)
+  const [dbProducts, setDbProducts] = useState([]);
+  const [dbPages, setDbPages] = useState(0);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  // S&S brand browse
+  const [browseProducts, setBrowseProducts] = useState([]);
+  const [browsePages, setBrowsePages] = useState(0);
+  const [browseTotal, setBrowseTotal] = useState(0);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState('');
+
+  // Quote tray
   const [selectedProducts, setSelectedProducts] = useState([]);
-  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
 
-  const imagesPerPage = 24;
-  const open = Boolean(anchorEl);
-  const openType = Boolean(anchorElType);
+  const PER_PAGE = 24;
+  const isBrowse = activeBrand !== '';
 
-  // Load tray from sessionStorage
+  // ── sessionStorage tray ───────────────────────────────────────────────────
   useEffect(() => {
     try {
-      const stored = window.sessionStorage.getItem('jpSelectedProducts');
-      if (stored) { const p = JSON.parse(stored); if (Array.isArray(p)) setSelectedProducts(p); }
-    } catch (e) {}
+      const s = window.sessionStorage.getItem('jpSelectedProducts');
+      if (s) { const p = JSON.parse(s); if (Array.isArray(p)) setSelectedProducts(p); }
+    } catch (_) {}
   }, []);
-
   useEffect(() => {
-    try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); } catch (e) {}
+    try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); } catch (_) {}
   }, [selectedProducts]);
 
-  // Debounce search input
+  // ── search debounce ───────────────────────────────────────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => { setSearch(searchInput); setPage(1); }, 600);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 600);
+    return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Fetch products
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const url = `${config.backendUrl}/api/products?page=${page}&limit=${imagesPerPage}&category=${selectedCategory}&type=${selectedType}&search=${encodeURIComponent(search)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        setProducts(data.products || []);
-        setNumPages(data.totalPages || 0);
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
-    };
-    fetchProducts();
-  }, [page, selectedCategory, selectedType, search]);
+  // reset page when brand / category changes
+  useEffect(() => { setPage(1); }, [activeBrand, category]);
 
+  // ── DB products fetch ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isBrowse) return;
+    setDbLoading(true);
+    const cat = category === 'All' ? '' : category;
+    fetch(`${config.backendUrl}/api/products?page=${page}&limit=${PER_PAGE}&category=${cat}&search=${encodeURIComponent(search)}`)
+      .then((r) => r.json())
+      .then((d) => { setDbProducts(d.products || []); setDbPages(d.totalPages || 0); })
+      .catch(console.error)
+      .finally(() => setDbLoading(false));
+  }, [isBrowse, page, category, search]);
+
+  // ── S&S brand browse fetch ────────────────────────────────────────────────
+  const fetchBrowse = useCallback(async () => {
+    if (!activeBrand) return;
+    setBrowseLoading(true);
+    setBrowseError('');
+    try {
+      const cat = category === 'All' ? '' : category;
+      const url = `${config.backendUrl}/api/products/ss/browse?brand=${encodeURIComponent(activeBrand)}&page=${page}&limit=${PER_PAGE}&search=${encodeURIComponent(search)}&category=${cat}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Could not load catalog');
+      setBrowseProducts(d.products || []);
+      setBrowsePages(d.totalPages || 0);
+      setBrowseTotal(d.total || 0);
+    } catch (err) {
+      setBrowseError(err.message || 'Could not load catalog. Please try again.');
+    } finally {
+      setBrowseLoading(false);
+    }
+  }, [activeBrand, page, category, search]);
+
+  useEffect(() => {
+    if (isBrowse) fetchBrowse();
+  }, [isBrowse, fetchBrowse]);
+
+  // ── helpers ───────────────────────────────────────────────────────────────
   const toggleSelected = (item) => {
     setSelectedProducts((cur) => {
-      const exists = cur.some((p) => p.style === item.style);
-      if (exists) return cur.filter((p) => p.style !== item.style);
+      if (cur.some((p) => p.style === item.style)) return cur.filter((p) => p.style !== item.style);
       return [...cur, {
         style: item.style, name: item.name, vendor: item.vendor, tag: item.tag,
-        thumbnail: item.productFrontImages?.[0] || '',
+        thumbnail: item.image || item.productFrontImages?.[0] || '',
       }];
     });
   };
 
-  const handleClearFilters = () => {
-    setSelectedCategory(''); setSelectedType(''); setSearch(''); setSearchInput(''); setPage(1);
-  };
+  const products = isBrowse ? browseProducts : dbProducts;
+  const totalPages = isBrowse ? browsePages : dbPages;
+  const loading = isBrowse ? browseLoading : dbLoading;
+
+  // ── render ────────────────────────────────────────────────────────────────
+  const SIDEBAR_W = 230;
 
   return (
-    <Box bgcolor="#f5f5f5" minHeight="100vh">
-      <Stack
-        py={mobile ? 3 : 5}
-        px={mobile ? 2 : '4vw'}
-        pb={selectedProducts.length > 0 ? (mobile ? 14 : 10) : (mobile ? 3 : 5)}
-        spacing={3}
-        maxWidth={1240}
-        mx="auto"
-      >
-        {/* HEADER */}
-        <Stack spacing={0.5}>
-          <Typography variant="overline" sx={{ letterSpacing: 3, color: 'text.secondary' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f5f5f5', position: 'relative' }}>
+
+      {/* ── DESKTOP SIDEBAR ─────────────────────────────────────────────── */}
+      {!isMobile && (
+        <Box sx={{
+          width: SIDEBAR_W, flexShrink: 0, position: 'sticky', top: 0,
+          height: '100vh', overflowY: 'auto',
+          scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
+        }}>
+          <SidebarContent
+            category={category} setCategory={setCategory}
+            activeBrand={activeBrand} setActiveBrand={setActiveBrand}
+            onClose={null}
+          />
+        </Box>
+      )}
+
+      {/* ── MOBILE DRAWER ───────────────────────────────────────────────── */}
+      <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}
+        PaperProps={{ sx: { width: 260, bgcolor: BRAND.bg } }}>
+        <SidebarContent
+          category={category} setCategory={setCategory}
+          activeBrand={activeBrand} setActiveBrand={setActiveBrand}
+          onClose={() => setDrawerOpen(false)}
+        />
+      </Drawer>
+
+      {/* ── MAIN CONTENT ────────────────────────────────────────────────── */}
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+
+        {/* TOP SEARCH + HEADER BAR */}
+        <Box sx={{
+          bgcolor: BRAND.bg,
+          px: { xs: 2, sm: 3, md: 4 }, py: { xs: 1.5, sm: 2 },
+          position: 'sticky', top: 0, zIndex: 100,
+        }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            {isMobile && (
+              <IconButton onClick={() => setDrawerOpen(true)} sx={{ color: BRAND.green, flexShrink: 0 }}>
+                <FilterListIcon />
+              </IconButton>
+            )}
+            <Box sx={{ flexGrow: 1 }}>
+              <TextField
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search styles, brands, categories…"
+                size="small"
+                fullWidth
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'rgba(255,255,255,0.4)' }} /></InputAdornment>,
+                  sx: {
+                    bgcolor: 'rgba(255,255,255,0.06)', borderRadius: 2,
+                    color: '#fff',
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
+                    '&:hover fieldset': { borderColor: 'rgba(74,222,128,0.5)' },
+                    '&.Mui-focused fieldset': { borderColor: BRAND.green },
+                    '& input': { color: '#fff' },
+                    '& input::placeholder': { color: 'rgba(255,255,255,0.35)', opacity: 1 },
+                  },
+                }}
+              />
+            </Box>
+            {search && (
+              <Chip
+                label={`"${search}"`} size="small" variant="outlined"
+                onDelete={() => { setSearch(''); setSearchInput(''); }}
+                sx={{ color: BRAND.green, borderColor: BRAND.green, '& .MuiChip-deleteIcon': { color: BRAND.green } }}
+              />
+            )}
+          </Stack>
+        </Box>
+
+        {/* PAGE TITLE + CONTEXT */}
+        <Box sx={{ px: { xs: 2, sm: 3, md: 4 }, pt: { xs: 2.5, sm: 3 }, pb: 1 }}>
+          <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: 3 }}>
             STEP 1 · PICK YOUR BLANKS
           </Typography>
-          <Stack direction={mobile ? 'column' : 'row'} alignItems={mobile ? 'flex-start' : 'center'} justifyContent="space-between" spacing={1}>
-            <Typography variant="h4" component="h1" sx={{ fontSize: { xs: 26, sm: 34 } }}>
-              Build your merch lineup
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'baseline' }} spacing={{ sm: 1.5 }} mt={0.5}>
+            <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 22, sm: 28 } }}>
+              {activeBrand ? activeBrand : 'Our Catalog'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420 }}>
-              Choose the pieces you like, drop them in your quote tray, and we'll handle mockups, pricing, and print details.
-            </Typography>
-          </Stack>
-        </Stack>
-
-        {/* FILTERS */}
-        <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', px: mobile ? 2 : 3, py: 1.5, bgcolor: 'background.paper' }}>
-          <Stack direction={mobile ? 'column' : 'row'} alignItems={mobile ? 'stretch' : 'center'} justifyContent="space-between" spacing={mobile ? 1.5 : 2}>
-            <TextField
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search products…"
-              size="small"
-              sx={{ minWidth: 200, flex: 1, maxWidth: 320 }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment> }}
-            />
-
-            <Stack direction="row" spacing={mobile ? 1 : 2} alignItems="center" flexWrap="wrap" useFlexGap>
-              {!mobile && <Typography variant="subtitle2" color="text.secondary">Filter:</Typography>}
-
-              <Button onClick={(e) => setAnchorEl(e.currentTarget)} size="small" variant="outlined" sx={{ flexGrow: { xs: 1, sm: 0 } }}>
-                {selectedCategory || 'Category'}
-              </Button>
-              <Menu anchorEl={anchorEl} open={open} onClose={() => setAnchorEl(null)}>
-                {['', 'Shirts', 'Pants', 'Hoodies', 'Hats'].map((c) => (
-                  <MenuItem key={c} onClick={() => { setAnchorEl(null); setSelectedCategory(c); setPage(1); }}>{c || 'All'}</MenuItem>
-                ))}
-              </Menu>
-
-              <Button onClick={(e) => setAnchorElType(e.currentTarget)} size="small" variant="outlined" sx={{ flexGrow: { xs: 1, sm: 0 } }}>
-                {selectedType || 'Fit / Type'}
-              </Button>
-              <Menu anchorEl={anchorElType} open={openType} onClose={() => setAnchorElType(null)}>
-                {['', 'Unisex', 'Male', 'Female', 'Kids'].map((t) => (
-                  <MenuItem key={t} onClick={() => { setAnchorElType(null); setSelectedType(t); setPage(1); }}>{t || 'All'}</MenuItem>
-                ))}
-              </Menu>
-            </Stack>
-
-            {(selectedCategory || selectedType || search) && (
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                {selectedCategory && <Chip label={selectedCategory} size="small" onDelete={() => setSelectedCategory('')} />}
-                {selectedType && <Chip label={selectedType} size="small" onDelete={() => setSelectedType('')} />}
-                {search && <Chip label={`"${search}"`} size="small" onDelete={() => { setSearch(''); setSearchInput(''); }} />}
-                <Button size="small" color="inherit" onClick={handleClearFilters} sx={{ textTransform: 'none' }}>Clear</Button>
-              </Stack>
+            {isBrowse && browseTotal > 0 && !browseLoading && (
+              <Typography variant="body2" color="text.secondary">
+                {browseTotal} style{browseTotal !== 1 ? 's' : ''}
+              </Typography>
             )}
           </Stack>
-        </Paper>
+          {isBrowse && (
+            <Typography variant="body2" color="text.secondary" mt={0.5}>
+              Browsing the full {activeBrand} lineup — add what you like and we'll quote it for you.
+            </Typography>
+          )}
+        </Box>
 
-        <Divider />
+        {/* PRODUCT GRID AREA */}
+        <Box sx={{ flex: 1, px: { xs: 2, sm: 3, md: 4 }, pb: selectedProducts.length > 0 ? { xs: 14, sm: 12 } : 5 }}>
 
-        {loading ? (
-          <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="60vh" gap={2}>
-            <CircularProgress size={48} thickness={4} />
-            <Typography variant="body2" color="text.secondary">Loading your merch lineup…</Typography>
-          </Box>
-        ) : products.length > 0 ? (
-          <>
-            <Grid container spacing={mobile ? 2 : 3} sx={{ mt: 1 }}>
-              {products.map((item, index) => {
-                const isSelected = selectedProducts.some((p) => p.style === item.style);
-                return (
-                  <Grid item xs={6} sm={6} md={4} lg={3} key={item._id || index}>
-                    <ProductCard
-                      item={item}
-                      isSelected={isSelected}
-                      onToggle={() => toggleSelected(item)}
-                      onNavigate={() => navigate('/product?styleCode=' + item.style)}
-                    />
-                  </Grid>
-                );
-              })}
-            </Grid>
-            <Stack spacing={2} alignItems="center" sx={{ margin: '20px 0' }}>
-              <Pagination count={numPages} page={page} onChange={(_, v) => setPage(v)} size={mobile ? 'small' : 'medium'} />
-            </Stack>
-          </>
-        ) : (
-          <Box height="40vh" display="flex" flexDirection="column" alignItems="center" justifyContent="center" gap={1.5}>
-            <Typography color="text.secondary">No products found.</Typography>
-            {(selectedCategory || selectedType || search) && (
-              <Button size="small" onClick={handleClearFilters} variant="outlined" sx={{ textTransform: 'none' }}>Clear filters</Button>
-            )}
-          </Box>
-        )}
-      </Stack>
+          {loading && (
+            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
+              <CircularProgress size={44} thickness={4} sx={{ color: '#1a3d2b' }} />
+              <Typography variant="body2" color="text.secondary">
+                {isBrowse ? `Loading ${activeBrand}…` : 'Loading catalog…'}
+              </Typography>
+            </Box>
+          )}
 
-      {/* STICKY QUOTE BAR */}
+          {!loading && browseError && isBrowse && (
+            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="40vh" gap={2}>
+              <Typography color="error.main" textAlign="center" maxWidth={400}>{browseError}</Typography>
+              <Button variant="outlined" onClick={fetchBrowse} sx={{ textTransform: 'none' }}>Retry</Button>
+              <Button color="inherit" size="small" onClick={() => setActiveBrand('')} sx={{ textTransform: 'none' }}>
+                Back to featured picks
+              </Button>
+            </Box>
+          )}
+
+          {!loading && !browseError && products.length === 0 && (
+            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="40vh" gap={1.5}>
+              <Typography color="text.secondary">No styles found.</Typography>
+              {search && (
+                <Button size="small" variant="outlined" onClick={() => { setSearch(''); setSearchInput(''); }} sx={{ textTransform: 'none' }}>
+                  Clear search
+                </Button>
+              )}
+            </Box>
+          )}
+
+          {!loading && !browseError && products.length > 0 && (
+            <>
+              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                {products.map((item, idx) => {
+                  const isSelected = selectedProducts.some((p) => p.style === item.style);
+                  return (
+                    <Grid item xs={6} sm={4} md={4} lg={3} key={item._id || item.style || idx}>
+                      <ProductCard
+                        item={item}
+                        isSelected={isSelected}
+                        onToggle={() => toggleSelected(item)}
+                        onNavigate={!isBrowse ? () => navigate('/product?styleCode=' + item.style) : null}
+                      />
+                    </Grid>
+                  );
+                })}
+              </Grid>
+              {totalPages > 1 && (
+                <Stack alignItems="center" sx={{ mt: 4, mb: 2 }}>
+                  <Pagination count={totalPages} page={page} onChange={(_, v) => { setPage(v); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+                </Stack>
+              )}
+            </>
+          )}
+        </Box>
+      </Box>
+
+      {/* ── STICKY QUOTE BAR ────────────────────────────────────────────── */}
       {selectedProducts.length > 0 && (
         <Box sx={{
-          position: 'fixed', bottom: { xs: 12, sm: 16 }, left: '50%', transform: 'translateX(-50%)',
-          bgcolor: 'background.paper', boxShadow: 6, borderRadius: 999,
-          px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 1.5 },
+          position: 'fixed', bottom: { xs: 10, sm: 16 }, left: '50%', transform: 'translateX(-50%)',
+          bgcolor: 'background.paper', boxShadow: 8, borderRadius: 999,
+          px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 1.25 },
           display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 },
-          zIndex: 1300, border: '1px solid', borderColor: 'secondary.light',
+          zIndex: 1300, border: '1px solid', borderColor: 'rgba(26,61,43,0.3)',
           maxWidth: 'calc(100vw - 24px)',
         }}>
           <Stack direction="row" spacing={0.5} alignItems="center">
-            {selectedProducts.slice(0, mobile ? 3 : 4).map((p) => (
-              <Tooltip key={p.style} title={`Remove ${p.name || 'product'}`} arrow placement="top">
+            {selectedProducts.slice(0, isMobile ? 3 : 5).map((p) => (
+              <Tooltip key={p.style} title={`Remove ${p.name || ''}`} arrow placement="top">
                 <Box
-                  onClick={() => setSelectedProducts((cur) => cur.filter((x) => x.style !== p.style))}
-                  sx={{ position: 'relative', cursor: 'pointer', borderRadius: '50%', '&:hover .remove-x': { opacity: 1 } }}
+                  onClick={() => setSelectedProducts((c) => c.filter((x) => x.style !== p.style))}
+                  sx={{ position: 'relative', cursor: 'pointer', '&:hover .rx': { opacity: 1 } }}
                 >
-                  <Avatar src={p.thumbnail || undefined} sx={{ width: mobile ? 26 : 30, height: mobile ? 26 : 30, fontSize: 12 }}>
-                    {p.name ? p.name.charAt(0) : '?'}
+                  <Avatar src={p.thumbnail || undefined}
+                    sx={{ width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, fontSize: 12 }}>
+                    {p.name?.[0] || '?'}
                   </Avatar>
-                  <Box className="remove-x" sx={{
+                  <Box className="rx" sx={{
                     position: 'absolute', inset: 0, borderRadius: '50%',
                     bgcolor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     opacity: 0, transition: 'opacity 150ms',
                   }}>
-                    <CloseIcon sx={{ color: 'white', fontSize: 14 }} />
+                    <CloseIcon sx={{ color: '#fff', fontSize: 13 }} />
                   </Box>
                 </Box>
               </Tooltip>
             ))}
-            {selectedProducts.length > (mobile ? 3 : 4) && (
-              <Avatar sx={{ width: mobile ? 26 : 30, height: mobile ? 26 : 30, fontSize: 11, bgcolor: 'grey.400' }}>
-                +{selectedProducts.length - (mobile ? 3 : 4)}
+            {selectedProducts.length > (isMobile ? 3 : 5) && (
+              <Avatar sx={{ width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, fontSize: 11, bgcolor: 'grey.400' }}>
+                +{selectedProducts.length - (isMobile ? 3 : 5)}
               </Avatar>
             )}
           </Stack>
-          <Typography variant="body2" sx={{ fontSize: { xs: 12, sm: 14 }, whiteSpace: 'nowrap' }}>
-            {mobile ? `${selectedProducts.length} item${selectedProducts.length > 1 ? 's' : ''}` : `${selectedProducts.length} product${selectedProducts.length > 1 ? 's' : ''} in tray`}
+          <Typography variant="body2" sx={{ fontSize: { xs: 12, sm: 14 }, whiteSpace: 'nowrap', color: 'text.secondary' }}>
+            {selectedProducts.length} {selectedProducts.length === 1 ? 'item' : 'items'}
           </Typography>
-          {!mobile && <Divider orientation="vertical" flexItem />}
-          <Button variant="contained" size="small" color="secondary"
-            sx={{ textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 14 }, whiteSpace: 'nowrap' }}
-            onClick={() => setQuoteDialogOpen(true)}>
-            {mobile ? 'Get quote' : 'Request mockup & quote'}
+          {!isMobile && <Divider orientation="vertical" flexItem />}
+          <Button
+            variant="contained" size="small"
+            sx={{
+              textTransform: 'none', borderRadius: 999, whiteSpace: 'nowrap',
+              fontSize: { xs: 12, sm: 13 }, bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
+            }}
+            onClick={() => setQuoteOpen(true)}
+          >
+            {isMobile ? 'Get quote' : 'Request mockup & quote'}
           </Button>
         </Box>
       )}
 
       <QuoteDialog
-        open={quoteDialogOpen}
-        onClose={(submitted) => { setQuoteDialogOpen(false); if (submitted) setSelectedProducts([]); }}
+        open={quoteOpen}
+        onClose={(submitted) => { setQuoteOpen(false); if (submitted) setSelectedProducts([]); }}
         products={selectedProducts}
       />
     </Box>
