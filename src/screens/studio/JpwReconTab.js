@@ -26,6 +26,7 @@ import {
   Paper, Drawer, Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   CircularProgress, Tooltip, LinearProgress, InputAdornment,
   ToggleButton, ToggleButtonGroup,
+  Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -40,6 +41,8 @@ import SendIcon from '@mui/icons-material/Send';
 import SearchIcon from '@mui/icons-material/Search';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import BoltIcon from '@mui/icons-material/Bolt';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import config from '../../config.json';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +129,9 @@ function makeApi(token) {
     auditLead:  (id) => base.post(`/leads/${id}/audit`).then((r) => r.data),
     auditBatch: (body) => base.post('/audit-batch', body).then((r) => r.data),
     searchPlaces: (body) => base.post('/search/places', body).then((r) => r.data),
+    pushSpider:      (id) => base.post(`/leads/${id}/push-to-spider`).then((r) => r.data),
+    pushSpiderBatch: (body) => base.post('/push-to-spider-batch', body).then((r) => r.data),
+    updateAdSignal:  (id, body) => base.post(`/leads/${id}/ad-signal`, body).then((r) => r.data),
     usage:      () => base.get('/usage').then((r) => r.data),
     exportCsvUrl: (params = {}) => {
       const q = new URLSearchParams(params).toString();
@@ -290,6 +296,112 @@ function AuditChecklist({ audit }) {
   );
 }
 
+// Manual entry panel for Meta Ad Library signals. Paste a Meta Ad Library
+// page URL, advertiser name/ID, sample ad copy, etc. We store them on the
+// lead's ad_signal subdoc; the scoring engine pulls buying-intent points
+// straight from that.
+//
+// Confidence dropdown:
+//   - "confirmed"  → active_ads_found = true   (full +15 / +4 for copy)
+//   - "possible"   → active_ads_found = "possible" (+8 partial)
+//   - "none"       → active_ads_found = false
+function AdSignalPanel({ adSignal, onSave, busy }) {
+  const [draft, setDraft] = React.useState(() => ({ ...(adSignal || {}) }));
+  React.useEffect(() => { setDraft({ ...(adSignal || {}) }); }, [adSignal]);
+
+  const confidence = adSignal?.active_ads_found === true
+    ? 'confirmed'
+    : adSignal?.active_ads_found === 'possible' ? 'possible'
+    : adSignal?.active_ads_found === false      ? 'none' : '';
+
+  const setConfidence = (val) => {
+    let active_ads_found;
+    if (val === 'confirmed') active_ads_found = true;
+    else if (val === 'possible') active_ads_found = 'possible';
+    else if (val === 'none') active_ads_found = false;
+    setDraft({ ...draft, active_ads_found, confidence: val });
+  };
+
+  return (
+    <Accordion
+      elevation={0}
+      sx={{
+        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+        borderRadius: '6px !important', mb: 1.5,
+        '&:before': { display: 'none' },
+        '&.Mui-expanded': { margin: '0 0 12px 0' },
+      }}
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: TERM.muted }} />}
+        sx={{ px: 1.5, '& .MuiAccordionSummary-content': { my: 1 }}}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+            Meta ad signal
+          </Typography>
+          {confidence && (
+            <Chip size="small" label={confidence} sx={{
+              fontFamily: MONO, fontSize: 10, height: 18,
+              bgcolor: confidence === 'confirmed' ? `${TERM.green}20` : confidence === 'possible' ? `${TERM.amber}20` : 'rgba(255,255,255,0.06)',
+              color: confidence === 'confirmed' ? TERM.green : confidence === 'possible' ? TERM.amber : TERM.muted,
+              border: `1px solid ${confidence === 'confirmed' ? TERM.green : confidence === 'possible' ? TERM.amber : TERM.borderDim}40`,
+            }} />
+          )}
+          {adSignal?.active_ad_count > 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
+              {adSignal.active_ad_count} ads
+            </Typography>
+          )}
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1.5 }}>
+        <Stack spacing={1.2}>
+          <Stack direction="row" spacing={1}>
+            <TextField select label="Confidence" size="small" sx={{ ...darkInputSx, width: 150 }}
+              value={confidence} onChange={(e) => setConfidence(e.target.value)}>
+              <MenuItem value="">unset</MenuItem>
+              <MenuItem value="confirmed">confirmed (active)</MenuItem>
+              <MenuItem value="possible">possible</MenuItem>
+              <MenuItem value="none">no ads</MenuItem>
+            </TextField>
+            <TextField label="# active ads" type="number" size="small" sx={{ ...darkInputSx, width: 110 }}
+              value={draft.active_ad_count || ''}
+              onChange={(e) => setDraft({ ...draft, active_ad_count: parseInt(e.target.value, 10) || 0 })}/>
+            <TextField label="Latest seen" type="date" size="small" sx={{ ...darkInputSx, flex: 1 }}
+              InputLabelProps={{ shrink: true }}
+              value={(draft.latest_seen_date || '').slice(0, 10)}
+              onChange={(e) => setDraft({ ...draft, latest_seen_date: e.target.value })}/>
+          </Stack>
+          <TextField label="Meta Ad Library URL or page" size="small" sx={darkInputSx}
+            placeholder="https://www.facebook.com/ads/library/?id=…  or  Page name"
+            value={draft.page_url || draft.page_name || ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (/^https?:\/\//i.test(v)) setDraft({ ...draft, page_url: v });
+              else setDraft({ ...draft, page_name: v });
+            }}/>
+          <TextField label="Ad angle / copy summary" multiline minRows={2} size="small" sx={darkInputSx}
+            placeholder='e.g. "Free estimate today, financing available, emergency service 24/7"'
+            value={draft.ad_angle_summary || ''}
+            onChange={(e) => setDraft({ ...draft, ad_angle_summary: e.target.value })}/>
+          <TextField label="Sample ad copy (one per line)" multiline minRows={2} size="small" sx={darkInputSx}
+            value={Array.isArray(draft.ad_text_samples) ? draft.ad_text_samples.join('\n') : (draft.ad_text_samples || '')}
+            onChange={(e) => setDraft({ ...draft, ad_text_samples: e.target.value.split('\n').filter(Boolean) })}/>
+          <TextField label="Landing pages (one per line)" multiline minRows={1} size="small" sx={darkInputSx}
+            value={Array.isArray(draft.landing_page_urls) ? draft.landing_page_urls.join('\n') : (draft.landing_page_urls || '')}
+            onChange={(e) => setDraft({ ...draft, landing_page_urls: e.target.value.split('\n').filter(Boolean) })}/>
+          <Stack direction="row" justifyContent="flex-end">
+            <Button onClick={() => onSave(draft)} disabled={busy}
+              sx={{
+                bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, fontSize: 11.5,
+                '&:hover': { bgcolor: '#3ecb6f' },
+              }}>Save & re-score</Button>
+          </Stack>
+        </Stack>
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
 function ScoreBar({ label, value, max, color = TERM.green }) {
   const pct = max ? Math.min(100, (value / max) * 100) : 0;
   return (
@@ -422,6 +534,11 @@ function LeadRow({ lead, onOpen }) {
         <Box sx={{ flexShrink: 0 }}>
           <StatusChip status={lead.call_status} />
         </Box>
+        {lead.pushed_to_spider_at && (
+          <Tooltip title={`In Spider since ${new Date(lead.pushed_to_spider_at).toLocaleDateString()}`}>
+            <CheckCircleOutlineIcon sx={{ color: TERM.green, fontSize: 16, opacity: 0.8 }} />
+          </Tooltip>
+        )}
         {lead.phone && (
           <Tooltip title={lead.phone}>
             <IconButton
@@ -443,7 +560,7 @@ function LeadRow({ lead, onOpen }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Lead detail drawer
 // ─────────────────────────────────────────────────────────────────────────────
-function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
+function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [draft, setDraft] = React.useState(lead || {});
@@ -485,6 +602,28 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
     setBusy(true); setErr('');
     try {
       const updated = await api.auditLead(lead._id);
+      setDraft(updated);
+      onSaved(updated);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    } finally { setBusy(false); }
+  };
+
+  const pushToSpider = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.pushSpider(lead._id);
+      setDraft(r.lead);
+      onSaved(r.lead);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    } finally { setBusy(false); }
+  };
+
+  const saveAdSignal = async (adForm) => {
+    setBusy(true); setErr('');
+    try {
+      const updated = await api.updateAdSignal(lead._id, adForm);
       setDraft(updated);
       onSaved(updated);
     } catch (e) {
@@ -696,6 +835,12 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
           )}
         </Paper>
 
+        <AdSignalPanel
+          adSignal={draft.ad_signal}
+          onSave={saveAdSignal}
+          busy={busy}
+        />
+
         {/* Editable section */}
         <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.6 }}>
           Notes
@@ -733,15 +878,31 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved }) {
             Close
           </Button>
           <Box sx={{ flex: 1 }} />
-          <Tooltip title="Phase 3 — Push to Spider sheet (new tab) coming next">
-            <span>
-              <Button
-                disabled
-                startIcon={<SendIcon sx={{ fontSize: 14 }} />}
-                sx={{ color: TERM.muted, border: `1px dashed ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11 }}
-              >Push to Spider</Button>
-            </span>
-          </Tooltip>
+          {draft.pushed_to_spider_at ? (
+            <Tooltip title={`Pushed ${new Date(draft.pushed_to_spider_at).toLocaleString()}`}>
+              <span>
+                <Button
+                  startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 14 }} />}
+                  onClick={pushToSpider} disabled={busy || !spiderConfigured}
+                  sx={{ color: TERM.green, border: `1px solid ${TERM.green}40`, fontFamily: MONO, fontSize: 11 }}
+                >Re-push</Button>
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip title={spiderConfigured ? 'Append to Spider sheet, "JPW Recon" tab' : 'Spider webhook not configured on backend'}>
+              <span>
+                <Button
+                  startIcon={<SendIcon sx={{ fontSize: 14 }} />}
+                  onClick={pushToSpider} disabled={busy || !spiderConfigured}
+                  sx={{
+                    color: TERM.green, border: `1px solid ${TERM.green}`,
+                    fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                    '&:hover': { bgcolor: `${TERM.green}10` },
+                  }}
+                >Push to Spider</Button>
+              </span>
+            </Tooltip>
+          )}
         </Stack>
       </Box>
     </Drawer>
@@ -1113,6 +1274,22 @@ export default function JpwReconTab({ token }) {
     } finally { setAuditingBatch(false); }
   };
 
+  const pushAllAplusA = async () => {
+    if (!usage?.spider_configured) {
+      window.alert('Spider webhook not configured on backend. See docs/JPW_SPIDER_SETUP.md.');
+      return;
+    }
+    if (!window.confirm('Push every A+/A lead that hasn\'t been pushed yet into the Spider sheet ("JPW Recon" tab)?')) return;
+    setErr('');
+    try {
+      const r = await api.pushSpiderBatch({ only_unpushed: true, limit: 100 });
+      await loadAll();
+      window.alert(`Pushed ${r.pushed} new rows, ${r.skipped} already present (out of ${r.requested}).`);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    }
+  };
+
   // Refresh usage when this tab is opened
   React.useEffect(() => {
     api.usage().then(setUsage).catch(() => {});
@@ -1184,6 +1361,16 @@ export default function JpwReconTab({ token }) {
           onClick={auditUnaudited} disabled={auditingBatch}
           sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
           Audit batch
+        </Button>
+        <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
+          onClick={pushAllAplusA}
+          disabled={!usage?.spider_configured}
+          sx={{
+            color: usage?.spider_configured ? TERM.green : TERM.muted,
+            border: `1px solid ${usage?.spider_configured ? `${TERM.green}40` : TERM.borderDim}`,
+            fontFamily: MONO, fontSize: 11, fontWeight: 700,
+          }}>
+          Push A+/A → Spider
         </Button>
         <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 14 }} />}
           component="a" href={api.exportCsvUrl()} download
@@ -1280,6 +1467,7 @@ export default function JpwReconTab({ token }) {
       <LeadDetail
         lead={selected} scoreCaps={reference?.score_caps}
         onClose={() => setSelected(null)} api={api} onSaved={onLeadSaved}
+        spiderConfigured={!!usage?.spider_configured}
       />
       <AddLeadDialog
         open={addOpen} onClose={() => setAddOpen(false)} api={api} reference={reference}
