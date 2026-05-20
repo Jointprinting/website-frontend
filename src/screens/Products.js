@@ -1,5 +1,5 @@
 // src/screens/Products.js
-import { React, useState, useEffect } from 'react';
+import { React, useState, useEffect, useCallback } from 'react';
 import {
   Box, Stack, Typography, Chip, Divider, Rating, Pagination,
   CircularProgress, Button, Tooltip, TextField, InputAdornment,
@@ -9,6 +9,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
@@ -77,8 +78,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         {item.colorCount > 1 && (
           <Chip
             label={`${item.colorCount} colors`}
-            size="small"
-            variant="outlined"
+            size="small" variant="outlined"
             sx={{
               position: 'absolute', top: 10, right: 10, fontSize: 10, height: 20,
               bgcolor: 'rgba(255,255,255,0.88)', borderColor: 'rgba(0,0,0,0.14)',
@@ -154,7 +154,6 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
         </Stack>
       )}
 
-      {/* Garment Type */}
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
         Garment Type
@@ -167,7 +166,6 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 2 }} />
 
-      {/* Gender / Fit */}
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
         Gender / Fit
@@ -194,8 +192,8 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
 
 // ─── Main ───────────────────────────────────────────────────────────────────────
 export default function Products() {
-  const navigate   = useNavigate();
-  const isMobile   = useMediaQuery('(max-width:768px)');
+  const navigate  = useNavigate();
+  const isMobile  = useMediaQuery('(max-width:768px)');
 
   const [category,    setCategory]    = useState('');
   const [genderType,  setGenderType]  = useState('');
@@ -204,11 +202,12 @@ export default function Products() {
   const [page,        setPage]        = useState(1);
   const [drawerOpen,  setDrawerOpen]  = useState(false);
 
-  const [products,    setProducts]    = useState([]);
-  const [totalPages,  setTotalPages]  = useState(0);
-  const [totalItems,  setTotalItems]  = useState(0);
-  const [loading,     setLoading]     = useState(true);
-  const [everLoaded,  setEverLoaded]  = useState(false);
+  const [products,   setProducts]   = useState([]);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [fetchKey,   setFetchKey]   = useState(0); // incremented to retry
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteOpen,         setQuoteOpen]        = useState(false);
@@ -232,12 +231,12 @@ export default function Products() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // reset page on filter change
   useEffect(() => { setPage(1); }, [category, genderType]);
 
   // ── fetch from S&S live browse ───────────────────────────────────────────────
-  useEffect(() => {
+  const doFetch = useCallback(() => {
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams({ page, limit: PER_PAGE });
     if (category)   params.set('category', category);
     if (genderType) params.set('type', genderType);
@@ -246,14 +245,19 @@ export default function Products() {
     fetch(`${config.backendUrl}/api/products/ss/browse?${params}`)
       .then((r) => r.json())
       .then((d) => {
+        if (d.message && !d.products) {
+          setError(d.message);
+          return;
+        }
         setProducts(d.products || []);
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
-        setEverLoaded(true);
       })
-      .catch(console.error)
+      .catch(() => setError('Could not reach the catalog server. Check your connection and try again.'))
       .finally(() => setLoading(false));
-  }, [page, category, genderType, search]);
+  }, [page, category, genderType, search, fetchKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { doFetch(); }, [doFetch]);
 
   // ── helpers ──────────────────────────────────────────────────────────────
   const toggleSelected = (item) => {
@@ -266,35 +270,26 @@ export default function Products() {
     });
   };
 
-  const activeLabel   = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
-  const genderLabel   = GENDER_TYPES.find((g) => g.value === genderType)?.label;
+  const activeLabel = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
+  const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
 
-      {/* DESKTOP SIDEBAR — sticky column */}
+      {/* DESKTOP SIDEBAR */}
       {!isMobile && (
-        <Box sx={{
-          width: SIDEBAR_W, flexShrink: 0,
-          position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start',
-        }}>
-          <Sidebar
-            category={category} setCategory={setCategory}
-            genderType={genderType} setGenderType={setGenderType}
-            onClose={null}
-          />
+        <Box sx={{ width: SIDEBAR_W, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start' }}>
+          <Sidebar category={category} setCategory={setCategory}
+            genderType={genderType} setGenderType={setGenderType} onClose={null} />
         </Box>
       )}
 
       {/* MOBILE DRAWER */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}
         PaperProps={{ sx: { width: 270, bgcolor: SIDEBAR_BG } }}>
-        <Sidebar
-          category={category} setCategory={setCategory}
-          genderType={genderType} setGenderType={setGenderType}
-          onClose={() => setDrawerOpen(false)}
-        />
+        <Sidebar category={category} setCategory={setCategory}
+          genderType={genderType} setGenderType={setGenderType} onClose={() => setDrawerOpen(false)} />
       </Drawer>
 
       {/* MAIN CONTENT */}
@@ -331,9 +326,7 @@ export default function Products() {
               }}
               InputProps={{
                 startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 18 }} />
-                  </InputAdornment>
+                  <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment>
                 ),
                 ...(search ? {
                   endAdornment: (
@@ -352,26 +345,19 @@ export default function Products() {
 
         {/* PAGE HEADER */}
         <Box sx={{ px: { xs: 2, sm: 3 }, pt: 3, pb: 1 }}>
-          <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: 3, fontSize: 10 }}>
-            STEP 1 · PICK YOUR BLANKS
-          </Typography>
-          <Stack direction="row" alignItems="baseline" spacing={1.5} mt={0.5} flexWrap="wrap" useFlexGap>
+          <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap>
             <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 26 } }}>
               {activeLabel}
             </Typography>
-            {!loading && totalItems > 0 && (
+            {!loading && !error && totalItems > 0 && (
               <Typography variant="body2" color="text.secondary">
                 {totalItems.toLocaleString()} style{totalItems !== 1 ? 's' : ''}
               </Typography>
             )}
           </Stack>
           {genderType && (
-            <Chip
-              label={genderLabel}
-              size="small"
-              onDelete={() => setGenderType('')}
-              sx={{ mt: 0.75, fontSize: 11, height: 22 }}
-            />
+            <Chip label={genderLabel} size="small" onDelete={() => setGenderType('')}
+              sx={{ mt: 0.75, fontSize: 11, height: 22 }} />
           )}
         </Box>
 
@@ -381,15 +367,28 @@ export default function Products() {
           {loading && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
               <CircularProgress size={44} thickness={4} sx={{ color: '#1a3d2b' }} />
-              <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ whiteSpace: 'pre-line' }}>
-                {!everLoaded
-                  ? 'Loading S&S Activewear catalog…\nThis may take a moment on first visit.'
-                  : 'Loading…'}
+              <Typography variant="body2" color="text.secondary" textAlign="center">
+                Loading catalog…
               </Typography>
             </Box>
           )}
 
-          {!loading && products.length === 0 && (
+          {!loading && error && (
+            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={2}>
+              <Typography color="error" textAlign="center" sx={{ maxWidth: 380 }}>
+                {error}
+              </Typography>
+              <Button
+                variant="outlined" size="small" startIcon={<RefreshIcon />}
+                onClick={() => setFetchKey((k) => k + 1)}
+                sx={{ textTransform: 'none' }}
+              >
+                Try again
+              </Button>
+            </Box>
+          )}
+
+          {!loading && !error && products.length === 0 && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={1.5}>
               <Typography color="text.secondary" textAlign="center">
                 No styles found{category ? ` in ${activeLabel}` : ''}.
@@ -402,7 +401,7 @@ export default function Products() {
             </Box>
           )}
 
-          {!loading && products.length > 0 && (
+          {!loading && !error && products.length > 0 && (
             <>
               <Grid container spacing={2} sx={{ mt: 0.5 }}>
                 {products.map((item, idx) => {
