@@ -112,7 +112,9 @@ function makeApi(token) {
     auditLead:  (id) => base.post(`/leads/${id}/audit`).then((r) => r.data),
     auditBatch: (body) => base.post('/audit-batch', body).then((r) => r.data),
     searchPlaces: (body) => base.post('/search/places', body).then((r) => r.data),
-    sweepPlaces:  (body) => base.post('/search/sweep', body, { timeout: 180000 }).then((r) => r.data),
+    sweepPlaces:  (body) => base.post('/search/sweep', body).then((r) => r.data),
+    sweepStatus:  () => base.get('/search/sweep/status').then((r) => r.data),
+    sweepStop:    () => base.post('/search/sweep/stop').then((r) => r.data),
     pushSpider:      (id) => base.post(`/leads/${id}/push-to-spider`).then((r) => r.data),
     pushSpiderBatch: (body) => base.post('/push-to-spider-batch', body).then((r) => r.data),
     updateAdSignal:  (id, body) => base.post(`/leads/${id}/ad-signal`, body).then((r) => r.data),
@@ -1141,27 +1143,41 @@ function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
 // Bulk sweep — runs N (category × town) combos in one shot
 // ─────────────────────────────────────────────────────────────────────────────
 function SweepDialog({ open, onClose, api, reference, onDone }) {
-  // Default both lists pre-selected so a normal "run everything" is one click
+  const [maxSearches, setMaxSearches] = React.useState(33);
+  const [advanced, setAdvanced] = React.useState(false);
   const [pickedCats, setPickedCats] = React.useState(new Set());
   const [pickedTowns, setPickedTowns] = React.useState(new Set());
-  const [maxSearches, setMaxSearches] = React.useState(30);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
-  const [result, setResult] = React.useState(null);
   const [usage, setUsage] = React.useState(null);
+  const [status, setStatus] = React.useState(null);
 
-  // Hydrate selections when dialog opens — all high-ticket categories + all
-  // SJ towns by default
+  // Reset transient UI state when dialog opens. Categories/towns hydrate
+  // for the advanced override but stay hidden behind the accordion.
   React.useEffect(() => {
-    if (!open || !reference) return;
-    setPickedCats(new Set(
-      (reference.categories || []).filter((c) => c.tier === 'high').map((c) => c.name)
-    ));
-    setPickedTowns(new Set(reference.towns || []));
+    if (!open) return;
     setErr('');
-    setResult(null);
     api.usage().then(setUsage).catch(() => {});
+    api.sweepStatus().then(setStatus).catch(() => setStatus(null));
+    if (reference) {
+      setPickedCats(new Set(
+        (reference.categories || []).filter((c) => c.tier === 'high').map((c) => c.name)
+      ));
+      setPickedTowns(new Set(reference.towns || []));
+    }
   }, [open, reference, api]);
+
+  // Poll status while the dialog is open OR a sweep is running. 2s feels
+  // responsive without hammering the API.
+  React.useEffect(() => {
+    if (!open) return;
+    const tick = () => api.sweepStatus().then(setStatus).catch(() => {});
+    const id = setInterval(tick, 2000);
+    return () => clearInterval(id);
+  }, [open, api]);
+
+  const isRunning = status?.status === 'running';
+  const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
   const toggle = (set, setSet, value) => {
     const next = new Set(set);
@@ -1171,33 +1187,53 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
   };
   const allCats  = (reference?.categories || []).filter((c) => c.tier === 'high');
   const allTowns = reference?.towns || [];
-  const pairCount = pickedCats.size * pickedTowns.size;
-  const willRun = Math.min(pairCount, maxSearches);
 
   const submit = async () => {
-    if (!pickedCats.size || !pickedTowns.size) {
-      setErr('Pick at least one category and one town.');
-      return;
-    }
-    setBusy(true); setErr(''); setResult(null);
+    setBusy(true); setErr('');
     try {
-      const r = await api.sweepPlaces({
-        categories: Array.from(pickedCats),
-        towns:      Array.from(pickedTowns),
-        max:        maxSearches,
-      });
-      setResult(r);
-      onDone();
+      const body = { max: maxSearches };
+      if (advanced) {
+        if (!pickedCats.size || !pickedTowns.size) {
+          setErr('Pick at least one category and one town in advanced mode.');
+          setBusy(false);
+          return;
+        }
+        body.categories = Array.from(pickedCats);
+        body.towns      = Array.from(pickedTowns);
+      }
+      const r = await api.sweepPlaces(body);
+      if (!r.ok) {
+        setErr(r.message || 'Could not start sweep.');
+      } else {
+        // Immediately fetch status so the progress section appears
+        const next = await api.sweepStatus();
+        setStatus(next);
+        onDone();
+      }
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
     } finally { setBusy(false); }
   };
 
+  const stopSweep = async () => {
+    try {
+      await api.sweepStop();
+      const next = await api.sweepStatus();
+      setStatus(next);
+    } catch (e) {
+      setErr(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const pct = status?.pairs_total
+    ? Math.min(100, Math.round(100 * (status.pairs_done || 0) / status.pairs_total))
+    : 0;
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
       PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
       <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
-        Run Full Sweep
+        Run Sweep
       </DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
         {usage && (
@@ -1206,110 +1242,180 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
             sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}
           >
             {usage.places_key_configured
-              ? `Today: ${usage.places_calls_today} / ${usage.daily_cap} Places calls. Sweep will halt at the cap.`
+              ? `Today: ${usage.places_calls_today} / ${usage.daily_cap} Places calls. Sweep halts if the cap is hit.`
               : 'GOOGLE_PLACES_KEY is not set on the backend — this will fail.'}
           </Alert>
         )}
         {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
-        {result && (
-          <Alert severity="success" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}>
-            Ran {result.searches_run} of {result.pairs_total} searches.
-            Created {result.total_created} new leads, merged {result.total_merged},
-            skipped {result.total_skipped_in_spider} already in Spider.
-            {result.halted_reason && (
-              <Box component="span" sx={{ display: 'block', mt: 0.5, opacity: 0.7 }}>
-                Halted: {result.halted_reason}
-              </Box>
+
+        {/* Live progress section — visible whenever the backend reports a
+            running OR finished sweep so the user can reopen the dialog and
+            see results even after closing it mid-run. */}
+        {(isRunning || isFinished) && status && (
+          <Paper elevation={0} sx={{
+            bgcolor: TERM.panel, border: `1px solid ${isRunning ? TERM.green : TERM.borderDim}`,
+            borderRadius: 1.5, p: 1.5, mb: 2,
+          }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 0.5 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TERM.text }}>
+                {status.pairs_done || 0} / {status.pairs_total || 0} pairs
+                {status.api_calls_used > 0 && (
+                  <Box component="span" sx={{ color: TERM.muted, fontWeight: 400, ml: 1 }}>
+                    · {status.api_calls_used} API calls
+                  </Box>
+                )}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: isRunning ? TERM.green : TERM.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
+                {status.status}
+              </Typography>
+            </Stack>
+            <LinearProgress
+              variant="determinate" value={pct}
+              sx={{
+                height: 6, borderRadius: 3, mb: 1,
+                bgcolor: 'rgba(255,255,255,0.05)',
+                '& .MuiLinearProgress-bar': {
+                  bgcolor: isRunning ? TERM.green : (status.status === 'completed' ? TERM.green : TERM.amber),
+                },
+              }}
+            />
+            <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+              <Box>New: <Box component="span" sx={{ color: TERM.green, fontWeight: 700 }}>{status.total_created || 0}</Box></Box>
+              <Box>Merged: <Box component="span" sx={{ color: TERM.text }}>{status.total_merged || 0}</Box></Box>
+              <Box>Skipped (Spider): <Box component="span" sx={{ color: TERM.text }}>{status.total_skipped_in_spider || 0}</Box></Box>
+            </Stack>
+            {status.current_pair && isRunning && (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mt: 0.5 }}>
+                Now searching: <Box component="span" sx={{ color: TERM.text }}>{status.current_pair}</Box>
+              </Typography>
             )}
-          </Alert>
+            {status.halted_reason && (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.amber, mt: 0.5 }}>
+                Halted: {status.halted_reason}
+              </Typography>
+            )}
+            {isRunning && (
+              <Button onClick={stopSweep} size="small" sx={{
+                color: TERM.amber, border: `1px solid ${TERM.amber}40`,
+                fontFamily: MONO, fontSize: 11, fontWeight: 700, mt: 1,
+              }}>Stop sweep</Button>
+            )}
+          </Paper>
         )}
-        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
-          Runs the cross-product of <Box component="span" sx={{ color: TERM.text }}>{pickedCats.size}</Box> categories ×
-          <Box component="span" sx={{ color: TERM.text }}> {pickedTowns.size}</Box> towns =
-          <Box component="span" sx={{ color: TERM.green, fontWeight: 700 }}> {pairCount} pairs</Box>.
-          Will execute the first <Box component="span" sx={{ color: TERM.green, fontWeight: 700 }}>{willRun}</Box>,
-          ~1s each with throttling. Auto-audit kicks off after every search.
-        </Typography>
 
-        <TextField
-          type="number" label="Max searches this run" size="small"
-          value={maxSearches}
-          onChange={(e) => setMaxSearches(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          inputProps={{ min: 1, max: 100 }}
-          sx={{ ...darkInputSx, width: 200, mb: 2 }}
-        />
+        {!isRunning && (
+          <>
+            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
+              Smart queue picks the (category × town) pairs you haven't searched recently.
+              Each pair runs 2-3 phrasings × 2 pages = up to ~80 unique businesses, then
+              auto-audits in the background. Daily cap halts the run cleanly if hit.
+            </Typography>
 
-        <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
-          <Box sx={{ flex: 1 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-                Categories ({pickedCats.size}/{allCats.length})
-              </Typography>
-              <Stack direction="row" spacing={0.5}>
-                <Button size="small" onClick={() => setPickedCats(new Set(allCats.map((c) => c.name)))}
-                  sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
-                <Button size="small" onClick={() => setPickedCats(new Set())}
-                  sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
-              </Stack>
-            </Stack>
+            <TextField
+              type="number" label="Max searches this run" size="small"
+              value={maxSearches}
+              onChange={(e) => setMaxSearches(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              inputProps={{ min: 1, max: 100 }}
+              sx={{ ...darkInputSx, width: 220, mb: 2 }}
+              helperText="Each pair uses ~6 API calls. 33 ≈ full daily budget."
+            />
+
+            {/* Advanced override — collapsed by default. Smart queue is the
+                normal path; this is only for when you want to force a
+                specific category/town set. */}
             <Box sx={{
-              maxHeight: 240, overflowY: 'auto',
-              border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5,
+              border: `1px solid ${TERM.borderDim}`, borderRadius: 1, mb: 1,
             }}>
-              {allCats.map((c) => (
-                <Box key={c.name}
-                  onClick={() => toggle(pickedCats, setPickedCats, c.name)}
-                  sx={{
-                    cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
-                    fontFamily: MONO, fontSize: 11.5,
-                    color: pickedCats.has(c.name) ? TERM.green : TERM.muted,
-                    bgcolor: pickedCats.has(c.name) ? `${TERM.green}10` : 'transparent',
-                    '&:hover': { bgcolor: `${TERM.green}08` },
-                  }}>
-                  {pickedCats.has(c.name) ? '✓ ' : '  '}{c.name}
+              <Box
+                onClick={() => setAdvanced((v) => !v)}
+                sx={{
+                  cursor: 'pointer', px: 1.25, py: 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
+                }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  Advanced — override smart queue
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+                  {advanced ? '▾' : '▸'}
+                </Typography>
+              </Box>
+              {advanced && (
+                <Box sx={{ p: 1.25, borderTop: `1px solid ${TERM.borderDim}` }}>
+                  <Stack direction="row" spacing={2}>
+                    <Box sx={{ flex: 1 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+                          Categories ({pickedCats.size}/{allCats.length})
+                        </Typography>
+                        <Stack direction="row" spacing={0.5}>
+                          <Button size="small" onClick={() => setPickedCats(new Set(allCats.map((c) => c.name)))}
+                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
+                          <Button size="small" onClick={() => setPickedCats(new Set())}
+                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
+                        </Stack>
+                      </Stack>
+                      <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5 }}>
+                        {allCats.map((c) => (
+                          <Box key={c.name}
+                            onClick={() => toggle(pickedCats, setPickedCats, c.name)}
+                            sx={{
+                              cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
+                              fontFamily: MONO, fontSize: 11.5,
+                              color: pickedCats.has(c.name) ? TERM.green : TERM.muted,
+                              bgcolor: pickedCats.has(c.name) ? `${TERM.green}10` : 'transparent',
+                              '&:hover': { bgcolor: `${TERM.green}08` },
+                            }}>
+                            {pickedCats.has(c.name) ? '✓ ' : '  '}{c.name}
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+                          Towns ({pickedTowns.size}/{allTowns.length})
+                        </Typography>
+                        <Stack direction="row" spacing={0.5}>
+                          <Button size="small" onClick={() => setPickedTowns(new Set(allTowns))}
+                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
+                          <Button size="small" onClick={() => setPickedTowns(new Set())}
+                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
+                        </Stack>
+                      </Stack>
+                      <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5 }}>
+                        {allTowns.map((t) => (
+                          <Box key={t}
+                            onClick={() => toggle(pickedTowns, setPickedTowns, t)}
+                            sx={{
+                              cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
+                              fontFamily: MONO, fontSize: 11.5,
+                              color: pickedTowns.has(t) ? TERM.green : TERM.muted,
+                              bgcolor: pickedTowns.has(t) ? `${TERM.green}10` : 'transparent',
+                              '&:hover': { bgcolor: `${TERM.green}08` },
+                            }}>
+                            {pickedTowns.has(t) ? '✓ ' : '  '}{t}
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  </Stack>
                 </Box>
-              ))}
+              )}
             </Box>
-          </Box>
-          <Box sx={{ flex: 1 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-                Towns ({pickedTowns.size}/{allTowns.length})
-              </Typography>
-              <Stack direction="row" spacing={0.5}>
-                <Button size="small" onClick={() => setPickedTowns(new Set(allTowns))}
-                  sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
-                <Button size="small" onClick={() => setPickedTowns(new Set())}
-                  sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
-              </Stack>
-            </Stack>
-            <Box sx={{
-              maxHeight: 240, overflowY: 'auto',
-              border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5,
-            }}>
-              {allTowns.map((t) => (
-                <Box key={t}
-                  onClick={() => toggle(pickedTowns, setPickedTowns, t)}
-                  sx={{
-                    cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
-                    fontFamily: MONO, fontSize: 11.5,
-                    color: pickedTowns.has(t) ? TERM.green : TERM.muted,
-                    bgcolor: pickedTowns.has(t) ? `${TERM.green}10` : 'transparent',
-                    '&:hover': { bgcolor: `${TERM.green}08` },
-                  }}>
-                  {pickedTowns.has(t) ? '✓ ' : '  '}{t}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </Stack>
+          </>
+        )}
       </DialogContent>
       <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>Close</Button>
-        <Button onClick={submit} disabled={busy || !pickedCats.size || !pickedTowns.size} variant="contained"
-          sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-          {busy ? <CircularProgress size={18} /> : `Run sweep (${willRun} searches, ~${willRun}s)`}
+        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>
+          {isRunning ? 'Close (sweep keeps running)' : 'Close'}
         </Button>
+        {!isRunning && (
+          <Button onClick={submit} disabled={busy} variant="contained"
+            sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
+            {busy ? <CircularProgress size={18} /> : `Run ${maxSearches} searches`}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
