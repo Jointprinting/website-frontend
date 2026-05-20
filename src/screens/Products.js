@@ -13,11 +13,12 @@ import { useNavigate } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
-// ─── constants ──────────────────────────────────────────────────────────────
-const SIDEBAR_BG = '#0c1a11';
-const GREEN      = '#4ade80';
-const MUTED      = 'rgba(255,255,255,0.55)';
-const SIDEBAR_W  = 230;
+// ─── constants ────────────────────────────────────────────────────────────────────
+const SIDEBAR_BG  = '#0c1a11';
+const GREEN       = '#4ade80';
+const MUTED       = 'rgba(255,255,255,0.55)';
+const SIDEBAR_W   = 230;
+const NAVBAR_H    = 64; // desktop sticky navbar height in px
 
 const GARMENT_CATEGORIES = [
   { label: 'All Styles',      value: '' },
@@ -37,14 +38,14 @@ const GARMENT_CATEGORIES = [
 const GENDER_TYPES = [
   { label: 'Everyone', value: '' },
   { label: "Men's",    value: 'Male' },
-  { label: "Women's", value: 'Female' },
-  { label: 'Youth',   value: 'Kids' },
-  { label: 'Unisex',  value: 'Unisex' },
+  { label: "Women's",  value: 'Female' },
+  { label: 'Youth',    value: 'Kids' },
+  { label: 'Unisex',   value: 'Unisex' },
 ];
 
 const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favorite': 'warning' };
 
-// ─── ProductCard ───────────────────────────────────────────────────────────────
+// ─── ProductCard ───────────────────────────────────────────────────────────────────
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   const imgSrc = item.image || item.productFrontImages?.[0];
   return (
@@ -60,13 +61,13 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         cursor: onNavigate ? 'pointer' : 'default',
         position: 'relative', bgcolor: '#f7f7f7',
         display: 'flex', justifyContent: 'center', alignItems: 'center',
-        minHeight: { xs: 160, sm: 210 },
+        minHeight: { xs: 150, sm: 200 },
       }}>
         {imgSrc ? (
           <img src={imgSrc} alt={item.name} loading="lazy"
             style={{ maxHeight: 220, width: '100%', objectFit: 'contain' }} />
         ) : (
-          <Box sx={{ width: '100%', height: 190, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: '100%', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
           </Box>
         )}
@@ -86,15 +87,15 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         )}
       </Box>
 
-      <Box sx={{ p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
+      <Box sx={{ p: { xs: 1.25, sm: 1.75 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
         <Typography variant="caption" color="text.secondary"
           sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
           {item.vendor}
         </Typography>
         <Typography fontWeight={600} sx={{
-          fontSize: { xs: 13, sm: 15 }, lineHeight: 1.3,
+          fontSize: { xs: 13, sm: 14 }, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          minHeight: { xs: 34, sm: 40 },
+          minHeight: { xs: 34, sm: 38 },
         }}>
           {item.name}
         </Typography>
@@ -111,7 +112,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         <Button
           variant={isSelected ? 'contained' : 'outlined'} size="small" fullWidth
           sx={{
-            mt: 1.5, textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 13 },
+            mt: 1.25, textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 13 },
             ...(isSelected ? { bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' } } : {}),
           }}
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
@@ -123,7 +124,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   );
 }
 
-// ─── Sidebar ───────────────────────────────────────────────────────────────
+// ─── Sidebar ──────────────────────────────────────────────────────────────────────
 function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) {
   const navBtn = (label, active, onClick) => (
     <Button key={label} onClick={() => { onClick(); onClose?.(); }}
@@ -154,7 +155,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       )}
 
       <Typography variant="overline"
-        sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
+        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
         Garment Type
       </Typography>
       <Stack spacing={0}>
@@ -166,7 +167,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 2 }} />
 
       <Typography variant="overline"
-        sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
+        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
         Gender / Fit
       </Typography>
       <Stack spacing={0}>
@@ -176,10 +177,10 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       </Stack>
 
       <Box flexGrow={1} />
-      <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', pt: 2, mt: 3 }}>
+      <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.08)', pt: 2, mt: 3 }}>
         <Typography sx={{
           fontFamily: 'ui-monospace,"SF Mono",monospace',
-          fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.12)',
+          fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.3)',
           textTransform: 'uppercase', lineHeight: 2,
         }}>
           JOINT<br />
@@ -190,7 +191,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
   );
 }
 
-// ─── Main ───────────────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────────────
 export default function Products() {
   const navigate  = useNavigate();
   const isMobile  = useMediaQuery('(max-width:768px)');
@@ -214,7 +215,7 @@ export default function Products() {
 
   const PER_PAGE = 24;
 
-  // ── session storage ──────────────────────────────────────────────────────────
+  // ── session storage ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
       const s = window.sessionStorage.getItem('jpSelectedProducts');
@@ -225,7 +226,7 @@ export default function Products() {
     try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); } catch (_) {}
   }, [selectedProducts]);
 
-  // ── debounce search ──────────────────────────────────────────────────────────
+  // ── debounce search ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 600);
     return () => clearTimeout(t);
@@ -233,7 +234,7 @@ export default function Products() {
 
   useEffect(() => { setPage(1); }, [category, genderType]);
 
-  // ── fetch from S&S live browse ───────────────────────────────────────────────
+  // ── fetch from S&S live browse ─────────────────────────────────────────────────────────
   const doFetch = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -259,7 +260,7 @@ export default function Products() {
 
   useEffect(() => { doFetch(); }, [doFetch]);
 
-  // ── helpers ──────────────────────────────────────────────────────────────
+  // ── helpers ──────────────────────────────────────────────────────────────────────
   const toggleSelected = (item) => {
     setSelectedProducts((cur) => {
       if (cur.some((p) => p.style === item.style)) return cur.filter((p) => p.style !== item.style);
@@ -282,13 +283,17 @@ export default function Products() {
     setFetchKey((k) => k + 1);
   };
 
-  // ── render ──────────────────────────────────────────────────────────────────
+  // ── render ──────────────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
 
-      {/* DESKTOP SIDEBAR */}
+      {/* DESKTOP SIDEBAR — sticky below the navbar so it doesn't hide under it */}
       {!isMobile && (
-        <Box sx={{ width: SIDEBAR_W, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start' }}>
+        <Box sx={{
+          width: SIDEBAR_W, flexShrink: 0,
+          position: 'sticky', top: NAVBAR_H, height: `calc(100vh - ${NAVBAR_H}px)`,
+          alignSelf: 'flex-start',
+        }}>
           <Sidebar category={category} setCategory={setCategory}
             genderType={genderType} setGenderType={setGenderType} onClose={null} />
         </Box>
@@ -306,14 +311,14 @@ export default function Products() {
 
         {/* SEARCH BAR */}
         <Box sx={{
-          bgcolor: SIDEBAR_BG, px: { xs: 1.5, sm: 2.5, md: 3 }, py: 1.5,
-          position: 'sticky', top: 0, zIndex: 100,
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          bgcolor: SIDEBAR_BG, px: { xs: 1.5, sm: 2.5, md: 3 }, py: { xs: 1, sm: 1.5 },
+          position: 'sticky', top: { xs: 0, sm: NAVBAR_H }, zIndex: 100,
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
         }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
             {isMobile && (
               <IconButton onClick={() => setDrawerOpen(true)} size="small"
-                sx={{ color: GREEN, border: '1px solid rgba(74,222,128,0.35)', borderRadius: 1.5, p: 0.75, flexShrink: 0 }}>
+                sx={{ color: GREEN, border: '1px solid rgba(74,222,128,0.4)', borderRadius: 1.5, p: 0.75, flexShrink: 0 }}>
                 <FilterListIcon fontSize="small" />
               </IconButton>
             )}
@@ -324,24 +329,24 @@ export default function Products() {
               size="small" fullWidth
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  bgcolor: 'rgba(255,255,255,0.09)', borderRadius: 2, color: '#fff',
-                  '& fieldset': { borderColor: 'rgba(255,255,255,0.22)' },
-                  '&:hover fieldset': { borderColor: 'rgba(74,222,128,0.5)' },
-                  '&.Mui-focused fieldset': { borderColor: GREEN },
+                  bgcolor: 'rgba(255,255,255,0.14)', borderRadius: 2, color: '#fff',
+                  '& fieldset': { borderColor: 'rgba(255,255,255,0.38)' },
+                  '&:hover fieldset': { borderColor: 'rgba(74,222,128,0.65)' },
+                  '&.Mui-focused fieldset': { borderColor: GREEN, borderWidth: 2 },
                 },
                 '& input': { color: '#fff', fontSize: 14 },
-                '& input::placeholder': { color: 'rgba(255,255,255,0.4)', opacity: 1 },
-                '& .MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' },
+                '& input::placeholder': { color: 'rgba(255,255,255,0.62)', opacity: 1 },
+                '& .MuiSvgIcon-root': { color: 'rgba(255,255,255,0.6)' },
               }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment>
                 ),
-                ...(search ? {
+                ...(searchInput ? {
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton size="small" onClick={() => { setSearch(''); setSearchInput(''); }}
-                        sx={{ color: 'rgba(255,255,255,0.4)', '&:hover': { color: '#fff' } }}>
+                        sx={{ color: 'rgba(255,255,255,0.5)', '&:hover': { color: '#fff' } }}>
                         <CloseIcon sx={{ fontSize: 15 }} />
                       </IconButton>
                     </InputAdornment>
@@ -371,7 +376,7 @@ export default function Products() {
         </Box>
 
         {/* GRID */}
-        <Box sx={{ flex: 1, px: { xs: 2, sm: 3 }, pb: selectedProducts.length > 0 ? { xs: 14, sm: 12 } : 5 }}>
+        <Box sx={{ flex: 1, px: { xs: 1.5, sm: 3 }, pb: selectedProducts.length > 0 ? { xs: 14, sm: 12 } : 5 }}>
 
           {loading && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
@@ -405,8 +410,7 @@ export default function Products() {
                   : 'No styles found.'}
               </Typography>
               <Button
-                size="small"
-                variant="outlined"
+                size="small" variant="outlined"
                 startIcon={hasActiveFilters ? null : <RefreshIcon />}
                 onClick={clearFilters}
                 sx={{ textTransform: 'none' }}
@@ -418,7 +422,7 @@ export default function Products() {
 
           {!loading && !error && products.length > 0 && (
             <>
-              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: 0.5 }}>
                 {products.map((item, idx) => {
                   const isSel = selectedProducts.some((p) => p.style === item.style);
                   return (
@@ -446,24 +450,33 @@ export default function Products() {
       {/* STICKY QUOTE BAR */}
       {selectedProducts.length > 0 && (
         <Box sx={{
-          position: 'fixed', bottom: { xs: 10, sm: 16 }, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed',
+          bottom: { xs: 12, sm: 20 },
+          left: '50%', transform: 'translateX(-50%)',
           bgcolor: 'background.paper', boxShadow: 8, borderRadius: 999,
           px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 1.25 },
           display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 },
           zIndex: 1300, border: '1px solid rgba(26,61,43,0.25)',
-          maxWidth: 'calc(100vw - 24px)',
+          maxWidth: { xs: 'calc(100vw - 24px)', sm: 600 },
         }}>
           <Stack direction="row" spacing={0.5} alignItems="center">
             {selectedProducts.slice(0, isMobile ? 3 : 5).map((p) => (
               <Tooltip key={p.style} title={`Remove ${p.name || ''}`} arrow placement="top">
                 <Box onClick={() => setSelectedProducts((c) => c.filter((x) => x.style !== p.style))}
                   sx={{ position: 'relative', cursor: 'pointer', '&:hover .rx': { opacity: 1 } }}>
-                  <Avatar src={p.thumbnail || undefined}
-                    sx={{ width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, fontSize: 12 }}>
-                    {p.name?.[0] || '?'}
+                  <Avatar
+                    src={p.thumbnail || undefined}
+                    variant="rounded"
+                    sx={{
+                      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: 12,
+                      bgcolor: '#e8f5e9',
+                      '& img': { objectFit: 'contain', p: '2px' },
+                    }}
+                  >
+                    {!p.thumbnail && (p.name?.[0] || '?')}
                   </Avatar>
                   <Box className="rx" sx={{
-                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    position: 'absolute', inset: 0, borderRadius: 1,
                     bgcolor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     opacity: 0, transition: 'opacity 150ms',
                   }}>
@@ -473,7 +486,7 @@ export default function Products() {
               </Tooltip>
             ))}
             {selectedProducts.length > (isMobile ? 3 : 5) && (
-              <Avatar sx={{ width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, fontSize: 11, bgcolor: 'grey.400' }}>
+              <Avatar sx={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: 11, bgcolor: 'grey.300' }}>
                 +{selectedProducts.length - (isMobile ? 3 : 5)}
               </Avatar>
             )}
@@ -485,7 +498,8 @@ export default function Products() {
           <Button variant="contained" size="small"
             sx={{
               textTransform: 'none', borderRadius: 999, whiteSpace: 'nowrap',
-              fontSize: { xs: 12, sm: 13 }, bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
+              fontSize: { xs: 12, sm: 13 }, px: { xs: 1.5, sm: 2.5 },
+              bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
             }}
             onClick={() => setQuoteOpen(true)}>
             {isMobile ? 'Get quote' : 'Request mockup & quote'}
