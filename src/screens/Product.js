@@ -15,44 +15,44 @@ import { useSearchParams } from 'react-router-dom';
 import QuoteDialog from '../common/QuoteDialog';
 import config from '../config.json';
 
+const getTagCode = (tag) => {
+  switch (tag) {
+    case 'Best Seller':  return 'success';
+    case 'New Arrival':  return 'error';
+    case 'Our Favorite': return 'warning';
+    default:             return 'info';
+  }
+};
+
+const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
+
 function Product() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get('styleCode');
 
-  const [productVendor, setProductVendor]                 = useState('');
-  const [productStyle, setProductStyle]                   = useState('');
-  const [productRating, setProductRating]                 = useState(5);
-  const [productTitle, setProductTitle]                   = useState('');
+  const [productVendor, setProductVendor]                     = useState('');
+  const [productStyle, setProductStyle]                       = useState('');
+  const [productRating, setProductRating]                     = useState(5);
+  const [productTitle, setProductTitle]                       = useState('');
   const [productPriceRangeBottom, setProductPriceRangeBottom] = useState('10');
-  const [productPriceRangeTop, setProductPriceRangeTop]   = useState('20');
-  const [productSizeRangeBottom, setProductSizeRangeBottom] = useState('S');
-  const [productSizeRangeTop, setProductSizeRangeTop]     = useState('XXL');
-  const [productTag, setProductTag]                       = useState('Best Seller');
-  const [productTagColor, setProductTagColor]             = useState('warning');
-  const [productColorOptions, setProductColorOptions]     = useState([]);
-  const [productColorCodes, setProductColorCodes]         = useState([]);
-  const [productFrontImages, setProductFrontImages]       = useState([]);
-  const [productBackImages, setProductBackImages]         = useState([]);
-  const [productDescription, setProductDescription]       = useState('');
-  const [frontSelected, setFrontSelected]                 = useState(true);
-  const [productColor, setProductColor]                   = useState('');
-  const [productColorCode, setProductColorCode]           = useState('');
-  const [productIndex, setProductIndex]                   = useState(0);
-  const [loading, setLoading]                             = useState(true);
+  const [productPriceRangeTop, setProductPriceRangeTop]       = useState('20');
+  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState('S');
+  const [productSizeRangeTop, setProductSizeRangeTop]         = useState('XXL');
+  const [productTag, setProductTag]                           = useState('Best Seller');
+  const [productTagColor, setProductTagColor]                 = useState('warning');
+  const [productColorOptions, setProductColorOptions]         = useState([]);
+  const [productColorCodes, setProductColorCodes]             = useState([]);
+  const [productFrontImages, setProductFrontImages]           = useState([]);
+  const [productBackImages, setProductBackImages]             = useState([]);
+  const [productDescription, setProductDescription]           = useState('');
+  const [frontSelected, setFrontSelected]                     = useState(true);
+  const [productColor, setProductColor]                       = useState('');
+  const [productColorCode, setProductColorCode]               = useState('');
+  const [productIndex, setProductIndex]                       = useState(0);
+  const [loading, setLoading]                                 = useState(true);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
-
-  const getTagCode = (tag) => {
-    switch (tag) {
-      case 'Best Seller':  return 'success';
-      case 'New Arrival':  return 'error';
-      case 'Our Favorite': return 'warning';
-      default:             return 'info';
-    }
-  };
-
-  const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
   useEffect(() => {
     try {
@@ -74,46 +74,45 @@ function Product() {
     }
   }, [selectedProducts]);
 
-  // Shared helper — populates all product state from an API response.
-  // supportsBase64Images=true means images are GridFS base64 (DB records);
-  // false means they’re direct CDN URLs (live S&S response).
-  const applyProductData = (data, supportsBase64Images) => {
-    setProductVendor(data.vendor);
-    setProductStyle(data.style);
-    setProductRating(data.rating);
-    setProductTitle(data.name);
-    setProductPriceRangeBottom(data.priceRangeBottom);
-    setProductPriceRangeTop(data.priceRangeTop);
-    setProductSizeRangeBottom(data.sizeRangeBottom);
-    setProductSizeRangeTop(data.sizeRangeTop);
-    setProductTag(data.tag);
-    setProductTagColor(getTagCode(data.tag));
-    const colors = (data.colors || []).map((c) => capitalize(c));
-    setProductColorOptions(colors);
-    setProductColorCodes(data.colorCodes || []);
-    setProductFrontImages(data.productFrontImages || []);
-    setProductBackImages(data.productBackImages || []);
-    setProductDescription(data.description);
-    setProductColor(colors[0] || '');
-    setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
-  };
-
   useEffect(() => {
     if (!id) return;
+
+    // Defined inside the effect so it's not a missing dependency.
+    const applyProductData = (data) => {
+      setProductVendor(data.vendor);
+      setProductStyle(data.style);
+      setProductRating(data.rating);
+      setProductTitle(data.name);
+      setProductPriceRangeBottom(data.priceRangeBottom);
+      setProductPriceRangeTop(data.priceRangeTop);
+      setProductSizeRangeBottom(data.sizeRangeBottom);
+      setProductSizeRangeTop(data.sizeRangeTop);
+      setProductTag(data.tag);
+      setProductTagColor(getTagCode(data.tag));
+      const colors = (data.colors || []).map((c) => capitalize(c));
+      setProductColorOptions(colors);
+      setProductColorCodes(data.colorCodes || []);
+      setProductFrontImages(data.productFrontImages || []);
+      setProductBackImages(data.productBackImages || []);
+      setProductDescription(data.description);
+      setProductColor(colors[0] || '');
+      setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
+    };
+
     const fetchProduct = async () => {
       try {
         setLoading(true);
         // Try the DB-stored product first (fast, images already encoded)
         const res = await fetch(config.backendUrl + '/api/products/style/' + id);
         if (res.ok) {
-          applyProductData(await res.json(), true);
+          applyProductData(await res.json());
           return;
         }
         if (res.status === 404) {
           // Fall back to live S&S lookup (style not yet synced to DB)
           const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + id);
           if (ssRes.ok) {
-            applyProductData(await ssRes.json(), false);
+            applyProductData(await ssRes.json());
             return;
           }
         }
@@ -123,6 +122,7 @@ function Product() {
         setLoading(false);
       }
     };
+
     fetchProduct();
   }, [id]);
 
@@ -284,14 +284,7 @@ function Product() {
                 </Typography>
               </Stack>
 
-              <Box
-                sx={{
-                  overflowX: 'auto',
-                  width: '100%',
-                  py: 1,
-                  px: '2px',
-                }}
-              >
+              <Box sx={{ overflowX: 'auto', width: '100%', py: 1, px: '2px' }}>
                 <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: 'fit-content' }}>
                   {productColorOptions.map((item, index) => (
                     <Tooltip title={item} placement="top" arrow key={index}>
@@ -323,12 +316,8 @@ function Product() {
                   variant={isSelected ? 'contained' : 'outlined'}
                   size="large"
                   sx={{
-                    width: '100%',
-                    borderRadius: 2,
-                    py: 1.5,
-                    fontWeight: 700,
-                    textTransform: 'none',
-                    fontSize: { xs: 14, sm: 16 },
+                    width: '100%', borderRadius: 2, py: 1.5,
+                    fontWeight: 700, textTransform: 'none', fontSize: { xs: 14, sm: 16 },
                   }}
                   onClick={toggleQuoteForCurrent}
                 >
@@ -339,12 +328,8 @@ function Product() {
                   color="secondary"
                   size="large"
                   sx={{
-                    width: '100%',
-                    borderRadius: 2,
-                    py: 1.5,
-                    fontWeight: 700,
-                    textTransform: 'none',
-                    fontSize: { xs: 14, sm: 16 },
+                    width: '100%', borderRadius: 2, py: 1.5,
+                    fontWeight: 700, textTransform: 'none', fontSize: { xs: 14, sm: 16 },
                   }}
                   onClick={() => setQuoteDialogOpen(true)}
                 >
