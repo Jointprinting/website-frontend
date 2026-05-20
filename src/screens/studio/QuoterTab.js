@@ -628,7 +628,7 @@ function ListPage({ quotes, loading, err, search, setSearch, onBack, onNew, onOp
           <ArrowBackIosNewIcon fontSize="small" />
         </IconButton>
         <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 16, letterSpacing: 0.5, ml: 0.5 }}>
-          CEO QUOTER
+          QUOTER
         </Typography>
         <Box sx={{ flex: 1 }} />
         <TextField

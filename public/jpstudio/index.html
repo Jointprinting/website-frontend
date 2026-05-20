@@ -45,15 +45,22 @@
     `;
   }
 
+  // Mockup name filter passed from Client Hub via ?filter= param
+  let _pendingMockupFilter = null;
+
   function getToken() {
     // 1. URL param (parent passes this on iframe load)
     const params = new URLSearchParams(window.location.search);
     const urlT = params.get('t');
+    // Capture ?filter= param before cleaning the URL
+    const filterParam = params.get('filter');
+    if (filterParam) { _pendingMockupFilter = decodeURIComponent(filterParam); }
     if (urlT) {
       try { sessionStorage.setItem('jpStudioToken', urlT); } catch (_) {}
       // Clean URL so token isn't in browser history
       const url = new URL(window.location.href);
       url.searchParams.delete('t');
+      url.searchParams.delete('filter');
       window.history.replaceState({}, '', url.toString());
       return urlT;
     }
@@ -96,6 +103,21 @@
       document.documentElement.style.visibility = 'visible';
       // Notify parent window we're ready (for any iframe coordination)
       try { window.parent && window.parent.postMessage({ type: 'jp-studio-ready' }, '*'); } catch (_) {}
+      // If a ?filter= param was passed, navigate to library and filter by mockup name
+      if (_pendingMockupFilter) {
+        const filterVal = _pendingMockupFilter;
+        _pendingMockupFilter = null;
+        setTimeout(() => {
+          const btn = document.querySelector('.nav-tab[onclick*="library"]');
+          if (btn) btn.click();
+          const sel = document.getElementById('library-client-filter');
+          if (sel) {
+            // Try to match by name — set a custom data attribute the filter can use
+            sel._nameFilter = filterVal;
+            refreshLibrary();
+          }
+        }, 400);
+      }
     } catch (e) {
       return showLockScreen("Couldn't reach server. Check your connection.");
     }
@@ -2426,12 +2448,13 @@ async function refreshLibrary() {
   document.getElementById('logo-count').textContent=logos.length;
   // Refresh client suggestions (datalist + filter dropdowns) when library opens
   await refreshClientSuggestions();
-  // Apply client filter to mockups (blanks/logos aren't tagged)
-  const clientFilter = (document.getElementById('library-client-filter')?.value || '').trim();
-  const filteredMockups = clientFilter
-    ? mockups.filter(m => (m.client || '') === clientFilter)
-    : mockups;
-  document.getElementById('mockup-count').textContent = clientFilter
+  // Apply client filter + optional name filter (set by ?filter= URL param from Client Hub)
+  const clientFilterEl = document.getElementById('library-client-filter');
+  const clientFilter = (clientFilterEl?.value || '').trim();
+  const nameFilter = (clientFilterEl?._nameFilter || '').trim().toLowerCase();
+  let filteredMockups = clientFilter ? mockups.filter(m => (m.client || '') === clientFilter) : mockups;
+  if (nameFilter) filteredMockups = filteredMockups.filter(m => (m.name || '').toLowerCase().includes(nameFilter));
+  document.getElementById('mockup-count').textContent = (clientFilter || nameFilter)
     ? `${filteredMockups.length}/${mockups.length}`
     : mockups.length;
   renderAssetGrid('library-blanks',blanks,'blank');
