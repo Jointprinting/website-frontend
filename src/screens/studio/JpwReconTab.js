@@ -132,6 +132,8 @@ function makeApi(token) {
     pushSpider:      (id) => base.post(`/leads/${id}/push-to-spider`).then((r) => r.data),
     pushSpiderBatch: (body) => base.post('/push-to-spider-batch', body).then((r) => r.data),
     updateAdSignal:  (id, body) => base.post(`/leads/${id}/ad-signal`, body).then((r) => r.data),
+    bulkDelete:      (body) => base.post('/bulk-delete', body).then((r) => r.data),
+    runJob:          (job) => base.post(`/scheduler/${job}/run`).then((r) => r.data),
     usage:      () => base.get('/usage').then((r) => r.data),
     exportCsvUrl: (params = {}) => {
       const q = new URLSearchParams(params).toString();
@@ -427,7 +429,33 @@ function ScoreBar({ label, value, max, color = TERM.green }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
-function Dashboard({ stats }) {
+function relativeTime(d) {
+  if (!d) return 'never';
+  const ms = Date.now() - new Date(d).getTime();
+  if (ms < 60_000) return 'just now';
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+  return `${Math.floor(ms / 86_400_000)}d ago`;
+}
+
+function StatusRow({ label, ok, detail }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 0.4 }}>
+      <Box sx={{ width: 10, height: 10, borderRadius: '50%',
+        bgcolor: ok ? TERM.green : TERM.amber,
+        boxShadow: `0 0 6px ${ok ? TERM.green : TERM.amber}`,
+      }} />
+      <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.text, flex: 1 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
+        {detail}
+      </Typography>
+    </Stack>
+  );
+}
+
+function Dashboard({ stats, usage, api, onAction }) {
   if (!stats) return null;
   const aplus = stats.byGrade['A+'] || 0;
   const a = stats.byGrade['A'] || 0;
@@ -439,6 +467,28 @@ function Dashboard({ stats }) {
                + (stats.byStatus['interested'] || 0)
                + (stats.byStatus['audit_requested'] || 0)
                + booked;
+
+  const cleanup = async (label, body) => {
+    if (!window.confirm(`Delete ${label}? Cannot be undone.`)) return;
+    try {
+      const r = await api.bulkDelete(body);
+      window.alert(`Deleted ${r.deleted}.`);
+      onAction();
+    } catch (e) {
+      window.alert(e?.response?.data?.message || e.message);
+    }
+  };
+  const runJob = async (job) => {
+    try {
+      await api.runJob(job);
+      window.alert('Started in background. Refresh in a few seconds to see results.');
+    } catch (e) {
+      window.alert(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const rescore = usage?.scheduler?.nightly_rescore;
+  const staleAudit = usage?.scheduler?.weekly_stale_audit;
 
   return (
     <Stack spacing={1.5}>
@@ -453,6 +503,7 @@ function Dashboard({ stats }) {
         <KpiTile label="Calls Made" value={called} />
         <KpiTile label="Booked" value={booked} accent={TERM.green} />
       </Stack>
+
       <Paper elevation={0} sx={{
         bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
         p: 1.5, borderRadius: 1.5,
@@ -470,6 +521,116 @@ function Dashboard({ stats }) {
           ))}
         </Stack>
       </Paper>
+
+      {/* System status */}
+      <Paper elevation={0} sx={{
+        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+        p: 1.5, borderRadius: 1.5,
+      }}>
+        <Typography sx={{
+          fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted,
+          fontWeight: 600, textTransform: 'uppercase', mb: 1,
+        }}>System status</Typography>
+        <StatusRow
+          label="Google Places API key"
+          ok={!!usage?.places_key_configured}
+          detail={usage?.places_key_configured ? `${usage.places_calls_today} / ${usage.daily_cap} calls today` : 'not configured'}
+        />
+        <StatusRow
+          label="PageSpeed Insights API key"
+          ok={!!usage?.pagespeed_configured}
+          detail={usage?.pagespeed_configured ? 'enabled' : 'optional — set PAGESPEED_KEY to enable mobile speed audits'}
+        />
+        <StatusRow
+          label="Spider webhook"
+          ok={!!usage?.spider_configured}
+          detail={usage?.spider_configured ? 'enabled' : 'see docs/JPW_SPIDER_SETUP.md'}
+        />
+        <StatusRow
+          label="Nightly re-score job (03:00)"
+          ok={!!rescore?.ran_at && !rescore?.error}
+          detail={rescore?.ran_at
+            ? `${rescore.updated || 0}/${rescore.total || 0} · ${relativeTime(rescore.ran_at)}${rescore.error ? ' · err' : ''}`
+            : 'has not run yet'}
+        />
+        <StatusRow
+          label="Weekly stale-audit refresh (Sun 03:30)"
+          ok={!!staleAudit?.ran_at && !staleAudit?.error}
+          detail={staleAudit?.ran_at
+            ? `${staleAudit.audited || 0}/${staleAudit.attempted || 0} · ${relativeTime(staleAudit.ran_at)}${staleAudit.error ? ' · err' : ''}`
+            : 'has not run yet'}
+        />
+        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+          <Button size="small" onClick={() => runJob('rescore')}
+            sx={{ color: TERM.green, border: `1px solid ${TERM.green}40`, fontFamily: MONO, fontSize: 10.5 }}>
+            Run rescore now
+          </Button>
+          <Button size="small" onClick={() => runJob('stale_audit')}
+            sx={{ color: TERM.green, border: `1px solid ${TERM.green}40`, fontFamily: MONO, fontSize: 10.5 }}>
+            Run stale-audit now
+          </Button>
+        </Stack>
+      </Paper>
+
+      {/* Cleanup */}
+      <Paper elevation={0} sx={{
+        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+        p: 1.5, borderRadius: 1.5,
+      }}>
+        <Typography sx={{
+          fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted,
+          fontWeight: 600, textTransform: 'uppercase', mb: 1,
+        }}>Cleanup</Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1 }}>
+          Bulk delete dead-weight leads. Disqualifiers + grade D rarely justify a callback.
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button size="small" onClick={() => cleanup('all D-graded leads', { grade: 'D' })}
+            sx={{ color: TERM.red, border: `1px solid ${TERM.red}40`, fontFamily: MONO, fontSize: 10.5 }}>
+            Delete D leads ({stats.byGrade['D'] || 0})
+          </Button>
+          <Button size="small" onClick={() => cleanup('all "Do Not Call" leads', { call_status: 'do_not_call' })}
+            sx={{ color: TERM.red, border: `1px solid ${TERM.red}40`, fontFamily: MONO, fontSize: 10.5 }}>
+            Delete DNC ({stats.byStatus['do_not_call'] || 0})
+          </Button>
+          <Button size="small" onClick={() => cleanup('all "Not Fit" leads', { call_status: 'not_fit' })}
+            sx={{ color: TERM.red, border: `1px solid ${TERM.red}40`, fontFamily: MONO, fontSize: 10.5 }}>
+            Delete Not Fit ({stats.byStatus['not_fit'] || 0})
+          </Button>
+        </Stack>
+      </Paper>
+
+      {/* Scoring rubric — read-only reference */}
+      <Accordion elevation={0} sx={{
+        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+        borderRadius: '6px !important', '&:before': { display: 'none' },
+        '&.Mui-expanded': { margin: 0 },
+      }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: TERM.muted }} />}
+          sx={{ px: 1.5, '& .MuiAccordionSummary-content': { my: 1 }}}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+            Scoring rubric · 100 pts
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1.5 }}>
+          <Box sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.text, lineHeight: 1.6 }}>
+            <Box sx={{ color: TERM.green, fontWeight: 700, mt: 0.5 }}>Buying Intent · max 30</Box>
+            Active Meta ads (+15) · possible (+8) · multiple ads (+4) · high-intent ad copy (+4) · 150+ reviews (+7) · 50+ (+5) · 25+ (+3) · tracking pixels (+3) · landing-page structure (+2) · 3+ service areas (+2)
+            <Box sx={{ color: TERM.amber, fontWeight: 700, mt: 1 }}>Pain · max 25</Box>
+            No website (+10) · loads poorly (+8) · no click-to-call (+5) · no quote CTA (+5) · no form (+4) · weak meta (+3) · no service area (+4) · no on-site reviews (+3) · no gallery (+3) · outdated copyright (+2) · bad mobile speed (+4) · no LocalBusiness schema (+3)
+            <Box sx={{ color: TERM.blue, fontWeight: 700, mt: 1 }}>Ability to Pay · max 25</Box>
+            High-ticket category (+8) · 150+ reviews (+7) or 50+ (+5) · 4.2★ with 25+ (+3) · weak site that exists (+4) · running ads (+5) · multiple areas (+4) · emergency category (+2)
+            <Box sx={{ color: TERM.green, fontWeight: 700, mt: 1 }}>Fit · max 15</Box>
+            In South Jersey (+5) · independent (+4) · phone-driven (+4) · matches a core offer (+2)
+            <Box sx={{ color: TERM.red, fontWeight: 700, mt: 1 }}>Urgency · max 5</Box>
+            Seasonal demand (+2) · emergency category (+2) · recent ad activity (+1)
+            <Box sx={{ color: TERM.red, fontWeight: 700, mt: 1 }}>Penalties</Box>
+            Closed (excluded) · no phone (-20) · outside SJ (-25) · franchise (-25) · disqualify category (-15) · already polished + has agency (-20) · {'<10 reviews'} no ads (-20) · no website no reviews no signals (-25) · residential only (-15)
+            <Box sx={{ color: TERM.muted, mt: 1 }}>Grades:</Box>
+            A+ 82-100 · A 72-81 · B 60-71 · C 45-59 · D under 45
+          </Box>
+        </AccordionDetails>
+      </Accordion>
     </Stack>
   );
 }
@@ -1437,7 +1598,14 @@ export default function JpwReconTab({ token }) {
       {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
 
       {view === 'dashboard' ? (
-        loading ? <CircularProgress sx={{ color: TERM.green, my: 4 }} /> : <Dashboard stats={stats} />
+        loading ? <CircularProgress sx={{ color: TERM.green, my: 4 }} /> : (
+          <Dashboard
+            stats={stats}
+            usage={usage}
+            api={api}
+            onAction={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
+          />
+        )
       ) : (
         <Box>
           {loading ? (
