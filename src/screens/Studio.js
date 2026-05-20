@@ -53,6 +53,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
+import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -67,6 +68,7 @@ import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import QuoterTab from './studio/QuoterTab';
+import JpwReconTab from './studio/JpwReconTab';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -1896,7 +1898,8 @@ const HUB_GROUPS = [
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall', label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
+      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
+      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
     ],
   },
 ];
@@ -2145,6 +2148,7 @@ function StudioBody({ token, onLogout }) {
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
+                  {view === 'jpwrecon'    && <JpwReconTab token={token} />}
                 </Box>
               </Fade>
             </Paper>
