@@ -30,15 +30,11 @@ import {
 import PhoneIcon from '@mui/icons-material/Phone';
 import LanguageIcon from '@mui/icons-material/Language';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import SearchIcon from '@mui/icons-material/Search';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
-import BoltIcon from '@mui/icons-material/Bolt';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import config from '../../config.json';
@@ -359,24 +355,20 @@ function StatusRow({ label, ok, detail }) {
   );
 }
 
-function Dashboard({ stats, usage, api, onAction }) {
+function Dashboard({ stats, usage, api, onAction, requestCleanup }) {
   if (!stats) return null;
   const aplus = stats.byGrade['A+'] || 0;
   const a = stats.byGrade['A'] || 0;
   const b = stats.byGrade['B'] || 0;
-  // pushedCount uses byStatus to read what the backend dashboard returns —
-  // we use the same source for the "in Spider" tile.
   const pushedCount = stats.pushedToSpider || 0;
 
-  const cleanup = async (label, body) => {
-    if (!window.confirm(`Delete ${label}? Cannot be undone.`)) return;
-    try {
-      const r = await api.bulkDelete(body);
-      window.alert(`Deleted ${r.deleted}.`);
-      onAction();
-    } catch (e) {
-      window.alert(e?.response?.data?.message || e.message);
+  const cleanup = (label, body) => {
+    if (requestCleanup) {
+      requestCleanup({ message: `Delete ${label}? Cannot be undone.`, body });
+      return;
     }
+    // Fallback (unused with current parent), kept defensive
+    api.bulkDelete(body).then(() => onAction()).catch(() => {});
   };
   const runJob = async (job) => {
     try {
@@ -435,11 +427,13 @@ function Dashboard({ stats, usage, api, onAction }) {
           ok={!!usage?.places_key_configured}
           detail={usage?.places_key_configured ? `${usage.places_calls_today} / ${usage.daily_cap} calls today` : 'not configured'}
         />
-        <StatusRow
-          label="PageSpeed Insights API key"
-          ok={!!usage?.pagespeed_configured}
-          detail={usage?.pagespeed_configured ? 'enabled' : 'optional — set PAGESPEED_KEY to enable mobile speed audits'}
-        />
+        {usage?.pagespeed_configured && (
+          <StatusRow
+            label="PageSpeed Insights"
+            ok
+            detail="enabled — mobile speed scores in audits"
+          />
+        )}
         <StatusRow
           label="Spider webhook"
           ok={!!usage?.spider_configured}
@@ -506,20 +500,68 @@ function Dashboard({ stats, usage, api, onAction }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Lead row (used by both Call Queue and All Leads tables)
 // ─────────────────────────────────────────────────────────────────────────────
-function LeadRow({ lead, onOpen }) {
+// Styled confirm dialog — replaces the browser's native window.confirm().
+// Used for destructive bulk operations (delete D leads, etc.) so they match
+// the studio theme instead of looking like a Chrome popup.
+function ConfirmDialog({ open, title, body, confirmLabel, danger, onCancel, onConfirm }) {
+  return (
+    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
+      <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
+        {title}
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: 12.5, color: TERM.text, lineHeight: 1.6 }}>
+          {body}
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
+        <Button onClick={onCancel} sx={{ color: TERM.muted, fontFamily: MONO }}>Cancel</Button>
+        <Button onClick={onConfirm} variant="contained"
+          sx={{
+            bgcolor: danger ? TERM.red : TERM.green,
+            color: danger ? '#1a0808' : TERM.greenDk,
+            fontFamily: MONO, fontWeight: 700,
+            '&:hover': { bgcolor: danger ? '#e35858' : '#3ecb6f' },
+          }}>
+          {confirmLabel || 'Confirm'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function LeadRow({ lead, onOpen, selected, onToggleSelect }) {
   const score = lead.lead_score || {};
   return (
     <Paper
       elevation={0}
       onClick={() => onOpen(lead)}
       sx={{
-        bgcolor: TERM.panelLite, border: `1px solid ${TERM.borderDim}`,
+        bgcolor: selected ? 'rgba(74,222,128,0.08)' : TERM.panelLite,
+        border: `1px solid ${selected ? TERM.green : TERM.borderDim}`,
         borderRadius: 1.25, p: 1.2, cursor: 'pointer',
         transition: 'border-color 0.15s',
         '&:hover': { borderColor: TERM.green, bgcolor: 'rgba(74,222,128,0.04)' },
       }}
     >
       <Stack direction="row" spacing={1.5} alignItems="center">
+        {onToggleSelect && (
+          <Box
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(lead._id); }}
+            sx={{
+              flexShrink: 0, width: 18, height: 18, borderRadius: 0.5,
+              border: `1.5px solid ${selected ? TERM.green : TERM.borderDim}`,
+              bgcolor: selected ? TERM.green : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: TERM.greenDk, fontFamily: MONO, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer',
+              '&:hover': { borderColor: TERM.green },
+            }}
+          >
+            {selected ? '✓' : ''}
+          </Box>
+        )}
         <Box sx={{ flexShrink: 0, width: 56, textAlign: 'center' }}>
           <GradeChip grade={score.grade || 'D'} score={score.score} />
         </Box>
@@ -584,6 +626,47 @@ function LeadRow({ lead, onOpen }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Lead detail drawer
 // ─────────────────────────────────────────────────────────────────────────────
+// Inline collapsible section — replaces the Paper card layout for sections
+// that are now expand-on-click. Header shows title + a one-line summary so
+// the user can decide whether to expand. Click anywhere on the header to
+// toggle. Closed by default.
+function CollapsibleSection({ title, summary, defaultOpen = false, children }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <Box sx={{
+      bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+      borderRadius: 1.5, mb: 1.5, overflow: 'hidden',
+    }}>
+      <Box
+        onClick={() => setOpen((v) => !v)}
+        sx={{
+          cursor: 'pointer', px: 1.5, py: 1.1,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
+        }}
+      >
+        <Box>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted,
+            fontWeight: 600, textTransform: 'uppercase',
+          }}>{title}</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text, mt: 0.2 }}>
+            {summary}
+          </Typography>
+        </Box>
+        <Typography sx={{ fontFamily: MONO, fontSize: 14, color: TERM.muted }}>
+          {open ? '▾' : '▸'}
+        </Typography>
+      </Box>
+      {open && (
+        <Box sx={{ px: 1.5, pb: 1.5, borderTop: `1px solid ${TERM.borderDim}`, pt: 1.5 }}>
+          {children}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, onOpenColdCall }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
@@ -592,17 +675,6 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, 
 
   if (!lead) return null;
   const score = draft.lead_score || {};
-
-  const runAudit = async () => {
-    setBusy(true); setErr('');
-    try {
-      const updated = await api.auditLead(lead._id);
-      setDraft(updated);
-      onSaved(updated);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
 
   const pushToSpider = async () => {
     setBusy(true); setErr('');
@@ -683,53 +755,48 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, 
           </Box>
         )}
 
-        {/* Website audit */}
-        <Paper elevation={0} sx={{
-          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-          borderRadius: 1.5, p: 1.5, mb: 1.5,
-        }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-              Website audit
-              {draft.website_audit?.audited_at && (
-                <Box component="span" sx={{ ml: 1, color: TERM.muted, opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>
-                  {new Date(draft.website_audit.audited_at).toLocaleString()}
-                </Box>
-              )}
-            </Typography>
-            <Button
-              size="small" onClick={runAudit} disabled={busy || !draft.website_url}
-              sx={{
-                color: TERM.green, border: `1px solid ${TERM.green}40`,
-                fontFamily: MONO, fontSize: 10.5, fontWeight: 700,
-                px: 1, py: 0.2, minWidth: 0,
-                '&:hover': { bgcolor: `${TERM.green}10` },
-              }}
-            >{draft.website_audit?.audited_at ? 'Re-audit' : 'Audit site'}</Button>
-          </Stack>
+        {/* Website audit — collapsed accordion. Header summarizes the state
+            (audited / not audited / blocked) so user can decide if it's
+            worth expanding. */}
+        <CollapsibleSection
+          title="Website audit"
+          summary={(() => {
+            if (!draft.website_url) return 'no website on file';
+            const a = draft.website_audit || {};
+            if (!a.audited_at) return 'not audited yet';
+            if (a.loads_successfully === false) {
+              return `couldn't reach site (HTTP ${a.status_code || '?'})`;
+            }
+            return `audited · ${new Date(a.audited_at).toLocaleDateString()}`;
+          })()}
+        >
           {!draft.website_url ? (
             <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
               No website on file — nothing to audit.
             </Typography>
           ) : !draft.website_audit?.audited_at ? (
             <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
-              Not audited yet. Click "Audit site" to fetch and analyze.
+              Audit hasn't run yet. The next sweep auto-audits new leads in the background.
             </Typography>
+          ) : draft.website_audit.loads_successfully === false ? (
+            <Alert severity="warning" sx={{ fontFamily: MONO, fontSize: 11.5 }}>
+              <Box sx={{ fontWeight: 700, mb: 0.5 }}>Site blocked our audit (HTTP {draft.website_audit.status_code || 'unknown'})</Box>
+              The site either refused our request or doesn't exist at this URL. Open the website link above to check it manually.
+              {draft.website_audit.notes && (
+                <Box sx={{ mt: 0.5, opacity: 0.8 }}>{draft.website_audit.notes}</Box>
+              )}
+            </Alert>
           ) : (
-            <Box>
-              <AuditChecklist audit={draft.website_audit} />
-            </Box>
+            <AuditChecklist audit={draft.website_audit} />
           )}
-        </Paper>
+        </CollapsibleSection>
 
-        {/* Score breakdown with inline reasons */}
-        <Paper elevation={0} sx={{
-          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-          borderRadius: 1.5, p: 1.5, mb: 1.5,
-        }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 1 }}>
-            Score breakdown · {score.score}/100
-          </Typography>
+        {/* Score breakdown — collapsed accordion. Header shows the total
+            score so user can decide whether to dig in. */}
+        <CollapsibleSection
+          title="Score breakdown"
+          summary={`${score.score}/100 · ${score.grade || 'D'}`}
+        >
           <ScoreBar
             label="Buying intent" max={scoreCaps?.buyingIntent || 30} color={TERM.green}
             value={score.breakdown?.buyingIntent?.value || 0}
@@ -767,7 +834,7 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, 
               ))}
             </Box>
           )}
-        </Paper>
+        </CollapsibleSection>
 
         {(score.disqualifiers?.length > 0) && (
           <Alert severity="warning" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 12 }}>
@@ -826,321 +893,7 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Add lead modal
-// ─────────────────────────────────────────────────────────────────────────────
-function AddLeadDialog({ open, onClose, api, reference, onCreated }) {
-  const [draft, setDraft] = React.useState({});
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState('');
-  React.useEffect(() => { if (open) { setDraft({ state: 'NJ' }); setErr(''); } }, [open]);
-
-  const submit = async () => {
-    if (!draft.business_name?.trim()) { setErr('Business name is required.'); return; }
-    setBusy(true); setErr('');
-    try {
-      const result = await api.createLead(draft);
-      onCreated(result);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
-      <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
-        Add Lead
-      </DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
-        {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
-        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-          <TextField autoFocus label="Business name" required size="small" sx={darkInputSx}
-            value={draft.business_name || ''} onChange={(e) => setDraft({ ...draft, business_name: e.target.value })} />
-          <Stack direction="row" spacing={1}>
-            <TextField label="Phone" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={draft.phone || ''} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-            <TextField label="Website" size="small" sx={{ ...darkInputSx, flex: 1.4 }}
-              value={draft.website_url || ''} onChange={(e) => setDraft({ ...draft, website_url: e.target.value })} />
-          </Stack>
-          <Stack direction="row" spacing={1}>
-            <TextField select label="Category" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={draft.category || ''} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
-              <MenuItem value="">—</MenuItem>
-              {(reference?.categories || []).map((c) => (
-                <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField label="Rating" size="small" type="number" inputProps={{ step: 0.1, min: 0, max: 5 }} sx={{ ...darkInputSx, width: 90 }}
-              value={draft.rating || ''} onChange={(e) => setDraft({ ...draft, rating: e.target.value })} />
-            <TextField label="Reviews" size="small" type="number" inputProps={{ min: 0 }} sx={{ ...darkInputSx, width: 100 }}
-              value={draft.review_count || ''} onChange={(e) => setDraft({ ...draft, review_count: e.target.value })} />
-          </Stack>
-          <TextField label="Address" size="small" sx={darkInputSx}
-            value={draft.address || ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
-          <Stack direction="row" spacing={1}>
-            <TextField select label="City (SJ towns)" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={draft.city || ''} onChange={(e) => setDraft({ ...draft, city: e.target.value })}>
-              <MenuItem value="">—</MenuItem>
-              {(reference?.towns || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-            </TextField>
-            <TextField select label="County" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={draft.county || ''} onChange={(e) => setDraft({ ...draft, county: e.target.value })}>
-              <MenuItem value="">—</MenuItem>
-              {(reference?.counties || []).map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-            </TextField>
-          </Stack>
-          <TextField label="Google Maps URL" size="small" sx={darkInputSx}
-            value={draft.google_maps_url || ''} onChange={(e) => setDraft({ ...draft, google_maps_url: e.target.value })} />
-          <TextField label="Notes / first impressions" multiline minRows={2} size="small" sx={darkInputSx}
-            value={draft.call_notes || ''} onChange={(e) => setDraft({ ...draft, call_notes: e.target.value })} />
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>Cancel</Button>
-        <Button onClick={submit} disabled={busy} variant="contained"
-          sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-          {busy ? <CircularProgress size={18} /> : 'Add & score'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Import dialog
-// ─────────────────────────────────────────────────────────────────────────────
-function ImportDialog({ open, onClose, api, onDone }) {
-  const [text, setText] = React.useState('');
-  const [meta, setMeta] = React.useState({ source: 'csv', source_query: '', source_city: '', source_county: '' });
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState('');
-  const [result, setResult] = React.useState(null);
-  React.useEffect(() => { if (open) { setText(''); setErr(''); setResult(null); } }, [open]);
-
-  // Two accepted formats:
-  //   1) JSON array  (e.g. Apify "Get dataset items" → JSON)
-  //   2) CSV with header row (comma OR tab separated, quoted values supported)
-  const parseInput = (raw) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return [];
-    if (trimmed.startsWith('[')) {
-      const parsed = JSON.parse(trimmed);
-      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array.');
-      return parsed;
-    }
-    // CSV/TSV — basic parser, handles quoted fields with commas/quotes.
-    const lines = trimmed.split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) throw new Error('Need at least a header row and one data row.');
-    const sep = lines[0].includes('\t') ? '\t' : ',';
-    const parseLine = (line) => {
-      const out = [];
-      let cur = '', inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (inQuotes) {
-          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-          else if (ch === '"') { inQuotes = false; }
-          else cur += ch;
-        } else {
-          if (ch === '"') inQuotes = true;
-          else if (ch === sep) { out.push(cur); cur = ''; }
-          else cur += ch;
-        }
-      }
-      out.push(cur);
-      return out.map((s) => s.trim());
-    };
-    const headers = parseLine(lines[0]);
-    return lines.slice(1).map((l) => {
-      const cells = parseLine(l);
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = cells[i]; });
-      return obj;
-    });
-  };
-
-  const submit = async () => {
-    setBusy(true); setErr(''); setResult(null);
-    try {
-      const rows = parseInput(text);
-      if (!rows.length) throw new Error('No rows parsed.');
-      const r = await api.import({ rows, ...meta });
-      setResult(r);
-      onDone();
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
-      <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
-        Import Leads
-      </DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
-        {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
-        {result && (
-          <Alert severity="success" sx={{ mb: 1.5 }}>
-            Received {result.received} · Created {result.created} · Merged {result.merged} · Skipped {result.skipped}
-            {result.errors?.length > 0 && ` · ${result.errors.length} errors`}
-          </Alert>
-        )}
-        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1 }}>
-          Paste an Apify / OutScraper / Google Maps export — JSON array OR CSV with a header row.
-          Field names like "name", "phone", "website", "rating", "reviewsCount", "categoryName", "city"
-          are auto-mapped. Dedupe runs by place_id → phone → domain → name+city.
-        </Typography>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
-          <TextField select label="Source" size="small" sx={{ ...darkInputSx, width: 150 }}
-            value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>
-            <MenuItem value="csv">csv</MenuItem>
-            <MenuItem value="apify">apify</MenuItem>
-            <MenuItem value="outscraper">outscraper</MenuItem>
-            <MenuItem value="manual">manual</MenuItem>
-          </TextField>
-          <TextField label="Search query / context" size="small" sx={{ ...darkInputSx, flex: 1 }}
-            value={meta.source_query} onChange={(e) => setMeta({ ...meta, source_query: e.target.value })}
-            placeholder='e.g. "tree service Voorhees NJ"' />
-        </Stack>
-        <TextField
-          multiline minRows={12} fullWidth
-          value={text} onChange={(e) => setText(e.target.value)}
-          placeholder={'Paste JSON array or CSV here…'}
-          sx={{
-            ...darkInputSx,
-            '& .MuiOutlinedInput-root': {
-              ...darkInputSx['& .MuiOutlinedInput-root'],
-              fontFamily: MONO, fontSize: 11,
-            },
-          }}
-        />
-      </DialogContent>
-      <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>Close</Button>
-        <Button onClick={submit} disabled={busy || !text.trim()} variant="contained"
-          sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-          {busy ? <CircularProgress size={18} /> : 'Import & score'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Search Google Places dialog
-// ─────────────────────────────────────────────────────────────────────────────
-function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
-  const [form, setForm] = React.useState({ category: '', town: '', county: '', extra_query: '' });
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState('');
-  const [result, setResult] = React.useState(null);
-  const [usage, setUsage] = React.useState(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    setErr(''); setResult(null);
-    api.usage().then(setUsage).catch(() => {});
-  }, [open, api]);
-
-  const submit = async () => {
-    if (!form.category) { setErr('Pick a category.'); return; }
-    setBusy(true); setErr(''); setResult(null);
-    try {
-      const r = await api.searchPlaces(form);
-      setResult(r);
-      setUsage((u) => u ? { ...u, places_calls_today: r.usage_today } : u);
-      onDone();
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
-      <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
-        Search Google Places
-      </DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
-        {usage && (
-          <Alert
-            severity={usage.places_key_configured ? 'info' : 'warning'}
-            sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}
-          >
-            {usage.places_key_configured
-              ? `Today: ${usage.places_calls_today} / ${usage.daily_cap} Places calls`
-              : 'GOOGLE_PLACES_KEY is not set on the backend — this will fail.'}
-          </Alert>
-        )}
-        {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
-        {result && (
-          <Alert severity="success" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}>
-            "{result.query}" → received {result.received},
-            created {result.created},
-            merged {result.merged}
-            {result.skipped_in_spider > 0 && `, skipped ${result.skipped_in_spider} (already in Spider)`}
-            {result.skipped > 0 && `, skipped ${result.skipped} (other)`}.
-            {result.spider_phones_checked > 0 && (
-              <Box component="span" sx={{ display: 'block', mt: 0.5, opacity: 0.7 }}>
-                Checked against {result.spider_phones_checked} phones in your Spider sheet.
-              </Box>
-            )}
-          </Alert>
-        )}
-        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
-          Searches a single category × town/county. Results are deduped against your existing leads
-          AND any phone already in your Spider sheet — you'll only see new businesses.
-          One call uses one quota slot.
-        </Typography>
-        <Stack spacing={1.5}>
-          {/* High-ticket first (the offers Nate is built for), then mid-ticket
-              below a subheader. Disqualified categories never appear. */}
-          <TextField select required label="Category" size="small" sx={darkInputSx}
-            value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {(reference?.categories || []).filter((c) => c.tier === 'high').map((c) => (
-              <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
-            ))}
-            {(reference?.categories || []).some((c) => c.tier === 'mid') && (
-              <MenuItem disabled sx={{ opacity: 0.7, fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' }}>
-                — mid-ticket —
-              </MenuItem>
-            )}
-            {(reference?.categories || []).filter((c) => c.tier === 'mid').map((c) => (
-              <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
-            ))}
-          </TextField>
-          <Stack direction="row" spacing={1}>
-            <TextField select label="Town" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={form.town} onChange={(e) => setForm({ ...form, town: e.target.value, county: '' })}>
-              <MenuItem value="">—</MenuItem>
-              {(reference?.towns || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-            </TextField>
-            <TextField select label="County (used if no town)" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              value={form.county} onChange={(e) => setForm({ ...form, county: e.target.value })}
-              disabled={!!form.town}>
-              <MenuItem value="">—</MenuItem>
-              {(reference?.counties || []).map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-            </TextField>
-          </Stack>
-          <TextField label="Extra query (optional)" size="small" sx={darkInputSx}
-            value={form.extra_query} onChange={(e) => setForm({ ...form, extra_query: e.target.value })}
-            placeholder='e.g. "emergency" or "residential"' />
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>Close</Button>
-        <Button onClick={submit} disabled={busy || !form.category} variant="contained"
-          sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-          {busy ? <CircularProgress size={18} /> : 'Search & ingest'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bulk sweep — runs N (category × town) combos in one shot
+// Bulk sweep — async, smart queue, progress bar
 // ─────────────────────────────────────────────────────────────────────────────
 function SweepDialog({ open, onClose, api, reference, onDone }) {
   const [busy, setBusy] = React.useState(false);
@@ -1187,14 +940,23 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
+  // Has today's sweep already completed successfully? Used to nudge the
+  // user that there's nothing more to do today (the daily API budget is
+  // mostly spent by one full sweep anyway).
+  const ranToday = (() => {
+    if (status?.status !== 'completed') return false;
+    if (!status.finished_at) return false;
+    const finishedDate = new Date(status.finished_at).toISOString().slice(0, 10);
+    return finishedDate === new Date().toISOString().slice(0, 10);
+  })();
+
   const submit = async () => {
     setBusy(true); setErr('');
     setJustStarted(false);
     try {
-      // Smart queue defaults — no inputs, no decisions. Backend's
-      // getNextSweepPairs picks the least-recently-run pairs and caps at
-      // the remaining daily API budget. User just clicks one button.
-      const r = await api.sweepPlaces({ max: 33 });
+      // Smart queue defaults — no inputs, no decisions. Backend computes
+      // pair count from remaining daily API budget when max is omitted.
+      const r = await api.sweepPlaces({});
       if (!r.ok) {
         setErr(r.message || 'Could not start sweep.');
       } else {
@@ -1329,10 +1091,27 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
           {isRunning ? 'Close (sweep keeps running)' : 'Close'}
         </Button>
         {!isRunning && (
-          <Button onClick={submit} disabled={busy} variant="contained"
-            sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-            {busy ? <CircularProgress size={18} /> : 'Run today\'s sweep'}
-          </Button>
+          ranToday ? (
+            // Already ran today — soft-disable the button. We don't block it
+            // entirely because some days he might WANT a second pass, but
+            // the visual treatment says "you probably don't need to."
+            <Tooltip title="You've already run today's sweep. The daily Google budget is mostly spent — try tomorrow.">
+              <span>
+                <Button onClick={submit} disabled={busy}
+                  sx={{
+                    color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+                    fontFamily: MONO, fontWeight: 700,
+                  }}>
+                  {busy ? <CircularProgress size={18} /> : 'Run another sweep anyway'}
+                </Button>
+              </span>
+            </Tooltip>
+          ) : (
+            <Button onClick={submit} disabled={busy} variant="contained"
+              sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
+              {busy ? <CircularProgress size={18} /> : 'Run today\'s sweep'}
+            </Button>
+          )
         )}
       </DialogActions>
     </Dialog>
@@ -1352,13 +1131,12 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState('');
   const [selected, setSelected] = React.useState(null);
-  const [addOpen, setAddOpen] = React.useState(false);
-  const [importOpen, setImportOpen] = React.useState(false);
   const [sweepOpen, setSweepOpen]   = React.useState(false);
-  const [searchOpen, setSearchOpen] = React.useState(false);
-  const [auditingBatch, setAuditingBatch] = React.useState(false);
   const [usage, setUsage] = React.useState(null);
   const [search, setSearch] = React.useState('');
+  const [selectedIds, setSelectedIds] = React.useState(new Set());
+  const [bulkPushBusy, setBulkPushBusy] = React.useState(false);
+  const [cleanupConfirm, setCleanupConfirm] = React.useState(null); // {label, body} or null
   const [filters, setFilters] = React.useState({ grade: '', pushed: '', category: '', county: '', recommended_offer: '' });
 
   const loadAll = React.useCallback(async () => {
@@ -1391,39 +1169,32 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
 
   React.useEffect(() => { loadAll(); }, [loadAll]);
 
-  const rescoreAll = async () => {
-    if (!window.confirm('Re-score every lead? This can take a few seconds for large datasets.')) return;
-    try { await api.rescore({}); await loadAll(); }
-    catch (e) { setErr(e?.response?.data?.message || e.message); }
-  };
-
-  const auditUnaudited = async () => {
-    if (!window.confirm('Audit up to 50 leads that have a website but no audit yet. Takes ~30s.')) return;
-    setAuditingBatch(true); setErr('');
+  // Multi-select bulk push. User checks a few rows, clicks "Push N → Spider"
+  // in the toolbar, this hits the batch endpoint with explicit ids.
+  const pushSelected = async () => {
+    if (!selectedIds.size) return;
+    setBulkPushBusy(true); setErr('');
     try {
-      const r = await api.auditBatch({ only_unaudited: true, limit: 50, concurrency: 4 });
+      await api.pushSpiderBatch({
+        ids: Array.from(selectedIds),
+        only_unpushed: false, // respect the user's explicit selection
+      });
+      setSelectedIds(new Set());
       await loadAll();
-      window.alert(`Audited ${r.audited} of ${r.requested}. ${r.errors ? `${r.errors} errors.` : ''}`);
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
-    } finally { setAuditingBatch(false); }
+    } finally { setBulkPushBusy(false); }
   };
 
-  const pushAllAplusA = async () => {
-    if (!usage?.spider_configured) {
-      window.alert('Spider webhook not configured on backend. See docs/JPW_SPIDER_SETUP.md.');
-      return;
-    }
-    if (!window.confirm('Push every A+/A lead that hasn\'t been pushed yet into the Spider sheet ("JPW Recon" tab)?')) return;
-    setErr('');
-    try {
-      const r = await api.pushSpiderBatch({ only_unpushed: true, limit: 100 });
-      await loadAll();
-      window.alert(`Pushed ${r.pushed} new rows, ${r.skipped} already present (out of ${r.requested}).`);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    }
-  };
+  // Stable lead-row select toggle, passed down to LeadRow.
+  const toggleSelected = React.useCallback((id) => {
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Refresh usage when this tab is opened
   React.useEffect(() => {
@@ -1481,49 +1252,22 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
         <IconButton onClick={loadAll} sx={{ color: TERM.muted, border: `1px solid ${TERM.borderDim}`, borderRadius: 1 }}>
           <RefreshIcon sx={{ fontSize: 18 }} />
         </IconButton>
-        <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setSearchOpen(true)}
-          sx={{ color: TERM.green, border: `1px solid ${TERM.green}40`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Search Places
-        </Button>
+        {selectedIds.size > 0 && (
+          <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
+            onClick={pushSelected}
+            disabled={!usage?.spider_configured || bulkPushBusy}
+            sx={{
+              bgcolor: TERM.green, color: TERM.greenDk,
+              fontFamily: MONO, fontSize: 11, fontWeight: 700,
+              '&:hover': { bgcolor: '#3ecb6f' },
+            }}>
+            {bulkPushBusy ? <CircularProgress size={14} /> : `Push ${selectedIds.size} → Spider`}
+          </Button>
+        )}
         <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
           onClick={() => setSweepOpen(true)}
           sx={{ color: TERM.green, border: `1px solid ${TERM.green}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
           Run Sweep
-        </Button>
-        <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setAddOpen(true)}
-          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Add
-        </Button>
-        <Button size="small" startIcon={<UploadFileIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setImportOpen(true)}
-          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Import
-        </Button>
-        <Button size="small" startIcon={auditingBatch ? <CircularProgress size={14} sx={{ color: TERM.green }} /> : <BoltIcon sx={{ fontSize: 14 }} />}
-          onClick={auditUnaudited} disabled={auditingBatch}
-          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Audit batch
-        </Button>
-        <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
-          onClick={pushAllAplusA}
-          disabled={!usage?.spider_configured}
-          sx={{
-            color: usage?.spider_configured ? TERM.green : TERM.muted,
-            border: `1px solid ${usage?.spider_configured ? `${TERM.green}40` : TERM.borderDim}`,
-            fontFamily: MONO, fontSize: 11, fontWeight: 700,
-          }}>
-          Push A+/A → Spider
-        </Button>
-        <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 14 }} />}
-          component="a" href={api.exportCsvUrl()} download
-          sx={{ color: TERM.text, border: `1px solid ${TERM.borderDim}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Export
-        </Button>
-        <Button size="small" onClick={rescoreAll}
-          sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 11 }}>
-          Re-score
         </Button>
       </Stack>
 
@@ -1588,6 +1332,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
             usage={usage}
             api={api}
             onAction={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
+            requestCleanup={setCleanupConfirm}
           />
         )
       ) : (
@@ -1629,7 +1374,10 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
           ) : (
             <Stack spacing={0.75}>
               {filteredLeads.map((l) => (
-                <LeadRow key={l._id} lead={l} onOpen={setSelected} />
+                <LeadRow key={l._id} lead={l} onOpen={setSelected}
+                  selected={selectedIds.has(l._id)}
+                  onToggleSelect={toggleSelected}
+                />
               ))}
             </Stack>
           )}
@@ -1654,23 +1402,30 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
           if (onOpenColdCall) onOpenColdCall();
         }}
       />
-      <AddLeadDialog
-        open={addOpen} onClose={() => setAddOpen(false)} api={api} reference={reference}
-        onCreated={(r) => { setAddOpen(false); loadAll(); if (r?.lead) setSelected(r.lead); }}
-      />
-      <ImportDialog
-        open={importOpen} onClose={() => setImportOpen(false)} api={api}
-        onDone={loadAll}
-      />
-      <SearchPlacesDialog
-        open={searchOpen} onClose={() => setSearchOpen(false)} api={api}
-        reference={reference}
-        onDone={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
-      />
       <SweepDialog
         open={sweepOpen} onClose={() => setSweepOpen(false)} api={api}
         reference={reference}
         onDone={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
+      />
+      <ConfirmDialog
+        open={!!cleanupConfirm}
+        title="Delete leads?"
+        body={cleanupConfirm?.message || ''}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setCleanupConfirm(null)}
+        onConfirm={async () => {
+          try {
+            const r = await api.bulkDelete(cleanupConfirm.body);
+            setCleanupConfirm(null);
+            await loadAll();
+            setErr(`Deleted ${r.deleted} leads.`);
+            setTimeout(() => setErr(''), 3000);
+          } catch (e) {
+            setErr(e?.response?.data?.message || e.message);
+            setCleanupConfirm(null);
+          }
+        }}
       />
     </Box>
   );
