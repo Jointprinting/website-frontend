@@ -8,34 +8,49 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckroomIcon from '@mui/icons-material/Checkroom';
 import { useNavigate } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
-// ─── constants ───────────────────────────────────────────────────────────────
-const SIDEBAR_BG  = '#0c1a11';
-const GREEN       = '#4ade80';
-const MUTED       = 'rgba(255,255,255,0.55)';
-const SIDEBAR_W   = 220;
+// ─── constants ──────────────────────────────────────────────────────────────
+const SIDEBAR_BG = '#0c1a11';
+const GREEN      = '#4ade80';
+const MUTED      = 'rgba(255,255,255,0.55)';
+const SIDEBAR_W  = 230;
 
-const CATEGORIES = ['All', 'Shirts', 'Hoodies', 'Hats', 'Pants'];
+const GARMENT_CATEGORIES = [
+  { label: 'All Styles',      value: '' },
+  { label: 'T-Shirts',        value: 'T-Shirts' },
+  { label: 'Long Sleeve',     value: 'Long Sleeve' },
+  { label: 'Hoodies',         value: 'Hoodies' },
+  { label: 'Crewnecks',       value: 'Crewnecks' },
+  { label: 'Zip-Ups',         value: 'Zip-Ups' },
+  { label: 'Tank Tops',       value: 'Tanks' },
+  { label: 'Polos',           value: 'Polos' },
+  { label: 'Jackets',         value: 'Jackets' },
+  { label: 'Pants & Joggers', value: 'Pants' },
+  { label: 'Shorts',          value: 'Shorts' },
+  { label: 'Hats & Caps',     value: 'Hats' },
+];
 
-const BRANDS = [
-  'Bella + Canvas', 'Gildan', 'Port & Company', 'Port Authority',
-  'Sport-Tek', 'Next Level', 'Alternative Apparel', 'Hanes',
-  'District', 'Carhartt', 'Jerzees', 'Champion',
-  'Independent Trading Co.', 'Comfort Colors', 'LAT Apparel',
+const GENDER_TYPES = [
+  { label: 'Everyone', value: '' },
+  { label: "Men's",    value: 'Male' },
+  { label: "Women's", value: 'Female' },
+  { label: 'Youth',   value: 'Kids' },
+  { label: 'Unisex',  value: 'Unisex' },
 ];
 
 const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favorite': 'warning' };
 
-// ─── ProductCard ─────────────────────────────────────────────────────────────
+// ─── ProductCard ───────────────────────────────────────────────────────────────
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   const imgSrc = item.image || item.productFrontImages?.[0];
   return (
     <Paper elevation={isSelected ? 5 : 1} sx={{
       borderRadius: 2.5, overflow: 'hidden', position: 'relative',
-      border: isSelected ? '2px solid #1a3d2b' : '1px solid',
+      border: isSelected ? '2px solid' : '1px solid',
       borderColor: isSelected ? '#4ade80' : 'divider',
       transition: 'transform 140ms, box-shadow 140ms',
       '&:hover': { transform: 'translateY(-3px)', boxShadow: 5 },
@@ -52,12 +67,23 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
             style={{ maxHeight: 220, width: '100%', objectFit: 'contain' }} />
         ) : (
           <Box sx={{ width: '100%', height: 190, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography variant="caption" color="text.disabled">{item.style}</Typography>
+            <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
           </Box>
         )}
         {item.tag && (
           <Chip label={item.tag} size="small" color={TAG_COLOR[item.tag] || 'info'}
             sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 700, fontSize: 11 }} />
+        )}
+        {item.colorCount > 1 && (
+          <Chip
+            label={`${item.colorCount} colors`}
+            size="small"
+            variant="outlined"
+            sx={{
+              position: 'absolute', top: 10, right: 10, fontSize: 10, height: 20,
+              bgcolor: 'rgba(255,255,255,0.88)', borderColor: 'rgba(0,0,0,0.14)',
+            }}
+          />
         )}
       </Box>
 
@@ -98,8 +124,8 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   );
 }
 
-// ─── Sidebar ─────────────────────────────────────────────────────────────────
-function Sidebar({ category, setCategory, vendor, setVendor, onClose }) {
+// ─── Sidebar ───────────────────────────────────────────────────────────────
+function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) {
   const navBtn = (label, active, onClick) => (
     <Button key={label} onClick={() => { onClick(); onClose?.(); }}
       sx={{
@@ -115,10 +141,10 @@ function Sidebar({ category, setCategory, vendor, setVendor, onClose }) {
   );
 
   return (
-    <Stack sx={{ height: '100%', bgcolor: SIDEBAR_BG, p: 2.5, overflowY: 'auto',
-      scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
-      spacing={0}
-    >
+    <Stack sx={{
+      height: '100%', bgcolor: SIDEBAR_BG, p: 2.5, overflowY: 'auto',
+      scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
+    }} spacing={0}>
       {onClose && (
         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
           <Typography fontWeight={800} sx={{ color: GREEN, letterSpacing: 1, fontSize: 13 }}>Filters</Typography>
@@ -128,25 +154,28 @@ function Sidebar({ category, setCategory, vendor, setVendor, onClose }) {
         </Stack>
       )}
 
-      {/* Category */}
+      {/* Garment Type */}
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
-        Category
+        Garment Type
       </Typography>
       <Stack spacing={0}>
-        {CATEGORIES.map((c) => navBtn(c, category === c, () => { setCategory(c); setVendor(''); }))}
+        {GARMENT_CATEGORIES.map(({ label, value }) =>
+          navBtn(label, category === value, () => setCategory(value))
+        )}
       </Stack>
 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 2 }} />
 
-      {/* Brands */}
+      {/* Gender / Fit */}
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.3)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
-        Brand
+        Gender / Fit
       </Typography>
       <Stack spacing={0}>
-        {navBtn('All brands', vendor === '', () => { setVendor(''); setCategory('All'); })}
-        {BRANDS.map((b) => navBtn(b, vendor === b, () => { setVendor(b); setCategory('All'); }))}
+        {GENDER_TYPES.map(({ label, value }) =>
+          navBtn(label, genderType === value, () => setGenderType(value))
+        )}
       </Stack>
 
       <Box flexGrow={1} />
@@ -163,28 +192,30 @@ function Sidebar({ category, setCategory, vendor, setVendor, onClose }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main ───────────────────────────────────────────────────────────────────────
 export default function Products() {
-  const navigate = useNavigate();
-  const isMobile = useMediaQuery('(max-width:768px)');
+  const navigate   = useNavigate();
+  const isMobile   = useMediaQuery('(max-width:768px)');
 
-  const [category, setCategory] = useState('All');
-  const [vendor, setVendor]     = useState('');
+  const [category,    setCategory]    = useState('');
+  const [genderType,  setGenderType]  = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch]     = useState('');
-  const [page, setPage]         = useState(1);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [search,      setSearch]      = useState('');
+  const [page,        setPage]        = useState(1);
+  const [drawerOpen,  setDrawerOpen]  = useState(false);
 
-  const [products, setProducts] = useState([]);
-  const [totalPages, setTotalPages] = useState(0);
-  const [loading, setLoading]   = useState(true);
+  const [products,    setProducts]    = useState([]);
+  const [totalPages,  setTotalPages]  = useState(0);
+  const [totalItems,  setTotalItems]  = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [everLoaded,  setEverLoaded]  = useState(false);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
-  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quoteOpen,         setQuoteOpen]        = useState(false);
 
   const PER_PAGE = 24;
 
-  // ── session storage ─────────────────────────────────────────────────────────
+  // ── session storage ──────────────────────────────────────────────────────────
   useEffect(() => {
     try {
       const s = window.sessionStorage.getItem('jpSelectedProducts');
@@ -202,37 +233,43 @@ export default function Products() {
   }, [searchInput]);
 
   // reset page on filter change
-  useEffect(() => { setPage(1); }, [category, vendor]);
+  useEffect(() => { setPage(1); }, [category, genderType]);
 
-  // ── fetch products ───────────────────────────────────────────────────────────
+  // ── fetch from S&S live browse ───────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
-    const cat = category === 'All' ? '' : category;
-    const params = new URLSearchParams({
-      page, limit: PER_PAGE, category: cat, search,
-      ...(vendor ? { vendor } : {}),
-    });
-    fetch(`${config.backendUrl}/api/products?${params}`)
+    const params = new URLSearchParams({ page, limit: PER_PAGE });
+    if (category)   params.set('category', category);
+    if (genderType) params.set('type', genderType);
+    if (search)     params.set('search', search);
+
+    fetch(`${config.backendUrl}/api/products/ss/browse?${params}`)
       .then((r) => r.json())
-      .then((d) => { setProducts(d.products || []); setTotalPages(d.totalPages || 0); })
+      .then((d) => {
+        setProducts(d.products || []);
+        setTotalPages(d.totalPages || 0);
+        setTotalItems(d.total || 0);
+        setEverLoaded(true);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [page, category, vendor, search]);
+  }, [page, category, genderType, search]);
 
-  // ── helpers ──────────────────────────────────────────────────────────────────
+  // ── helpers ──────────────────────────────────────────────────────────────
   const toggleSelected = (item) => {
     setSelectedProducts((cur) => {
       if (cur.some((p) => p.style === item.style)) return cur.filter((p) => p.style !== item.style);
       return [...cur, {
         style: item.style, name: item.name, vendor: item.vendor, tag: item.tag,
-        thumbnail: item.productFrontImages?.[0] || '',
+        thumbnail: item.image || item.productFrontImages?.[0] || '',
       }];
     });
   };
 
-  const activeFilterLabel = vendor || (category !== 'All' ? category : 'All styles');
+  const activeLabel   = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
+  const genderLabel   = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
-  // ── render ───────────────────────────────────────────────────────────────────
+  // ── render ──────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
 
@@ -240,20 +277,24 @@ export default function Products() {
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
-          position: 'sticky', top: 0,
-          height: '100vh',
-          alignSelf: 'flex-start',
+          position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start',
         }}>
-          <Sidebar category={category} setCategory={setCategory}
-            vendor={vendor} setVendor={setVendor} onClose={null} />
+          <Sidebar
+            category={category} setCategory={setCategory}
+            genderType={genderType} setGenderType={setGenderType}
+            onClose={null}
+          />
         </Box>
       )}
 
       {/* MOBILE DRAWER */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { width: 260, bgcolor: SIDEBAR_BG } }}>
-        <Sidebar category={category} setCategory={setCategory}
-          vendor={vendor} setVendor={setVendor} onClose={() => setDrawerOpen(false)} />
+        PaperProps={{ sx: { width: 270, bgcolor: SIDEBAR_BG } }}>
+        <Sidebar
+          category={category} setCategory={setCategory}
+          genderType={genderType} setGenderType={setGenderType}
+          onClose={() => setDrawerOpen(false)}
+        />
       </Drawer>
 
       {/* MAIN CONTENT */}
@@ -275,13 +316,11 @@ export default function Products() {
             <TextField
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search styles, brands, categories…"
+              placeholder="Search garments, styles…"
               size="small" fullWidth
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  bgcolor: 'rgba(255,255,255,0.09)',
-                  borderRadius: 2,
-                  color: '#fff',
+                  bgcolor: 'rgba(255,255,255,0.09)', borderRadius: 2, color: '#fff',
                   '& fieldset': { borderColor: 'rgba(255,255,255,0.22)' },
                   '&:hover fieldset': { borderColor: 'rgba(74,222,128,0.5)' },
                   '&.Mui-focused fieldset': { borderColor: GREEN },
@@ -318,14 +357,22 @@ export default function Products() {
           </Typography>
           <Stack direction="row" alignItems="baseline" spacing={1.5} mt={0.5} flexWrap="wrap" useFlexGap>
             <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 26 } }}>
-              {activeFilterLabel}
+              {activeLabel}
             </Typography>
-            {!loading && products.length > 0 && (
+            {!loading && totalItems > 0 && (
               <Typography variant="body2" color="text.secondary">
-                {products.length} style{products.length !== 1 ? 's' : ''}
+                {totalItems.toLocaleString()} style{totalItems !== 1 ? 's' : ''}
               </Typography>
             )}
           </Stack>
+          {genderType && (
+            <Chip
+              label={genderLabel}
+              size="small"
+              onDelete={() => setGenderType('')}
+              sx={{ mt: 0.75, fontSize: 11, height: 22 }}
+            />
+          )}
         </Box>
 
         {/* GRID */}
@@ -334,17 +381,21 @@ export default function Products() {
           {loading && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
               <CircularProgress size={44} thickness={4} sx={{ color: '#1a3d2b' }} />
-              <Typography variant="body2" color="text.secondary">Loading catalog…</Typography>
+              <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ whiteSpace: 'pre-line' }}>
+                {!everLoaded
+                  ? 'Loading S&S Activewear catalog…\nThis may take a moment on first visit.'
+                  : 'Loading…'}
+              </Typography>
             </Box>
           )}
 
           {!loading && products.length === 0 && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={1.5}>
               <Typography color="text.secondary" textAlign="center">
-                No products found{vendor ? ` for ${vendor}` : ''}.
+                No styles found{category ? ` in ${activeLabel}` : ''}.
               </Typography>
               <Button size="small" variant="outlined"
-                onClick={() => { setCategory('All'); setVendor(''); setSearch(''); setSearchInput(''); }}
+                onClick={() => { setCategory(''); setGenderType(''); setSearch(''); setSearchInput(''); }}
                 sx={{ textTransform: 'none' }}>
                 Clear filters
               </Button>
