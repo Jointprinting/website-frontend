@@ -26,7 +26,6 @@ import {
   Paper, Drawer, Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   CircularProgress, Tooltip, LinearProgress, InputAdornment,
   ToggleButton, ToggleButtonGroup,
-  Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -36,13 +35,12 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseIcon from '@mui/icons-material/Close';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SendIcon from '@mui/icons-material/Send';
 import SearchIcon from '@mui/icons-material/Search';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import BoltIcon from '@mui/icons-material/Bolt';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import config from '../../config.json';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,21 +71,6 @@ const GRADE_COLOR = {
   'C':  '#f97316',
   'D':  '#6b7280',
 };
-
-const CALL_STATUSES = [
-  { value: 'new',              label: 'New',           color: TERM.blue   },
-  { value: 'call_today',       label: 'Call Today',    color: TERM.green  },
-  { value: 'called_no_answer', label: 'No Answer',     color: TERM.amber  },
-  { value: 'left_voicemail',   label: 'Voicemail',     color: TERM.amber  },
-  { value: 'gatekeeper',       label: 'Gatekeeper',    color: '#a78bfa'   },
-  { value: 'interested',       label: 'Interested',    color: TERM.green  },
-  { value: 'audit_requested',  label: 'Audit Sent',    color: '#06b6d4'   },
-  { value: 'booked',           label: 'Booked ✓',      color: TERM.green  },
-  { value: 'follow_up',        label: 'Follow Up',     color: TERM.amber  },
-  { value: 'not_fit',          label: 'Not Fit',       color: '#9ca3af'   },
-  { value: 'do_not_call',      label: 'DNC',           color: TERM.red    },
-];
-const statusMeta = (s) => CALL_STATUSES.find((x) => x.value === s) || CALL_STATUSES[0];
 
 // Shared dark input styling — keep all selects/inputs readable on dark.
 const darkInputSx = {
@@ -163,19 +146,25 @@ function GradeChip({ grade, score }) {
   );
 }
 
-function StatusChip({ status }) {
-  const meta = statusMeta(status);
+// Binary chip — has this lead been pushed to Spider yet? Replaces the old
+// 11-state call_status chip; we don't track call outcomes in Lead Recon any
+// more (Spider + Cold Call Tree handle that).
+function PushStateChip({ pushedAt }) {
+  const pushed = !!pushedAt;
+  const color = pushed ? TERM.green : TERM.muted;
+  const label = pushed ? 'PUSHED ✓' : 'READY';
+  const tooltip = pushed
+    ? `In Spider since ${new Date(pushedAt).toLocaleDateString()}`
+    : 'Not yet pushed to Spider';
   return (
-    <Box sx={{
-      display: 'inline-block', px: 0.9, py: 0.25, borderRadius: 0.75,
-      fontFamily: MONO, fontWeight: 600, fontSize: 10,
-      color: meta.color,
-      bgcolor: `${meta.color}1a`,
-      border: `1px solid ${meta.color}40`,
-      letterSpacing: 0.5, textTransform: 'uppercase',
-    }}>
-      {meta.label}
-    </Box>
+    <Tooltip title={tooltip}>
+      <Box sx={{
+        display: 'inline-block', px: 0.9, py: 0.25, borderRadius: 0.75,
+        fontFamily: MONO, fontWeight: 700, fontSize: 10,
+        color, bgcolor: `${color}1a`, border: `1px solid ${color}40`,
+        letterSpacing: 0.5, textTransform: 'uppercase',
+      }}>{label}</Box>
+    </Tooltip>
   );
 }
 
@@ -298,118 +287,17 @@ function AuditChecklist({ audit }) {
   );
 }
 
-// Manual entry panel for Meta Ad Library signals. Paste a Meta Ad Library
-// page URL, advertiser name/ID, sample ad copy, etc. We store them on the
-// lead's ad_signal subdoc; the scoring engine pulls buying-intent points
-// straight from that.
-//
-// Confidence dropdown:
-//   - "confirmed"  → active_ads_found = true   (full +15 / +4 for copy)
-//   - "possible"   → active_ads_found = "possible" (+8 partial)
-//   - "none"       → active_ads_found = false
-function AdSignalPanel({ adSignal, onSave, busy }) {
-  const [draft, setDraft] = React.useState(() => ({ ...(adSignal || {}) }));
-  React.useEffect(() => { setDraft({ ...(adSignal || {}) }); }, [adSignal]);
 
-  const confidence = adSignal?.active_ads_found === true
-    ? 'confirmed'
-    : adSignal?.active_ads_found === 'possible' ? 'possible'
-    : adSignal?.active_ads_found === false      ? 'none' : '';
-
-  const setConfidence = (val) => {
-    let active_ads_found;
-    if (val === 'confirmed') active_ads_found = true;
-    else if (val === 'possible') active_ads_found = 'possible';
-    else if (val === 'none') active_ads_found = false;
-    setDraft({ ...draft, active_ads_found, confidence: val });
-  };
-
-  return (
-    <Accordion
-      elevation={0}
-      sx={{
-        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-        borderRadius: '6px !important', mb: 1.5,
-        '&:before': { display: 'none' },
-        '&.Mui-expanded': { margin: '0 0 12px 0' },
-      }}
-    >
-      <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: TERM.muted }} />}
-        sx={{ px: 1.5, '& .MuiAccordionSummary-content': { my: 1 }}}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-            Meta ad signal
-          </Typography>
-          {confidence && (
-            <Chip size="small" label={confidence} sx={{
-              fontFamily: MONO, fontSize: 10, height: 18,
-              bgcolor: confidence === 'confirmed' ? `${TERM.green}20` : confidence === 'possible' ? `${TERM.amber}20` : 'rgba(255,255,255,0.06)',
-              color: confidence === 'confirmed' ? TERM.green : confidence === 'possible' ? TERM.amber : TERM.muted,
-              border: `1px solid ${confidence === 'confirmed' ? TERM.green : confidence === 'possible' ? TERM.amber : TERM.borderDim}40`,
-            }} />
-          )}
-          {adSignal?.active_ad_count > 0 && (
-            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
-              {adSignal.active_ad_count} ads
-            </Typography>
-          )}
-        </Stack>
-      </AccordionSummary>
-      <AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1.5 }}>
-        <Stack spacing={1.2}>
-          <Stack direction="row" spacing={1}>
-            <TextField select label="Confidence" size="small" sx={{ ...darkInputSx, width: 150 }}
-              value={confidence} onChange={(e) => setConfidence(e.target.value)}>
-              <MenuItem value="">unset</MenuItem>
-              <MenuItem value="confirmed">confirmed (active)</MenuItem>
-              <MenuItem value="possible">possible</MenuItem>
-              <MenuItem value="none">no ads</MenuItem>
-            </TextField>
-            <TextField label="# active ads" type="number" size="small" sx={{ ...darkInputSx, width: 110 }}
-              value={draft.active_ad_count || ''}
-              onChange={(e) => setDraft({ ...draft, active_ad_count: parseInt(e.target.value, 10) || 0 })}/>
-            <TextField label="Latest seen" type="date" size="small" sx={{ ...darkInputSx, flex: 1 }}
-              InputLabelProps={{ shrink: true }}
-              value={(draft.latest_seen_date || '').slice(0, 10)}
-              onChange={(e) => setDraft({ ...draft, latest_seen_date: e.target.value })}/>
-          </Stack>
-          <TextField label="Meta Ad Library URL or page" size="small" sx={darkInputSx}
-            placeholder="https://www.facebook.com/ads/library/?id=…  or  Page name"
-            value={draft.page_url || draft.page_name || ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (/^https?:\/\//i.test(v)) setDraft({ ...draft, page_url: v });
-              else setDraft({ ...draft, page_name: v });
-            }}/>
-          <TextField label="Ad angle / copy summary" multiline minRows={2} size="small" sx={darkInputSx}
-            placeholder='e.g. "Free estimate today, financing available, emergency service 24/7"'
-            value={draft.ad_angle_summary || ''}
-            onChange={(e) => setDraft({ ...draft, ad_angle_summary: e.target.value })}/>
-          <TextField label="Sample ad copy (one per line)" multiline minRows={2} size="small" sx={darkInputSx}
-            value={Array.isArray(draft.ad_text_samples) ? draft.ad_text_samples.join('\n') : (draft.ad_text_samples || '')}
-            onChange={(e) => setDraft({ ...draft, ad_text_samples: e.target.value.split('\n').filter(Boolean) })}/>
-          <TextField label="Landing pages (one per line)" multiline minRows={1} size="small" sx={darkInputSx}
-            value={Array.isArray(draft.landing_page_urls) ? draft.landing_page_urls.join('\n') : (draft.landing_page_urls || '')}
-            onChange={(e) => setDraft({ ...draft, landing_page_urls: e.target.value.split('\n').filter(Boolean) })}/>
-          <Stack direction="row" justifyContent="flex-end">
-            <Button onClick={() => onSave(draft)} disabled={busy}
-              sx={{
-                bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, fontSize: 11.5,
-                '&:hover': { bgcolor: '#3ecb6f' },
-              }}>Save & re-score</Button>
-          </Stack>
-        </Stack>
-      </AccordionDetails>
-    </Accordion>
-  );
-}
-
-function ScoreBar({ label, value, max, color = TERM.green }) {
+// Score bar — shows the bucket value vs cap, plus inline reasons explaining
+// why this bucket landed where it did. Empty-reasons buckets show "no
+// signals credited" so the user knows the bar is genuinely zero, not just
+// stale data.
+function ScoreBar({ label, value, max, color = TERM.green, reasons = [] }) {
   const pct = max ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <Box sx={{ mb: 0.75 }}>
+    <Box sx={{ mb: 1.2 }}>
       <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.3 }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>{label}</Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.text, fontWeight: 600 }}>{label}</Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text, fontWeight: 700 }}>
           {value}/{max}
         </Typography>
@@ -417,11 +305,24 @@ function ScoreBar({ label, value, max, color = TERM.green }) {
       <LinearProgress
         variant="determinate" value={pct}
         sx={{
-          height: 4, borderRadius: 2,
+          height: 5, borderRadius: 2,
           bgcolor: 'rgba(255,255,255,0.04)',
           '& .MuiLinearProgress-bar': { bgcolor: color },
         }}
       />
+      <Box sx={{ mt: 0.4 }}>
+        {reasons && reasons.length > 0 ? (
+          reasons.map((r, i) => (
+            <Typography key={i} sx={{
+              fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.5,
+            }}>· {r}</Typography>
+          ))
+        ) : (
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, fontStyle: 'italic' }}>
+            no signals credited
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -460,13 +361,9 @@ function Dashboard({ stats, usage, api, onAction }) {
   const aplus = stats.byGrade['A+'] || 0;
   const a = stats.byGrade['A'] || 0;
   const b = stats.byGrade['B'] || 0;
-  const booked = stats.byStatus['booked'] || 0;
-  const called = (stats.byStatus['called_no_answer'] || 0)
-               + (stats.byStatus['left_voicemail'] || 0)
-               + (stats.byStatus['gatekeeper'] || 0)
-               + (stats.byStatus['interested'] || 0)
-               + (stats.byStatus['audit_requested'] || 0)
-               + booked;
+  // pushedCount uses byStatus to read what the backend dashboard returns —
+  // we use the same source for the "in Spider" tile.
+  const pushedCount = stats.pushedToSpider || 0;
 
   const cleanup = async (label, body) => {
     if (!window.confirm(`Delete ${label}? Cannot be undone.`)) return;
@@ -500,8 +397,7 @@ function Dashboard({ stats, usage, api, onAction }) {
         <KpiTile label="Active Ads" value={stats.activeAds} accent={TERM.green} />
         <KpiTile label="No Website" value={stats.noWebsite} accent={TERM.amber} />
         <KpiTile label="Weak Website" value={stats.weakSite} accent={TERM.amber} />
-        <KpiTile label="Calls Made" value={called} />
-        <KpiTile label="Booked" value={booked} accent={TERM.green} />
+        <KpiTile label="Pushed to Spider" value={pushedCount} accent={TERM.green} />
       </Stack>
 
       <Paper elevation={0} sx={{
@@ -600,37 +496,6 @@ function Dashboard({ stats, usage, api, onAction }) {
         </Stack>
       </Paper>
 
-      {/* Scoring rubric — read-only reference */}
-      <Accordion elevation={0} sx={{
-        bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-        borderRadius: '6px !important', '&:before': { display: 'none' },
-        '&.Mui-expanded': { margin: 0 },
-      }}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: TERM.muted }} />}
-          sx={{ px: 1.5, '& .MuiAccordionSummary-content': { my: 1 }}}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-            Scoring rubric · 100 pts
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1.5 }}>
-          <Box sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.text, lineHeight: 1.6 }}>
-            <Box sx={{ color: TERM.green, fontWeight: 700, mt: 0.5 }}>Buying Intent · max 30</Box>
-            Active Meta ads (+15) · possible (+8) · multiple ads (+4) · high-intent ad copy (+4) · 150+ reviews (+7) · 50+ (+5) · 25+ (+3) · tracking pixels (+3) · landing-page structure (+2) · 3+ service areas (+2)
-            <Box sx={{ color: TERM.amber, fontWeight: 700, mt: 1 }}>Pain · max 25</Box>
-            No website (+10) · loads poorly (+8) · no click-to-call (+5) · no quote CTA (+5) · no form (+4) · weak meta (+3) · no service area (+4) · no on-site reviews (+3) · no gallery (+3) · outdated copyright (+2) · bad mobile speed (+4) · no LocalBusiness schema (+3)
-            <Box sx={{ color: TERM.blue, fontWeight: 700, mt: 1 }}>Ability to Pay · max 25</Box>
-            High-ticket category (+8) · 150+ reviews (+7) or 50+ (+5) · 4.2★ with 25+ (+3) · weak site that exists (+4) · running ads (+5) · multiple areas (+4) · emergency category (+2)
-            <Box sx={{ color: TERM.green, fontWeight: 700, mt: 1 }}>Fit · max 15</Box>
-            In South Jersey (+5) · independent (+4) · phone-driven (+4) · matches a core offer (+2)
-            <Box sx={{ color: TERM.red, fontWeight: 700, mt: 1 }}>Urgency · max 5</Box>
-            Seasonal demand (+2) · emergency category (+2) · recent ad activity (+1)
-            <Box sx={{ color: TERM.red, fontWeight: 700, mt: 1 }}>Penalties</Box>
-            Closed (excluded) · no phone (-20) · outside SJ (-25) · franchise (-25) · disqualify category (-15) · already polished + has agency (-20) · {'<10 reviews'} no ads (-20) · no website no reviews no signals (-25) · residential only (-15)
-            <Box sx={{ color: TERM.muted, mt: 1 }}>Grades:</Box>
-            A+ 82-100 · A 72-81 · B 60-71 · C 45-59 · D under 45
-          </Box>
-        </AccordionDetails>
-      </Accordion>
     </Stack>
   );
 }
@@ -693,13 +558,8 @@ function LeadRow({ lead, onOpen }) {
           </Typography>
         </Box>
         <Box sx={{ flexShrink: 0 }}>
-          <StatusChip status={lead.call_status} />
+          <PushStateChip pushedAt={lead.pushed_to_spider_at} />
         </Box>
-        {lead.pushed_to_spider_at && (
-          <Tooltip title={`In Spider since ${new Date(lead.pushed_to_spider_at).toLocaleDateString()}`}>
-            <CheckCircleOutlineIcon sx={{ color: TERM.green, fontSize: 16, opacity: 0.8 }} />
-          </Tooltip>
-        )}
         {lead.phone && (
           <Tooltip title={lead.phone}>
             <IconButton
@@ -721,7 +581,7 @@ function LeadRow({ lead, onOpen }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Lead detail drawer
 // ─────────────────────────────────────────────────────────────────────────────
-function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }) {
+function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, onOpenColdCall }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [draft, setDraft] = React.useState(lead || {});
@@ -729,35 +589,6 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }
 
   if (!lead) return null;
   const score = draft.lead_score || {};
-
-  const save = async () => {
-    setBusy(true); setErr('');
-    try {
-      const updated = await api.updateLead(lead._id, {
-        call_status: draft.call_status,
-        call_notes:  draft.call_notes,
-        next_follow_up_at: draft.next_follow_up_at || null,
-        owner_name:  draft.owner_name,
-        email:       draft.email,
-        category:    draft.category,
-        is_franchise: !!draft.is_franchise,
-      });
-      onSaved(updated);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
-
-  const quickStatus = async (status) => {
-    setBusy(true); setErr('');
-    try {
-      const updated = await api.updateLead(lead._id, { call_status: status });
-      setDraft(updated);
-      onSaved(updated);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
 
   const runAudit = async () => {
     setBusy(true); setErr('');
@@ -781,19 +612,6 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }
     } finally { setBusy(false); }
   };
 
-  const saveAdSignal = async (adForm) => {
-    setBusy(true); setErr('');
-    try {
-      const updated = await api.updateAdSignal(lead._id, adForm);
-      setDraft(updated);
-      onSaved(updated);
-    } catch (e) {
-      setErr(e?.response?.data?.message || e.message);
-    } finally { setBusy(false); }
-  };
-
-  const copy = (text) => navigator.clipboard?.writeText(text || '');
-
   return (
     <Drawer
       anchor="right" open={!!lead} onClose={onClose}
@@ -807,7 +625,7 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }
           <Box>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
               <GradeChip grade={score.grade} score={score.score} />
-              <StatusChip status={draft.call_status} />
+              <PushStateChip pushedAt={draft.pushed_to_spider_at} />
             </Stack>
             <Typography sx={{ color: TERM.text, fontFamily: MONO, fontWeight: 700, fontSize: 16 }}>
               {draft.business_name}
@@ -849,112 +667,17 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }
           )}
         </Stack>
 
-        {/* Recommended offer + opener */}
-        <Paper elevation={0} sx={{
-          bgcolor: TERM.greenSoft, border: `1px solid ${TERM.border}`,
-          borderRadius: 1.5, p: 1.5, mb: 1.5,
-        }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>
-            Recommended Offer
-          </Typography>
-          <Typography sx={{ fontFamily: MONO, fontSize: 14, color: TERM.green, fontWeight: 700, mb: 1 }}>
-            {score.recommendedOffer || '—'}
-          </Typography>
-          <Typography sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text, lineHeight: 1.5, fontStyle: 'italic' }}>
-            "{score.pitchAngle}"
-          </Typography>
-        </Paper>
-
-        <Paper elevation={0} sx={{
-          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-          borderRadius: 1.5, p: 1.5, mb: 1.5,
-        }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-              Suggested Opener
+        {/* Recommended offer — one chip, no pitch sentence */}
+        {score.recommendedOffer && (
+          <Box sx={{ mb: 1.5 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.4 }}>
+              Recommended offer
             </Typography>
-            <IconButton size="small" onClick={() => copy(score.opener)} sx={{ color: TERM.green }}>
-              <ContentCopyIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Stack>
-          <Typography sx={{ fontFamily: MONO, fontSize: 12.5, color: TERM.text, lineHeight: 1.55 }}>
-            {score.opener || '—'}
-          </Typography>
-        </Paper>
-
-        {/* Quick status buttons */}
-        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.5 }}>
-          Update status
-        </Typography>
-        <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-          {['called_no_answer', 'left_voicemail', 'gatekeeper', 'interested', 'audit_requested', 'booked', 'follow_up', 'not_fit', 'do_not_call'].map((s) => {
-            const m = statusMeta(s);
-            return (
-              <Button key={s} size="small" disabled={busy} onClick={() => quickStatus(s)}
-                sx={{
-                  color: m.color, border: `1px solid ${m.color}40`,
-                  fontFamily: MONO, fontSize: 10.5, textTransform: 'none',
-                  '&:hover': { bgcolor: `${m.color}10`, borderColor: m.color },
-                }}>{m.label}</Button>
-            );
-          })}
-        </Stack>
-
-        {/* Score breakdown */}
-        <Paper elevation={0} sx={{
-          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-          borderRadius: 1.5, p: 1.5, mb: 1.5,
-        }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 1 }}>
-            Score Breakdown · {score.score}/100
-          </Typography>
-          <ScoreBar label="Buying intent" value={score.breakdown?.buyingIntent || 0} max={scoreCaps?.buyingIntent || 30} color={TERM.green} />
-          <ScoreBar label="Pain"           value={score.breakdown?.pain || 0}         max={scoreCaps?.pain || 25}          color={TERM.amber} />
-          <ScoreBar label="Ability to pay" value={score.breakdown?.abilityToPay || 0} max={scoreCaps?.abilityToPay || 25}  color={TERM.blue} />
-          <ScoreBar label="Fit"            value={score.breakdown?.fit || 0}          max={scoreCaps?.fit || 15}           color={TERM.green} />
-          <ScoreBar label="Urgency"        value={score.breakdown?.urgency || 0}      max={scoreCaps?.urgency || 5}        color={TERM.red} />
-          {score.breakdown?.penaltyDelta < 0 && (
-            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.red, mt: 0.5 }}>
-              Penalties: {score.breakdown.penaltyDelta}
-            </Typography>
-          )}
-        </Paper>
-
-        {/* Buying signals & pain points */}
-        {(score.buyingSignals?.length > 0) && (
-          <Paper elevation={0} sx={{
-            bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-            borderRadius: 1.5, p: 1.5, mb: 1.5,
-          }}>
-            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.green, fontWeight: 600, textTransform: 'uppercase', mb: 0.6 }}>
-              Buying signals
-            </Typography>
-            {score.buyingSignals.map((s, i) => (
-              <Typography key={i} sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text, lineHeight: 1.55 }}>
-                · {s}
-              </Typography>
-            ))}
-          </Paper>
-        )}
-        {(score.mainPainPoints?.length > 0) && (
-          <Paper elevation={0} sx={{
-            bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-            borderRadius: 1.5, p: 1.5, mb: 1.5,
-          }}>
-            <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.amber, fontWeight: 600, textTransform: 'uppercase', mb: 0.6 }}>
-              Main weaknesses · what to mention
-            </Typography>
-            {score.mainPainPoints.map((s, i) => (
-              <Typography key={i} sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text, lineHeight: 1.55 }}>
-                · {s}
-              </Typography>
-            ))}
-          </Paper>
-        )}
-        {(score.disqualifiers?.length > 0) && (
-          <Alert severity="warning" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 12 }}>
-            Disqualifiers: {score.disqualifiers.join(', ')}
-          </Alert>
+            <Chip label={score.recommendedOffer} sx={{
+              bgcolor: TERM.greenSoft, color: TERM.green, fontFamily: MONO, fontSize: 11.5,
+              fontWeight: 700, border: `1px solid ${TERM.green}40`, borderRadius: 1, height: 26,
+            }} />
+          </Box>
         )}
 
         {/* Website audit */}
@@ -996,74 +719,103 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured }
           )}
         </Paper>
 
-        <AdSignalPanel
-          adSignal={draft.ad_signal}
-          onSave={saveAdSignal}
-          busy={busy}
-        />
+        {/* Score breakdown with inline reasons */}
+        <Paper elevation={0} sx={{
+          bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+          borderRadius: 1.5, p: 1.5, mb: 1.5,
+        }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 1 }}>
+            Score breakdown · {score.score}/100
+          </Typography>
+          <ScoreBar
+            label="Buying intent" max={scoreCaps?.buyingIntent || 30} color={TERM.green}
+            value={score.breakdown?.buyingIntent?.value || 0}
+            reasons={score.breakdown?.buyingIntent?.reasons || []}
+          />
+          <ScoreBar
+            label="Pain" max={scoreCaps?.pain || 25} color={TERM.amber}
+            value={score.breakdown?.pain?.value || 0}
+            reasons={score.breakdown?.pain?.reasons || []}
+          />
+          <ScoreBar
+            label="Ability to pay" max={scoreCaps?.abilityToPay || 25} color={TERM.blue}
+            value={score.breakdown?.abilityToPay?.value || 0}
+            reasons={score.breakdown?.abilityToPay?.reasons || []}
+          />
+          <ScoreBar
+            label="Fit" max={scoreCaps?.fit || 15} color={TERM.green}
+            value={score.breakdown?.fit?.value || 0}
+            reasons={score.breakdown?.fit?.reasons || []}
+          />
+          <ScoreBar
+            label="Urgency" max={scoreCaps?.urgency || 5} color={TERM.red}
+            value={score.breakdown?.urgency?.value || 0}
+            reasons={score.breakdown?.urgency?.reasons || []}
+          />
+          {score.breakdown?.penaltyDelta < 0 && (
+            <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${TERM.borderDim}` }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.red, fontWeight: 700 }}>
+                Penalties: {score.breakdown.penaltyDelta}
+              </Typography>
+              {(score.penalties || []).map((p, i) => (
+                <Typography key={i} sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.5 }}>
+                  · {p}
+                </Typography>
+              ))}
+            </Box>
+          )}
+        </Paper>
 
-        {/* Editable section */}
-        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase', mb: 0.6 }}>
-          Notes
-        </Typography>
-        <TextField
-          multiline minRows={3} fullWidth size="small"
-          value={draft.call_notes || ''}
-          onChange={(e) => setDraft({ ...draft, call_notes: e.target.value })}
-          placeholder="Call notes, objections, who you spoke to…"
-          sx={{ ...darkInputSx, mb: 1.2 }}
-        />
-        <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
-          <TextField
-            label="Owner / contact" size="small" sx={{ ...darkInputSx, flex: 1 }}
-            value={draft.owner_name || ''}
-            onChange={(e) => setDraft({ ...draft, owner_name: e.target.value })}
-          />
-          <TextField
-            label="Follow-up date" size="small" type="date"
-            InputLabelProps={{ shrink: true }}
-            sx={{ ...darkInputSx, width: 170 }}
-            value={(draft.next_follow_up_at || '').slice(0, 10)}
-            onChange={(e) => setDraft({ ...draft, next_follow_up_at: e.target.value })}
-          />
-        </Stack>
-        <Stack direction="row" spacing={1}>
-          <Button
-            onClick={save} disabled={busy} variant="contained"
-            sx={{
-              bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700,
-              '&:hover': { bgcolor: '#3ecb6f' },
-            }}
-          >Save</Button>
-          <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>
-            Close
-          </Button>
-          <Box sx={{ flex: 1 }} />
+        {(score.disqualifiers?.length > 0) && (
+          <Alert severity="warning" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 12 }}>
+            Disqualifiers: {score.disqualifiers.join(', ')}
+          </Alert>
+        )}
+
+        {/* Action row — push to Spider + open Cold Call Tree */}
+        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
           {draft.pushed_to_spider_at ? (
             <Tooltip title={`Pushed ${new Date(draft.pushed_to_spider_at).toLocaleString()}`}>
               <span>
                 <Button
-                  startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 14 }} />}
+                  startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 16 }} />}
                   onClick={pushToSpider} disabled={busy || !spiderConfigured}
-                  sx={{ color: TERM.green, border: `1px solid ${TERM.green}40`, fontFamily: MONO, fontSize: 11 }}
-                >Re-push</Button>
+                  sx={{
+                    color: TERM.green, border: `1px solid ${TERM.green}40`,
+                    fontFamily: MONO, fontSize: 12, fontWeight: 700,
+                  }}
+                >Re-push to Spider</Button>
               </span>
             </Tooltip>
           ) : (
             <Tooltip title={spiderConfigured ? 'Append to Spider sheet, "JPW Recon" tab' : 'Spider webhook not configured on backend'}>
               <span>
                 <Button
-                  startIcon={<SendIcon sx={{ fontSize: 14 }} />}
+                  variant="contained"
+                  startIcon={<SendIcon sx={{ fontSize: 16 }} />}
                   onClick={pushToSpider} disabled={busy || !spiderConfigured}
                   sx={{
-                    color: TERM.green, border: `1px solid ${TERM.green}`,
-                    fontFamily: MONO, fontSize: 11, fontWeight: 700,
-                    '&:hover': { bgcolor: `${TERM.green}10` },
+                    bgcolor: TERM.green, color: TERM.greenDk,
+                    fontFamily: MONO, fontSize: 12, fontWeight: 700,
+                    '&:hover': { bgcolor: '#3ecb6f' },
                   }}
                 >Push to Spider</Button>
               </span>
             </Tooltip>
           )}
+          <Button
+            onClick={() => onOpenColdCall && onOpenColdCall(draft)}
+            startIcon={<PhoneInTalkIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+              fontFamily: MONO, fontSize: 12, fontWeight: 700,
+              '&:hover': { borderColor: TERM.green, color: TERM.green },
+            }}
+          >Cold Call Tree</Button>
+          <Box sx={{ flex: 1 }} />
+          <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 12 }}>
+            Close
+          </Button>
         </Stack>
       </Box>
     </Drawer>
@@ -1321,22 +1073,38 @@ function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
         {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
         {result && (
           <Alert severity="success" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}>
-            "{result.query}" → received {result.received}, created {result.created},
-            merged {result.merged}, skipped {result.skipped}.
+            "{result.query}" → received {result.received},
+            created {result.created},
+            merged {result.merged}
+            {result.skipped_in_spider > 0 && `, skipped ${result.skipped_in_spider} (already in Spider)`}
+            {result.skipped > 0 && `, skipped ${result.skipped} (other)`}.
+            {result.spider_phones_checked > 0 && (
+              <Box component="span" sx={{ display: 'block', mt: 0.5, opacity: 0.7 }}>
+                Checked against {result.spider_phones_checked} phones in your Spider sheet.
+              </Box>
+            )}
           </Alert>
         )}
         <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
           Searches a single category × town/county. Results are deduped against your existing leads
-          and scored automatically. One call uses one quota slot — re-running the same query updates
-          stale rating/review counts.
+          AND any phone already in your Spider sheet — you'll only see new businesses.
+          One call uses one quota slot.
         </Typography>
         <Stack spacing={1.5}>
+          {/* High-ticket first (the offers Nate is built for), then mid-ticket
+              below a subheader. Disqualified categories never appear. */}
           <TextField select required label="Category" size="small" sx={darkInputSx}
             value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {(reference?.categories || []).filter((c) => c.tier !== 'disqualify').map((c) => (
-              <MenuItem key={c.name} value={c.name}>
-                {c.name}{c.tier === 'high' ? ' · high-ticket' : ''}
+            {(reference?.categories || []).filter((c) => c.tier === 'high').map((c) => (
+              <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
+            ))}
+            {(reference?.categories || []).some((c) => c.tier === 'mid') && (
+              <MenuItem disabled sx={{ opacity: 0.7, fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' }}>
+                — mid-ticket —
               </MenuItem>
+            )}
+            {(reference?.categories || []).filter((c) => c.tier === 'mid').map((c) => (
+              <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
             ))}
           </TextField>
           <Stack direction="row" spacing={1}>
@@ -1371,7 +1139,7 @@ function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Main tab
 // ─────────────────────────────────────────────────────────────────────────────
-export default function JpwReconTab({ token }) {
+export default function JpwReconTab({ token, onOpenColdCall }) {
   const api = React.useMemo(() => makeApi(token), [token]);
 
   const [view, setView] = React.useState('queue'); // 'queue' | 'all' | 'dashboard'
@@ -1387,7 +1155,7 @@ export default function JpwReconTab({ token }) {
   const [auditingBatch, setAuditingBatch] = React.useState(false);
   const [usage, setUsage] = React.useState(null);
   const [search, setSearch] = React.useState('');
-  const [filters, setFilters] = React.useState({ grade: '', call_status: '', category: '', county: '', recommended_offer: '' });
+  const [filters, setFilters] = React.useState({ grade: '', pushed: '', category: '', county: '', recommended_offer: '' });
 
   const loadAll = React.useCallback(async () => {
     setLoading(true); setErr('');
@@ -1413,7 +1181,7 @@ export default function JpwReconTab({ token }) {
     } finally { setLoading(false); }
   // filters object reference changes each render — track its values
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, view, filters.grade, filters.call_status, filters.category, filters.county, filters.recommended_offer]);
+  }, [api, view, filters.grade, filters.pushed, filters.category, filters.county, filters.recommended_offer]);
 
   React.useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -1463,15 +1231,19 @@ export default function JpwReconTab({ token }) {
   };
 
   const filteredLeads = React.useMemo(() => {
-    if (!search.trim()) return leads;
-    const q = search.toLowerCase();
-    return leads.filter((l) =>
-      (l.business_name || '').toLowerCase().includes(q) ||
-      (l.phone || '').includes(q) ||
-      (l.city || '').toLowerCase().includes(q) ||
-      (l.category || '').toLowerCase().includes(q)
-    );
-  }, [leads, search]);
+    const q = search.trim().toLowerCase();
+    return leads.filter((l) => {
+      // Pushed filter — client-side because the backend list endpoint doesn't
+      // accept a `pushed` filter today and the data set fits in memory.
+      if (filters.pushed === 'true'  && !l.pushed_to_spider_at) return false;
+      if (filters.pushed === 'false' && l.pushed_to_spider_at)  return false;
+      if (!q) return true;
+      return (l.business_name || '').toLowerCase().includes(q)
+          || (l.phone || '').includes(q)
+          || (l.city || '').toLowerCase().includes(q)
+          || (l.category || '').toLowerCase().includes(q);
+    });
+  }, [leads, search, filters.pushed]);
 
   return (
     <Box sx={{ bgcolor: TERM.bg, color: TERM.text, p: { xs: 1.5, md: 2 }, minHeight: 600 }}>
@@ -1489,7 +1261,7 @@ export default function JpwReconTab({ token }) {
             },
           }}
         >
-          <ToggleButton value="queue">Call Queue</ToggleButton>
+          <ToggleButton value="queue">Push Queue</ToggleButton>
           <ToggleButton value="all">All Leads</ToggleButton>
           <ToggleButton value="dashboard">Dashboard</ToggleButton>
         </ToggleButtonGroup>
@@ -1569,10 +1341,11 @@ export default function JpwReconTab({ token }) {
             <MenuItem value="">All</MenuItem>
             {['A+', 'A', 'B', 'C', 'D'].map((g) => <MenuItem key={g} value={g}>{g}</MenuItem>)}
           </TextField>
-          <TextField select label="Status" size="small" sx={{ ...darkInputSx, width: 150 }}
-            value={filters.call_status} onChange={(e) => setFilters({ ...filters, call_status: e.target.value })}>
+          <TextField select label="In Spider?" size="small" sx={{ ...darkInputSx, width: 130 }}
+            value={filters.pushed} onChange={(e) => setFilters({ ...filters, pushed: e.target.value })}>
             <MenuItem value="">All</MenuItem>
-            {CALL_STATUSES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+            <MenuItem value="false">Not pushed</MenuItem>
+            <MenuItem value="true">Pushed</MenuItem>
           </TextField>
           <TextField select label="Category" size="small" sx={{ ...darkInputSx, width: 200 }}
             value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}>
@@ -1636,6 +1409,19 @@ export default function JpwReconTab({ token }) {
         lead={selected} scoreCaps={reference?.score_caps}
         onClose={() => setSelected(null)} api={api} onSaved={onLeadSaved}
         spiderConfigured={!!usage?.spider_configured}
+        onOpenColdCall={(l) => {
+          // Hand the lead off to the Cold Call Tree tab. The tree reads this
+          // on mount and pre-fills its name/business/service inputs.
+          try {
+            sessionStorage.setItem('jpwColdCallContext', JSON.stringify({
+              biz:   l?.business_name || '',
+              name:  l?.owner_name || '',
+              svc:   l?.category || '',
+              phone: l?.phone || '',
+            }));
+          } catch (_) { /* sessionStorage unavailable — handoff just won't prefill */ }
+          if (onOpenColdCall) onOpenColdCall();
+        }}
       />
       <AddLeadDialog
         open={addOpen} onClose={() => setAddOpen(false)} api={api} reference={reference}

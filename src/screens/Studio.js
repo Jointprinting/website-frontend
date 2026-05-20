@@ -53,6 +53,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
+import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -68,6 +69,7 @@ import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import QuoterTab from './studio/QuoterTab';
+import JpwReconTab from './studio/JpwReconTab';
 import ClientHubTab from './studio/ClientHubTab';
 
 const TOKEN_KEY = 'jpStudioToken';
@@ -1549,6 +1551,24 @@ function ColdCallTab({ token }) {
       const saved = JSON.parse(localStorage.getItem('jpw_cc_overrides') || '{}');
       if (saved && typeof saved === 'object') setOverrides(saved);
     } catch (e) {}
+
+    // One-shot handoff from the JPW Lead Recon tab: when the user clicks
+    // "Cold Call Tree" on a lead, that tab writes the lead context to
+    // sessionStorage just before switching views. We pick it up here and
+    // pre-fill the three setup fields, then clear it so re-entering the
+    // tree later doesn't re-apply the same lead.
+    try {
+      const handoff = sessionStorage.getItem('jpwColdCallContext');
+      if (handoff) {
+        const ctx = JSON.parse(handoff);
+        if (ctx && typeof ctx === 'object') {
+          if (ctx.biz)  setBiz(ctx.biz);
+          if (ctx.svc)  setSvc(ctx.svc);
+          if (ctx.name) setName(ctx.name);
+        }
+        sessionStorage.removeItem('jpwColdCallContext');
+      }
+    } catch (e) { /* malformed handoff — skip */ }
   }, []);
 
   React.useEffect(() => { localStorage.setItem('jpw_cc_biz', biz); }, [biz]);
@@ -1899,7 +1919,8 @@ const HUB_GROUPS = [
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall', label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
+      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
+      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
     ],
   },
 ];
@@ -2152,6 +2173,7 @@ function StudioBody({ token, onLogout }) {
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
+                  {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
                 </Box>
               </Fade>
             </Paper>
