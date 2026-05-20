@@ -84,6 +84,18 @@ export default function ClientHubTab({ token, onBack }) {
   const [orderDialogOpen, setOrderDialogOpen] = React.useState(false);
   const [editingOrder, setEditingOrder]       = React.useState(null);
   const [orderSaving, setOrderSaving]         = React.useState(false);
+  const [seeding, setSeeding]                 = React.useState(false);
+
+  const runSeedHistorical = async () => {
+    setSeeding(true);
+    try {
+      const r = await axios.post(`${base}/orders/seed-historical`, {}, authHdr);
+      await loadClients();
+      alert(`Done! Added ${r.data.created} orders (${r.data.skipped} already existed).`);
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Seed failed');
+    } finally { setSeeding(false); }
+  };
 
   const selectedClient = clients.find(c => c._id === selectedKey);
 
@@ -247,28 +259,42 @@ export default function ClientHubTab({ token, onBack }) {
         <Box sx={{
           width: { xs: 200, sm: 260, md: 280 }, flexShrink: 0,
           borderRight: `1px solid ${B.border}`, overflowY: 'auto',
+          display: 'flex', flexDirection: 'column',
         }}>
-          {clientsLoading ? (
-            <Box sx={{ textAlign: 'center', py: 6 }}>
-              <CircularProgress size={24} sx={{ color: B.green }} />
-            </Box>
-          ) : filteredClients.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8, color: B.muted, px: 2 }}>
-              <PeopleOutlineIcon sx={{ fontSize: 36, opacity: 0.3, mb: 1 }} />
-              <Typography sx={{ fontSize: 13 }}>
-                {search ? 'No matches.' : 'No clients yet.'}
-              </Typography>
-            </Box>
-          ) : (
-            filteredClients.map(c => (
-              <ClientListItem
-                key={c._id}
-                client={c}
-                selected={c._id === selectedKey}
-                onClick={() => handleSelectClient(c._id)}
-              />
-            ))
-          )}
+          <Box sx={{ flex: 1 }}>
+            {clientsLoading ? (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <CircularProgress size={24} sx={{ color: B.green }} />
+              </Box>
+            ) : filteredClients.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8, color: B.muted, px: 2 }}>
+                <PeopleOutlineIcon sx={{ fontSize: 36, opacity: 0.3, mb: 1 }} />
+                <Typography sx={{ fontSize: 13 }}>
+                  {search ? 'No matches.' : 'No clients yet.'}
+                </Typography>
+              </Box>
+            ) : (
+              filteredClients.map(c => (
+                <ClientListItem
+                  key={c._id}
+                  client={c}
+                  selected={c._id === selectedKey}
+                  onClick={() => handleSelectClient(c._id)}
+                />
+              ))
+            )}
+          </Box>
+          {/* Seed historical data */}
+          <Box sx={{ p: 1.5, borderTop: `1px solid ${B.faint}` }}>
+            <Button
+              fullWidth size="small" onClick={runSeedHistorical} disabled={seeding}
+              sx={{ color: B.muted, fontSize: 11, fontWeight: 600, textTransform: 'none',
+                '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.05)' } }}
+            >
+              {seeding ? <CircularProgress size={12} sx={{ mr: 1, color: B.green }} /> : null}
+              {seeding ? 'Importing…' : 'Import historical orders'}
+            </Button>
+          </Box>
         </Box>
 
         {/* Right panel — detail */}
