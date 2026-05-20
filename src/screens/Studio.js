@@ -1909,7 +1909,7 @@ const HUB_GROUPS = [
     tools: [
       { id: 'manual',      label: 'Product Entry',        Icon: Inventory2OutlinedIcon },
       { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
-      { id: 'quoter',      label: 'CEO Quoter',           Icon: RequestQuoteOutlinedIcon },
+      { id: 'quoter',      label: 'Quoter',               Icon: RequestQuoteOutlinedIcon },
       { id: 'clients',     label: 'Clients',              Icon: PeopleOutlineIcon },
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
       { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
