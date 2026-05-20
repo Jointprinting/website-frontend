@@ -2073,6 +2073,7 @@ function StudioBody({ token, onLogout }) {
     );
   }
 
+
   if (view === 'quoter') {
     return <QuoterTab token={token} onBack={() => setView('hub')} />;
   }
