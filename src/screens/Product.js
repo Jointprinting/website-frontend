@@ -19,29 +19,29 @@ function Product() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get('styleCode');
 
-  const [productVendor, setProductVendor] = useState('');
-  const [productStyle, setProductStyle] = useState('');
-  const [productRating, setProductRating] = useState(5);
-  const [productTitle, setProductTitle] = useState('');
+  const [productVendor, setProductVendor]                 = useState('');
+  const [productStyle, setProductStyle]                   = useState('');
+  const [productRating, setProductRating]                 = useState(5);
+  const [productTitle, setProductTitle]                   = useState('');
   const [productPriceRangeBottom, setProductPriceRangeBottom] = useState('10');
-  const [productPriceRangeTop, setProductPriceRangeTop] = useState('20');
+  const [productPriceRangeTop, setProductPriceRangeTop]   = useState('20');
   const [productSizeRangeBottom, setProductSizeRangeBottom] = useState('S');
-  const [productSizeRangeTop, setProductSizeRangeTop] = useState('XXL');
-  const [productTag, setProductTag] = useState('Best Seller');
-  const [productTagColor, setProductTagColor] = useState('warning');
-  const [productColorOptions, setProductColorOptions] = useState([]);
-  const [productColorCodes, setProductColorCodes] = useState([]);
-  const [productFrontImages, setProductFrontImages] = useState([]);
-  const [productBackImages, setProductBackImages] = useState([]);
-  const [productDescription, setProductDescription] = useState('');
-  const [frontSelected, setFrontSelected] = useState(true);
-  const [productColor, setProductColor] = useState('');
-  const [productColorCode, setProductColorCode] = useState('');
-  const [productIndex, setProductIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [productSizeRangeTop, setProductSizeRangeTop]     = useState('XXL');
+  const [productTag, setProductTag]                       = useState('Best Seller');
+  const [productTagColor, setProductTagColor]             = useState('warning');
+  const [productColorOptions, setProductColorOptions]     = useState([]);
+  const [productColorCodes, setProductColorCodes]         = useState([]);
+  const [productFrontImages, setProductFrontImages]       = useState([]);
+  const [productBackImages, setProductBackImages]         = useState([]);
+  const [productDescription, setProductDescription]       = useState('');
+  const [frontSelected, setFrontSelected]                 = useState(true);
+  const [productColor, setProductColor]                   = useState('');
+  const [productColorCode, setProductColorCode]           = useState('');
+  const [productIndex, setProductIndex]                   = useState(0);
+  const [loading, setLoading]                             = useState(true);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
-  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
 
   const getTagCode = (tag) => {
     switch (tag) {
@@ -74,34 +74,53 @@ function Product() {
     }
   }, [selectedProducts]);
 
+  // Shared helper — populates all product state from an API response.
+  // supportsBase64Images=true means images are GridFS base64 (DB records);
+  // false means they’re direct CDN URLs (live S&S response).
+  const applyProductData = (data, supportsBase64Images) => {
+    setProductVendor(data.vendor);
+    setProductStyle(data.style);
+    setProductRating(data.rating);
+    setProductTitle(data.name);
+    setProductPriceRangeBottom(data.priceRangeBottom);
+    setProductPriceRangeTop(data.priceRangeTop);
+    setProductSizeRangeBottom(data.sizeRangeBottom);
+    setProductSizeRangeTop(data.sizeRangeTop);
+    setProductTag(data.tag);
+    setProductTagColor(getTagCode(data.tag));
+    const colors = (data.colors || []).map((c) => capitalize(c));
+    setProductColorOptions(colors);
+    setProductColorCodes(data.colorCodes || []);
+    setProductFrontImages(data.productFrontImages || []);
+    setProductBackImages(data.productBackImages || []);
+    setProductDescription(data.description);
+    setProductColor(colors[0] || '');
+    setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
+  };
+
   useEffect(() => {
+    if (!id) return;
     const fetchProduct = async () => {
       try {
         setLoading(true);
-        const response = await fetch(config.backendUrl + '/api/products/style/' + id);
-        const data = await response.json();
-        setProductVendor(data.vendor);
-        setProductStyle(data.style);
-        setProductRating(data.rating);
-        setProductTitle(data.name);
-        setProductPriceRangeBottom(data.priceRangeBottom);
-        setProductPriceRangeTop(data.priceRangeTop);
-        setProductSizeRangeBottom(data.sizeRangeBottom);
-        setProductSizeRangeTop(data.sizeRangeTop);
-        setProductTag(data.tag);
-        setProductTagColor(getTagCode(data.tag));
-        const colors = (data.colors || []).map((c) => capitalize(c));
-        setProductColorOptions(colors);
-        setProductColorCodes(data.colorCodes || []);
-        setProductFrontImages(data.productFrontImages || []);
-        setProductBackImages(data.productBackImages || []);
-        setProductDescription(data.description);
-        setProductColor(colors[0] || '');
-        setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
-        setLoading(false);
+        // Try the DB-stored product first (fast, images already encoded)
+        const res = await fetch(config.backendUrl + '/api/products/style/' + id);
+        if (res.ok) {
+          applyProductData(await res.json(), true);
+          return;
+        }
+        if (res.status === 404) {
+          // Fall back to live S&S lookup (style not yet synced to DB)
+          const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + id);
+          if (ssRes.ok) {
+            applyProductData(await ssRes.json(), false);
+            return;
+          }
+        }
       } catch (err) {
-        setLoading(false);
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchProduct();
@@ -343,8 +362,6 @@ function Product() {
                   if (submitted) setSelectedProducts([]);
                 }}
                 products={
-                  // Always include the current product in the dialog, plus anything
-                  // else already in the tray from other pages.
                   selectedProducts.some((p) => p.style === productStyle)
                     ? selectedProducts
                     : [
