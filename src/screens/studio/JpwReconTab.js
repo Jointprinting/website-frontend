@@ -1143,72 +1143,65 @@ function SearchPlacesDialog({ open, onClose, api, reference, onDone }) {
 // Bulk sweep — runs N (category × town) combos in one shot
 // ─────────────────────────────────────────────────────────────────────────────
 function SweepDialog({ open, onClose, api, reference, onDone }) {
-  const [maxSearches, setMaxSearches] = React.useState(33);
-  const [advanced, setAdvanced] = React.useState(false);
-  const [pickedCats, setPickedCats] = React.useState(new Set());
-  const [pickedTowns, setPickedTowns] = React.useState(new Set());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [usage, setUsage] = React.useState(null);
   const [status, setStatus] = React.useState(null);
+  const [justStarted, setJustStarted] = React.useState(false);
 
-  // Reset transient UI state when dialog opens. Categories/towns hydrate
-  // for the advanced override but stay hidden behind the accordion.
+  // Reset transient UI state when dialog opens.
   React.useEffect(() => {
     if (!open) return;
     setErr('');
+    setJustStarted(false);
     api.usage().then(setUsage).catch(() => {});
     api.sweepStatus().then(setStatus).catch(() => setStatus(null));
-    if (reference) {
-      setPickedCats(new Set(
-        (reference.categories || []).filter((c) => c.tier === 'high').map((c) => c.name)
-      ));
-      setPickedTowns(new Set(reference.towns || []));
-    }
-  }, [open, reference, api]);
+  }, [open, api]);
 
-  // Poll status while the dialog is open OR a sweep is running. 2s feels
-  // responsive without hammering the API.
+  // Poll status while the dialog is open. 2s is responsive but not abusive.
+  // We also tell the parent (`onDone`) every time the sweep transitions to a
+  // terminal state so it can refresh the leads list.
+  const lastStatusRef = React.useRef(null);
   React.useEffect(() => {
     if (!open) return;
-    const tick = () => api.sweepStatus().then(setStatus).catch(() => {});
+    const tick = async () => {
+      try {
+        const next = await api.sweepStatus();
+        setStatus(next);
+        const prev = lastStatusRef.current?.status;
+        const cur = next?.status;
+        if (prev === 'running' && (cur === 'completed' || cur === 'stopped' || cur === 'failed')) {
+          // Sweep just finished — refresh the parent's leads + stats so the
+          // new audits + grades show up immediately when the user closes the
+          // dialog.
+          if (typeof onDone === 'function') onDone();
+        }
+        lastStatusRef.current = next;
+      } catch (_) { /* ignore */ }
+    };
+    tick(); // immediate first poll
     const id = setInterval(tick, 2000);
     return () => clearInterval(id);
-  }, [open, api]);
+  }, [open, api, onDone]);
 
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
-  const toggle = (set, setSet, value) => {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    setSet(next);
-  };
-  const allCats  = (reference?.categories || []).filter((c) => c.tier === 'high');
-  const allTowns = reference?.towns || [];
-
   const submit = async () => {
     setBusy(true); setErr('');
+    setJustStarted(false);
     try {
-      const body = { max: maxSearches };
-      if (advanced) {
-        if (!pickedCats.size || !pickedTowns.size) {
-          setErr('Pick at least one category and one town in advanced mode.');
-          setBusy(false);
-          return;
-        }
-        body.categories = Array.from(pickedCats);
-        body.towns      = Array.from(pickedTowns);
-      }
-      const r = await api.sweepPlaces(body);
+      // Smart queue defaults — no inputs, no decisions. Backend's
+      // getNextSweepPairs picks the least-recently-run pairs and caps at
+      // the remaining daily API budget. User just clicks one button.
+      const r = await api.sweepPlaces({ max: 33 });
       if (!r.ok) {
         setErr(r.message || 'Could not start sweep.');
       } else {
-        // Immediately fetch status so the progress section appears
+        setJustStarted(true);
         const next = await api.sweepStatus();
         setStatus(next);
-        onDone();
+        lastStatusRef.current = next;
       }
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
@@ -1230,7 +1223,7 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
     : 0;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
       PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
       <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
         Run Sweep
@@ -1242,16 +1235,18 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
             sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}
           >
             {usage.places_key_configured
-              ? `Today: ${usage.places_calls_today} / ${usage.daily_cap} Places calls. Sweep halts if the cap is hit.`
+              ? `Today's Google Places budget: ${usage.places_calls_today} / ${usage.daily_cap} calls used. Sweep auto-halts when full.`
               : 'GOOGLE_PLACES_KEY is not set on the backend — this will fail.'}
           </Alert>
         )}
         {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
+        {justStarted && !isRunning && !isFinished && (
+          <Alert severity="success" sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}>
+            Sweep started. Progress will appear here in a second…
+          </Alert>
+        )}
 
-        {/* Live progress section — visible whenever the backend reports a
-            running OR finished sweep so the user can reopen the dialog and
-            see results even after closing it mid-run. */}
-        {(isRunning || isFinished) && status && (
+        {(isRunning || isFinished || justStarted) && status && (
           <Paper elevation={0} sx={{
             bgcolor: TERM.panel, border: `1px solid ${isRunning ? TERM.green : TERM.borderDim}`,
             borderRadius: 1.5, p: 1.5, mb: 2,
@@ -1270,7 +1265,8 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
               </Typography>
             </Stack>
             <LinearProgress
-              variant="determinate" value={pct}
+              variant={isRunning && status.pairs_total === 0 ? 'indeterminate' : 'determinate'}
+              value={pct}
               sx={{
                 height: 6, borderRadius: 3, mb: 1,
                 bgcolor: 'rgba(255,255,255,0.05)',
@@ -1300,110 +1296,26 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
                 fontFamily: MONO, fontSize: 11, fontWeight: 700, mt: 1,
               }}>Stop sweep</Button>
             )}
+            {isFinished && status.status === 'completed' && (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.green, mt: 0.5 }}>
+                ✓ Sweep complete. Auto-audit may still be running on the new leads — check back in ~1 minute for finalized grades.
+              </Typography>
+            )}
           </Paper>
         )}
 
         {!isRunning && (
-          <>
-            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1.5 }}>
-              Smart queue picks the (category × town) pairs you haven't searched recently.
-              Each pair runs 2-3 phrasings × 2 pages = up to ~80 unique businesses, then
-              auto-audits in the background. Daily cap halts the run cleanly if hit.
-            </Typography>
-
-            <TextField
-              type="number" label="Max searches this run" size="small"
-              value={maxSearches}
-              onChange={(e) => setMaxSearches(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              inputProps={{ min: 1, max: 100 }}
-              sx={{ ...darkInputSx, width: 220, mb: 2 }}
-              helperText="Each pair uses ~6 API calls. 33 ≈ full daily budget."
-            />
-
-            {/* Advanced override — collapsed by default. Smart queue is the
-                normal path; this is only for when you want to force a
-                specific category/town set. */}
-            <Box sx={{
-              border: `1px solid ${TERM.borderDim}`, borderRadius: 1, mb: 1,
-            }}>
-              <Box
-                onClick={() => setAdvanced((v) => !v)}
-                sx={{
-                  cursor: 'pointer', px: 1.25, py: 1,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
-                }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
-                  Advanced — override smart queue
-                </Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
-                  {advanced ? '▾' : '▸'}
-                </Typography>
-              </Box>
-              {advanced && (
-                <Box sx={{ p: 1.25, borderTop: `1px solid ${TERM.borderDim}` }}>
-                  <Stack direction="row" spacing={2}>
-                    <Box sx={{ flex: 1 }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-                          Categories ({pickedCats.size}/{allCats.length})
-                        </Typography>
-                        <Stack direction="row" spacing={0.5}>
-                          <Button size="small" onClick={() => setPickedCats(new Set(allCats.map((c) => c.name)))}
-                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
-                          <Button size="small" onClick={() => setPickedCats(new Set())}
-                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
-                        </Stack>
-                      </Stack>
-                      <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5 }}>
-                        {allCats.map((c) => (
-                          <Box key={c.name}
-                            onClick={() => toggle(pickedCats, setPickedCats, c.name)}
-                            sx={{
-                              cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
-                              fontFamily: MONO, fontSize: 11.5,
-                              color: pickedCats.has(c.name) ? TERM.green : TERM.muted,
-                              bgcolor: pickedCats.has(c.name) ? `${TERM.green}10` : 'transparent',
-                              '&:hover': { bgcolor: `${TERM.green}08` },
-                            }}>
-                            {pickedCats.has(c.name) ? '✓ ' : '  '}{c.name}
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                    <Box sx={{ flex: 1 }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                        <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-                          Towns ({pickedTowns.size}/{allTowns.length})
-                        </Typography>
-                        <Stack direction="row" spacing={0.5}>
-                          <Button size="small" onClick={() => setPickedTowns(new Set(allTowns))}
-                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>all</Button>
-                          <Button size="small" onClick={() => setPickedTowns(new Set())}
-                            sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10, minWidth: 0, px: 0.8 }}>none</Button>
-                        </Stack>
-                      </Stack>
-                      <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${TERM.borderDim}`, borderRadius: 1, p: 0.5 }}>
-                        {allTowns.map((t) => (
-                          <Box key={t}
-                            onClick={() => toggle(pickedTowns, setPickedTowns, t)}
-                            sx={{
-                              cursor: 'pointer', px: 1, py: 0.4, borderRadius: 0.5,
-                              fontFamily: MONO, fontSize: 11.5,
-                              color: pickedTowns.has(t) ? TERM.green : TERM.muted,
-                              bgcolor: pickedTowns.has(t) ? `${TERM.green}10` : 'transparent',
-                              '&:hover': { bgcolor: `${TERM.green}08` },
-                            }}>
-                            {pickedTowns.has(t) ? '✓ ' : '  '}{t}
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </Stack>
-                </Box>
-              )}
-            </Box>
-          </>
+          <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.muted, lineHeight: 1.6 }}>
+            The sweep automatically picks the (category × town) pairs you haven't
+            run recently, searches multiple phrasings of each, paginates past the
+            top 20 to catch buried businesses, and dedupes against your Spider
+            sheet. After each pair, websites are audited in the background so
+            grades populate without you doing anything.
+            <br /><br />
+            Run it once a day. The smart queue cycles through the full set of
+            South Jersey combos over ~15 days, then starts over with the oldest
+            ones to refresh stale data.
+          </Typography>
         )}
       </DialogContent>
       <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
@@ -1413,7 +1325,7 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
         {!isRunning && (
           <Button onClick={submit} disabled={busy} variant="contained"
             sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-            {busy ? <CircularProgress size={18} /> : `Run ${maxSearches} searches`}
+            {busy ? <CircularProgress size={18} /> : 'Run today\'s sweep'}
           </Button>
         )}
       </DialogActions>
@@ -1443,6 +1355,8 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
   const [search, setSearch] = React.useState('');
   const [filters, setFilters] = React.useState({ grade: '', pushed: '', category: '', county: '', recommended_offer: '' });
 
+  const [queueIsFallback, setQueueIsFallback] = React.useState(false);
+
   const loadAll = React.useCallback(async () => {
     setLoading(true); setErr('');
     try {
@@ -1451,16 +1365,28 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
       const params = view === 'queue'
         ? { grade: 'A+', sort: 'score_desc', limit: 500 }
         : { ...filters, sort: 'score_desc', limit: 500 };
-      // Queue view = A+ OR A
       if (view === 'queue') {
+        // A+/A first. If both are empty (early in the lifecycle, before
+        // audits have populated Pain scores, or in a thin-results area),
+        // fall back to the top 30 unpushed leads by score so the user
+        // always has something to evaluate.
         const [a1, a2] = await Promise.all([
           api.listLeads({ grade: 'A+', sort: 'score_desc' }),
           api.listLeads({ grade: 'A',  sort: 'score_desc' }),
         ]);
-        setLeads([...(a1.leads || []), ...(a2.leads || [])]);
+        const combined = [...(a1.leads || []), ...(a2.leads || [])];
+        if (combined.length === 0) {
+          const top = await api.listLeads({ sort: 'score_desc', limit: 30 });
+          setLeads(top.leads || []);
+          setQueueIsFallback(true);
+        } else {
+          setLeads(combined);
+          setQueueIsFallback(false);
+        }
       } else {
         const r = await api.listLeads(params);
         setLeads(r.leads || []);
+        setQueueIsFallback(false);
       }
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
@@ -1680,18 +1606,32 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
               borderRadius: 1.5, p: 4, textAlign: 'center',
             }}>
               <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.muted, mb: 1 }}>
-                {view === 'queue' ? 'No A+/A leads yet.' : 'No leads match these filters.'}
+                {view === 'queue' ? 'No leads ingested yet.' : 'No leads match these filters.'}
               </Typography>
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
-                Add one manually or import an Apify / OutScraper export to populate.
+                {view === 'queue'
+                  ? 'Click Run Sweep above to start pulling leads from Google Places.'
+                  : 'Adjust filters or run a sweep to populate.'}
               </Typography>
             </Paper>
           ) : (
-            <Stack spacing={0.75}>
-              {filteredLeads.map((l) => (
-                <LeadRow key={l._id} lead={l} onOpen={setSelected} />
-              ))}
-            </Stack>
+            <>
+              {view === 'queue' && queueIsFallback && (
+                <Alert severity="info" sx={{
+                  mb: 1.5, fontFamily: MONO, fontSize: 11,
+                  bgcolor: 'rgba(96,165,250,0.06)', color: TERM.text,
+                  border: `1px solid ${TERM.blue}40`,
+                }}>
+                  No A+/A leads in your pool right now. Showing top {filteredLeads.length} by score so you've got something to look at.
+                  More leads grade up as the auto-audit finishes on freshly-swept results — try refreshing in a minute.
+                </Alert>
+              )}
+              <Stack spacing={0.75}>
+                {filteredLeads.map((l) => (
+                  <LeadRow key={l._id} lead={l} onOpen={setSelected} />
+                ))}
+              </Stack>
+            </>
           )}
         </Box>
       )}
