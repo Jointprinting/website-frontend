@@ -102,12 +102,12 @@ const emptyRow = (tier = 'mid', qty = 48) => ({
   selected: false, selectedMargin: 30, garmentColor: '', notes: '',
 });
 
-const emptyGroup = (garmentType = '') => ({ _uid: uid(), garmentType, rows: [] });
+const emptyGroup = (garmentType = '') => ({ _uid: uid(), garmentType, qtyTiers: [], rows: [] });
 
 const emptyQuote = () => ({
   clientName: '', companyName: '', printerName: '',
   date: new Date().toISOString().slice(0, 10),
-  notes: '', status: 'draft',
+  notes: '',
   garmentGroups: [],
   confPage: {
     shippingName: '', attentionName: '', streetAddress: '', cityStateZip: '',
@@ -115,8 +115,8 @@ const emptyQuote = () => ({
   },
 });
 
-const calcCOGS = (r) => {
-  const qty = Number(r.quantity) || 1;
+const calcCOGS = (r, qtyOverride) => {
+  const qty = qtyOverride ?? (Number(r.quantity) || 1);
   return (
     Number(r.blankPrice) +
     Number(r.printCostPerUnit) +
@@ -165,11 +165,14 @@ export default function QuoterTab({ token, onBack }) {
   const [clients, setClients] = React.useState({ clients: [], companies: [] });
 
   // Add-group dialog
-  const [addOpen, setAddOpen]       = React.useState(false);
-  const [newType, setNewType]       = React.useState('T-Shirt');
-  const [newQty, setNewQty]         = React.useState(48);
-  const [suggesting, setSuggesting] = React.useState(false);
-  const [suggestErr, setSuggestErr] = React.useState('');
+  const [addOpen, setAddOpen]               = React.useState(false);
+  const [newType, setNewType]               = React.useState('T-Shirt');
+  const [newQtyTiersInput, setNewQtyTiersInput] = React.useState('48');
+  const [suggesting, setSuggesting]         = React.useState(false);
+  const [suggestErr, setSuggestErr]         = React.useState('');
+
+  // Active qty tier per group (local, not persisted): { [group._uid]: number }
+  const [activeQtyPerGroup, setActiveQtyPerGroup] = React.useState({});
 
   const authHdr = React.useMemo(
     () => ({ headers: { Authorization: `Bearer ${token}` } }),
@@ -241,6 +244,7 @@ export default function QuoterTab({ token, onBack }) {
       garmentGroups: (q.garmentGroups || []).map(g => ({
         _uid: g._uid || uid(),
         garmentType: g.garmentType || '',
+        qtyTiers: g.qtyTiers || [],
         rows: (g.rows || []).map(r => ({ ...emptyRow(), ...r, _uid: r._uid || uid() })),
       })),
     };
@@ -263,13 +267,20 @@ export default function QuoterTab({ token, onBack }) {
         `${baseUrl}/suggest?garmentType=${encodeURIComponent(newType)}`, authHdr,
       );
       const { budget, mid, premium } = r.data || {};
+
+      // Parse qty tiers from the input (e.g. "48" or "25, 50, 75")
+      const parsedTiers = newQtyTiersInput
+        .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+      const qtyTiers = parsedTiers.length > 1 ? parsedTiers : [];
+      const baseQty  = parsedTiers[0] || 48;
+
       const tiers = [
         { tier: 'budget', prod: budget },
         { tier: 'mid', prod: mid },
         { tier: 'premium', prod: premium },
       ];
       const rows = tiers.map(({ tier, prod }) => {
-        const row = emptyRow(tier, Number(newQty) || 48);
+        const row = emptyRow(tier, baseQty);
         row.productType = newType;
         if (prod) {
           row.styleCode  = prod.style || '';
@@ -280,6 +291,7 @@ export default function QuoterTab({ token, onBack }) {
       });
       const group = emptyGroup(newType);
       group.rows = rows;
+      group.qtyTiers = qtyTiers;
       setQuote(prev => ({ ...prev, garmentGroups: [...(prev.garmentGroups || []), group] }));
       setAddOpen(false);
     } catch (e) {
@@ -356,9 +368,12 @@ export default function QuoterTab({ token, onBack }) {
   const buildConfPage = () => {
     const selected = [];
     for (const g of (quote.garmentGroups || [])) {
+      const activeQty = g.qtyTiers?.length > 1
+        ? (activeQtyPerGroup[g._uid] ?? g.qtyTiers[0])
+        : null;
       for (const r of (g.rows || [])) {
         if (!r.selected) continue;
-        const cogs  = calcCOGS(r);
+        const cogs  = calcCOGS(r, activeQty);
         const price = calcPrice(cogs, r.selectedMargin || 30);
         selected.push({
           fromQuoter: true,
@@ -535,6 +550,9 @@ export default function QuoterTab({ token, onBack }) {
           quote={quote} clients={clients}
           saving={saving} saveOk={saveOk} saveErr={saveErr}
           selectedCount={selectedCount}
+          activeQtyPerGroup={activeQtyPerGroup}
+          onSetActiveQty={(groupUid, qty) =>
+            setActiveQtyPerGroup(prev => ({ ...prev, [groupUid]: qty }))}
           onBack={() => { setPage('list'); loadQuotes(); }}
           onSave={() => saveQuote()}
           onBuildConf={buildConfPage}
@@ -566,7 +584,7 @@ export default function QuoterTab({ token, onBack }) {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         garmentType={newType} setGarmentType={setNewType}
-        qty={newQty} setQty={setNewQty}
+        qtyTiersInput={newQtyTiersInput} setQtyTiersInput={setNewQtyTiersInput}
         onAdd={addGroup}
         suggesting={suggesting} suggestErr={suggestErr}
       />
@@ -663,7 +681,6 @@ function ListPage({ quotes, loading, err, search, setSearch, onBack, onNew, onOp
                       <TableCell sx={headSx}>Company</TableCell>
                       <TableCell sx={headSx}>Garments</TableCell>
                       <TableCell sx={headSx}>Date</TableCell>
-                      <TableCell sx={headSx}>Status</TableCell>
                       <TableCell sx={headSx} align="center">Open</TableCell>
                       <TableCell sx={headSx} align="center">Delete</TableCell>
                     </TableRow>
@@ -676,7 +693,6 @@ function ListPage({ quotes, loading, err, search, setSearch, onBack, onNew, onOp
                         ? new Date(q.date).toLocaleDateString('en-US',
                           { month: 'short', day: 'numeric', year: 'numeric' })
                         : '—';
-                      const finalized = q.status === 'finalized';
                       return (
                         <TableRow
                           key={q._id}
@@ -691,17 +707,6 @@ function ListPage({ quotes, loading, err, search, setSearch, onBack, onNew, onOp
                             {garments || '—'}
                           </TableCell>
                           <TableCell sx={{ ...cellSx, color: B.muted }}>{dateStr}</TableCell>
-                          <TableCell sx={cellSx}>
-                            <Chip
-                              label={finalized ? 'Finalized' : 'Draft'}
-                              size="small"
-                              sx={{
-                                height: 20, fontSize: 10, fontWeight: 700,
-                                bgcolor: finalized ? 'rgba(74,222,128,0.15)' : 'rgba(251,191,36,0.12)',
-                                color: finalized ? B.green : '#fbbf24',
-                              }}
-                            />
-                          </TableCell>
                           <TableCell sx={cellSx} align="center">
                             <IconButton
                               size="small"
@@ -737,6 +742,7 @@ function ListPage({ quotes, loading, err, search, setSearch, onBack, onNew, onOp
 // ─── Page 2: Quote Editor ────────────────────────────────────────────────────
 function EditorPage({
   quote, clients, saving, saveOk, saveErr, selectedCount,
+  activeQtyPerGroup, onSetActiveQty,
   onBack, onSave, onBuildConf,
   updateQuoteField, updateGroup, updateRow,
   removeGroup, removeRow, addBlankRow, duplicateRow, lookupStyle, onAddGroup,
@@ -792,17 +798,6 @@ function EditorPage({
                 InputLabelProps={{ shrink: true }}
                 sx={{ ...darkInput, minWidth: 150 }}
               />
-              <FormControl size="small" sx={{ minWidth: 130 }}>
-                <InputLabel sx={{ color: B.muted }}>Status</InputLabel>
-                <Select
-                  label="Status" value={quote.status || 'draft'}
-                  onChange={e => updateQuoteField('status', e.target.value)}
-                  sx={selectSx}
-                >
-                  <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="finalized">Finalized</MenuItem>
-                </Select>
-              </FormControl>
               <Box sx={{ flex: 1 }} />
               <Button
                 onClick={onSave} disabled={saving} variant="contained"
@@ -828,19 +823,26 @@ function EditorPage({
 
           {/* Garment groups */}
           <Stack spacing={2}>
-            {(quote.garmentGroups || []).map((group, gIdx) => (
-              <GarmentGroup
-                key={group._uid || gIdx}
-                group={group}
-                onLabelChange={v => updateGroup(gIdx, 'garmentType', v)}
-                onRemoveGroup={() => removeGroup(gIdx)}
-                onUpdateRow={(rIdx, patch) => updateRow(gIdx, rIdx, patch)}
-                onRemoveRow={rIdx => removeRow(gIdx, rIdx)}
-                onAddRow={() => addBlankRow(gIdx)}
-                onDuplicateRow={rIdx => duplicateRow(gIdx, rIdx)}
-                onLookup={(rIdx, code) => lookupStyle(gIdx, rIdx, code)}
-              />
-            ))}
+            {(quote.garmentGroups || []).map((group, gIdx) => {
+              const activeQty = group.qtyTiers?.length > 1
+                ? (activeQtyPerGroup[group._uid] ?? group.qtyTiers[0])
+                : null;
+              return (
+                <GarmentGroup
+                  key={group._uid || gIdx}
+                  group={group}
+                  activeQty={activeQty}
+                  onQtyTierChange={tier => onSetActiveQty(group._uid, tier)}
+                  onLabelChange={v => updateGroup(gIdx, 'garmentType', v)}
+                  onRemoveGroup={() => removeGroup(gIdx)}
+                  onUpdateRow={(rIdx, patch) => updateRow(gIdx, rIdx, patch)}
+                  onRemoveRow={rIdx => removeRow(gIdx, rIdx)}
+                  onAddRow={() => addBlankRow(gIdx)}
+                  onDuplicateRow={rIdx => duplicateRow(gIdx, rIdx)}
+                  onLookup={(rIdx, code) => lookupStyle(gIdx, rIdx, code)}
+                />
+              );
+            })}
           </Stack>
 
           <Button
@@ -866,7 +868,8 @@ const COL_HEADERS = [
 ];
 
 function GarmentGroup({
-  group, onLabelChange, onRemoveGroup, onUpdateRow, onRemoveRow,
+  group, activeQty, onQtyTierChange,
+  onLabelChange, onRemoveGroup, onUpdateRow, onRemoveRow,
   onAddRow, onDuplicateRow, onLookup,
 }) {
   const [expanded, setExpanded] = React.useState(true);
@@ -886,6 +889,29 @@ function GarmentGroup({
             '& .MuiInput-underline:before': { borderBottomColor: 'transparent' },
             '& .MuiInput-underline:after': { borderBottomColor: B.green } }}
         />
+        {/* Qty tier tabs */}
+        {group.qtyTiers?.length > 1 && (
+          <Stack direction="row" spacing={0.4} alignItems="center">
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mr: 0.5 }}>QTY</Typography>
+            {group.qtyTiers.map(tier => (
+              <Box
+                key={tier}
+                onClick={() => onQtyTierChange(tier)}
+                sx={{
+                  px: 1.2, py: 0.3, borderRadius: 1, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 700,
+                  bgcolor: activeQty === tier ? B.green : 'rgba(255,255,255,0.07)',
+                  color: activeQty === tier ? B.greenDk : B.muted,
+                  border: `1px solid ${activeQty === tier ? B.green : 'transparent'}`,
+                  transition: 'all 0.12s',
+                  '&:hover': { bgcolor: activeQty === tier ? B.green : 'rgba(255,255,255,0.12)' },
+                }}
+              >
+                {tier}
+              </Box>
+            ))}
+          </Stack>
+        )}
         {selectedInGroup > 0 && (
           <Chip label={`${selectedInGroup} selected`} size="small"
             sx={{ bgcolor: 'rgba(74,222,128,0.15)', color: B.green, fontSize: 11, height: 20 }} />
@@ -924,6 +950,7 @@ function GarmentGroup({
               <QuoteRow
                 key={row._uid || rIdx}
                 row={row} garmentType={group.garmentType}
+                activeQty={activeQty}
                 onChange={patch => onUpdateRow(rIdx, patch)}
                 onRemove={() => onRemoveRow(rIdx)}
                 onDuplicate={() => onDuplicateRow(rIdx)}
@@ -959,14 +986,18 @@ const tinyInput = {
     ...darkInput['& .MuiOutlinedInput-root'],
   },
   '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: '6px' },
+  '& input[type=number]': {
+    MozAppearance: 'textfield',
+    '&::-webkit-inner-spin-button, &::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  },
 };
 
-function QuoteRow({ row, garmentType, onChange, onRemove, onDuplicate, onLookup }) {
+function QuoteRow({ row, garmentType, activeQty, onChange, onRemove, onDuplicate, onLookup }) {
   const [expanded, setExpanded] = React.useState(false);
   const [shipAnchor, setShipAnchor] = React.useState(null);
 
-  const cogs = calcCOGS(row);
-  const qty = Number(row.quantity) || 1;
+  const cogs = calcCOGS(row, activeQty);
+  const qty = activeQty ?? (Number(row.quantity) || 1);
   const lbPerPiece = GARMENT_WEIGHT_LB[garmentType] ?? 0.5;
   const totalLbs = lbPerPiece * qty;
   const estShip = estimateShipping(totalLbs);
@@ -1035,8 +1066,10 @@ function QuoteRow({ row, garmentType, onChange, onRemove, onDuplicate, onLookup 
           {row.brand || '—'}
         </Typography>
 
-        {/* Qty */}
-        {numField(row.quantity, 'quantity')}
+        {/* Qty — read-only display when group uses qty tiers */}
+        {activeQty != null
+          ? <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{activeQty}</Typography>
+          : numField(row.quantity, 'quantity')}
 
         {/* Blank price */}
         {numField(row.blankPrice, 'blankPrice', { InputProps: dollarAdorn })}
@@ -1200,7 +1233,7 @@ function EstRow({ label, val, highlight }) {
 }
 
 // ─── Add Group Dialog ────────────────────────────────────────────────────────
-function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qty, setQty, onAdd, suggesting, suggestErr }) {
+function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qtyTiersInput, setQtyTiersInput, onAdd, suggesting, suggestErr }) {
   return (
     <Dialog
       open={open} onClose={onClose}
@@ -1222,9 +1255,15 @@ function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qty, setQt
             </Select>
           </FormControl>
           <TextField
-            label="Quantity" size="small" type="number" value={qty}
-            onChange={e => setQty(Number(e.target.value) || 0)}
+            label="Qty / Qty Tiers" size="small" value={qtyTiersInput}
+            onChange={e => setQtyTiersInput(e.target.value)}
+            placeholder="e.g. 48  or  25, 50, 75"
             sx={darkInput}
+            helperText={
+              <Typography component="span" sx={{ color: B.muted, fontSize: 11 }}>
+                Single number = one qty. Comma-separated = qty tier tabs on the group.
+              </Typography>
+            }
           />
           <Typography sx={{ color: B.muted, fontSize: 12 }}>
             Creates 3 product tiers (Budget / Mid / Premium) auto-filled from your

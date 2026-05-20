@@ -1,4 +1,3 @@
-// src/screens/Products.js
 import { React, useState, useEffect, useCallback } from 'react';
 import {
   Box, Stack, Typography, Chip, Divider, Rating, Pagination,
@@ -183,7 +182,8 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.12)',
           textTransform: 'uppercase', lineHeight: 2,
         }}>
-          JOINT<br />PRINTING
+          JOINT<br />
+          PRINTING
         </Typography>
       </Box>
     </Stack>
@@ -207,7 +207,7 @@ export default function Products() {
   const [totalItems, setTotalItems] = useState(0);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
-  const [fetchKey,   setFetchKey]   = useState(0); // incremented to retry
+  const [fetchKey,   setFetchKey]   = useState(0);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteOpen,         setQuoteOpen]        = useState(false);
@@ -270,8 +270,17 @@ export default function Products() {
     });
   };
 
+  const hasActiveFilters = category !== '' || genderType !== '' || search !== '';
   const activeLabel = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
   const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
+
+  const clearFilters = () => {
+    setCategory('');
+    setGenderType('');
+    setSearch('');
+    setSearchInput('');
+    setFetchKey((k) => k + 1);
+  };
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
@@ -391,12 +400,18 @@ export default function Products() {
           {!loading && !error && products.length === 0 && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={1.5}>
               <Typography color="text.secondary" textAlign="center">
-                No styles found{category ? ` in ${activeLabel}` : ''}.
+                {hasActiveFilters
+                  ? `No styles found${category ? ` in ${activeLabel}` : ''}.`
+                  : 'No styles found.'}
               </Typography>
-              <Button size="small" variant="outlined"
-                onClick={() => { setCategory(''); setGenderType(''); setSearch(''); setSearchInput(''); }}
-                sx={{ textTransform: 'none' }}>
-                Clear filters
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={hasActiveFilters ? null : <RefreshIcon />}
+                onClick={clearFilters}
+                sx={{ textTransform: 'none' }}
+              >
+                {hasActiveFilters ? 'Clear filters' : 'Try again'}
               </Button>
             </Box>
           )}
