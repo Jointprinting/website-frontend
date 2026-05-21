@@ -17,6 +17,7 @@ import {
   TextField,
   MenuItem,
   Button,
+  useMediaQuery,
   FormControl,
   Select,
   Paper,
@@ -45,6 +46,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import InboxIcon from '@mui/icons-material/Inbox';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
@@ -745,164 +747,8 @@ function Detail({ label, children }) {
     </Stack>
   );
 }
-function EditableScript({
-  nodeId, field, defaultLines, fill, sx,
-  override, onSaveOverride, onResetOverride,
-}) {
-  const isMultiline = Array.isArray(defaultLines);
-  const defaultText = isMultiline ? defaultLines.join('\n\n') : (defaultLines || '');
-  const hasOverride = override != null && override !== '';
-  const currentText = hasOverride ? override : defaultText;
 
-  const [editing, setEditing] = React.useState(false);
-  const [draft, setDraft] = React.useState('');
-
-  const startEdit = () => {
-    setDraft(currentText);
-    setEditing(true);
-  };
-  const cancelEdit = () => {
-    setEditing(false);
-    setDraft('');
-  };
-  const saveEdit = () => {
-    const trimmed = draft.trim();
-    if (!trimmed) { cancelEdit(); return; }
-    if (trimmed === defaultText) {
-      // They edited back to match the default — just clear the override.
-      onResetOverride();
-    } else {
-      onSaveOverride(trimmed);
-    }
-    setEditing(false);
-  };
-
-  // Render lines
-  const renderedLines = isMultiline
-    ? currentText.split(/\n{2,}/).map((l) => l.trim()).filter(Boolean)
-    : [currentText];
-
-  return (
-    <Box sx={sx}>
-      {!editing ? (
-        <>
-          {renderedLines.map((line, i) => (
-            <MuiTypography
-              key={i}
-              variant="body1"
-              sx={{
-                color: 'inherit',
-                mb: i === renderedLines.length - 1 ? 0 : 1.5,
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {fill ? fill(line) : line}
-            </MuiTypography>
-          ))}
-
-          {/* Toolbar — edit + reset */}
-          <Stack
-            direction="row" spacing={1} alignItems="center"
-            sx={{
-              mt: 1.5, pt: 1.25, borderTop: `1px dashed ${BRAND.faint}`,
-              flexWrap: 'wrap', gap: 0.75,
-            }}
-          >
-            <Button
-              size="small"
-              startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
-              onClick={startEdit}
-              sx={{
-                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
-                fontSize: 12, py: 0.4, px: 1.25,
-                '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
-              }}
-            >Edit</Button>
-
-            {hasOverride && (
-              <>
-                <Chip
-                  label="Edited"
-                  size="small"
-                  sx={{
-                    bgcolor: 'rgba(74,222,128,0.12)',
-                    color: BRAND.green,
-                    fontWeight: 700,
-                    height: 20,
-                    fontSize: 10,
-                    border: '1px solid rgba(74,222,128,0.3)',
-                  }}
-                />
-                <Button
-                  size="small"
-                  onClick={() => {
-                    if (window.confirm('Reset this back to the default script?')) onResetOverride();
-                  }}
-                  sx={{
-                    textTransform: 'none', color: 'rgba(248,113,113,0.7)',
-                    fontWeight: 600, fontSize: 12, py: 0.4, px: 1.25,
-                    '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.06)' },
-                  }}
-                >Reset to default</Button>
-              </>
-            )}
-          </Stack>
-        </>
-      ) : (
-        <Stack spacing={1.25}>
-          <TextField
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            multiline
-            minRows={isMultiline ? 4 : 2}
-            fullWidth
-            autoFocus
-            placeholder={isMultiline ? 'Separate paragraphs with a blank line.' : ''}
-            sx={{
-              ...darkInputSx,
-              '& .MuiOutlinedInput-root': {
-                ...darkInputSx['& .MuiOutlinedInput-root'],
-                fontSize: 14, fontFamily: 'inherit',
-              },
-            }}
-          />
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small" variant="contained"
-              startIcon={<SaveOutlinedIcon sx={{ fontSize: 16 }} />}
-              onClick={saveEdit}
-              sx={{
-                textTransform: 'none', fontWeight: 700, py: 0.6, fontSize: 12.5,
-                bgcolor: BRAND.green, color: BRAND.greenDk,
-                '&:hover': { bgcolor: '#22c55e' },
-              }}
-            >Save</Button>
-            <Button
-              size="small"
-              startIcon={<CloseIcon sx={{ fontSize: 16 }} />}
-              onClick={cancelEdit}
-              sx={{
-                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
-                py: 0.6, fontSize: 12.5,
-                '&:hover': { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
-              }}
-            >Cancel</Button>
-          </Stack>
-          <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
-            Edits save to this device and stay until you reset. Click "Reset to default" any time to restore the original.
-          </MuiTypography>
-        </Stack>
-      )}
-    </Box>
-  );
-}
-
-
-// ── Cold Call Tree script + objection rebuttals ────────────────────────
-// Restored from pre-Studio-v4 history; the v4 rewrite forgot to bring these
-// over even though ColdCallTab still references them.
-
+// ─────────────────────────────────────────────────────────────────────────────
 const COLD_CALL_NODES = {
   // ─── ENTRY POINTS ──────────────────────────────────────────────────────
   start: {
@@ -1369,6 +1215,167 @@ const QUICK_REBUTTALS = [
   { q: '"I need to think about it"', a: "Totally fair. What specifically are you turning over — the timing, the price, or you're just not sure it'll work? Whichever it is, easier to give you the actual answer than have you guess." },
   { q: '"Call me back in a few months"', a: "Sure — but real quick, is there something specific changing in a few months, or is now just not the time? Helps me know if it's a real timing thing or a polite no, no judgment either way." },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EditableScript — renders a list of script lines for one node+field, with
+//  inline editing. One override per field, persisted in localStorage. No
+//  version naming, no dropdowns — just edit, save, it stays. Reset to wipe.
+//
+//  field: 'script' | 'followUp' | 'voicemail' | 'direction'
+//  defaultLines: array of strings (or single string for voicemail/direction)
+// ─────────────────────────────────────────────────────────────────────────────
+function EditableScript({
+  nodeId, field, defaultLines, fill, sx,
+  override, onSaveOverride, onResetOverride,
+}) {
+  const isMultiline = Array.isArray(defaultLines);
+  const defaultText = isMultiline ? defaultLines.join('\n\n') : (defaultLines || '');
+  const hasOverride = override != null && override !== '';
+  const currentText = hasOverride ? override : defaultText;
+
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+
+  const startEdit = () => {
+    setDraft(currentText);
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft('');
+  };
+  const saveEdit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) { cancelEdit(); return; }
+    if (trimmed === defaultText) {
+      // They edited back to match the default — just clear the override.
+      onResetOverride();
+    } else {
+      onSaveOverride(trimmed);
+    }
+    setEditing(false);
+  };
+
+  // Render lines
+  const renderedLines = isMultiline
+    ? currentText.split(/\n{2,}/).map((l) => l.trim()).filter(Boolean)
+    : [currentText];
+
+  return (
+    <Box sx={sx}>
+      {!editing ? (
+        <>
+          {renderedLines.map((line, i) => (
+            <MuiTypography
+              key={i}
+              variant="body1"
+              sx={{
+                color: 'inherit',
+                mb: i === renderedLines.length - 1 ? 0 : 1.5,
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {fill ? fill(line) : line}
+            </MuiTypography>
+          ))}
+
+          {/* Toolbar — edit + reset */}
+          <Stack
+            direction="row" spacing={1} alignItems="center"
+            sx={{
+              mt: 1.5, pt: 1.25, borderTop: `1px dashed ${BRAND.faint}`,
+              flexWrap: 'wrap', gap: 0.75,
+            }}
+          >
+            <Button
+              size="small"
+              startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+              onClick={startEdit}
+              sx={{
+                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
+                fontSize: 12, py: 0.4, px: 1.25,
+                '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+              }}
+            >Edit</Button>
+
+            {hasOverride && (
+              <>
+                <Chip
+                  label="Edited"
+                  size="small"
+                  sx={{
+                    bgcolor: 'rgba(74,222,128,0.12)',
+                    color: BRAND.green,
+                    fontWeight: 700,
+                    height: 20,
+                    fontSize: 10,
+                    border: '1px solid rgba(74,222,128,0.3)',
+                  }}
+                />
+                <Button
+                  size="small"
+                  onClick={() => {
+                    if (window.confirm('Reset this back to the default script?')) onResetOverride();
+                  }}
+                  sx={{
+                    textTransform: 'none', color: 'rgba(248,113,113,0.7)',
+                    fontWeight: 600, fontSize: 12, py: 0.4, px: 1.25,
+                    '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.06)' },
+                  }}
+                >Reset to default</Button>
+              </>
+            )}
+          </Stack>
+        </>
+      ) : (
+        <Stack spacing={1.25}>
+          <TextField
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            multiline
+            minRows={isMultiline ? 4 : 2}
+            fullWidth
+            autoFocus
+            placeholder={isMultiline ? 'Separate paragraphs with a blank line.' : ''}
+            sx={{
+              ...darkInputSx,
+              '& .MuiOutlinedInput-root': {
+                ...darkInputSx['& .MuiOutlinedInput-root'],
+                fontSize: 14, fontFamily: 'inherit',
+              },
+            }}
+          />
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small" variant="contained"
+              startIcon={<SaveOutlinedIcon sx={{ fontSize: 16 }} />}
+              onClick={saveEdit}
+              sx={{
+                textTransform: 'none', fontWeight: 700, py: 0.6, fontSize: 12.5,
+                bgcolor: BRAND.green, color: BRAND.greenDk,
+                '&:hover': { bgcolor: '#22c55e' },
+              }}
+            >Save</Button>
+            <Button
+              size="small"
+              startIcon={<CloseIcon sx={{ fontSize: 16 }} />}
+              onClick={cancelEdit}
+              sx={{
+                textTransform: 'none', color: BRAND.muted, fontWeight: 600,
+                py: 0.6, fontSize: 12.5,
+                '&:hover': { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
+              }}
+            >Cancel</Button>
+          </Stack>
+          <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
+            Edits save to this device and stay until you reset. Click "Reset to default" any time to restore the original.
+          </MuiTypography>
+        </Stack>
+      )}
+    </Box>
+  );
+}
 
 function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
