@@ -474,9 +474,6 @@ function Dashboard({ stats, usage, api, onAction, requestCleanup }) {
           fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted,
           fontWeight: 600, textTransform: 'uppercase', mb: 1,
         }}>Cleanup</Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, mb: 1 }}>
-          Bulk delete dead-weight leads. Disqualifiers + grade D rarely justify a callback.
-        </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Button size="small" onClick={() => cleanup('all D-graded leads', { grade: 'D' })}
             sx={{ color: TERM.red, border: `1px solid ${TERM.red}40`, fontFamily: MONO, fontSize: 10.5 }}>
@@ -588,7 +585,12 @@ function LeadRow({ lead, onOpen, selected, onToggleSelect }) {
             )}
           </Stack>
         </Box>
-        <Box sx={{ flexShrink: 0, minWidth: 140, textAlign: 'right' }}>
+        {/* Recommended offer + #1 weakness — hidden on phone (xs), visible
+            on sm+. On mobile this would just squeeze the business name. */}
+        <Box sx={{
+          flexShrink: 0, minWidth: 140, textAlign: 'right',
+          display: { xs: 'none', sm: 'block' },
+        }}>
           <Typography sx={{
             fontFamily: MONO, fontSize: 10.5, color: TERM.green, fontWeight: 600,
           }}>
@@ -940,15 +942,12 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
-  // Has today's sweep already completed successfully? Used to nudge the
-  // user that there's nothing more to do today (the daily API budget is
-  // mostly spent by one full sweep anyway).
-  const ranToday = (() => {
-    if (status?.status !== 'completed') return false;
-    if (!status.finished_at) return false;
-    const finishedDate = new Date(status.finished_at).toISOString().slice(0, 10);
-    return finishedDate === new Date().toISOString().slice(0, 10);
-  })();
+  // We only block "Run sweep" when the daily Places API budget is
+  // genuinely too low to be worth running — not just because one sweep
+  // already completed today. Sweep eats ~3 calls per pair; if you've got
+  // less than 10 calls left (~3 pairs), the run isn't worth it.
+  const remainingBudget = usage ? Math.max(0, (usage.daily_cap || 200) - (usage.places_calls_today || 0)) : null;
+  const budgetExhausted = remainingBudget !== null && remainingBudget < 10;
 
   const submit = async () => {
     setBusy(true); setErr('');
@@ -1066,24 +1065,10 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
             )}
             {isFinished && status.status === 'completed' && (
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.green, mt: 0.5 }}>
-                ✓ Sweep complete. Auto-audit may still be running on the new leads — check back in ~1 minute for finalized grades.
+                ✓ Done
               </Typography>
             )}
           </Paper>
-        )}
-
-        {!isRunning && (
-          <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.muted, lineHeight: 1.6 }}>
-            The sweep automatically picks the (category × town) pairs you haven't
-            run recently, searches multiple phrasings of each, paginates past the
-            top 20 to catch buried businesses, and dedupes against your Spider
-            sheet. After each pair, websites are audited in the background so
-            grades populate without you doing anything.
-            <br /><br />
-            Run it once a day. The smart queue cycles through the full set of
-            South Jersey combos over ~15 days, then starts over with the oldest
-            ones to refresh stale data.
-          </Typography>
         )}
       </DialogContent>
       <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
@@ -1091,25 +1076,23 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
           {isRunning ? 'Close (sweep keeps running)' : 'Close'}
         </Button>
         {!isRunning && (
-          ranToday ? (
-            // Already ran today — soft-disable the button. We don't block it
-            // entirely because some days he might WANT a second pass, but
-            // the visual treatment says "you probably don't need to."
-            <Tooltip title="You've already run today's sweep. The daily Google budget is mostly spent — try tomorrow.">
+          budgetExhausted ? (
+            // Daily budget is essentially used up — block until tomorrow.
+            <Tooltip title="Daily Google Places budget is almost full. The sweep would halt immediately.">
               <span>
-                <Button onClick={submit} disabled={busy}
+                <Button disabled
                   sx={{
                     color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
                     fontFamily: MONO, fontWeight: 700,
                   }}>
-                  {busy ? <CircularProgress size={18} /> : 'Run another sweep anyway'}
+                  Daily budget used
                 </Button>
               </span>
             </Tooltip>
           ) : (
             <Button onClick={submit} disabled={busy} variant="contained"
               sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-              {busy ? <CircularProgress size={18} /> : 'Run today\'s sweep'}
+              {busy ? <CircularProgress size={18} /> : 'Run sweep'}
             </Button>
           )
         )}
@@ -1245,7 +1228,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
 
         <Box sx={{ flex: 1 }} />
 
-        <TextField size="small" placeholder="Search name / phone / city" sx={{ ...darkInputSx, width: 240 }}
+        <TextField size="small" placeholder="Search name / phone / city" sx={{ ...darkInputSx, width: { xs: '100%', sm: 240 }, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
           value={search} onChange={(e) => setSearch(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: TERM.muted }} /></InputAdornment> }}
         />
@@ -1345,30 +1328,13 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
               borderRadius: 1.5, p: 4, textAlign: 'center',
             }}>
               {view === 'queue' ? (
-                <>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.text, mb: 1, fontWeight: 700 }}>
-                    No A+/A leads in your pool right now.
-                  </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 11.5, color: TERM.muted, lineHeight: 1.7, maxWidth: 520, mx: 'auto' }}>
-                    {(stats?.total || 0) === 0 ? (
-                      <>You haven't run any sweeps yet. Click <b style={{ color: TERM.green }}>Run Sweep</b> in the toolbar to start ingesting leads from Google Places.</>
-                    ) : (
-                      <>
-                        You have {stats?.total || 0} total leads, but none have climbed to A+/A grade.
-                        This usually means either (a) auto-audit hasn't finished on recently-swept leads — click <b style={{ color: TERM.green }}>Audit batch</b> in the toolbar or wait a few minutes, or (b) your current pool genuinely doesn't contain ideal-fit businesses. Try running another sweep — the smart queue rotates through different categories and towns each time.
-                      </>
-                    )}
-                  </Typography>
-                </>
+                <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.text, fontWeight: 700 }}>
+                  {(stats?.total || 0) === 0 ? 'No leads yet. Run a sweep.' : 'No A+/A leads in your pool right now.'}
+                </Typography>
               ) : (
-                <>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.muted, mb: 1 }}>
-                    No leads match these filters.
-                  </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted }}>
-                    Adjust filters or run a sweep to populate.
-                  </Typography>
-                </>
+                <Typography sx={{ fontFamily: MONO, fontSize: 13, color: TERM.muted }}>
+                  No leads match these filters.
+                </Typography>
               )}
             </Paper>
           ) : (
