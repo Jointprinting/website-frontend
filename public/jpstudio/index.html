@@ -881,6 +881,12 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     <div class="panel-scroll">
       <div class="psec">
         <div class="psec-hdr"><span class="psec-lbl">Mockup Info</span></div>
+        <div class="field">
+          <label>Project</label>
+          <select id="f-project" onchange="onProjectChange()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:var(--f);cursor:pointer;width:100%">
+            <option value="">— Unlinked —</option>
+          </select>
+        </div>
         <div class="field"><label>Client</label><input type="text" id="f-client" list="client-suggestions" placeholder="e.g. Acme Co" oninput="liveUpdate()"/><datalist id="client-suggestions"></datalist></div>
         <div class="field"><label>Title</label><input type="text" id="f-title" placeholder="e.g. JP Hoodie – Army" oninput="liveUpdate()"/></div>
         <div class="field"><label>Subtitle</label><input type="text" id="f-subtitle" placeholder="SS4500 · Screen Print" oninput="liveUpdate()"/></div>
@@ -1494,6 +1500,7 @@ let placeSide = 'front';
 function defaultPageInfo() {
   return {
     title:'', subtitle:'', mockupNum:'', pdfName:'', notes:'', client:'',
+    projectId:'', projectNumber:'',
     frontBlankImg:null, frontBlankBase64:null,
     backBlankImg:null,  backBlankBase64:null,
     frontLogoImg:null,  frontLogoBase64:null,
@@ -1576,9 +1583,93 @@ function initDB() {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id',autoIncrement:true});
       });
     };
-    req.onsuccess = e => { db = e.target.result; res(db); setTimeout(()=>syncFromBackend().catch(()=>{}), 800); };
+    req.onsuccess = e => { db = e.target.result; res(db); setTimeout(()=>{ syncFromBackend().catch(()=>{}); loadProjects().catch(()=>{}); }, 800); };
     req.onerror = ()=>rej(req.error);
   });
+}
+
+// ── Project picker (Order Tracker integration) ────────────────────
+window.PROJECTS_CACHE = [];
+async function loadProjects() {
+  const token = getStudioToken(); if (!token) return;
+  try {
+    const res = await fetch(`${BACKEND}/api/orders/projects`, { headers:{'Authorization':'Bearer '+token} });
+    if (!res.ok) return;
+    const data = await res.json();
+    window.PROJECTS_CACHE = data.projects || [];
+    const sel = document.getElementById('f-project');
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Unlinked —</option>' +
+      window.PROJECTS_CACHE.map(p => {
+        const label = `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`;
+        return `<option value="${p._id}">${label.replace(/</g,'&lt;')}</option>`;
+      }).join('');
+    sel.value = current;
+  } catch(e) { /* best-effort */ }
+}
+
+function _firstName(s) { return (s || '').trim().split(/\s+/)[0] || ''; }
+function _nextMockupNum(project) {
+  const projNumRaw = String(project.projectNumber || '').split('-')[0];
+  if (!projNumRaw) return '';
+  const padded = projNumRaw.padStart(6, '0');
+  const base = `#${padded}`;
+  const matches = (project.mockupNumbers || []).filter(m => m && m.startsWith(base));
+  if (matches.length === 0) return `${base}A`;
+  const letters = matches.map(m => m.slice(base.length).toUpperCase()).filter(l => /^[A-Z]$/.test(l));
+  if (letters.length === 0) return `${base}A`;
+  const maxLetter = letters.reduce((a, b) => a > b ? a : b);
+  if (maxLetter === 'Z') return `${base}AA`;
+  return `${base}${String.fromCharCode(maxLetter.charCodeAt(0) + 1)}`;
+}
+
+function onProjectChange() {
+  const sel = document.getElementById('f-project');
+  const pid = sel.value;
+  if (!pid) {
+    saveFormToState();
+    liveUpdate();
+    return;
+  }
+  const proj = window.PROJECTS_CACHE.find(p => p._id === pid);
+  if (!proj) return;
+  // Auto-fill client (only if empty so we don't overwrite a manual entry)
+  const clientEl = document.getElementById('f-client');
+  if (clientEl && !clientEl.value.trim()) {
+    clientEl.value = proj.clientName || proj.companyName || '';
+  }
+  // Auto-fill title: "<First> <Company> Merch"
+  const titleEl = document.getElementById('f-title');
+  if (titleEl && !titleEl.value.trim()) {
+    const first = _firstName(proj.clientName);
+    const co    = (proj.companyName || '').trim();
+    titleEl.value = [first, co, 'Merch'].filter(Boolean).join(' ');
+  }
+  // Auto-fill mockup #: next free letter for that project (only if empty)
+  const numEl = document.getElementById('f-mockupnum');
+  if (numEl && !numEl.value.trim()) {
+    numEl.value = _nextMockupNum(proj);
+  }
+  saveFormToState();
+  liveUpdate();
+}
+
+async function linkMockupToProject(projectId, mockupNumber) {
+  const token = getStudioToken(); if (!token || !projectId || !mockupNumber) return;
+  const proj = window.PROJECTS_CACHE.find(p => p._id === projectId);
+  if (!proj) return;
+  const existing = proj.mockupNumbers || [];
+  if (existing.includes(mockupNumber)) return;
+  const updated = [...existing, mockupNumber];
+  try {
+    await fetch(`${BACKEND}/api/orders/${projectId}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({ mockupNumbers: updated }),
+    });
+    proj.mockupNumbers = updated;
+  } catch(e) { /* best-effort */ }
 }
 // dbSave: adds remoteId then saves locally + fires cloud backup
 function dbSave(store,data){
@@ -1706,6 +1797,13 @@ function saveFormToState() {
   pg.pdfName  = document.getElementById('f-pdfname').value;
   pg.notes    = document.getElementById('f-notes').value;
   pg.client   = (document.getElementById('f-client')?.value || '').trim();
+  pg.projectId = document.getElementById('f-project')?.value || '';
+  if (pg.projectId) {
+    const proj = (window.PROJECTS_CACHE || []).find(p => p._id === pg.projectId);
+    pg.projectNumber = proj ? (proj.projectNumber || '') : '';
+  } else {
+    pg.projectNumber = '';
+  }
   pg.printFront = {
     type: document.getElementById('f-type-front').value,
     dims: document.getElementById('f-dims-front').value,
@@ -1726,6 +1824,8 @@ function loadPageIntoForm() {
   document.getElementById('f-notes').value    = pg.notes    || '';
   const clientEl = document.getElementById('f-client');
   if (clientEl) clientEl.value = pg.client || '';
+  const projEl = document.getElementById('f-project');
+  if (projEl) projEl.value = pg.projectId || '';
   document.getElementById('f-type-front').value = pg.printFront.type || '';
   document.getElementById('f-dims-front').value = pg.printFront.dims || '';
   document.getElementById('f-loc-front').value  = pg.printFront.loc  || '';
@@ -2390,15 +2490,21 @@ async function saveMockupToLibrary() {
   if (!db){toast('Database not ready','error');return;}
   saveFormToState();
   const pg=state.pages[state.currentPage];
-  // Auto-generate mockup number based on existing count if not set
+  // Auto-generate mockup number — prefer the project-aware next letter,
+  // fall back to a sequential number for unlinked mockups.
   if (!pg.mockupNum) {
-    try {
-      const existing = await dbGetAll('mockups');
-      pg.mockupNum = String(existing.length + 1).padStart(3,'0');
-      document.getElementById('f-mockupnum').value = pg.mockupNum;
-    } catch(e) {
-      pg.mockupNum = String(Date.now()).slice(-6);
+    const proj = pg.projectId && (window.PROJECTS_CACHE || []).find(p => p._id === pg.projectId);
+    if (proj) {
+      pg.mockupNum = _nextMockupNum(proj);
+    } else {
+      try {
+        const existing = await dbGetAll('mockups');
+        pg.mockupNum = String(existing.length + 1).padStart(3,'0');
+      } catch(e) {
+        pg.mockupNum = String(Date.now()).slice(-6);
+      }
     }
+    document.getElementById('f-mockupnum').value = pg.mockupNum;
   }
   // Auto-generate PDF filename from title + number if not set
   if (!pg.pdfName && (pg.title || pg.mockupNum)) {
@@ -2413,7 +2519,17 @@ async function saveMockupToLibrary() {
     thumbnail:pg.frontCompositeBase64||pg.frontBlankBase64||null,
     pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null})),
   };
-  try{await dbSave('mockups',snapshot);toast(`"${name}" saved ✓`,'success');refreshClientSuggestions();}
+  try{
+    await dbSave('mockups',snapshot);
+    if (pg.projectId && pg.mockupNum) {
+      // Format mockup number for Order linking: ensure it carries the leading #
+      const formatted = pg.mockupNum.startsWith('#') ? pg.mockupNum : `#${pg.mockupNum}`;
+      await linkMockupToProject(pg.projectId, formatted);
+    }
+    toast(`"${name}" saved ✓`,'success');
+    refreshClientSuggestions();
+    loadProjects().catch(()=>{}); // refresh project cache so next mockup picks next letter
+  }
   catch(e){toast('Save failed','error');}
 }
 
