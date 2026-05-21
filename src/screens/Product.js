@@ -22,10 +22,9 @@ const getTagCode = (tag) => {
 
 const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
-// S&S returns product descriptions as raw HTML (<ul><li>...</li></ul>).
-// Strip the script-y bits before handing to dangerouslySetInnerHTML so a
-// malicious description can't execute. Vendor data is trusted, but cheap
-// defense-in-depth is worth a few lines.
+// S&S returns product descriptions as raw HTML. Strip the script-y bits
+// before handing to dangerouslySetInnerHTML so a malicious description
+// can't execute.
 const sanitizeHTML = (html) => {
   if (typeof html !== 'string') return '';
   return html
@@ -43,8 +42,6 @@ function Product() {
   const id = searchParams.get('styleCode');
   const isMobile = useMediaQuery('(max-width:768px)');
 
-  // Catalog passes the item via navigation state so the page can paint
-  // instantly without waiting on (or being blocked by) the backend fetch.
   const preloadedItem = location.state?.item || null;
 
   const [productVendor, setProductVendor]                     = useState(preloadedItem?.vendor || '');
@@ -53,14 +50,16 @@ function Product() {
   const [productTitle, setProductTitle]                       = useState(preloadedItem?.name || '');
   const [productPriceRangeBottom, setProductPriceRangeBottom] = useState(preloadedItem?.priceRangeBottom || '');
   const [productPriceRangeTop, setProductPriceRangeTop]       = useState(preloadedItem?.priceRangeTop || '');
-  // Sizes default to empty until the backend says otherwise — never
-  // fabricate "S - XL" since that's wrong for toddler/infant/tall items.
   const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState(preloadedItem?.sizeRangeBottom || '');
   const [productSizeRangeTop, setProductSizeRangeTop]         = useState(preloadedItem?.sizeRangeTop || '');
   const [productTag, setProductTag]                           = useState(preloadedItem?.tag || '');
   const [productTagColor, setProductTagColor]                 = useState(getTagCode(preloadedItem?.tag));
   const [productColorOptions, setProductColorOptions]         = useState([]);
   const [productColorCodes, setProductColorCodes]             = useState([]);
+  // Color count from catalog row (S&S /styles/ gives us this even when
+  // per-SKU color detail isn't available). Lets us still tell the user
+  // "Available in N colors" when the swatches haven't loaded.
+  const [productColorCount, setProductColorCount]             = useState(preloadedItem?.colorCount || 0);
   const [productFrontImages, setProductFrontImages]           = useState(preloadedItem?.image ? [preloadedItem.image] : []);
   const [productBackImages, setProductBackImages]             = useState([]);
   const [productDescription, setProductDescription]           = useState('');
@@ -68,7 +67,6 @@ function Product() {
   const [productColor, setProductColor]                       = useState('');
   const [productColorCode, setProductColorCode]               = useState('');
   const [productIndex, setProductIndex]                       = useState(0);
-  // Only show the full-page spinner when we have nothing to display yet.
   const [loading, setLoading]                                 = useState(!preloadedItem);
   const [error, setError]                                     = useState(null);
 
@@ -112,6 +110,7 @@ function Product() {
       const colors = (data.colors || []).map((c) => capitalize(c));
       setProductColorOptions(colors);
       setProductColorCodes(data.colorCodes || []);
+      if (colors.length > 0) setProductColorCount(colors.length);
       if (Array.isArray(data.productFrontImages) && data.productFrontImages.some(Boolean)) {
         setProductFrontImages(data.productFrontImages);
       }
@@ -180,8 +179,9 @@ function Product() {
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
   const hasRealPrice    = Number(productPriceRangeBottom) > 0 || Number(productPriceRangeTop) > 0;
   const hasRealSize     = !!(productSizeRangeBottom && productSizeRangeTop);
+  const hasSwatches     = productColorOptions.length > 0;
+  const colorCountForBadge = hasSwatches ? productColorOptions.length : productColorCount;
 
-  // Error state — only shown when we have nothing to display.
   if (error) {
     return (
       <Box bgcolor="#f5f5f5" minHeight="100vh">
@@ -231,7 +231,6 @@ function Product() {
               alignItems="flex-start"
               sx={{ flex: { md: '0 0 50%' }, width: { xs: '100%', md: 'auto' } }}
             >
-              {/* Thumbnails column */}
               <Stack spacing={1.5} sx={{ flexShrink: 0 }}>
                 <Box
                   onClick={() => setFrontSelected(true)}
@@ -261,7 +260,6 @@ function Product() {
                 )}
               </Stack>
 
-              {/* Main image */}
               <Box sx={{
                 flex: 1, bgcolor: 'white', borderRadius: 2, boxShadow: 1,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -315,7 +313,7 @@ function Product() {
                 *The price will depend on your design and your order size.*
               </Typography>
 
-              {productColorOptions.length > 0 && (
+              {hasSwatches ? (
                 <>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                     <Typography color="black" fontWeight="bold">Color selected:</Typography>
@@ -350,7 +348,16 @@ function Product() {
                     </Box>
                   </Box>
                 </>
-              )}
+              ) : colorCountForBadge > 1 ? (
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography color="black" fontWeight="bold">
+                    Available in {colorCountForBadge} colors
+                  </Typography>
+                  <Typography color="gray" sx={{ fontSize: 12 }}>
+                    — request a quote to see all options
+                  </Typography>
+                </Stack>
+              ) : null}
 
               <Stack spacing={1.5}>
                 <Button
@@ -423,7 +430,6 @@ function Product() {
         )}
       </Container>
 
-      {/* FLOATING QUOTE BAR — mirrors Products.js so tray is visible on the detail page */}
       {selectedProducts.length > 0 && (
         <Box sx={{
           position: 'fixed', bottom: { xs: 12, sm: 20 }, left: '50%', transform: 'translateX(-50%)',
