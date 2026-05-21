@@ -20,6 +20,7 @@ import SettingsOutlinedIcon     from '@mui/icons-material/SettingsOutlined';
 import SortIcon                 from '@mui/icons-material/Sort';
 import AttachFileIcon           from '@mui/icons-material/AttachFile';
 import DownloadIcon             from '@mui/icons-material/Download';
+import CheckCircleOutlineIcon   from '@mui/icons-material/CheckCircleOutline';
 import config from '../../config.json';
 
 const B = {
@@ -41,6 +42,17 @@ const STATUS_META = {
 };
 const STATUS_OPTIONS = Object.entries(STATUS_META).map(([value, m]) => ({ value, ...m }));
 
+// Label to use next to the date based on order status
+const DATE_LABEL = {
+  quoted:        'Quoted',
+  approved:      'Approved',
+  placed:        'Placed',
+  in_production: 'Started',
+  shipped:       'Shipped',
+  delivered:     'Delivered',
+  cancelled:     'Date',
+};
+
 const darkInput = {
   '& .MuiOutlinedInput-root': {
     bgcolor: 'rgba(255,255,255,0.04)', color: B.white,
@@ -55,13 +67,18 @@ const darkInput = {
   input: { color: B.white },
 };
 
+const scrollbar = {
+  '&::-webkit-scrollbar': { width: 5, bgcolor: 'transparent' },
+  '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.10)', borderRadius: 3 },
+};
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
 function emptyOrder(companyName = '', clientName = '') {
   return {
     orderNumber: '', clientName, companyName,
-    status: 'quoted', totalValue: '', cogs: '',
+    status: 'placed', totalValue: '', cogs: '',
     printerName: '', notes: '', mockupNumbers: [],
     items: [], orderDate: '', shipDate: '', deliveredDate: '',
   };
@@ -75,7 +92,7 @@ export default function ClientHubTab({ token, onBack }) {
   const [clients, setClients]               = React.useState([]);
   const [clientsLoading, setClientsLoading] = React.useState(true);
   const [search, setSearch]                 = React.useState('');
-  const [sortMode, setSortMode]             = React.useState('recent'); // 'recent' | 'alpha'
+  const [sortMode, setSortMode]             = React.useState('recent');
   const [selectedKey, setSelectedKey]       = React.useState(null);
 
   const [orders, setOrders]                 = React.useState([]);
@@ -90,14 +107,15 @@ export default function ClientHubTab({ token, onBack }) {
   const [editingOrder, setEditingOrder]       = React.useState(null);
   const [orderSaving, setOrderSaving]         = React.useState(false);
 
-  const [seeding, setSeeding]               = React.useState(false);
   const [settingsAnchor, setSettingsAnchor] = React.useState(null);
-  const [importDialogOpen, setImportDialogOpen] = React.useState(false);
-  const [importJson, setImportJson]             = React.useState('');
-  const [importing, setImporting]               = React.useState(false);
-  const [importResult, setImportResult]         = React.useState(null);
+  const [dedupeOpen, setDedupeOpen]         = React.useState(false);
+  const [convertingId, setConvertingId]     = React.useState(null);
 
   const selectedClient = clients.find(c => c._id === selectedKey);
+
+  // ── Derived: split orders into real (placed+) vs quoted ───────────────────
+  const realOrders  = React.useMemo(() => orders.filter(o => o.status !== 'quoted'), [orders]);
+  const quotedOrders = React.useMemo(() => orders.filter(o => o.status === 'quoted'), [orders]);
 
   // ── Data loading ───────────────────────────────────────────────────────────
   const loadClients = React.useCallback(async () => {
@@ -145,6 +163,7 @@ export default function ClientHubTab({ token, onBack }) {
   }, [selectedClient, loadClientData]);
 
   const handleSelectClient = (id) => {
+    if (id === selectedKey) return;
     setSelectedKey(id); setActiveTab(0);
     setOrders([]); setQuotes([]); setMockups([]);
   };
@@ -219,30 +238,25 @@ export default function ClientHubTab({ token, onBack }) {
     } catch (e) { alert(e?.response?.data?.message || 'Update failed'); }
   };
 
-  // ── Import Drive quotes ────────────────────────────────────────────────────
-  const runImportQuotes = async () => {
-    setImporting(true); setImportResult(null);
+  // ── Convert quoted order → placed ─────────────────────────────────────────
+  const convertToOrder = async (order) => {
+    setConvertingId(order._id);
     try {
-      const parsed = JSON.parse(importJson);
-      const r = await axios.post(`${base}/orders/import-quotes`, parsed, authHdr);
-      setImportResult(r.data);
-      setImportJson('');
+      let nextNum = order.orderNumber || '';
+      if (!nextNum) {
+        const r = await axios.get(`${base}/orders/next-number`, authHdr);
+        nextNum = r.data?.next || '';
+      }
+      await axios.put(`${base}/orders/${order._id}`, {
+        status: 'placed',
+        orderNumber: nextNum,
+        orderDate: order.orderDate || new Date().toISOString().slice(0, 10),
+      }, authHdr);
       await loadClients();
+      if (selectedClient) await loadClientData(selectedClient);
     } catch (e) {
-      setImportResult({ error: e?.response?.data?.message || e.message || 'Failed' });
-    } finally { setImporting(false); }
-  };
-
-  // ── Seed historical ────────────────────────────────────────────────────────
-  const runSeedHistorical = async () => {
-    setSeeding(true); setSettingsAnchor(null);
-    try {
-      const r = await axios.post(`${base}/orders/seed-historical`, {}, authHdr);
-      await loadClients();
-      alert(`Done! Added ${r.data.created} orders (${r.data.skipped} already existed).`);
-    } catch (e) {
-      alert(e?.response?.data?.message || 'Import failed');
-    } finally { setSeeding(false); }
+      alert(e?.response?.data?.message || 'Convert failed');
+    } finally { setConvertingId(null); }
   };
 
   // ── Filtered + sorted client list ─────────────────────────────────────────
@@ -260,11 +274,9 @@ export default function ClientHubTab({ token, onBack }) {
         return na.localeCompare(nb);
       });
     }
-    // 'recent' order already comes from backend (sorted by lastActivity desc)
     return list;
   }, [clients, search, sortMode]);
 
-  // Build a name→thumbnail map for mockup chips
   const mockupThumbnailMap = React.useMemo(() => {
     const map = {};
     mockups.forEach(m => { if (m.name) map[m.name] = m.thumbnail; });
@@ -326,27 +338,13 @@ export default function ClientHubTab({ token, onBack }) {
           <List dense disablePadding>
             <ListItem
               button
-              onClick={runSeedHistorical}
-              disabled={seeding}
-              sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
-            >
-              {seeding && <CircularProgress size={14} sx={{ mr: 1.5, color: B.green }} />}
-              <ListItemText
-                primary="Import historical orders"
-                primaryTypographyProps={{ sx: { color: B.white, fontSize: 13 } }}
-                secondary="Idempotent — safe to run multiple times"
-                secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
-              />
-            </ListItem>
-            <ListItem
-              button
-              onClick={() => { setSettingsAnchor(null); setImportDialogOpen(true); setImportResult(null); }}
+              onClick={() => { setSettingsAnchor(null); setDedupeOpen(true); }}
               sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
             >
               <ListItemText
-                primary="Import Drive quotes"
+                primary="Review duplicates"
                 primaryTypographyProps={{ sx: { color: B.white, fontSize: 13 } }}
-                secondary="Paste JSON from the Apps Script export"
+                secondary="Merge or rename company names"
                 secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
               />
             </ListItem>
@@ -360,6 +358,7 @@ export default function ClientHubTab({ token, onBack }) {
         <Box sx={{
           width: { xs: 220, sm: 270, md: 300 }, flexShrink: 0,
           borderRight: `1px solid ${B.border}`, overflowY: 'auto',
+          ...scrollbar,
         }}>
           {clientsLoading ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
@@ -369,7 +368,7 @@ export default function ClientHubTab({ token, onBack }) {
             <Box sx={{ textAlign: 'center', py: 8, color: B.muted, px: 2 }}>
               <PeopleOutlineIcon sx={{ fontSize: 36, opacity: 0.3, mb: 1 }} />
               <Typography sx={{ fontSize: 13 }}>
-                {search ? 'No matches.' : 'No clients yet. Use ⚙ → Import historical orders.'}
+                {search ? 'No matches.' : 'No clients yet.'}
               </Typography>
             </Box>
           ) : (
@@ -385,7 +384,7 @@ export default function ClientHubTab({ token, onBack }) {
         </Box>
 
         {/* Right panel — detail */}
-        <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <Box sx={{ flex: 1, overflowY: 'auto', ...scrollbar }}>
           {!selectedClient ? (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.muted, flexDirection: 'column', gap: 1 }}>
               <PeopleOutlineIcon sx={{ fontSize: 48, opacity: 0.2 }} />
@@ -422,14 +421,14 @@ export default function ClientHubTab({ token, onBack }) {
                   '& .MuiTabs-indicator': { bgcolor: B.green },
                 }}
               >
-                <Tab label={`Orders (${orders.length})`} icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
-                <Tab label={`Quotes (${quotes.length})`} icon={<RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                <Tab label={`Orders (${realOrders.length})`} icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                <Tab label={`Quotes (${quotedOrders.length + quotes.length})`} icon={<RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
                 <Tab label={`Mockups (${mockups.length})`} icon={<DesignServicesIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
               </Tabs>
 
               {activeTab === 0 && (
                 <OrdersTab
-                  orders={orders} loading={ordersLoading}
+                  orders={realOrders} loading={ordersLoading}
                   mockupThumbnailMap={mockupThumbnailMap}
                   onNew={openNewOrder} onEdit={openEditOrder}
                   onDelete={deleteOrderById} onStatusChange={updateOrderStatus}
@@ -437,7 +436,17 @@ export default function ClientHubTab({ token, onBack }) {
                   token={token} base={base} authHdr={authHdr}
                 />
               )}
-              {activeTab === 1 && <QuotesTab quotes={quotes} loading={quotesLoading} />}
+              {activeTab === 1 && (
+                <QuotesTab
+                  quotedOrders={quotedOrders} quotes={quotes}
+                  loading={quotesLoading || ordersLoading}
+                  mockupThumbnailMap={mockupThumbnailMap}
+                  onConvert={convertToOrder} convertingId={convertingId}
+                  onEdit={openEditOrder} onDelete={deleteOrderById}
+                  onStatusChange={updateOrderStatus} onMockupClick={openMockupInStudio}
+                  token={token} base={base} authHdr={authHdr}
+                />
+              )}
               {activeTab === 2 && (
                 <MockupsTab
                   mockups={mockups} loading={mockupsLoading}
@@ -449,49 +458,15 @@ export default function ClientHubTab({ token, onBack }) {
         </Box>
       </Box>
 
-      {/* Import Drive Quotes Dialog */}
-      <Dialog open={importDialogOpen} onClose={() => { setImportDialogOpen(false); setImportResult(null); }} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-        <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 16, pb: 1 }}>
-          Import Drive Quotes
-        </DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: B.muted, fontSize: 13, mb: 1.5 }}>
-            Run the Google Apps Script, then paste the JSON output below.
-          </Typography>
-          {importResult ? (
-            <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: importResult.error ? 'rgba(248,113,113,0.1)' : 'rgba(74,222,128,0.1)', border: `1px solid ${importResult.error ? '#f87171' : B.green}` }}>
-              {importResult.error ? (
-                <Typography sx={{ color: '#f87171', fontSize: 13 }}>Error: {importResult.error}</Typography>
-              ) : (
-                <>
-                  <Typography sx={{ color: B.green, fontWeight: 700, fontSize: 15 }}>Done!</Typography>
-                  <Typography sx={{ color: B.white, fontSize: 13 }}>{importResult.created} quotes imported, {importResult.skipped} already existed.</Typography>
-                </>
-              )}
-            </Box>
-          ) : (
-            <TextField
-              multiline minRows={8} maxRows={16} fullWidth
-              placeholder={'[\n  {\n    "companyName": "Lean Gang Merch",\n    ...\n  }\n]'}
-              value={importJson}
-              onChange={e => setImportJson(e.target.value)}
-              sx={{ ...darkInput, fontFamily: 'monospace', fontSize: 12 }}
-            />
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 2.5, pb: 2 }}>
-          <Button onClick={() => { setImportDialogOpen(false); setImportResult(null); }} sx={{ color: B.muted }}>
-            {importResult && !importResult.error ? 'Close' : 'Cancel'}
-          </Button>
-          {!importResult && (
-            <Button onClick={runImportQuotes} disabled={importing || !importJson.trim()} variant="contained"
-              sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>
-              {importing ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : 'Import'}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+      {/* Dedupe Dialog */}
+      <DedupeDialog
+        open={dedupeOpen}
+        onClose={() => setDedupeOpen(false)}
+        clients={clients}
+        base={base}
+        authHdr={authHdr}
+        onDone={() => { setDedupeOpen(false); loadClients(); if (selectedClient) loadClientData(selectedClient); }}
+      />
 
       {/* Order Dialog */}
       <OrderDialog
@@ -593,7 +568,71 @@ function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelet
   );
 }
 
-function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange, onMockupClick, base, authHdr }) {
+// ─── Quotes Tab ───────────────────────────────────────────────────────────────
+function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConvert, convertingId, onEdit, onDelete, onStatusChange, onMockupClick, token, base, authHdr }) {
+  if (loading) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>;
+
+  const hasContent = quotedOrders.length > 0 || quotes.length > 0;
+  if (!hasContent) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 6, color: B.muted }}>
+        <RequestQuoteOutlinedIcon sx={{ fontSize: 40, opacity: 0.3, mb: 1 }} />
+        <Typography sx={{ fontSize: 13 }}>No quotes yet.</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Stack spacing={1.5}>
+      {/* Quoted orders from DB — shown first with convert button */}
+      {quotedOrders.map(order => (
+        <OrderCard
+          key={order._id}
+          order={order}
+          mockupThumbnailMap={mockupThumbnailMap}
+          onEdit={() => onEdit(order)}
+          onDelete={() => onDelete(order._id)}
+          onStatusChange={status => onStatusChange(order._id, status)}
+          onMockupClick={onMockupClick}
+          onConvert={() => onConvert(order)}
+          converting={convertingId === order._id}
+          token={token} base={base} authHdr={authHdr}
+        />
+      ))}
+
+      {/* Studio Quoter quotes — read-only */}
+      {quotes.length > 0 && (
+        <>
+          {quotedOrders.length > 0 && (
+            <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, pt: 1 }}>
+              Studio Quoter
+            </Typography>
+          )}
+          {quotes.map(q => {
+            const garments = (q.garmentGroups || []).map(g => g.garmentType).filter(Boolean).join(', ');
+            return (
+              <Paper key={q._id} sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, p: 1.5 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
+                  <Box>
+                    <Typography sx={{ color: B.white, fontWeight: 600, fontSize: 14 }}>
+                      {q.companyName || q.clientName || 'Unnamed'}
+                    </Typography>
+                    <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                      {garments || 'No garments'} · {fmtDate(q.date)}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ color: B.muted, fontSize: 11, fontFamily: 'monospace' }}>{q._id?.slice(-6)}</Typography>
+                </Stack>
+              </Paper>
+            );
+          })}
+        </>
+      )}
+    </Stack>
+  );
+}
+
+function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange, onMockupClick, onConvert, converting, base, authHdr }) {
   const [statusOpen, setStatusOpen]   = React.useState(false);
   const [filesOpen, setFilesOpen]     = React.useState(false);
   const [uploading, setUploading]     = React.useState(false);
@@ -630,6 +669,9 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
   };
 
   const sm = STATUS_META[order.status] || STATUS_META.quoted;
+  const dateLabel = DATE_LABEL[order.status] || 'Date';
+  // Hide files section for drive-imported quotes that have no files attached
+  const showFiles = files.length > 0 || order.importedFrom !== 'gdrive_quoter';
 
   return (
     <Paper sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, p: 2 }}>
@@ -661,6 +703,20 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
               {fmt(order.totalValue)}
             </Typography>
           )}
+          {onConvert && (
+            <Tooltip title="Convert to order">
+              <Button
+                size="small"
+                onClick={onConvert}
+                disabled={converting}
+                startIcon={converting ? <CircularProgress size={12} sx={{ color: B.greenDk }} /> : <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />}
+                variant="contained"
+                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, fontSize: 11, px: 1, py: 0.4, minWidth: 0, mr: 0.5 }}
+              >
+                {converting ? '' : 'Convert'}
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip title="Edit"><IconButton size="small" onClick={onEdit} sx={{ color: B.muted, '&:hover': { color: B.green } }}><EditOutlinedIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
           <Tooltip title="Delete"><IconButton size="small" onClick={onDelete} sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         </Stack>
@@ -669,9 +725,9 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
       {/* Meta row */}
       <Stack direction="row" spacing={2} mt={0.8} flexWrap="wrap" useFlexGap>
         {order.printerName && <MetaItem label="Printer" value={order.printerName} />}
-        {order.orderDate    && <MetaItem label="Ordered"   value={fmtDate(order.orderDate)} />}
-        {order.shipDate     && <MetaItem label="Ship"      value={fmtDate(order.shipDate)} />}
-        {order.deliveredDate && <MetaItem label="Delivered" value={fmtDate(order.deliveredDate)} />}
+        {order.orderDate    && <MetaItem label={dateLabel}  value={fmtDate(order.orderDate)} />}
+        {order.shipDate     && <MetaItem label="Ship"        value={fmtDate(order.shipDate)} />}
+        {order.deliveredDate && <MetaItem label="Delivered"  value={fmtDate(order.deliveredDate)} />}
       </Stack>
 
       {/* Items */}
@@ -716,59 +772,61 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
 
       {order.notes && <Typography sx={{ color: B.muted, fontSize: 12, mt: 0.8, fontStyle: 'italic' }}>{order.notes}</Typography>}
 
-      {/* Files section */}
-      <Box mt={1}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Button
-            size="small"
-            startIcon={<AttachFileIcon sx={{ fontSize: 14 }} />}
-            onClick={() => setFilesOpen(f => !f)}
-            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 600, px: 0.5, minWidth: 0, '&:hover': { color: B.green } }}
-          >
-            Files {files.length > 0 ? `(${files.length})` : ''}
-          </Button>
-          <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
-          {filesOpen && (
+      {/* Files section — hidden for drive imports with no files */}
+      {showFiles && (
+        <Box mt={1}>
+          <Stack direction="row" alignItems="center" spacing={1}>
             <Button
               size="small"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              startIcon={uploading ? <CircularProgress size={12} /> : <AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
-              sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 600, px: 0.5, minWidth: 0 }}
+              startIcon={<AttachFileIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setFilesOpen(f => !f)}
+              sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 600, px: 0.5, minWidth: 0, '&:hover': { color: B.green } }}
             >
-              Upload
+              Files {files.length > 0 ? `(${files.length})` : ''}
             </Button>
-          )}
-        </Stack>
-        {filesOpen && files.length > 0 && (
-          <Stack spacing={0.5} mt={0.5} pl={0.5}>
-            {files.map((f, i) => (
-              <Stack key={i} direction="row" alignItems="center" spacing={0.5}>
-                <Typography sx={{ fontSize: 11, color: B.muted }}>{fileIcon(f.mimetype)}</Typography>
-                <Typography sx={{ fontSize: 11, color: B.white, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.originalName}
-                </Typography>
-                <Tooltip title="Download">
-                  <IconButton
-                    size="small"
-                    component="a"
-                    href={`${base}/orders/${order._id}/files/${f.filename}`}
-                    target="_blank"
-                    sx={{ color: B.muted, '&:hover': { color: B.green }, p: 0.3 }}
-                  >
-                    <DownloadIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Remove">
-                  <IconButton size="small" onClick={() => handleFileDelete(f.filename)} sx={{ color: B.muted, '&:hover': { color: '#f87171' }, p: 0.3 }}>
-                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            ))}
+            <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+            {filesOpen && (
+              <Button
+                size="small"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                startIcon={uploading ? <CircularProgress size={12} /> : <AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+                sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 600, px: 0.5, minWidth: 0 }}
+              >
+                Upload
+              </Button>
+            )}
           </Stack>
-        )}
-      </Box>
+          {filesOpen && files.length > 0 && (
+            <Stack spacing={0.5} mt={0.5} pl={0.5}>
+              {files.map((f, i) => (
+                <Stack key={i} direction="row" alignItems="center" spacing={0.5}>
+                  <Typography sx={{ fontSize: 11, color: B.muted }}>{fileIcon(f.mimetype)}</Typography>
+                  <Typography sx={{ fontSize: 11, color: B.white, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.originalName}
+                  </Typography>
+                  <Tooltip title="Download">
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={`${base}/orders/${order._id}/files/${f.filename}`}
+                      target="_blank"
+                      sx={{ color: B.muted, '&:hover': { color: B.green }, p: 0.3 }}
+                    >
+                      <DownloadIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Remove">
+                    <IconButton size="small" onClick={() => handleFileDelete(f.filename)} sx={{ color: B.muted, '&:hover': { color: '#f87171' }, p: 0.3 }}>
+                      <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      )}
     </Paper>
   );
 }
@@ -779,41 +837,6 @@ function MetaItem({ label, value }) {
       <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{label} </Typography>
       <Typography component="span" sx={{ color: B.white, fontSize: 12 }}>{value}</Typography>
     </Box>
-  );
-}
-
-// ─── Quotes Tab ───────────────────────────────────────────────────────────────
-function QuotesTab({ quotes, loading }) {
-  if (loading) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>;
-  if (quotes.length === 0) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6, color: B.muted }}>
-        <RequestQuoteOutlinedIcon sx={{ fontSize: 40, opacity: 0.3, mb: 1 }} />
-        <Typography sx={{ fontSize: 13 }}>No quotes found. Quotes saved in the Studio Quoter will appear here.</Typography>
-      </Box>
-    );
-  }
-  return (
-    <Stack spacing={1}>
-      {quotes.map(q => {
-        const garments = (q.garmentGroups || []).map(g => g.garmentType).filter(Boolean).join(', ');
-        return (
-          <Paper key={q._id} sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, p: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
-              <Box>
-                <Typography sx={{ color: B.white, fontWeight: 600, fontSize: 14 }}>
-                  {q.companyName || q.clientName || 'Unnamed'}
-                </Typography>
-                <Typography sx={{ color: B.muted, fontSize: 12 }}>
-                  {garments || 'No garments'} · {fmtDate(q.date)}
-                </Typography>
-              </Box>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontFamily: 'monospace' }}>{q._id?.slice(-6)}</Typography>
-            </Stack>
-          </Paper>
-        );
-      })}
-    </Stack>
   );
 }
 
@@ -855,6 +878,109 @@ function MockupsTab({ mockups, loading, onMockupClick }) {
   );
 }
 
+// ─── Dedupe Dialog ────────────────────────────────────────────────────────────
+function DedupeDialog({ open, onClose, clients, base, authHdr, onDone }) {
+  const [selected, setSelected]   = React.useState('');
+  const [renameTo, setRenameTo]   = React.useState('');
+  const [working, setWorking]     = React.useState(false);
+
+  React.useEffect(() => { if (!open) { setSelected(''); setRenameTo(''); } }, [open]);
+
+  const allNames = React.useMemo(
+    () => [...new Set(clients.map(c => c.companyName || c.clientName).filter(Boolean))].sort(),
+    [clients]
+  );
+
+  const handleMerge = async () => {
+    if (!selected || !renameTo.trim()) return;
+    setWorking(true);
+    try {
+      await axios.post(`${base}/orders/rename-company`, { from: selected, to: renameTo.trim() }, authHdr);
+      onDone();
+    } catch (e) { alert(e?.response?.data?.message || 'Failed'); }
+    finally { setWorking(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    if (!window.confirm(`Delete ALL orders for "${selected}"? This cannot be undone.`)) return;
+    setWorking(true);
+    try {
+      await axios.delete(`${base}/orders/by-company/${encodeURIComponent(selected)}`, authHdr);
+      onDone();
+    } catch (e) { alert(e?.response?.data?.message || 'Failed'); }
+    finally { setWorking(false); }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 16, pb: 1 }}>
+        Review Duplicates
+      </DialogTitle>
+      <DialogContent>
+        <Typography sx={{ color: B.muted, fontSize: 13, mb: 2 }}>
+          Select a company to rename it or merge it into another.
+        </Typography>
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel sx={{ color: B.muted }}>Company to change</InputLabel>
+          <Select
+            label="Company to change"
+            value={selected}
+            onChange={e => { setSelected(e.target.value); setRenameTo(''); }}
+            sx={{ bgcolor: 'rgba(255,255,255,0.04)', color: B.white, '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' }, '& .MuiSelect-icon': { color: B.muted } }}
+          >
+            {allNames.map(n => <MenuItem key={n} value={n} sx={{ fontSize: 13 }}>{n}</MenuItem>)}
+          </Select>
+        </FormControl>
+
+        {selected && (
+          <>
+            <TextField
+              size="small" fullWidth label="Rename / merge into"
+              value={renameTo}
+              onChange={e => setRenameTo(e.target.value)}
+              placeholder="Type new or existing name"
+              sx={{ ...darkInput, mb: 1.5 }}
+            />
+            <Typography sx={{ color: B.muted, fontSize: 11, mb: 0.75 }}>Or click an existing name:</Typography>
+            <Stack direction="row" flexWrap="wrap" gap={0.5}>
+              {allNames.filter(n => n !== selected).map(n => (
+                <Chip
+                  key={n} label={n} size="small" onClick={() => setRenameTo(n)}
+                  sx={{
+                    height: 22, fontSize: 11, cursor: 'pointer',
+                    bgcolor: renameTo === n ? 'rgba(74,222,128,0.15)' : B.panelHi,
+                    color: renameTo === n ? B.green : B.muted,
+                    border: `1px solid ${renameTo === n ? B.green : B.border}`,
+                  }}
+                />
+              ))}
+            </Stack>
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 2.5, pb: 2, gap: 1 }}>
+        <Button onClick={onClose} sx={{ color: B.muted }}>Close</Button>
+        {selected && (
+          <Button onClick={handleDelete} disabled={working}
+            sx={{ color: '#f87171', '&:hover': { bgcolor: 'rgba(248,113,113,0.08)' } }}>
+            Delete all orders
+          </Button>
+        )}
+        <Button
+          onClick={handleMerge}
+          disabled={working || !renameTo.trim() || !selected}
+          variant="contained"
+          sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}
+        >
+          {working ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : 'Merge / Rename'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ─── Order Dialog ─────────────────────────────────────────────────────────────
 function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }) {
   const [mockupPickerOpen, setMockupPickerOpen] = React.useState(false);
@@ -887,7 +1013,7 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
               {field('Order #', 'orderNumber', { sx: { ...darkInput, maxWidth: 160 } })}
               <FormControl size="small" fullWidth>
                 <InputLabel sx={{ color: B.muted }}>Status</InputLabel>
-                <Select label="Status" value={order.status || 'quoted'} onChange={e => onChange({ status: e.target.value })}
+                <Select label="Status" value={order.status || 'placed'} onChange={e => onChange({ status: e.target.value })}
                   sx={{ bgcolor: 'rgba(255,255,255,0.04)', color: B.white, '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' }, '& .MuiSelect-icon': { color: B.muted } }}>
                   {STATUS_OPTIONS.map(s => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                 </Select>
@@ -951,12 +1077,12 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
         <DialogContent>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 1 }}>
             {mockups.map(m => {
-              const selected = currentMockupNums.includes(m.name);
+              const sel = currentMockupNums.includes(m.name);
               return (
                 <Box key={m._id} onClick={() => toggleMockup(m.name)} sx={{
                   cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden',
-                  border: `2px solid ${selected ? B.green : B.border}`,
-                  opacity: selected ? 1 : 0.7, transition: 'all 0.12s',
+                  border: `2px solid ${sel ? B.green : B.border}`,
+                  opacity: sel ? 1 : 0.7, transition: 'all 0.12s',
                   '&:hover': { opacity: 1, borderColor: B.green },
                 }}>
                   {m.thumbnail ? (
@@ -966,8 +1092,8 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
                       <DesignServicesIcon sx={{ color: B.muted, fontSize: 28, opacity: 0.4 }} />
                     </Box>
                   )}
-                  <Box sx={{ p: 0.8, bgcolor: selected ? 'rgba(74,222,128,0.1)' : 'transparent' }}>
-                    <Typography sx={{ color: selected ? B.green : B.white, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <Box sx={{ p: 0.8, bgcolor: sel ? 'rgba(74,222,128,0.1)' : 'transparent' }}>
+                    <Typography sx={{ color: sel ? B.green : B.white, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.name || 'Untitled'}
                     </Typography>
                   </Box>
