@@ -261,7 +261,9 @@ export default function Products() {
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
 
-        // Lazily fetch images — S&S /styles/ doesn't include colorFrontImage
+        // Lazily fetch images for styles missing one. With the new S&S
+        // backend fix this set should usually be empty, but the fallback
+        // is harmless when /styles/ briefly omits the image field.
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
           fetch(`${config.backendUrl}/api/products/ss/images?styles=${needsImage.join(',')}`)
@@ -270,7 +272,7 @@ export default function Products() {
               if (!images || !Object.keys(images).length) return;
               setProducts((prev) => prev.map((p) => (images[p.style] ? { ...p, image: images[p.style] } : p)));
             })
-            .catch(() => {}); // images are optional; hanger placeholder shown on failure
+            .catch(() => {});
         }
       })
       .catch(() => setError('Could not reach the catalog server. Check your connection and try again.'))
@@ -449,7 +451,10 @@ export default function Products() {
                       <ProductCard
                         item={item} isSelected={isSel}
                         onToggle={() => toggleSelected(item)}
-                        onNavigate={() => navigate('/product?styleCode=' + item.style)}
+                        onNavigate={() => navigate(
+                          '/product?styleCode=' + encodeURIComponent(item.style),
+                          { state: { item } },
+                        )}
                       />
                     </Grid>
                   );
