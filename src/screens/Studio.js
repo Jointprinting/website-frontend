@@ -64,7 +64,7 @@ import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
-import ClientHubTab from './studio/ClientHubTab';
+import OrderTracker from './studio/OrderTracker';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -2005,7 +2005,7 @@ function StudioBody({ token, onLogout }) {
 
 
   if (view === 'clients') {
-    return <ClientHubTab token={token} onBack={() => setView('hub')} />;
+    return <OrderTracker token={token} onBack={() => setView('hub')} />;
   }
 
   return (
