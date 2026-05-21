@@ -250,9 +250,22 @@ export default function Products() {
           setError(d.message);
           return;
         }
-        setProducts(d.products || []);
+        const prods = d.products || [];
+        setProducts(prods);
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
+
+        // Lazily fetch images — S&S /styles/ doesn't include colorFrontImage
+        const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
+        if (needsImage.length > 0) {
+          fetch(`${config.backendUrl}/api/products/ss/images?styles=${needsImage.join(',')}`)
+            .then((r) => r.json())
+            .then(({ images }) => {
+              if (!images || !Object.keys(images).length) return;
+              setProducts((prev) => prev.map((p) => (images[p.style] ? { ...p, image: images[p.style] } : p)));
+            })
+            .catch(() => {}); // images are optional; hanger placeholder shown on failure
+        }
       })
       .catch(() => setError('Could not reach the catalog server. Check your connection and try again.'))
       .finally(() => setLoading(false));
