@@ -1770,8 +1770,9 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay, notice }) {
+function HubCard({ tool, onClick, delay, notice, badge }) {
   const { label, Icon } = tool;
+  const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
     <Grow in timeout={400 + delay}>
       <Paper
@@ -1807,13 +1808,29 @@ function HubCard({ tool, onClick, delay, notice }) {
             }}
           >
             <Icon sx={{ fontSize: 20 }} />
-            {notice && (
+            {notice && !badge && (
               <Box sx={{
                 position: 'absolute', top: -3, right: -3,
                 width: 10, height: 10, borderRadius: '50%',
                 bgcolor: BRAND.green,
                 boxShadow: '0 0 6px rgba(74,222,128,0.6)',
               }} />
+            )}
+            {badge > 0 && (
+              <Box sx={{
+                position: 'absolute', top: -6, right: -6,
+                minWidth: 18, height: 18, px: '5px',
+                borderRadius: '9px',
+                bgcolor: '#ff3b30',
+                color: '#fff',
+                fontSize: 11, fontWeight: 800,
+                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                lineHeight: 1,
+                boxShadow: '0 0 0 2px ' + BRAND.panel + ', 0 2px 6px rgba(255,59,48,0.45)',
+              }}>
+                {badgeText}
+              </Box>
             )}
           </Box>
           <MuiTypography fontWeight={700} sx={{
@@ -1836,7 +1853,7 @@ function HubCard({ tool, onClick, delay, notice }) {
   );
 }
 
-function Hub({ onPick, sweepNeeded }) {
+function Hub({ onPick, sweepNeeded, unseenInquiries }) {
   let cardIdx = 0;
   return (
     <Stack spacing={3}>
@@ -1858,6 +1875,7 @@ function Hub({ onPick, sweepNeeded }) {
           }}>
             {group.tools.map((t) => {
               const showNotice = t.id === 'jpwrecon' && sweepNeeded;
+              const badge = t.id === 'submissions' ? (unseenInquiries || 0) : 0;
               const card = (
                 <HubCard
                   key={t.id}
@@ -1865,6 +1883,7 @@ function Hub({ onPick, sweepNeeded }) {
                   delay={cardIdx * 60}
                   onClick={() => onPick(t.id)}
                   notice={showNotice ? "Today's sweep not run yet" : null}
+                  badge={badge}
                 />
               );
               cardIdx += 1;
@@ -1890,6 +1909,7 @@ function StudioBody({ token, onLogout }) {
   // Lead Recon card. Read once on hub view; cheap enough not to bother
   // polling.
   const [sweepNeeded, setSweepNeeded] = React.useState(false);
+  const [unseenInquiries, setUnseenInquiries] = React.useState(0);
   React.useEffect(() => {
     if (view !== 'hub') return;
     let cancelled = false;
@@ -1910,6 +1930,10 @@ function StudioBody({ token, onLogout }) {
         setSweepNeeded(!usedToday);
       })
       .catch(() => { /* if endpoint fails, hide the dot */ });
+    axios.get(`${config.backendUrl}/api/submissions/unseen-count`,
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
+      .then((res) => { if (!cancelled) setUnseenInquiries(res.data?.count || 0); })
+      .catch(() => { /* silent — bubble just won't show */ });
     return () => { cancelled = true; };
   }, [view, token]);
 
@@ -1917,6 +1941,12 @@ function StudioBody({ token, onLogout }) {
     if (id === 'mockup') {
       window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
       return;
+    }
+    if (id === 'submissions' && unseenInquiries > 0) {
+      setUnseenInquiries(0);
+      axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, {},
+        { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
+        .catch(() => { /* best-effort; badge already cleared locally */ });
     }
     setView(id);
   };
@@ -2008,7 +2038,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} />
+          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} unseenInquiries={unseenInquiries} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
