@@ -1780,7 +1780,7 @@ function HubCard({ tool, onClick, delay, notice }) {
         sx={{
           cursor: 'pointer',
           bgcolor: BRAND.panel,
-          border: `1px solid ${notice ? BRAND.green : BRAND.border}`,
+          border: `1px solid ${BRAND.border}`,
           borderRadius: 2,
           p: { xs: 1.75, sm: 2 },
           transition: 'all 0.18s ease',
@@ -1816,20 +1816,11 @@ function HubCard({ tool, onClick, delay, notice }) {
               }} />
             )}
           </Box>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <MuiTypography fontWeight={700} sx={{ color: BRAND.white, fontSize: 14.5 }}>
-              {label}
-            </MuiTypography>
-            {notice && (
-              <MuiTypography sx={{
-                color: BRAND.green, fontSize: 11, fontWeight: 600,
-                fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-                mt: 0.2,
-              }}>
-                {notice}
-              </MuiTypography>
-            )}
-          </Box>
+          <MuiTypography fontWeight={700} sx={{
+            color: BRAND.white, fontSize: 14.5, flexGrow: 1,
+          }}>
+            {label}
+          </MuiTypography>
           <ChevronRightIcon
             className="hub-arrow"
             sx={{
@@ -1908,9 +1899,17 @@ function StudioBody({ token, onLogout }) {
         if (cancelled) return;
         const s = res.data || {};
         const today = new Date().toISOString().slice(0, 10);
-        const finishedToday = s.status === 'completed' && s.finished_at &&
-          new Date(s.finished_at).toISOString().slice(0, 10) === today;
-        setSweepNeeded(!finishedToday);
+        // Counts as "ran today" if it finished today AND did at least one
+        // pair, regardless of whether status is 'completed' or 'stopped'
+        // (stopped happens when daily budget halts a sweep mid-run — still
+        // counts). 'failed' or zero-pair runs don't count.
+        const finishedDate = s.finished_at
+          ? new Date(s.finished_at).toISOString().slice(0, 10)
+          : null;
+        const ranToday = finishedDate === today
+          && ['completed', 'stopped'].includes(s.status)
+          && (s.pairs_done || 0) > 0;
+        setSweepNeeded(!ranToday);
       })
       .catch(() => { /* if the endpoint fails, just don't show the badge */ });
     return () => { cancelled = true; };
