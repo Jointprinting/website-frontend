@@ -112,8 +112,14 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         <Button
           variant={isSelected ? 'contained' : 'outlined'} size="small" fullWidth
           sx={{
-            mt: 1.25, textTransform: 'none', borderRadius: 999, fontSize: { xs: 12, sm: 13 },
-            ...(isSelected ? { bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' } } : {}),
+            mt: 1.25, textTransform: 'none', borderRadius: 999,
+            fontSize: { xs: 12, sm: 13 }, fontWeight: 600,
+            transition: 'all 140ms ease',
+            '&:active': { transform: 'scale(0.96)' },
+            ...(isSelected
+              ? { bgcolor: '#1a3d2b', borderColor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' } }
+              : { borderColor: '#4ade80', borderWidth: 2, color: '#1a3d2b',
+                  '&:hover': { bgcolor: 'rgba(74,222,128,0.1)', borderColor: '#22c55e', borderWidth: 2 } }),
           }}
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
         >
