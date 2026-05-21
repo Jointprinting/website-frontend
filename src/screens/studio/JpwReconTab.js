@@ -1046,7 +1046,12 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
           </Alert>
         )}
 
-        {(isRunning || isFinished || justStarted) && status && (
+        {/* Progress card — hide entirely when blocked. If today's budget
+            is used up and the last sweep state is a no-op "0/1 STOPPED"
+            (the user clicked when nothing could run), showing that as a
+            "progress card" is misleading. The green banner above already
+            tells them what happened. */}
+        {!blocked && (isRunning || isFinished || justStarted) && status && (
           <Paper elevation={0} sx={{
             bgcolor: TERM.panel, border: `1px solid ${isRunning ? TERM.green : TERM.borderDim}`,
             borderRadius: 1.5, p: 1.5, mb: 2,
