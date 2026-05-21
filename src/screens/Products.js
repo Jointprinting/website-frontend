@@ -35,9 +35,7 @@ const GARMENT_CATEGORIES = [
   { label: 'Hats & Caps',     value: 'Hats' },
 ];
 
-// "All fits" is the no-filter option; "Unisex" is the S&S-classified
-// fit. Old label was "Everyone" which read like a sub-category alongside
-// the actual fits.
+// "All fits" is the no-filter option; "Unisex" is the S&S-classified fit.
 const GENDER_TYPES = [
   { label: 'All fits',  value: '' },
   { label: "Men's",     value: 'Male' },
@@ -270,9 +268,8 @@ export default function Products() {
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
 
-        // Lazily fetch images for styles missing one. With the new S&S
-        // backend fix this set should usually be empty, but the fallback
-        // is harmless when /styles/ briefly omits the image field.
+        // Lazily backfill missing images. With the new backend most cards
+        // already have one; this is just a fallback.
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
           fetch(`${config.backendUrl}/api/products/ss/images?styles=${needsImage.join(',')}`)
@@ -280,6 +277,25 @@ export default function Products() {
             .then(({ images }) => {
               if (!images || !Object.keys(images).length) return;
               setProducts((prev) => prev.map((p) => (images[p.style] ? { ...p, image: images[p.style] } : p)));
+            })
+            .catch(() => {});
+        }
+
+        // Lazily backfill missing price/size/colorCount. Backend hits S&S
+        // per-style with bounded concurrency and caches for 12h, so after
+        // the first browse of a brand subsequent visits are instant.
+        const needsDetails = prods
+          .filter((p) => !p.priceRangeBottom || !p.sizeRangeBottom)
+          .map((p) => p.style);
+        if (needsDetails.length > 0) {
+          fetch(`${config.backendUrl}/api/products/ss/details?styles=${needsDetails.join(',')}`)
+            .then((r) => r.json())
+            .then(({ details }) => {
+              if (!details || !Object.keys(details).length) return;
+              setProducts((prev) => prev.map((p) => {
+                const d = details[p.style];
+                return d ? { ...p, ...d } : p;
+              }));
             })
             .catch(() => {});
         }
