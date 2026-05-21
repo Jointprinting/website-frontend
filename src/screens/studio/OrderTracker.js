@@ -19,9 +19,9 @@ import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
+import config from '../../config.json';
 
-const API = process.env.REACT_APP_API_URL || '';
-const base = `${API}/api`;
+const base = `${config.backendUrl}/api`;
 const STATUS_FILTERS = [
   { value: 'all',           label: 'All' },
   { value: 'quoted',        label: 'Quoted' },
