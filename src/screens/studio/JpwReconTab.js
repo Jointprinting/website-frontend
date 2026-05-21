@@ -942,12 +942,21 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
-  // We only block "Run sweep" when the daily Places API budget is
-  // genuinely too low to be worth running — not just because one sweep
-  // already completed today. Sweep eats ~3 calls per pair; if you've got
-  // less than 10 calls left (~3 pairs), the run isn't worth it.
+  // One sweep per day. If a sweep completed today, block. If the daily API
+  // budget is mostly used (even from manual searches), also block — would
+  // halt immediately anyway.
+  const today = new Date().toISOString().slice(0, 10);
+  const lastFinishedDate = status?.finished_at
+    ? new Date(status.finished_at).toISOString().slice(0, 10)
+    : null;
+  const ranToday = status?.status === 'completed' && lastFinishedDate === today;
+
   const remainingBudget = usage ? Math.max(0, (usage.daily_cap || 200) - (usage.places_calls_today || 0)) : null;
   const budgetExhausted = remainingBudget !== null && remainingBudget < 10;
+  const blocked = ranToday || budgetExhausted;
+  const blockReason = ranToday
+    ? "You've already run today's sweep. Resets at midnight."
+    : 'Daily Google Places budget is nearly used up. Resets at midnight.';
 
   const submit = async () => {
     setBusy(true); setErr('');
@@ -987,10 +996,20 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
       PaperProps={{ sx: { bgcolor: TERM.bg, border: `1px solid ${TERM.border}` }}}>
       <DialogTitle sx={{ fontFamily: MONO, color: TERM.text, fontWeight: 700, borderBottom: `1px solid ${TERM.borderDim}` }}>
-        Run Sweep
+        Daily sweep
       </DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
-        {usage && (
+        {blocked && !isRunning && (
+          <Alert severity="info" sx={{
+            mb: 1.5, fontFamily: MONO, fontSize: 11.5,
+            bgcolor: 'rgba(74,222,128,0.08)', color: TERM.text,
+            border: `1px solid ${TERM.green}40`,
+          }}>
+            <Box sx={{ fontWeight: 700, mb: 0.3 }}>{ranToday ? '✓ Daily sweep already ran today' : '✓ Daily budget used'}</Box>
+            {blockReason} Yesterday's results are still here for review.
+          </Alert>
+        )}
+        {usage && !blocked && (
           <Alert
             severity={usage.places_key_configured ? 'info' : 'warning'}
             sx={{ mb: 1.5, fontFamily: MONO, fontSize: 11 }}
@@ -1076,23 +1095,22 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
           {isRunning ? 'Close (sweep keeps running)' : 'Close'}
         </Button>
         {!isRunning && (
-          budgetExhausted ? (
-            // Daily budget is essentially used up — block until tomorrow.
-            <Tooltip title="Daily Google Places budget is almost full. The sweep would halt immediately.">
+          blocked ? (
+            <Tooltip title={blockReason}>
               <span>
                 <Button disabled
                   sx={{
                     color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
                     fontFamily: MONO, fontWeight: 700,
                   }}>
-                  Daily budget used
+                  {ranToday ? 'Already ran today' : 'Daily budget used'}
                 </Button>
               </span>
             </Tooltip>
           ) : (
             <Button onClick={submit} disabled={busy} variant="contained"
               sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-              {busy ? <CircularProgress size={18} /> : 'Run sweep'}
+              {busy ? <CircularProgress size={18} /> : 'Run daily sweep'}
             </Button>
           )
         )}
@@ -1250,7 +1268,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
         <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
           onClick={() => setSweepOpen(true)}
           sx={{ color: TERM.green, border: `1px solid ${TERM.green}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
-          Run Sweep
+          Run daily sweep
         </Button>
       </Stack>
 

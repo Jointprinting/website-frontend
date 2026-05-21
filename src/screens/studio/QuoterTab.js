@@ -53,11 +53,6 @@ const PAYMENT = {
   other: { label: 'Other',        rate: 0 },
 };
 
-const TIER_META = {
-  budget:  { label: 'BUDGET',  color: B.budget },
-  mid:     { label: 'MID',     color: B.mid },
-  premium: { label: 'PREMIUM', color: B.premium },
-};
 
 // Approximate weight (lbs) per piece by garment type
 const GARMENT_WEIGHT_LB = {
