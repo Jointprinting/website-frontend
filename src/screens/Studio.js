@@ -59,12 +59,10 @@ import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
-import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import config from '../config.json';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
-import QuoterTab from './studio/QuoterTab';
 import JpwReconTab from './studio/JpwReconTab';
 import ClientHubTab from './studio/ClientHubTab';
 
@@ -1772,7 +1770,7 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay }) {
+function HubCard({ tool, onClick, delay, notice }) {
   const { label, Icon } = tool;
   return (
     <Grow in timeout={400 + delay}>
@@ -1782,22 +1780,17 @@ function HubCard({ tool, onClick, delay }) {
         sx={{
           cursor: 'pointer',
           bgcolor: BRAND.panel,
-          border: `1px solid ${BRAND.border}`,
+          border: `1px solid ${notice ? BRAND.green : BRAND.border}`,
           borderRadius: 2,
           p: { xs: 1.75, sm: 2 },
           transition: 'all 0.18s ease',
+          position: 'relative',
           '&:hover': {
             borderColor: BRAND.green,
             transform: 'translateY(-2px)',
             boxShadow: '0 8px 24px -12px rgba(74,222,128,0.35)',
-            '& .hub-icon': {
-              bgcolor: BRAND.green,
-              color: BRAND.greenDk,
-            },
-            '& .hub-arrow': {
-              opacity: 1,
-              transform: 'translateX(0)',
-            },
+            '& .hub-icon': { bgcolor: BRAND.green, color: BRAND.greenDk },
+            '& .hub-arrow': { opacity: 1, transform: 'translateX(0)' },
           },
         }}
       >
@@ -1810,15 +1803,33 @@ function HubCard({ tool, onClick, delay }) {
               bgcolor: BRAND.greenDk, color: BRAND.green,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.18s ease',
+              position: 'relative',
             }}
           >
             <Icon sx={{ fontSize: 20 }} />
+            {notice && (
+              <Box sx={{
+                position: 'absolute', top: -3, right: -3,
+                width: 10, height: 10, borderRadius: '50%',
+                bgcolor: BRAND.green,
+                boxShadow: '0 0 6px rgba(74,222,128,0.6)',
+              }} />
+            )}
           </Box>
-          <MuiTypography fontWeight={700} sx={{
-            color: BRAND.white, fontSize: 14.5, flexGrow: 1,
-          }}>
-            {label}
-          </MuiTypography>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <MuiTypography fontWeight={700} sx={{ color: BRAND.white, fontSize: 14.5 }}>
+              {label}
+            </MuiTypography>
+            {notice && (
+              <MuiTypography sx={{
+                color: BRAND.green, fontSize: 11, fontWeight: 600,
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+                mt: 0.2,
+              }}>
+                {notice}
+              </MuiTypography>
+            )}
+          </Box>
           <ChevronRightIcon
             className="hub-arrow"
             sx={{
@@ -1834,7 +1845,7 @@ function HubCard({ tool, onClick, delay }) {
   );
 }
 
-function Hub({ onPick }) {
+function Hub({ onPick, sweepNeeded }) {
   let cardIdx = 0;
   return (
     <Stack spacing={3}>
@@ -1855,12 +1866,14 @@ function Hub({ onPick }) {
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
           }}>
             {group.tools.map((t) => {
+              const showNotice = t.id === 'jpwrecon' && sweepNeeded;
               const card = (
                 <HubCard
                   key={t.id}
                   tool={t}
                   delay={cardIdx * 60}
                   onClick={() => onPick(t.id)}
+                  notice={showNotice ? "Today's sweep not run yet" : null}
                 />
               );
               cardIdx += 1;
@@ -1880,6 +1893,28 @@ function StudioBody({ token, onLogout }) {
   const [view, setView] = React.useState('hub');
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
+
+  // Daily-sweep reminder: when sitting on the hub, peek at sweep state to
+  // know whether today's sweep has run. If not, show a small dot on the
+  // Lead Recon card. Read once on hub view; cheap enough not to bother
+  // polling.
+  const [sweepNeeded, setSweepNeeded] = React.useState(false);
+  React.useEffect(() => {
+    if (view !== 'hub') return;
+    let cancelled = false;
+    const url = `${config.backendUrl}/api/jpw/search/sweep/status`;
+    axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
+      .then((res) => {
+        if (cancelled) return;
+        const s = res.data || {};
+        const today = new Date().toISOString().slice(0, 10);
+        const finishedToday = s.status === 'completed' && s.finished_at &&
+          new Date(s.finished_at).toISOString().slice(0, 10) === today;
+        setSweepNeeded(!finishedToday);
+      })
+      .catch(() => { /* if the endpoint fails, just don't show the badge */ });
+    return () => { cancelled = true; };
+  }, [view, token]);
 
   const handlePick = (id) => {
     if (id === 'mockup') {
@@ -1976,7 +2011,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} />
+          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{

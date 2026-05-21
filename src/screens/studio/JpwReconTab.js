@@ -1187,21 +1187,45 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
 
   React.useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Multi-select bulk push. User checks a few rows, clicks "Push N → Spider"
-  // in the toolbar, this hits the batch endpoint with explicit ids.
+  // Multi-select bulk push.
   const pushSelected = async () => {
     if (!selectedIds.size) return;
     setBulkPushBusy(true); setErr('');
     try {
       await api.pushSpiderBatch({
         ids: Array.from(selectedIds),
-        only_unpushed: false, // respect the user's explicit selection
+        only_unpushed: false,
       });
       setSelectedIds(new Set());
       await loadAll();
     } catch (e) {
       setErr(e?.response?.data?.message || e.message);
     } finally { setBulkPushBusy(false); }
+  };
+
+  // Push every lead currently in the Push Queue view (A+/A/B unpushed) in
+  // one batch — for when the user just wants to fan everything out.
+  const pushAllInView = async () => {
+    const ids = filteredLeads
+      .filter((l) => !l.pushed_to_spider_at)
+      .map((l) => l._id);
+    if (!ids.length) return;
+    setCleanupConfirm({
+      message: `Push all ${ids.length} unpushed leads in this view to Spider?`,
+      action: 'push',
+      ids,
+    });
+  };
+
+  // Bulk delete selected leads — for "this lead is bad, don't waste my time
+  // with it again". Uses the existing /bulk-delete endpoint with explicit ids.
+  const deleteSelected = async () => {
+    if (!selectedIds.size) return;
+    setCleanupConfirm({
+      message: `Delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'}? This is permanent.`,
+      action: 'delete',
+      ids: Array.from(selectedIds),
+    });
   };
 
   // Stable lead-row select toggle, passed down to LeadRow.
@@ -1271,15 +1295,40 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
           <RefreshIcon sx={{ fontSize: 18 }} />
         </IconButton>
         {selectedIds.size > 0 && (
+          <>
+            <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
+              onClick={pushSelected}
+              disabled={!usage?.spider_configured || bulkPushBusy}
+              sx={{
+                bgcolor: TERM.green, color: TERM.greenDk,
+                fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                '&:hover': { bgcolor: '#3ecb6f' },
+              }}>
+              {bulkPushBusy ? <CircularProgress size={14} /> : `Push ${selectedIds.size} → Spider`}
+            </Button>
+            <Button size="small"
+              onClick={deleteSelected}
+              sx={{
+                color: TERM.red, border: `1px solid ${TERM.red}40`,
+                fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                '&:hover': { bgcolor: `${TERM.red}10` },
+              }}>
+              Delete {selectedIds.size}
+            </Button>
+          </>
+        )}
+        {/* "Push all" — only shown on Push Queue view when there are
+            unpushed leads to fan out. Skips a row-by-row select if the
+            user just wants everything in. */}
+        {view === 'queue' && selectedIds.size === 0 && filteredLeads.some((l) => !l.pushed_to_spider_at) && (
           <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
-            onClick={pushSelected}
-            disabled={!usage?.spider_configured || bulkPushBusy}
+            onClick={pushAllInView}
+            disabled={!usage?.spider_configured}
             sx={{
-              bgcolor: TERM.green, color: TERM.greenDk,
+              color: TERM.green, border: `1px solid ${TERM.green}40`,
               fontFamily: MONO, fontSize: 11, fontWeight: 700,
-              '&:hover': { bgcolor: '#3ecb6f' },
             }}>
-            {bulkPushBusy ? <CircularProgress size={14} /> : `Push ${selectedIds.size} → Spider`}
+            Push all → Spider
           </Button>
         )}
         <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
@@ -1413,18 +1462,39 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
       />
       <ConfirmDialog
         open={!!cleanupConfirm}
-        title="Delete leads?"
+        title={cleanupConfirm?.action === 'push' ? 'Push all to Spider?' : 'Delete leads?'}
         body={cleanupConfirm?.message || ''}
-        confirmLabel="Delete"
-        danger
+        confirmLabel={cleanupConfirm?.action === 'push' ? 'Push all' : 'Delete'}
+        danger={cleanupConfirm?.action !== 'push'}
         onCancel={() => setCleanupConfirm(null)}
         onConfirm={async () => {
+          if (!cleanupConfirm) return;
           try {
-            const r = await api.bulkDelete(cleanupConfirm.body);
-            setCleanupConfirm(null);
-            await loadAll();
-            setErr(`Deleted ${r.deleted} leads.`);
-            setTimeout(() => setErr(''), 3000);
+            // Three different payload shapes share this dialog:
+            //   - { ids: [...], action: 'push' }    → bulk push to Spider
+            //   - { ids: [...], action: 'delete' }  → bulk delete by id
+            //   - { body: { grade: 'D' }, ... }     → bulk delete by filter
+            if (cleanupConfirm.action === 'push') {
+              const r = await api.pushSpiderBatch({ ids: cleanupConfirm.ids, only_unpushed: false });
+              setCleanupConfirm(null);
+              setSelectedIds(new Set());
+              await loadAll();
+              setErr(`Pushed ${r.pushed || 0} to Spider${r.skipped ? `, ${r.skipped} already there` : ''}.`);
+              setTimeout(() => setErr(''), 3000);
+            } else if (cleanupConfirm.action === 'delete' && cleanupConfirm.ids) {
+              const r = await api.bulkDelete({ ids: cleanupConfirm.ids });
+              setCleanupConfirm(null);
+              setSelectedIds(new Set());
+              await loadAll();
+              setErr(`Deleted ${r.deleted} leads.`);
+              setTimeout(() => setErr(''), 3000);
+            } else {
+              const r = await api.bulkDelete(cleanupConfirm.body);
+              setCleanupConfirm(null);
+              await loadAll();
+              setErr(`Deleted ${r.deleted} leads.`);
+              setTimeout(() => setErr(''), 3000);
+            }
           } catch (e) {
             setErr(e?.response?.data?.message || e.message);
             setCleanupConfirm(null);
