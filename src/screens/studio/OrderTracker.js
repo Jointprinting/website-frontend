@@ -7,6 +7,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
+  Dialog, DialogContent,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
 import AddIcon             from '@mui/icons-material/Add';
@@ -16,6 +17,10 @@ import DesignServicesIcon  from '@mui/icons-material/DesignServices';
 import RefreshIcon         from '@mui/icons-material/Refresh';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import PrintIcon           from '@mui/icons-material/Print';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -45,6 +50,7 @@ export default function OrderTracker({ token, onBack }) {
   const [creating,      setCreating]      = useState(false);
   const [resyncing,     setResyncing]     = useState(false);
   const [picker,        setPicker]        = useState({ open: false, project: null });
+  const [confirmation,  setConfirmation]  = useState(null);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -275,8 +281,16 @@ export default function OrderTracker({ token, onBack }) {
         onSave={handleSave}
         onDelete={handleDelete}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
+        onOpenConfirmation={() => setConfirmation(activeProject)}
         token={token}
         authHdr={authHdr}
+      />
+
+      <ConfirmationDialog
+        open={!!confirmation}
+        project={confirmation}
+        mockupMap={mockupMap}
+        onClose={() => setConfirmation(null)}
       />
 
       <MockupPickerDialog
@@ -431,7 +445,7 @@ function ProjectCard({ project, mockupMap, onClick }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onDelete, onOpenPicker, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -577,10 +591,18 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
           onChange={v => saveField('deliveredDate', v)} />
 
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <InlineField label="Items / line items" multiline value={(local.items || []).map(i => i.description).join('\n')}
-            savingHint={savingField === 'items'}
-            onChange={v => updateLocal({ items: v.split('\n').filter(Boolean).map(d => ({ description: d, qty: 0, unitPrice: 0 })) })}
-            onBlur={v => saveField('items', v.split('\n').filter(Boolean).map(d => ({ description: d, qty: 0, unitPrice: 0 })))} />
+          <ItemsEditor
+            items={local.items || []}
+            saving={savingField === 'items'}
+            onChange={items => updateLocal({ items })}
+            onCommit={async (items) => {
+              const totalValue = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
+              updateLocal({ items, totalValue });
+              setSavingField('items');
+              await onSave(project._id, { items, totalValue });
+              setSavingField('');
+            }}
+          />
         </Box>
         <Box sx={{ gridColumn: '1 / -1' }}>
           <InlineField label="Notes" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
@@ -627,6 +649,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
         <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
           Updated {fmtRelative(local.updatedAt)}
         </Typography>
+        <Button startIcon={<DescriptionOutlinedIcon sx={{ fontSize: 16 }} />}
+          onClick={() => onOpenConfirmation()}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Confirmation page
+        </Button>
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
           sx={{ color: '#f87171', fontSize: 11, textTransform: 'none' }}>
@@ -696,5 +723,260 @@ function InlineDateField({ label, value, onChange, savingHint }) {
         InputLabelProps={{ shrink: true }}
       />
     </Box>
+  );
+}
+
+// ── ItemsEditor ──────────────────────────────────────────────────────────────
+// Real line-item editor (replaces the textarea). Adds/removes rows, edits qty,
+// description, unit price; auto-sums totalValue on commit.
+function ItemsEditor({ items, onChange, onCommit, saving }) {
+  const list = items && items.length > 0 ? items : [];
+  const total = list.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
+
+  const update = (i, patch) => {
+    const next = list.map((x, idx) => idx === i ? { ...x, ...patch } : x);
+    onChange(next);
+  };
+  const remove = (i) => {
+    const next = list.filter((_, idx) => idx !== i);
+    onChange(next);
+    onCommit(next);
+  };
+  const add = () => {
+    const next = [...list, { description: '', qty: 1, unitPrice: 0 }];
+    onChange(next);
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
+        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Items {saving && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+        </Typography>
+        <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+          onClick={add}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Add line
+        </Button>
+      </Stack>
+      {list.length === 0 ? (
+        <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
+          No line items yet. Add one to build the quote.
+        </Box>
+      ) : (
+        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, overflow: 'hidden' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '46px 1fr 80px 80px 28px',
+            gap: 0.5, px: 0.8, py: 0.4, bgcolor: B.panelHi,
+            fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <Box>Qty</Box>
+            <Box>Description</Box>
+            <Box sx={{ textAlign: 'right' }}>Unit $</Box>
+            <Box sx={{ textAlign: 'right' }}>Line $</Box>
+            <Box />
+          </Box>
+          {list.map((it, i) => {
+            const line = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+            return (
+              <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '46px 1fr 80px 80px 28px',
+                gap: 0.5, alignItems: 'center', px: 0.8, py: 0.4,
+                borderTop: `1px solid ${B.faint}` }}>
+                <TextField size="small" type="number" value={it.qty || ''}
+                  onChange={e => update(i, { qty: e.target.value })}
+                  onBlur={() => onCommit(list)}
+                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
+                <TextField size="small" value={it.description || ''}
+                  onChange={e => update(i, { description: e.target.value })}
+                  onBlur={() => onCommit(list)}
+                  placeholder="50 Bella+Canvas 3001, Black, screen print"
+                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4 } }} />
+                <TextField size="small" type="number" value={it.unitPrice || ''}
+                  onChange={e => update(i, { unitPrice: e.target.value })}
+                  onBlur={() => onCommit(list)}
+                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
+                <Box sx={{ color: B.white, fontSize: 12, fontFamily: 'monospace', textAlign: 'right', py: 0.4 }}>
+                  {fmt(line)}
+                </Box>
+                <IconButton size="small" onClick={() => remove(i)}
+                  sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                  <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
+            );
+          })}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 28px',
+            gap: 0.5, alignItems: 'center', px: 0.8, py: 0.6,
+            borderTop: `2px solid ${B.border}`, bgcolor: B.panelHi }}>
+            <Box sx={{ color: B.muted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Quote total
+            </Box>
+            <Box sx={{ color: B.green, fontSize: 14, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
+              {fmt(total)}
+            </Box>
+            <Box />
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── ConfirmationDialog ───────────────────────────────────────────────────────
+// Client-facing confirmation page. Printable (window.print) and screenshottable.
+// Renders mockups, line items, totals, and a clean header.
+function ConfirmationDialog({ open, project, mockupMap, onClose }) {
+  if (!project) return null;
+  const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n]).filter(Boolean);
+  const items = project.items || [];
+  const subtotal = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
+  const total = Number(project.totalValue) || subtotal;
+
+  const handlePrint = () => {
+    const el = document.getElementById('confirmation-printable');
+    if (!el) return window.print();
+    const w = window.open('', '_blank', 'width=900,height=1200');
+    if (!w) return;
+    w.document.write(`
+      <html><head><title>Confirmation #${project.projectNumber || ''}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #111; margin: 32px; }
+        h1 { font-size: 22px; margin: 0 0 4px 0; }
+        .meta { color: #555; font-size: 12px; margin-bottom: 24px; }
+        .section { margin-bottom: 24px; }
+        .section-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #777; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .mockup-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .mockup { aspect-ratio: 4/3; background: #f4f4f4; border-radius: 4px; overflow: hidden; }
+        .mockup img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; font-size: 10px; text-transform: uppercase; color: #777; padding: 6px 8px; border-bottom: 1px solid #ccc; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        td.r { text-align: right; }
+        .total-row td { font-weight: 800; border-top: 2px solid #111; font-size: 15px; }
+      </style>
+      </head><body>${el.innerHTML}</body></html>
+    `);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: '#f6f6f4', color: '#111', borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, bgcolor: '#fff', borderBottom: '1px solid #e6e6e0', px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 13, color: '#111', flex: 1 }}>
+          Confirmation page
+        </Typography>
+        <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 16 }} />}
+          onClick={handlePrint}
+          sx={{ color: '#111', fontSize: 12, textTransform: 'none', fontWeight: 700 }}>
+          Print / Save PDF
+        </Button>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent>
+        <Box id="confirmation-printable" sx={{
+          bgcolor: '#fff', color: '#111', p: 4, borderRadius: 1,
+          fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+        }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 24, mb: 0.3, color: '#111' }}>
+            JOINT PRINTING
+          </Typography>
+          <Typography sx={{ color: '#555', fontSize: 12 }}>
+            Project #{project.projectNumber || '—'}
+            {project.orderNumber ? `  ·  Invoice #${project.orderNumber}` : ''}
+            {project.orderDate ? `  ·  ${new Date(project.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+          </Typography>
+
+          <Box className="section" sx={{ mt: 3 }}>
+            <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
+              Client
+            </Typography>
+            <Typography sx={{ fontSize: 16, fontWeight: 700, color: '#111' }}>
+              {project.companyName || project.clientName || 'Untitled'}
+            </Typography>
+            {project.clientName && project.companyName && project.clientName !== project.companyName && (
+              <Typography sx={{ fontSize: 13, color: '#555' }}>{project.clientName}</Typography>
+            )}
+          </Box>
+
+          {mockupThumbs.length > 0 && (
+            <Box className="section" sx={{ mt: 3 }}>
+              <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
+                Mockups
+              </Typography>
+              <Box className="mockup-grid" sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
+                {mockupThumbs.map((m, i) => (
+                  <Box key={i} className="mockup" sx={{ aspectRatio: '4/3', bgcolor: '#f4f4f4', borderRadius: 1, overflow: 'hidden' }}>
+                    {m.thumbnail && <Box component="img" src={m.thumbnail} alt=""
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                  </Box>
+                ))}
+              </Box>
+              <Typography sx={{ mt: 1, color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
+                {(project.mockupNumbers || []).join(' · ')}
+              </Typography>
+            </Box>
+          )}
+
+          <Box className="section" sx={{ mt: 3 }}>
+            <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
+              Items
+            </Typography>
+            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: '#777', padding: '6px 8px', borderBottom: '1px solid #ccc' }}>Qty</th>
+                  <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: '#777', padding: '6px 8px', borderBottom: '1px solid #ccc' }}>Description</th>
+                  <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: '#777', padding: '6px 8px', borderBottom: '1px solid #ccc' }}>Unit $</th>
+                  <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: '#777', padding: '6px 8px', borderBottom: '1px solid #ccc' }}>Line $</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: '14px 8px', color: '#999', fontStyle: 'italic' }}>
+                    No line items
+                  </td></tr>
+                ) : items.map((it, i) => {
+                  const line = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+                  return (
+                    <tr key={i}>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.qty || ''}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.description || ''}</td>
+                      <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                        {it.unitPrice ? fmt(it.unitPrice) : ''}
+                      </td>
+                      <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                        {line ? fmt(line) : ''}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="total-row">
+                  <td colSpan={3} className="r" style={{ padding: 10, textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 15 }}>Total</td>
+                  <td className="r" style={{ padding: 10, textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 15 }}>
+                    {fmt(total)}
+                  </td>
+                </tr>
+              </tbody>
+            </Box>
+          </Box>
+
+          {project.notes && (
+            <Box className="section" sx={{ mt: 3 }}>
+              <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
+                Notes
+              </Typography>
+              <Typography sx={{ color: '#333', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                {project.notes}
+              </Typography>
+            </Box>
+          )}
+
+          <Typography sx={{ mt: 5, color: '#888', fontSize: 10, textAlign: 'center' }}>
+            Generated by Joint Printing · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          </Typography>
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }
