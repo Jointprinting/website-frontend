@@ -35,12 +35,15 @@ const GARMENT_CATEGORIES = [
   { label: 'Hats & Caps',     value: 'Hats' },
 ];
 
+// "All fits" is the no-filter option; "Unisex" is the S&S-classified
+// fit. Old label was "Everyone" which read like a sub-category alongside
+// the actual fits.
 const GENDER_TYPES = [
-  { label: 'Everyone', value: '' },
-  { label: "Men's",    value: 'Male' },
-  { label: "Women's",  value: 'Female' },
-  { label: 'Youth',    value: 'Kids' },
-  { label: 'Unisex',   value: 'Unisex' },
+  { label: 'All fits',  value: '' },
+  { label: "Men's",     value: 'Male' },
+  { label: "Women's",   value: 'Female' },
+  { label: 'Youth',     value: 'Kids' },
+  { label: 'Unisex',    value: 'Unisex' },
 ];
 
 const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favorite': 'warning' };
@@ -48,6 +51,7 @@ const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favor
 // ─── ProductCard ───────────────────────────────────────────────────────────────────
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   const imgSrc = item.image || item.productFrontImages?.[0];
+  const hasPrice = Number(item.priceRangeBottom) > 0 || Number(item.priceRangeTop) > 0;
   return (
     <Paper elevation={isSelected ? 5 : 1} onClick={onNavigate} sx={{
       borderRadius: 2.5, overflow: 'hidden', position: 'relative',
@@ -100,13 +104,18 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
           {item.name}
         </Typography>
         <Rating value={item.rating || 4.5} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
-        {(item.priceRangeBottom || item.priceRangeTop) && (
+        {hasPrice && (
           <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.5 }}>
             <Typography fontWeight={700} sx={{ fontSize: { xs: 13, sm: 14 } }}>
               ${item.priceRangeBottom} – ${item.priceRangeTop}
             </Typography>
             <Typography variant="caption" color="text.secondary" fontSize={10}>est.</Typography>
           </Stack>
+        )}
+        {item.sizeRangeBottom && item.sizeRangeTop && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
+            Sizes {item.sizeRangeBottom} – {item.sizeRangeTop}
+          </Typography>
         )}
         <Box flexGrow={1} />
         <Button
