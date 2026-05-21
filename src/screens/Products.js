@@ -49,16 +49,16 @@ const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favor
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   const imgSrc = item.image || item.productFrontImages?.[0];
   return (
-    <Paper elevation={isSelected ? 5 : 1} sx={{
+    <Paper elevation={isSelected ? 5 : 1} onClick={onNavigate} sx={{
       borderRadius: 2.5, overflow: 'hidden', position: 'relative',
       border: isSelected ? '2px solid' : '1px solid',
       borderColor: isSelected ? '#4ade80' : 'divider',
       transition: 'transform 140ms, box-shadow 140ms',
       '&:hover': { transform: 'translateY(-3px)', boxShadow: 5 },
       display: 'flex', flexDirection: 'column', bgcolor: '#fff',
+      cursor: onNavigate ? 'pointer' : 'default',
     }}>
-      <Box onClick={onNavigate} sx={{
-        cursor: onNavigate ? 'pointer' : 'default',
+      <Box sx={{
         position: 'relative', bgcolor: '#f7f7f7',
         display: 'flex', justifyContent: 'center', alignItems: 'center',
         minHeight: { xs: 150, sm: 200 },
