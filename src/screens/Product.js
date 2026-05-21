@@ -2,7 +2,7 @@
 import { React, useEffect, useState } from 'react';
 import {
   Box, Stack, Typography, Chip, Button, Rating, Tooltip,
-  CircularProgress, Container, Avatar, useMediaQuery, Divider,
+  CircularProgress, Container, Avatar, useMediaQuery, Divider, Alert,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
@@ -22,8 +22,6 @@ const getTagCode = (tag) => {
 
 const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
-// S&S returns descriptions as raw HTML. Strip script-y bits before
-// dangerouslySetInnerHTML.
 const sanitizeHTML = (html) => {
   if (typeof html !== 'string') return '';
   return html
@@ -32,6 +30,12 @@ const sanitizeHTML = (html) => {
     .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
     .replace(/javascript:/gi, '');
+};
+
+// Single source of truth for the displayed "Starting at $X" number.
+const startingPrice = (item) => {
+  const v = Number(item?.priceFrom) || Number(item?.priceRangeBottom) || 0;
+  return v > 0 ? v : null;
 };
 
 function Product() {
@@ -43,32 +47,31 @@ function Product() {
 
   const preloadedItem = location.state?.item || null;
 
-  const [productVendor, setProductVendor]                     = useState(preloadedItem?.vendor || '');
-  const [productStyle, setProductStyle]                       = useState(preloadedItem?.style || id || '');
-  const [productRating, setProductRating]                     = useState(preloadedItem?.rating || 0);
-  const [productTitle, setProductTitle]                       = useState(preloadedItem?.name || '');
-  const [productPriceRangeBottom, setProductPriceRangeBottom] = useState(preloadedItem?.priceRangeBottom || '');
-  const [productPriceRangeTop, setProductPriceRangeTop]       = useState(preloadedItem?.priceRangeTop || '');
-  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState(preloadedItem?.sizeRangeBottom || '');
-  const [productSizeRangeTop, setProductSizeRangeTop]         = useState(preloadedItem?.sizeRangeTop || '');
-  const [productTag, setProductTag]                           = useState(preloadedItem?.tag || '');
-  const [productTagColor, setProductTagColor]                 = useState(getTagCode(preloadedItem?.tag));
-  const [productColorOptions, setProductColorOptions]         = useState([]);
-  const [productColorCodes, setProductColorCodes]             = useState([]);
-  const [productColorCount, setProductColorCount]             = useState(preloadedItem?.colorCount || 0);
-  const [productFrontImages, setProductFrontImages]           = useState(preloadedItem?.image ? [preloadedItem.image] : []);
-  const [productBackImages, setProductBackImages]             = useState([]);
-  const [productDescription, setProductDescription]           = useState('');
-  const [frontSelected, setFrontSelected]                     = useState(true);
-  const [productColor, setProductColor]                       = useState('');
-  const [productColorCode, setProductColorCode]               = useState('');
-  const [productIndex, setProductIndex]                       = useState(0);
-  const [loading, setLoading]                                 = useState(!preloadedItem);
-  const [error, setError]                                     = useState(null);
-  // Escalating loading message: backend may run an on-demand S&S sync for
-  // this style the first time it's clicked (~8-15 s). Show progressively
-  // more reassuring copy so the user knows we're working.
-  const [loadingMessage, setLoadingMessage]                   = useState('');
+  const [productVendor, setProductVendor]               = useState(preloadedItem?.vendor || '');
+  const [productStyle, setProductStyle]                 = useState(preloadedItem?.style || id || '');
+  const [productRating, setProductRating]               = useState(preloadedItem?.rating || 0);
+  const [productTitle, setProductTitle]                 = useState(preloadedItem?.name || '');
+  const [productPriceFrom, setProductPriceFrom]         = useState(startingPrice(preloadedItem) || '');
+  const [productSizeRangeBottom, setProductSizeRangeBottom] = useState(preloadedItem?.sizeRangeBottom || '');
+  const [productSizeRangeTop, setProductSizeRangeTop]       = useState(preloadedItem?.sizeRangeTop || '');
+  const [productTag, setProductTag]                     = useState(preloadedItem?.tag || '');
+  const [productTagColor, setProductTagColor]           = useState(getTagCode(preloadedItem?.tag));
+  const [productColorOptions, setProductColorOptions]   = useState([]);
+  const [productColorCodes, setProductColorCodes]       = useState([]);
+  const [productColorCount, setProductColorCount]       = useState(preloadedItem?.colorCount || 0);
+  const [productFrontImages, setProductFrontImages]     = useState(preloadedItem?.image ? [preloadedItem.image] : []);
+  const [productBackImages, setProductBackImages]       = useState([]);
+  const [productDescription, setProductDescription]     = useState('');
+  const [frontSelected, setFrontSelected]               = useState(true);
+  const [productColor, setProductColor]                 = useState('');
+  const [productColorCode, setProductColorCode]         = useState('');
+  const [productIndex, setProductIndex]                 = useState(0);
+  const [loading, setLoading]                           = useState(!preloadedItem);
+  const [error, setError]                               = useState(null);
+  const [loadingMessage, setLoadingMessage]             = useState('');
+  // dataQuality === 'fallback' means the backend couldn't sync the style,
+  // so we're showing /styles/ basics only. Frontend renders a notice.
+  const [dataQuality, setDataQuality]                   = useState(null);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
@@ -80,17 +83,12 @@ function Product() {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) setSelectedProducts(parsed);
       }
-    } catch (e) {
-      console.error('Could not load selected products', e);
-    }
+    } catch (e) { console.error('Could not load selected products', e); }
   }, []);
 
   useEffect(() => {
-    try {
-      window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts));
-    } catch (e) {
-      console.error('Could not save selected products', e);
-    }
+    try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); }
+    catch (e) { console.error('Could not save selected products', e); }
   }, [selectedProducts]);
 
   useEffect(() => {
@@ -101,8 +99,7 @@ function Product() {
       setProductStyle(data.style || id);
       setProductRating(data.rating || 5);
       setProductTitle(data.name || '');
-      setProductPriceRangeBottom(data.priceRangeBottom || '');
-      setProductPriceRangeTop(data.priceRangeTop || '');
+      setProductPriceFrom(startingPrice(data) || '');
       setProductSizeRangeBottom(data.sizeRangeBottom || '');
       setProductSizeRangeTop(data.sizeRangeTop || '');
       setProductTag(data.tag || '');
@@ -111,6 +108,7 @@ function Product() {
       setProductColorOptions(colors);
       setProductColorCodes(data.colorCodes || []);
       if (colors.length > 0) setProductColorCount(colors.length);
+      else if (data.colorCount > 0) setProductColorCount(data.colorCount);
       if (Array.isArray(data.productFrontImages) && data.productFrontImages.some(Boolean)) {
         setProductFrontImages(data.productFrontImages);
       }
@@ -118,33 +116,22 @@ function Product() {
       setProductDescription(data.description || '');
       setProductColor(colors[0] || '');
       setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
+      setDataQuality(data.dataQuality || null);
     };
 
     const fetchProduct = async () => {
-      // Set up escalating loading-message timers so a long sync still feels
-      // intentional rather than hung.
       const t1 = setTimeout(() => setLoadingMessage('Loading colors and sizes from S&S…'), 3000);
       const t2 = setTimeout(() => setLoadingMessage('First time loading this style — almost there.'), 8000);
       try {
         if (!preloadedItem) setLoading(true);
         const encoded = encodeURIComponent(id);
-        // Backend handler now does Mongo → on-demand sync → live fallback,
-        // so we only need this one call.
+        // Backend handler is Mongo -> on-demand sync -> live fallback.
+        // One request handles everything; no separate /ss/style call needed.
         const res = await fetch(config.backendUrl + '/api/products/style/' + encoded);
         if (res.ok) {
           applyProductData(await res.json());
           setError(null);
           return;
-        }
-        // Belt-and-suspenders: hit the live S&S fallback directly if Mongo
-        // returns 404 (shouldn't happen now, but harmless).
-        if (res.status === 404) {
-          const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + encoded);
-          if (ssRes.ok) {
-            applyProductData(await ssRes.json());
-            setError(null);
-            return;
-          }
         }
         if (!preloadedItem) {
           setError("We couldn't load the full details for this style. Please try again or browse other items.");
@@ -155,8 +142,7 @@ function Product() {
           setError("We couldn't reach the catalog server. Please check your connection and try again.");
         }
       } finally {
-        clearTimeout(t1);
-        clearTimeout(t2);
+        clearTimeout(t1); clearTimeout(t2);
         setLoading(false);
         setLoadingMessage('');
       }
@@ -175,10 +161,7 @@ function Product() {
       return [
         ...current,
         {
-          style: productStyle,
-          name: productTitle,
-          vendor: productVendor,
-          tag: productTag,
+          style: productStyle, name: productTitle, vendor: productVendor, tag: productTag,
           thumbnail: productFrontImages?.[productIndex] || '',
         },
       ];
@@ -188,10 +171,11 @@ function Product() {
   const currentFrontImg = productFrontImages[productIndex] || null;
   const currentBackImg  = productBackImages[productIndex]  || null;
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
-  const hasRealPrice    = Number(productPriceRangeBottom) > 0 || Number(productPriceRangeTop) > 0;
+  const hasRealPrice    = Number(productPriceFrom) > 0;
   const hasRealSize     = !!(productSizeRangeBottom && productSizeRangeTop);
   const hasSwatches     = productColorOptions.length > 0;
   const colorCountForBadge = hasSwatches ? productColorOptions.length : productColorCount;
+  const isFallback      = dataQuality === 'fallback';
 
   if (error) {
     return (
@@ -199,21 +183,14 @@ function Product() {
         <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>
           <Stack spacing={3} alignItems="center" textAlign="center">
             <CheckroomIcon sx={{ fontSize: 64, color: 'rgba(0,0,0,0.2)' }} />
-            <Typography variant="h6" fontWeight={700} color="text.primary">
-              Style not available
-            </Typography>
-            <Typography color="text.secondary" sx={{ maxWidth: 380 }}>
-              {error}
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<ArrowBackIcon />}
+            <Typography variant="h6" fontWeight={700} color="text.primary">Style not available</Typography>
+            <Typography color="text.secondary" sx={{ maxWidth: 380 }}>{error}</Typography>
+            <Button variant="contained" startIcon={<ArrowBackIcon />}
               onClick={() => navigate('/products')}
               sx={{
                 textTransform: 'none', borderRadius: 999, px: 3,
                 bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
-              }}
-            >
+              }}>
               Back to catalog
             </Button>
           </Stack>
@@ -241,36 +218,28 @@ function Product() {
             alignItems={{ xs: 'stretch', md: 'flex-start' }}
           >
             {/* IMAGES */}
-            <Stack
-              direction="row"
-              spacing={2}
-              alignItems="flex-start"
-              sx={{ flex: { md: '0 0 50%' }, width: { xs: '100%', md: 'auto' } }}
-            >
+            <Stack direction="row" spacing={2} alignItems="flex-start"
+              sx={{ flex: { md: '0 0 50%' }, width: { xs: '100%', md: 'auto' } }}>
               <Stack spacing={1.5} sx={{ flexShrink: 0 }}>
-                <Box
-                  onClick={() => setFrontSelected(true)}
+                <Box onClick={() => setFrontSelected(true)}
                   sx={{
                     width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 },
                     cursor: 'pointer', borderRadius: 1, bgcolor: 'white', overflow: 'hidden',
                     border: frontSelected ? '2px solid #1a3d2b' : '2px solid transparent',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
+                  }}>
                   {currentFrontImg
                     ? <Box component="img" src={currentFrontImg} alt="front" sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     : <CheckroomIcon sx={{ fontSize: 24, color: 'rgba(0,0,0,0.15)' }} />}
                 </Box>
                 {currentBackImg && (
-                  <Box
-                    onClick={() => setFrontSelected(false)}
+                  <Box onClick={() => setFrontSelected(false)}
                     sx={{
                       width: { xs: 56, sm: 72 }, height: { xs: 56, sm: 72 },
                       cursor: 'pointer', borderRadius: 1, bgcolor: 'white', overflow: 'hidden',
                       border: !frontSelected ? '2px solid #1a3d2b' : '2px solid transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
+                    }}>
                     <Box component="img" src={currentBackImg} alt="back" sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                   </Box>
                 )}
@@ -304,23 +273,25 @@ function Product() {
                 </Typography>
               )}
 
+              {/* Starting at $X + size range */}
               {(hasRealPrice || hasRealSize) && (
-                <Stack
-                  spacing={{ xs: 1, sm: 7 }}
-                  direction={{ xs: 'column', sm: 'row' }}
-                >
+                <Stack spacing={{ xs: 1.5, sm: 5 }} direction={{ xs: 'column', sm: 'row' }}>
                   {hasRealPrice && (
-                    <Stack spacing={0.5}>
-                      <Typography color="black">Typically</Typography>
-                      <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
-                        ${productPriceRangeBottom} – ${productPriceRangeTop}
+                    <Stack spacing={0.25}>
+                      <Typography color="gray" sx={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Starting at
+                      </Typography>
+                      <Typography sx={{ fontSize: { xs: 26, sm: 32 }, fontWeight: 800, lineHeight: 1.1 }} color="black">
+                        ${productPriceFrom}
                       </Typography>
                     </Stack>
                   )}
                   {hasRealSize && (
-                    <Stack spacing={0.5}>
-                      <Typography color="black">Comes in</Typography>
-                      <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
+                    <Stack spacing={0.25}>
+                      <Typography color="gray" sx={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Comes in
+                      </Typography>
+                      <Typography sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 700, lineHeight: 1.1 }} color="black">
                         {productSizeRangeBottom} – {productSizeRangeTop}
                       </Typography>
                     </Stack>
@@ -328,9 +299,17 @@ function Product() {
                 </Stack>
               )}
 
-              <Typography color="gray" sx={{ fontSize: { xs: 12, sm: 14 } }}>
-                *The price will depend on your design and your order size.*
+              <Typography color="gray" sx={{ fontSize: { xs: 12, sm: 13 } }}>
+                Final price depends on quantity, colors, and print placement — request a free quote below.
               </Typography>
+
+              {/* Fallback notice — colors not synced yet */}
+              {isFallback && (
+                <Alert severity="info" sx={{ fontSize: 13, '& .MuiAlert-message': { py: 0.25 } }}>
+                  Live colors and per-color images for this style are still loading.
+                  Request a quote and we'll send a mockup with every available color within 24 hours.
+                </Alert>
+              )}
 
               {hasSwatches ? (
                 <>
@@ -348,8 +327,7 @@ function Product() {
                   </Stack>
 
                   <Box sx={{
-                    overflowX: 'auto',
-                    WebkitOverflowScrolling: 'touch',
+                    overflowX: 'auto', WebkitOverflowScrolling: 'touch',
                     width: '100%', py: 1, px: '2px',
                   }}>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: 'fit-content' }}>
@@ -359,7 +337,6 @@ function Product() {
                             onClick={() => { setProductColor(item); setProductColorCode(productColorCodes[index]); setProductIndex(index); }}
                             sx={{
                               cursor: 'pointer',
-                              // Bigger tap target on mobile for easier touch use.
                               width: { xs: 36, sm: 28 }, height: { xs: 36, sm: 28 },
                               borderRadius: '50%',
                               backgroundColor: productColorCodes[index],
@@ -399,8 +376,7 @@ function Product() {
                       : { borderColor: '#4ade80', borderWidth: 2, color: '#1a3d2b',
                           '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', borderColor: '#22c55e', borderWidth: 2 } }),
                   }}
-                  onClick={toggleQuoteForCurrent}
-                >
+                  onClick={toggleQuoteForCurrent}>
                   {isSelected ? '✓ Added to quote tray' : '+ Add to quote tray'}
                 </Button>
                 <Button
@@ -412,8 +388,7 @@ function Product() {
                     bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
                     transition: 'all 150ms ease', '&:active': { transform: 'scale(0.98)' },
                   }}
-                  onClick={() => setQuoteDialogOpen(true)}
-                >
+                  onClick={() => setQuoteDialogOpen(true)}>
                   Request quote now →
                 </Button>
                 <Typography fontSize={12} color="text.secondary">
@@ -440,8 +415,7 @@ function Product() {
                     color: 'text.secondary',
                     fontSize: { xs: 14, sm: 16 },
                     lineHeight: 1.6,
-                    overflowWrap: 'break-word',
-                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word', wordBreak: 'break-word',
                     '& ul, & ol': { pl: 2.5, my: 1 },
                     '& li': { mb: 0.5 },
                     '& p': { my: 1 },
@@ -468,10 +442,8 @@ function Product() {
           <Stack direction="row" spacing={0.5} alignItems="center">
             {selectedProducts.slice(0, isMobile ? 3 : 5).map((p) => (
               <Tooltip key={p.style} title={`Remove ${p.name || ''}`} arrow placement="top">
-                <Box
-                  onClick={() => setSelectedProducts((c) => c.filter((x) => x.style !== p.style))}
-                  sx={{ position: 'relative', cursor: 'pointer', '&:hover .rx': { opacity: 1 } }}
-                >
+                <Box onClick={() => setSelectedProducts((c) => c.filter((x) => x.style !== p.style))}
+                  sx={{ position: 'relative', cursor: 'pointer', '&:hover .rx': { opacity: 1 } }}>
                   <Avatar src={p.thumbnail || undefined} variant="rounded"
                     sx={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: 12, bgcolor: '#e8f5e9',
                       '& img': { objectFit: 'contain', p: '2px' } }}>
