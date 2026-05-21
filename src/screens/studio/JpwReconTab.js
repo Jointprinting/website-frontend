@@ -897,7 +897,7 @@ function LeadDetail({ lead, scoreCaps, onClose, api, onSaved, spiderConfigured, 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bulk sweep — async, smart queue, progress bar
 // ─────────────────────────────────────────────────────────────────────────────
-function SweepDialog({ open, onClose, api, reference, onDone }) {
+function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoStartConsumed }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [usage, setUsage] = React.useState(null);
@@ -977,6 +977,30 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
       setErr(e?.response?.data?.message || e.message);
     } finally { setBusy(false); }
   };
+
+  // Auto-start: when the toolbar button opens the dialog with autoStart=true
+  // AND the sweep isn't already running AND today's hasn't already finished,
+  // fire submit() immediately so the user doesn't have to click "Run" inside
+  // the dialog too. We need `status` to know whether it's blocked, so we run
+  // this in an effect that watches status.
+  const autoStartFiredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!open) { autoStartFiredRef.current = false; return; }
+    if (!autoStart || autoStartFiredRef.current) return;
+    // Wait until we have status — otherwise we might start a sweep even
+    // though today's already done.
+    if (!status) return;
+    if (isRunning || blocked) {
+      // Don't auto-start — user can see why in the banner. Consume the flag
+      // so it doesn't fire later.
+      if (onAutoStartConsumed) onAutoStartConsumed();
+      return;
+    }
+    autoStartFiredRef.current = true;
+    if (onAutoStartConsumed) onAutoStartConsumed();
+    submit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoStart, status, isRunning, blocked]);
 
   const stopSweep = async () => {
     try {
@@ -1094,25 +1118,17 @@ function SweepDialog({ open, onClose, api, reference, onDone }) {
         <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>
           {isRunning ? 'Close (sweep keeps running)' : 'Close'}
         </Button>
-        {!isRunning && (
-          blocked ? (
-            <Tooltip title={blockReason}>
-              <span>
-                <Button disabled
-                  sx={{
-                    color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
-                    fontFamily: MONO, fontWeight: 700,
-                  }}>
-                  {ranToday ? 'Already ran today' : 'Daily budget used'}
-                </Button>
-              </span>
-            </Tooltip>
-          ) : (
-            <Button onClick={submit} disabled={busy} variant="contained"
-              sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-              {busy ? <CircularProgress size={18} /> : 'Run daily sweep'}
-            </Button>
-          )
+        {/* When blocked (already ran today or out of budget), the green
+            banner up top says everything — no need for a disabled pill
+            next to Close that looks like dead UI. When not blocked AND
+            not running, we still show a manual "Run daily sweep" button
+            as a fallback in case the auto-start from the toolbar didn't
+            fire for some reason. */}
+        {!isRunning && !blocked && (
+          <Button onClick={submit} disabled={busy} variant="contained"
+            sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
+            {busy ? <CircularProgress size={18} /> : 'Run daily sweep'}
+          </Button>
         )}
       </DialogActions>
     </Dialog>
@@ -1133,6 +1149,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
   const [err, setErr] = React.useState('');
   const [selected, setSelected] = React.useState(null);
   const [sweepOpen, setSweepOpen]   = React.useState(false);
+  const [sweepAutoStart, setSweepAutoStart] = React.useState(false);
   const [usage, setUsage] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [selectedIds, setSelectedIds] = React.useState(new Set());
@@ -1152,11 +1169,15 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
         // A+/A only. If empty, the empty state will explain why — we do NOT
         // fall back to lower-grade leads. The point of the queue is to only
         // surface leads worth Nate's time.
-        const [a1, a2] = await Promise.all([
+        // A+/A/B — Nate's pool rarely produces A+ leads naturally, so we
+        // include B too. The grade chip on each row still tells him what
+        // they actually are; he can prioritize by score within the queue.
+        const [a1, a2, b] = await Promise.all([
           api.listLeads({ grade: 'A+', sort: 'score_desc' }),
           api.listLeads({ grade: 'A',  sort: 'score_desc' }),
+          api.listLeads({ grade: 'B',  sort: 'score_desc' }),
         ]);
-        setLeads([...(a1.leads || []), ...(a2.leads || [])]);
+        setLeads([...(a1.leads || []), ...(a2.leads || []), ...(b.leads || [])]);
       } else {
         const r = await api.listLeads(params);
         setLeads(r.leads || []);
@@ -1266,7 +1287,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
           </Button>
         )}
         <Button size="small" startIcon={<TravelExploreIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setSweepOpen(true)}
+          onClick={() => { setSweepAutoStart(true); setSweepOpen(true); }}
           sx={{ color: TERM.green, border: `1px solid ${TERM.green}`, fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
           Run daily sweep
         </Button>
@@ -1387,7 +1408,10 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
         }}
       />
       <SweepDialog
-        open={sweepOpen} onClose={() => setSweepOpen(false)} api={api}
+        open={sweepOpen}
+        autoStart={sweepAutoStart}
+        onAutoStartConsumed={() => setSweepAutoStart(false)}
+        onClose={() => setSweepOpen(false)} api={api}
         reference={reference}
         onDone={() => { loadAll(); api.usage().then(setUsage).catch(() => {}); }}
       />
