@@ -22,9 +22,8 @@ const getTagCode = (tag) => {
 
 const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
-// S&S returns product descriptions as raw HTML. Strip the script-y bits
-// before handing to dangerouslySetInnerHTML so a malicious description
-// can't execute.
+// S&S returns descriptions as raw HTML. Strip script-y bits before
+// dangerouslySetInnerHTML.
 const sanitizeHTML = (html) => {
   if (typeof html !== 'string') return '';
   return html
@@ -56,9 +55,6 @@ function Product() {
   const [productTagColor, setProductTagColor]                 = useState(getTagCode(preloadedItem?.tag));
   const [productColorOptions, setProductColorOptions]         = useState([]);
   const [productColorCodes, setProductColorCodes]             = useState([]);
-  // Color count from catalog row (S&S /styles/ gives us this even when
-  // per-SKU color detail isn't available). Lets us still tell the user
-  // "Available in N colors" when the swatches haven't loaded.
   const [productColorCount, setProductColorCount]             = useState(preloadedItem?.colorCount || 0);
   const [productFrontImages, setProductFrontImages]           = useState(preloadedItem?.image ? [preloadedItem.image] : []);
   const [productBackImages, setProductBackImages]             = useState([]);
@@ -69,6 +65,10 @@ function Product() {
   const [productIndex, setProductIndex]                       = useState(0);
   const [loading, setLoading]                                 = useState(!preloadedItem);
   const [error, setError]                                     = useState(null);
+  // Escalating loading message: backend may run an on-demand S&S sync for
+  // this style the first time it's clicked (~8-15 s). Show progressively
+  // more reassuring copy so the user knows we're working.
+  const [loadingMessage, setLoadingMessage]                   = useState('');
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
@@ -121,15 +121,23 @@ function Product() {
     };
 
     const fetchProduct = async () => {
+      // Set up escalating loading-message timers so a long sync still feels
+      // intentional rather than hung.
+      const t1 = setTimeout(() => setLoadingMessage('Loading colors and sizes from S&S…'), 3000);
+      const t2 = setTimeout(() => setLoadingMessage('First time loading this style — almost there.'), 8000);
       try {
         if (!preloadedItem) setLoading(true);
         const encoded = encodeURIComponent(id);
+        // Backend handler now does Mongo → on-demand sync → live fallback,
+        // so we only need this one call.
         const res = await fetch(config.backendUrl + '/api/products/style/' + encoded);
         if (res.ok) {
           applyProductData(await res.json());
           setError(null);
           return;
         }
+        // Belt-and-suspenders: hit the live S&S fallback directly if Mongo
+        // returns 404 (shouldn't happen now, but harmless).
         if (res.status === 404) {
           const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + encoded);
           if (ssRes.ok) {
@@ -147,7 +155,10 @@ function Product() {
           setError("We couldn't reach the catalog server. Please check your connection and try again.");
         }
       } finally {
+        clearTimeout(t1);
+        clearTimeout(t2);
         setLoading(false);
+        setLoadingMessage('');
       }
     };
 
@@ -215,8 +226,13 @@ function Product() {
     <Box bgcolor="#f5f5f5" minHeight="100vh">
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 7 }, px: { xs: 2, md: 4 } }}>
         {loading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" height="60vh">
+          <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="60vh" gap={2}>
             <CircularProgress size={64} thickness={3.5} />
+            {loadingMessage && (
+              <Typography color="text.secondary" textAlign="center" sx={{ maxWidth: 320, fontSize: 14 }}>
+                {loadingMessage}
+              </Typography>
+            )}
           </Box>
         ) : (
           <Stack
@@ -289,7 +305,10 @@ function Product() {
               )}
 
               {(hasRealPrice || hasRealSize) && (
-                <Stack spacing={{ xs: 2, sm: 7 }} direction="row">
+                <Stack
+                  spacing={{ xs: 1, sm: 7 }}
+                  direction={{ xs: 'column', sm: 'row' }}
+                >
                   {hasRealPrice && (
                     <Stack spacing={0.5}>
                       <Typography color="black">Typically</Typography>
@@ -328,18 +347,25 @@ function Product() {
                     </Typography>
                   </Stack>
 
-                  <Box sx={{ overflowX: 'auto', width: '100%', py: 1, px: '2px' }}>
+                  <Box sx={{
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    width: '100%', py: 1, px: '2px',
+                  }}>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: 'fit-content' }}>
                       {productColorOptions.map((item, index) => (
                         <Tooltip title={item} placement="top" arrow key={index}>
                           <Box
                             onClick={() => { setProductColor(item); setProductColorCode(productColorCodes[index]); setProductIndex(index); }}
                             sx={{
-                              cursor: 'pointer', width: 28, height: 28, borderRadius: '50%',
+                              cursor: 'pointer',
+                              // Bigger tap target on mobile for easier touch use.
+                              width: { xs: 36, sm: 28 }, height: { xs: 36, sm: 28 },
+                              borderRadius: '50%',
                               backgroundColor: productColorCodes[index],
                               border: item === productColor ? '2px solid white' : 'none',
                               boxShadow: item === productColor ? '0 0 0 2px #1a3d2b' : 2,
-                              flexShrink: 0, mr: '8px',
+                              flexShrink: 0, mr: { xs: '10px', sm: '8px' },
                               transition: 'box-shadow 120ms',
                             }}
                           />
