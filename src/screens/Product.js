@@ -22,6 +22,20 @@ const getTagCode = (tag) => {
 
 const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
+// S&S returns product descriptions as raw HTML (<ul><li>...</li></ul>).
+// Strip the script-y bits before handing to dangerouslySetInnerHTML so a
+// malicious description can't execute. Vendor data is trusted, but cheap
+// defense-in-depth is worth a few lines.
+const sanitizeHTML = (html) => {
+  if (typeof html !== 'string') return '';
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+};
+
 function Product() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -164,6 +178,7 @@ function Product() {
   const currentFrontImg = productFrontImages[productIndex] || null;
   const currentBackImg  = productBackImages[productIndex]  || null;
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
+  const hasRealPrice    = Number(productPriceRangeBottom) > 0 || Number(productPriceRangeTop) > 0;
 
   // Error state — only shown when we have nothing to display.
   if (error) {
@@ -274,7 +289,7 @@ function Product() {
                 </Typography>
               )}
 
-              {(productPriceRangeBottom || productPriceRangeTop) && (
+              {hasRealPrice ? (
                 <Stack spacing={{ xs: 2, sm: 7 }} direction="row">
                   <Stack spacing={0.5}>
                     <Typography color="black">Typically</Typography>
@@ -288,6 +303,13 @@ function Product() {
                       {productSizeRangeBottom} – {productSizeRangeTop}
                     </Typography>
                   </Stack>
+                </Stack>
+              ) : (
+                <Stack spacing={0.5}>
+                  <Typography color="black">Comes in</Typography>
+                  <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
+                    {productSizeRangeBottom} – {productSizeRangeTop}
+                  </Typography>
                 </Stack>
               )}
 
@@ -305,6 +327,9 @@ function Product() {
                       border: '1px solid white', boxShadow: '0 0 0 1px gray', flexShrink: 0,
                     }} />
                     <Typography color="black" fontWeight="bold">{productColor}</Typography>
+                    <Typography color="gray" sx={{ fontSize: 12 }}>
+                      ({productColorOptions.length} {productColorOptions.length === 1 ? 'option' : 'options'})
+                    </Typography>
                   </Stack>
 
                   <Box sx={{ overflowX: 'auto', width: '100%', py: 1, px: '2px' }}>
@@ -379,9 +404,21 @@ function Product() {
               />
 
               {productDescription && (
-                <Typography color="text.secondary" sx={{ fontSize: { xs: 14, sm: 16 }, overflowWrap: 'break-word', wordBreak: 'break-word' }}>
-                  {productDescription}
-                </Typography>
+                <Box
+                  sx={{
+                    color: 'text.secondary',
+                    fontSize: { xs: 14, sm: 16 },
+                    lineHeight: 1.6,
+                    overflowWrap: 'break-word',
+                    wordBreak: 'break-word',
+                    '& ul, & ol': { pl: 2.5, my: 1 },
+                    '& li': { mb: 0.5 },
+                    '& p': { my: 1 },
+                    '& a': { color: '#1a3d2b', textDecoration: 'underline' },
+                    '& strong, & b': { color: 'text.primary' },
+                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHTML(productDescription) }}
+                />
               )}
             </Stack>
           </Stack>
