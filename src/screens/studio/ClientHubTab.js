@@ -23,6 +23,7 @@ import DownloadIcon             from '@mui/icons-material/Download';
 import CheckCircleOutlineIcon   from '@mui/icons-material/CheckCircleOutline';
 import LinkIcon                 from '@mui/icons-material/Link';
 import config from '../../config.json';
+import DashboardView from './DashboardView';
 
 const B = {
   bg: '#0c1410', panel: '#162420', panelHi: '#1c2e28',
@@ -92,6 +93,7 @@ export default function ClientHubTab({ token, onBack }) {
 
   const [clients, setClients]               = React.useState([]);
   const [clientsLoading, setClientsLoading] = React.useState(true);
+  const [view, setView]                     = React.useState('dashboard'); // 'dashboard' | 'clients'
   const [search, setSearch]                 = React.useState('');
   const [sortMode, setSortMode]             = React.useState('recent');
   const [selectedKey, setSelectedKey]       = React.useState(null);
@@ -109,7 +111,6 @@ export default function ClientHubTab({ token, onBack }) {
   const [orderSaving, setOrderSaving]         = React.useState(false);
 
   const [settingsAnchor, setSettingsAnchor] = React.useState(null);
-  const [dedupeOpen, setDedupeOpen]         = React.useState(false);
   const [convertingId, setConvertingId]     = React.useState(null);
   // mockupPicker = { order, mode: 'convert' | 'link' } — drives the global picker
   const [mockupPicker, setMockupPicker]     = React.useState(null);
@@ -145,11 +146,8 @@ export default function ClientHubTab({ token, onBack }) {
     } catch (_) { setOrders([]); }
     finally { setOrdersLoading(false); }
 
-    try {
-      const r = await axios.get(`${base}/quoter/quotes?search=${encodeURIComponent(name)}`, authHdr);
-      setQuotes(Array.isArray(r.data) ? r.data : (r.data?.quotes || []));
-    } catch (_) { setQuotes([]); }
-    finally { setQuotesLoading(false); }
+    setQuotes([]);
+    setQuotesLoading(false);
 
     try {
       const r = await axios.get(`${base}/studio/library/mockups`, authHdr);
@@ -175,6 +173,26 @@ export default function ClientHubTab({ token, onBack }) {
     setSelectedKey(id); setActiveTab(0);
     setOrders([]); setQuotes([]); setMockups([]);
   };
+
+  // Jump from dashboard to a client by company/clientName, switching view.
+  const openClientByName = React.useCallback((name) => {
+    const target = (name || '').toLowerCase();
+    if (!target) return;
+    const match = clients.find(c =>
+      (c.companyName || '').toLowerCase() === target ||
+      (c.clientName  || '').toLowerCase() === target
+    ) || clients.find(c =>
+      (c.companyName || '').toLowerCase().includes(target) ||
+      (c.clientName  || '').toLowerCase().includes(target)
+    );
+    if (match) {
+      setView('clients');
+      handleSelectClient(match._id);
+    } else {
+      setView('clients');
+      setSearch(name);
+    }
+  }, [clients]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Order actions ──────────────────────────────────────────────────────────
   const openNewOrder = async (asQuote = false) => {
@@ -363,23 +381,51 @@ export default function ClientHubTab({ token, onBack }) {
         <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 16, letterSpacing: 0.5 }}>
           ORDER TRACKER
         </Typography>
-        <TextField
-          size="small" placeholder="Search clients…" value={search}
-          onChange={e => setSearch(e.target.value)}
-          sx={{ ...darkInput, width: { xs: 150, sm: 220 }, ml: 'auto' }}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: B.muted, fontSize: 18 }} /></InputAdornment>,
-          }}
-        />
-        <Tooltip title={sortMode === 'recent' ? 'Sort: Recent first' : 'Sort: A–Z'}>
-          <IconButton
-            size="small"
-            onClick={() => setSortMode(m => m === 'recent' ? 'alpha' : 'recent')}
-            sx={{ color: sortMode === 'alpha' ? B.green : B.muted, '&:hover': { color: B.green } }}
-          >
-            <SortIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+
+        {/* Dashboard / Clients toggle */}
+        <Box sx={{
+          display: 'flex', ml: 2, p: 0.25, borderRadius: 1.5,
+          bgcolor: 'rgba(255,255,255,0.04)', border: `1px solid ${B.border}`,
+        }}>
+          {['dashboard', 'clients'].map(v => (
+            <Box
+              key={v}
+              onClick={() => setView(v)}
+              sx={{
+                px: 1.5, py: 0.5, borderRadius: 1, cursor: 'pointer', fontSize: 12,
+                fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+                color: view === v ? B.greenDk : B.muted,
+                bgcolor: view === v ? B.green : 'transparent',
+                '&:hover': { color: view === v ? B.greenDk : B.white },
+              }}
+            >
+              {v === 'dashboard' ? 'Dashboard' : 'Clients'}
+            </Box>
+          ))}
+        </Box>
+
+        {view === 'clients' && (
+          <TextField
+            size="small" placeholder="Search clients…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            sx={{ ...darkInput, width: { xs: 150, sm: 220 }, ml: 'auto' }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: B.muted, fontSize: 18 }} /></InputAdornment>,
+            }}
+          />
+        )}
+        {view !== 'clients' && <Box sx={{ flex: 1 }} />}
+        {view === 'clients' && (
+          <Tooltip title={sortMode === 'recent' ? 'Sort: Recent first' : 'Sort: A–Z'}>
+            <IconButton
+              size="small"
+              onClick={() => setSortMode(m => m === 'recent' ? 'alpha' : 'recent')}
+              sx={{ color: sortMode === 'alpha' ? B.green : B.muted, '&:hover': { color: B.green } }}
+            >
+              <SortIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Settings">
           <IconButton
             size="small"
@@ -400,18 +446,6 @@ export default function ClientHubTab({ token, onBack }) {
           <List dense disablePadding>
             <ListItem
               button
-              onClick={() => { setSettingsAnchor(null); setDedupeOpen(true); }}
-              sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
-            >
-              <ListItemText
-                primary="Review duplicates"
-                primaryTypographyProps={{ sx: { color: B.white, fontSize: 13 } }}
-                secondary="Merge or rename company names"
-                secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
-              />
-            </ListItem>
-            <ListItem
-              button
               disabled={resyncing}
               onClick={() => { setSettingsAnchor(null); resyncHistorical(); }}
               sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
@@ -428,6 +462,12 @@ export default function ClientHubTab({ token, onBack }) {
       </Box>
 
       {/* Body */}
+      {view === 'dashboard' && (
+        <Box sx={{ position: 'absolute', inset: 0, top: HEADER_H, display: 'flex' }}>
+          <DashboardView token={token} onOpenClient={openClientByName} />
+        </Box>
+      )}
+      {view === 'clients' && (
       <Box sx={{ position: 'absolute', inset: 0, top: HEADER_H, display: 'flex' }}>
         {/* Left panel — client list */}
         <Box sx={{
@@ -535,16 +575,7 @@ export default function ClientHubTab({ token, onBack }) {
           )}
         </Box>
       </Box>
-
-      {/* Dedupe Dialog */}
-      <DedupeDialog
-        open={dedupeOpen}
-        onClose={() => setDedupeOpen(false)}
-        clients={clients}
-        base={base}
-        authHdr={authHdr}
-        onDone={() => { setDedupeOpen(false); loadClients(); if (selectedClient) loadClientData(selectedClient); }}
-      />
+      )}
 
       {/* Order Dialog */}
       <OrderDialog
@@ -988,109 +1019,6 @@ function MockupsTab({ mockups, loading, onMockupClick }) {
         </Paper>
       ))}
     </Box>
-  );
-}
-
-// ─── Dedupe Dialog ────────────────────────────────────────────────────────────
-function DedupeDialog({ open, onClose, clients, base, authHdr, onDone }) {
-  const [selected, setSelected]   = React.useState('');
-  const [renameTo, setRenameTo]   = React.useState('');
-  const [working, setWorking]     = React.useState(false);
-
-  React.useEffect(() => { if (!open) { setSelected(''); setRenameTo(''); } }, [open]);
-
-  const allNames = React.useMemo(
-    () => [...new Set(clients.map(c => c.companyName || c.clientName).filter(Boolean))].sort(),
-    [clients]
-  );
-
-  const handleMerge = async () => {
-    if (!selected || !renameTo.trim()) return;
-    setWorking(true);
-    try {
-      await axios.post(`${base}/orders/rename-company`, { from: selected, to: renameTo.trim() }, authHdr);
-      onDone();
-    } catch (e) { alert(e?.response?.data?.message || 'Failed'); }
-    finally { setWorking(false); }
-  };
-
-  const handleDelete = async () => {
-    if (!selected) return;
-    if (!window.confirm(`Delete ALL orders for "${selected}"? This cannot be undone.`)) return;
-    setWorking(true);
-    try {
-      await axios.delete(`${base}/orders/by-company/${encodeURIComponent(selected)}`, authHdr);
-      onDone();
-    } catch (e) { alert(e?.response?.data?.message || 'Failed'); }
-    finally { setWorking(false); }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-      <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 16, pb: 1 }}>
-        Review Duplicates
-      </DialogTitle>
-      <DialogContent>
-        <Typography sx={{ color: B.muted, fontSize: 13, mb: 2 }}>
-          Select a company to rename it or merge it into another.
-        </Typography>
-        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
-          <InputLabel sx={{ color: B.muted }}>Company to change</InputLabel>
-          <Select
-            label="Company to change"
-            value={selected}
-            onChange={e => { setSelected(e.target.value); setRenameTo(''); }}
-            sx={{ bgcolor: 'rgba(255,255,255,0.04)', color: B.white, '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' }, '& .MuiSelect-icon': { color: B.muted } }}
-          >
-            {allNames.map(n => <MenuItem key={n} value={n} sx={{ fontSize: 13 }}>{n}</MenuItem>)}
-          </Select>
-        </FormControl>
-
-        {selected && (
-          <>
-            <TextField
-              size="small" fullWidth label="Rename / merge into"
-              value={renameTo}
-              onChange={e => setRenameTo(e.target.value)}
-              placeholder="Type new or existing name"
-              sx={{ ...darkInput, mb: 1.5 }}
-            />
-            <Typography sx={{ color: B.muted, fontSize: 11, mb: 0.75 }}>Or click an existing name:</Typography>
-            <Stack direction="row" flexWrap="wrap" gap={0.5}>
-              {allNames.filter(n => n !== selected).map(n => (
-                <Chip
-                  key={n} label={n} size="small" onClick={() => setRenameTo(n)}
-                  sx={{
-                    height: 22, fontSize: 11, cursor: 'pointer',
-                    bgcolor: renameTo === n ? 'rgba(74,222,128,0.15)' : B.panelHi,
-                    color: renameTo === n ? B.green : B.muted,
-                    border: `1px solid ${renameTo === n ? B.green : B.border}`,
-                  }}
-                />
-              ))}
-            </Stack>
-          </>
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 2.5, pb: 2, gap: 1 }}>
-        <Button onClick={onClose} sx={{ color: B.muted }}>Close</Button>
-        {selected && (
-          <Button onClick={handleDelete} disabled={working}
-            sx={{ color: '#f87171', '&:hover': { bgcolor: 'rgba(248,113,113,0.08)' } }}>
-            Delete all orders
-          </Button>
-        )}
-        <Button
-          onClick={handleMerge}
-          disabled={working || !renameTo.trim() || !selected}
-          variant="contained"
-          sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}
-        >
-          {working ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : 'Merge / Rename'}
-        </Button>
-      </DialogActions>
-    </Dialog>
   );
 }
 
