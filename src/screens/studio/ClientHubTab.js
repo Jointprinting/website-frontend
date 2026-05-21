@@ -149,11 +149,14 @@ export default function ClientHubTab({ token, onBack }) {
     try {
       const r = await axios.get(`${base}/studio/library/mockups`, authHdr);
       const all = r.data || [];
-      const needle = name.toLowerCase();
-      setMockups(all.filter(m =>
-        (m.client || '').toLowerCase().includes(needle) ||
-        (m.name || '').toLowerCase().includes(needle.slice(0, 7))
-      ));
+      const companyN = (client.companyName || '').toLowerCase();
+      const clientN  = (client.clientName  || '').toLowerCase();
+      setMockups(all.filter(m => {
+        const mc = (m.client || '').toLowerCase();
+        const mn = (m.name   || '').toLowerCase();
+        return (companyN && (mc.includes(companyN) || mn.includes(companyN))) ||
+               (clientN  && (mc.includes(clientN)  || mn.includes(clientN)));
+      }));
     } catch (_) { setMockups([]); }
     finally { setMockupsLoading(false); }
   }, [authHdr, base]);
@@ -169,14 +172,17 @@ export default function ClientHubTab({ token, onBack }) {
   };
 
   // ── Order actions ──────────────────────────────────────────────────────────
-  const openNewOrder = async () => {
+  const openNewOrder = async (asQuote = false) => {
     const name = selectedClient?.companyName || selectedClient?.clientName || '';
     let nextNum = '';
-    try {
-      const r = await axios.get(`${base}/orders/next-number`, authHdr);
-      nextNum = r.data?.next || '';
-    } catch (_) {}
-    setEditingOrder({ ...emptyOrder(name, selectedClient?.clientName || ''), orderNumber: nextNum });
+    if (!asQuote) {
+      try {
+        const r = await axios.get(`${base}/orders/next-number`, authHdr);
+        nextNum = r.data?.next || '';
+      } catch (_) {}
+    }
+    const base_ = emptyOrder(name, selectedClient?.clientName || '');
+    setEditingOrder({ ...base_, status: asQuote ? 'quoted' : 'placed', orderNumber: nextNum });
     setOrderDialogOpen(true);
   };
 
@@ -277,9 +283,15 @@ export default function ClientHubTab({ token, onBack }) {
     return list;
   }, [clients, search, sortMode]);
 
+  // Key by mockup number (#000028D from pageState.mockupNum) first, then name as fallback
   const mockupThumbnailMap = React.useMemo(() => {
     const map = {};
-    mockups.forEach(m => { if (m.name) map[m.name] = m.thumbnail; });
+    mockups.forEach(m => {
+      if (!m.thumbnail) return;
+      const num = m.pageState?.mockupNum;
+      if (num) map[num] = m.thumbnail;
+      if (m.name) map[m.name] = m.thumbnail;
+    });
     return map;
   }, [mockups]);
 
@@ -444,6 +456,7 @@ export default function ClientHubTab({ token, onBack }) {
                   onConvert={convertToOrder} convertingId={convertingId}
                   onEdit={openEditOrder} onDelete={deleteOrderById}
                   onStatusChange={updateOrderStatus} onMockupClick={openMockupInStudio}
+                  onNewQuote={() => openNewOrder(true)}
                   token={token} base={base} authHdr={authHdr}
                 />
               )}
@@ -569,21 +582,25 @@ function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelet
 }
 
 // ─── Quotes Tab ───────────────────────────────────────────────────────────────
-function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConvert, convertingId, onEdit, onDelete, onStatusChange, onMockupClick, token, base, authHdr }) {
+function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConvert, convertingId, onEdit, onDelete, onStatusChange, onMockupClick, onNewQuote, token, base, authHdr }) {
   if (loading) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>;
-
-  const hasContent = quotedOrders.length > 0 || quotes.length > 0;
-  if (!hasContent) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6, color: B.muted }}>
-        <RequestQuoteOutlinedIcon sx={{ fontSize: 40, opacity: 0.3, mb: 1 }} />
-        <Typography sx={{ fontSize: 13 }}>No quotes yet.</Typography>
-      </Box>
-    );
-  }
 
   return (
     <Stack spacing={1.5}>
+      <Box>
+        <Button onClick={onNewQuote} startIcon={<AddCircleOutlineIcon />} size="small" variant="outlined"
+          sx={{ borderColor: B.border, color: '#60a5fa', fontWeight: 700, '&:hover': { borderColor: '#60a5fa', bgcolor: 'rgba(96,165,250,0.06)' } }}>
+          New Quote
+        </Button>
+      </Box>
+
+      {quotedOrders.length === 0 && quotes.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 6, color: B.muted }}>
+          <RequestQuoteOutlinedIcon sx={{ fontSize: 40, opacity: 0.3, mb: 1 }} />
+          <Typography sx={{ fontSize: 13 }}>No quotes yet.</Typography>
+        </Box>
+      )}
+
       {/* Quoted orders from DB — shown first with convert button */}
       {quotedOrders.map(order => (
         <OrderCard
@@ -741,9 +758,9 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
         </Box>
       )}
 
-      {/* Mockup chips with thumbnails */}
+      {/* Mockup thumbnails + labels */}
       {order.mockupNumbers?.length > 0 && (
-        <Stack direction="row" spacing={0.5} mt={1} flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={1} mt={1.2} flexWrap="wrap" useFlexGap>
           {order.mockupNumbers.map((n, i) => {
             const thumb = mockupThumbnailMap?.[n];
             return (
@@ -751,18 +768,25 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
                 <Box
                   onClick={() => onMockupClick(n)}
                   sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
-                    bgcolor: B.panelHi, borderRadius: 1, px: 0.8, py: 0.3,
-                    border: `1px solid ${B.border}`,
-                    '&:hover': { borderColor: B.green, bgcolor: 'rgba(74,222,128,0.06)' },
-                    transition: 'all 0.12s',
+                    cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden',
+                    border: `1px solid ${B.border}`, width: thumb ? 72 : 'auto',
+                    '&:hover': { borderColor: B.green },
+                    transition: 'border-color 0.12s',
                   }}
                 >
-                  {thumb && (
-                    <Box component="img" src={thumb} alt={n}
-                      sx={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 0.5 }} />
+                  {thumb ? (
+                    <>
+                      <Box component="img" src={thumb} alt={n}
+                        sx={{ width: 72, height: 72, objectFit: 'cover', display: 'block' }} />
+                      <Box sx={{ px: 0.6, py: 0.4, bgcolor: B.panelHi }}>
+                        <Typography sx={{ color: B.muted, fontSize: 9, fontFamily: 'monospace', fontWeight: 700, textAlign: 'center' }}>{n}</Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.8, py: 0.4, bgcolor: B.panelHi }}>
+                      <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', fontWeight: 600 }}>{n}</Typography>
+                    </Box>
                   )}
-                  <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', fontWeight: 600 }}>{n}</Typography>
                 </Box>
               </Tooltip>
             );

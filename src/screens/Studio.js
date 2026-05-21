@@ -1754,7 +1754,6 @@ const HUB_GROUPS = [
     brand: 'Joint Printing',
     tools: [
       { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
-      { id: 'quoter',      label: 'Quoter',               Icon: RequestQuoteOutlinedIcon },
       { id: 'clients',     label: 'Order Tracker',         Icon: PeopleOutlineIcon },
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
       { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
@@ -1942,10 +1941,6 @@ function StudioBody({ token, onLogout }) {
     );
   }
 
-
-  if (view === 'quoter') {
-    return <QuoterTab token={token} onBack={() => setView('hub')} />;
-  }
 
   if (view === 'clients') {
     return <ClientHubTab token={token} onBack={() => setView('hub')} />;
