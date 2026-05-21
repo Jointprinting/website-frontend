@@ -21,6 +21,7 @@ import SortIcon                 from '@mui/icons-material/Sort';
 import AttachFileIcon           from '@mui/icons-material/AttachFile';
 import DownloadIcon             from '@mui/icons-material/Download';
 import CheckCircleOutlineIcon   from '@mui/icons-material/CheckCircleOutline';
+import LinkIcon                 from '@mui/icons-material/Link';
 import config from '../../config.json';
 
 const B = {
@@ -110,6 +111,10 @@ export default function ClientHubTab({ token, onBack }) {
   const [settingsAnchor, setSettingsAnchor] = React.useState(null);
   const [dedupeOpen, setDedupeOpen]         = React.useState(false);
   const [convertingId, setConvertingId]     = React.useState(null);
+  // mockupPicker = { order, mode: 'convert' | 'link' } — drives the global picker
+  const [mockupPicker, setMockupPicker]     = React.useState(null);
+  const [pickerBusy, setPickerBusy]         = React.useState(false);
+  const [resyncing, setResyncing]           = React.useState(false);
 
   const selectedClient = clients.find(c => c._id === selectedKey);
 
@@ -245,7 +250,10 @@ export default function ClientHubTab({ token, onBack }) {
   };
 
   // ── Convert quoted order → placed ─────────────────────────────────────────
-  const convertToOrder = async (order) => {
+  // Now goes through the mockup picker so the user can mark which mockups the
+  // client approved at conversion time. `selectedNums` overrides whatever's
+  // currently on the order (typically empty for a fresh quote).
+  const convertToOrder = async (order, selectedNums) => {
     setConvertingId(order._id);
     try {
       let nextNum = order.orderNumber || '';
@@ -253,16 +261,58 @@ export default function ClientHubTab({ token, onBack }) {
         const r = await axios.get(`${base}/orders/next-number`, authHdr);
         nextNum = r.data?.next || '';
       }
-      await axios.put(`${base}/orders/${order._id}`, {
+      const patch = {
         status: 'placed',
         orderNumber: nextNum,
         orderDate: order.orderDate || new Date().toISOString().slice(0, 10),
-      }, authHdr);
+      };
+      if (Array.isArray(selectedNums)) patch.mockupNumbers = selectedNums;
+      await axios.put(`${base}/orders/${order._id}`, patch, authHdr);
       await loadClients();
       if (selectedClient) await loadClientData(selectedClient);
     } catch (e) {
       alert(e?.response?.data?.message || 'Convert failed');
     } finally { setConvertingId(null); }
+  };
+
+  // ── Mockup picker dispatch ────────────────────────────────────────────────
+  const openConvertPicker = (order) => setMockupPicker({ order, mode: 'convert' });
+  const openLinkPicker    = (order) => setMockupPicker({ order, mode: 'link' });
+  const closePicker       = () => { if (!pickerBusy) setMockupPicker(null); };
+
+  const confirmPicker = async (selectedNums) => {
+    if (!mockupPicker) return;
+    const { order, mode } = mockupPicker;
+    setPickerBusy(true);
+    try {
+      if (mode === 'convert') {
+        await convertToOrder(order, selectedNums);
+      } else {
+        await axios.put(`${base}/orders/${order._id}`, { mockupNumbers: selectedNums }, authHdr);
+        if (selectedClient) await loadClientData(selectedClient);
+      }
+      setMockupPicker(null);
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Update failed');
+    } finally {
+      setPickerBusy(false);
+    }
+  };
+
+  // ── Re-sync historical data (backfills empty mockup #'s on existing orders)
+  const resyncHistorical = async () => {
+    setResyncing(true);
+    try {
+      const r = await axios.post(`${base}/orders/seed-historical`, {}, authHdr);
+      const { created = 0, backfilled = 0, skipped = 0 } = r.data || {};
+      alert(`Re-sync done: ${created} created, ${backfilled} backfilled, ${skipped} unchanged.`);
+      await loadClients();
+      if (selectedClient) await loadClientData(selectedClient);
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Re-sync failed');
+    } finally {
+      setResyncing(false);
+    }
   };
 
   // ── Filtered + sorted client list ─────────────────────────────────────────
@@ -360,6 +410,19 @@ export default function ClientHubTab({ token, onBack }) {
                 secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
               />
             </ListItem>
+            <ListItem
+              button
+              disabled={resyncing}
+              onClick={() => { setSettingsAnchor(null); resyncHistorical(); }}
+              sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
+            >
+              <ListItemText
+                primary={resyncing ? 'Re-syncing…' : 'Re-sync historical data'}
+                primaryTypographyProps={{ sx: { color: B.white, fontSize: 13 } }}
+                secondary="Backfill mockup #'s and printers from Notion seed"
+                secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
+              />
+            </ListItem>
           </List>
         </Popover>
       </Box>
@@ -445,6 +508,7 @@ export default function ClientHubTab({ token, onBack }) {
                   onNew={openNewOrder} onEdit={openEditOrder}
                   onDelete={deleteOrderById} onStatusChange={updateOrderStatus}
                   onMockupClick={openMockupInStudio}
+                  onLinkMockups={openLinkPicker}
                   token={token} base={base} authHdr={authHdr}
                 />
               )}
@@ -453,9 +517,10 @@ export default function ClientHubTab({ token, onBack }) {
                   quotedOrders={quotedOrders} quotes={quotes}
                   loading={quotesLoading || ordersLoading}
                   mockupThumbnailMap={mockupThumbnailMap}
-                  onConvert={convertToOrder} convertingId={convertingId}
+                  onConvert={openConvertPicker} convertingId={convertingId}
                   onEdit={openEditOrder} onDelete={deleteOrderById}
                   onStatusChange={updateOrderStatus} onMockupClick={openMockupInStudio}
+                  onLinkMockups={openLinkPicker}
                   onNewQuote={() => openNewOrder(true)}
                   token={token} base={base} authHdr={authHdr}
                 />
@@ -493,6 +558,20 @@ export default function ClientHubTab({ token, onBack }) {
         token={token}
         base={base}
         authHdr={authHdr}
+      />
+
+      {/* Convert / Link mockup picker (shared) */}
+      <MockupPickerDialog
+        open={!!mockupPicker}
+        onClose={closePicker}
+        onConfirm={confirmPicker}
+        mockups={mockups}
+        companyName={mockupPicker?.order?.companyName || ''}
+        clientName={mockupPicker?.order?.clientName || ''}
+        initialSelected={mockupPicker?.order?.mockupNumbers || []}
+        title={mockupPicker?.mode === 'convert' ? 'Pick approved mockups' : 'Link mockups'}
+        confirmLabel={mockupPicker?.mode === 'convert' ? 'Convert to order' : 'Save'}
+        busy={pickerBusy}
       />
     </Box>
   );
@@ -548,7 +627,7 @@ function ClientListItem({ client, selected, onClick }) {
 }
 
 // ─── Orders Tab ───────────────────────────────────────────────────────────────
-function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelete, onStatusChange, onMockupClick, token, base, authHdr }) {
+function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelete, onStatusChange, onMockupClick, onLinkMockups, token, base, authHdr }) {
   if (loading) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>;
   return (
     <Stack spacing={1.5}>
@@ -573,6 +652,7 @@ function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelet
             onDelete={() => onDelete(order._id)}
             onStatusChange={status => onStatusChange(order._id, status)}
             onMockupClick={onMockupClick}
+            onLinkMockups={onLinkMockups ? () => onLinkMockups(order) : undefined}
             token={token} base={base} authHdr={authHdr}
           />
         ))
@@ -582,7 +662,7 @@ function OrdersTab({ orders, loading, mockupThumbnailMap, onNew, onEdit, onDelet
 }
 
 // ─── Quotes Tab ───────────────────────────────────────────────────────────────
-function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConvert, convertingId, onEdit, onDelete, onStatusChange, onMockupClick, onNewQuote, token, base, authHdr }) {
+function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConvert, convertingId, onEdit, onDelete, onStatusChange, onMockupClick, onLinkMockups, onNewQuote, token, base, authHdr }) {
   if (loading) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>;
 
   return (
@@ -611,6 +691,7 @@ function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConver
           onDelete={() => onDelete(order._id)}
           onStatusChange={status => onStatusChange(order._id, status)}
           onMockupClick={onMockupClick}
+          onLinkMockups={onLinkMockups ? () => onLinkMockups(order) : undefined}
           onConvert={() => onConvert(order)}
           converting={convertingId === order._id}
           token={token} base={base} authHdr={authHdr}
@@ -649,7 +730,7 @@ function QuotesTab({ quotedOrders, quotes, loading, mockupThumbnailMap, onConver
   );
 }
 
-function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange, onMockupClick, onConvert, converting, base, authHdr }) {
+function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange, onMockupClick, onConvert, onLinkMockups, converting, base, authHdr }) {
   const [statusOpen, setStatusOpen]   = React.useState(false);
   const [filesOpen, setFilesOpen]     = React.useState(false);
   const [uploading, setUploading]     = React.useState(false);
@@ -732,6 +813,14 @@ function OrderCard({ order, mockupThumbnailMap, onEdit, onDelete, onStatusChange
               >
                 {converting ? '' : 'Convert'}
               </Button>
+            </Tooltip>
+          )}
+          {onLinkMockups && (
+            <Tooltip title={order.mockupNumbers?.length > 0 ? 'Edit linked mockups' : 'Link mockups'}>
+              <IconButton size="small" onClick={onLinkMockups}
+                sx={{ color: order.mockupNumbers?.length > 0 ? B.green : B.muted, '&:hover': { color: B.green } }}>
+                <LinkIcon sx={{ fontSize: 16 }} />
+              </IconButton>
             </Tooltip>
           )}
           <Tooltip title="Edit"><IconButton size="small" onClick={onEdit} sx={{ color: B.muted, '&:hover': { color: B.green } }}><EditOutlinedIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
@@ -1006,6 +1095,130 @@ function DedupeDialog({ open, onClose, clients, base, authHdr, onDone }) {
 }
 
 // ─── Order Dialog ─────────────────────────────────────────────────────────────
+// Reusable mockup picker. Filters by client/company match by default, with a
+// "Show all" toggle. Selection keys off pageState.mockupNum (e.g. "#000028D"),
+// falling back to m.name when no mockupNum is set. Confirm hands the array
+// of selected mockup-number strings back to the caller.
+function MockupPickerDialog({
+  open, onClose, onConfirm, mockups,
+  companyName = '', clientName = '',
+  initialSelected = [],
+  title = 'Pick Mockups',
+  confirmLabel = 'Save',
+  busy = false,
+}) {
+  const [selected, setSelected] = React.useState(initialSelected);
+  const [showAll, setShowAll]   = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setSelected(initialSelected || []);
+      setShowAll(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const keyFor = (m) => m.pageState?.mockupNum || m.name || m._id;
+
+  const matched = React.useMemo(() => {
+    const cn = (companyName || '').trim().toLowerCase();
+    const pn = (clientName  || '').trim().toLowerCase();
+    if (!cn && !pn) return mockups;
+    return mockups.filter(m => {
+      const mc = (m.client || '').toLowerCase();
+      const mn = (m.name   || '').toLowerCase();
+      return (cn && (mc.includes(cn) || mn.includes(cn))) ||
+             (pn && (mc.includes(pn) || mn.includes(pn)));
+    });
+  }, [mockups, companyName, clientName]);
+
+  const shown = showAll || matched.length === 0 ? mockups : matched;
+  const filteringPossible = matched.length > 0 && matched.length < mockups.length;
+
+  const toggle = (m) => {
+    const k = keyFor(m);
+    setSelected(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 15, pb: 1 }}>
+        {title}
+        {(companyName || clientName) && (
+          <Typography component="span" sx={{ color: B.muted, fontSize: 12, fontWeight: 500, ml: 1 }}>
+            — {companyName || clientName}
+          </Typography>
+        )}
+      </DialogTitle>
+      <DialogContent>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+          <Typography sx={{ color: B.muted, fontSize: 11, fontFamily: 'monospace' }}>
+            {selected.length} selected · {shown.length} shown
+          </Typography>
+          {filteringPossible && (
+            <Button size="small" onClick={() => setShowAll(s => !s)}
+              sx={{ color: B.green, fontSize: 11, textTransform: 'none', py: 0.3 }}>
+              {showAll ? `Filter to ${companyName || clientName}` : 'Show all mockups'}
+            </Button>
+          )}
+        </Stack>
+        {shown.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 6, color: B.muted }}>
+            <DesignServicesIcon sx={{ fontSize: 36, opacity: 0.3, mb: 1 }} />
+            <Typography sx={{ fontSize: 13 }}>No mockups saved yet.</Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 1 }}>
+            {shown.map(m => {
+              const k = keyFor(m);
+              const sel = selected.includes(k);
+              const num = m.pageState?.mockupNum;
+              return (
+                <Box key={m._id} onClick={() => toggle(m)} sx={{
+                  cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden',
+                  border: `2px solid ${sel ? B.green : B.border}`,
+                  opacity: sel ? 1 : 0.78, transition: 'all 0.12s',
+                  '&:hover': { opacity: 1, borderColor: B.green },
+                }}>
+                  {m.thumbnail ? (
+                    <Box component="img" src={m.thumbnail} alt={m.name}
+                      sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    <Box sx={{ aspectRatio: '1', bgcolor: B.panelHi,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <DesignServicesIcon sx={{ color: B.muted, fontSize: 28, opacity: 0.4 }} />
+                    </Box>
+                  )}
+                  <Box sx={{ px: 0.8, py: 0.6, bgcolor: sel ? 'rgba(74,222,128,0.12)' : 'transparent' }}>
+                    {num && (
+                      <Typography sx={{ color: sel ? B.green : B.muted, fontSize: 9, fontWeight: 700,
+                        fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {num}
+                      </Typography>
+                    )}
+                    <Typography sx={{ color: sel ? B.green : B.white, fontSize: 10, fontWeight: 600,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.name || 'Untitled'}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 2.5, pb: 2 }}>
+        <Button onClick={onClose} sx={{ color: B.muted }} disabled={busy}>Cancel</Button>
+        <Button onClick={() => onConfirm(selected)} variant="contained" disabled={busy}
+          sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>
+          {busy ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }) {
   const [mockupPickerOpen, setMockupPickerOpen] = React.useState(false);
   if (!order) return null;
@@ -1017,11 +1230,8 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
 
   const currentMockupNums = Array.isArray(order.mockupNumbers) ? order.mockupNumbers : [];
 
-  const toggleMockup = (name) => {
-    const nums = currentMockupNums.includes(name)
-      ? currentMockupNums.filter(n => n !== name)
-      : [...currentMockupNums, name];
-    onChange({ mockupNumbers: nums });
+  const removeMockup = (n) => {
+    onChange({ mockupNumbers: currentMockupNums.filter(x => x !== n) });
   };
 
   return (
@@ -1075,7 +1285,7 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
               {currentMockupNums.length > 0 && (
                 <Stack direction="row" spacing={0.5} mt={0.8} flexWrap="wrap" useFlexGap>
                   {currentMockupNums.map((n, i) => (
-                    <Chip key={i} label={n} size="small" onDelete={() => toggleMockup(n)}
+                    <Chip key={i} label={n} size="small" onDelete={() => removeMockup(n)}
                       sx={{ height: 20, fontSize: 10, bgcolor: B.panelHi, color: B.muted }} />
                   ))}
                 </Stack>
@@ -1094,43 +1304,17 @@ function OrderDialog({ open, order, saving, onChange, onSave, onClose, mockups }
         </DialogActions>
       </Dialog>
 
-      {/* Mockup picker dialog */}
-      <Dialog open={mockupPickerOpen} onClose={() => setMockupPickerOpen(false)} maxWidth="md" fullWidth
-        PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-        <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 15, pb: 1 }}>Browse Mockups</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 1 }}>
-            {mockups.map(m => {
-              const sel = currentMockupNums.includes(m.name);
-              return (
-                <Box key={m._id} onClick={() => toggleMockup(m.name)} sx={{
-                  cursor: 'pointer', borderRadius: 1.5, overflow: 'hidden',
-                  border: `2px solid ${sel ? B.green : B.border}`,
-                  opacity: sel ? 1 : 0.7, transition: 'all 0.12s',
-                  '&:hover': { opacity: 1, borderColor: B.green },
-                }}>
-                  {m.thumbnail ? (
-                    <Box component="img" src={m.thumbnail} alt={m.name} sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    <Box sx={{ aspectRatio: '1', bgcolor: B.panelHi, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <DesignServicesIcon sx={{ color: B.muted, fontSize: 28, opacity: 0.4 }} />
-                    </Box>
-                  )}
-                  <Box sx={{ p: 0.8, bgcolor: sel ? 'rgba(74,222,128,0.1)' : 'transparent' }}>
-                    <Typography sx={{ color: sel ? B.green : B.white, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {m.name || 'Untitled'}
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ px: 2.5, pb: 2 }}>
-          <Button onClick={() => setMockupPickerOpen(false)} variant="contained"
-            sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>Done</Button>
-        </DialogActions>
-      </Dialog>
+      <MockupPickerDialog
+        open={mockupPickerOpen}
+        onClose={() => setMockupPickerOpen(false)}
+        onConfirm={(nums) => { onChange({ mockupNumbers: nums }); setMockupPickerOpen(false); }}
+        mockups={mockups}
+        companyName={order.companyName}
+        clientName={order.clientName}
+        initialSelected={currentMockupNums}
+        title="Link Mockups"
+        confirmLabel="Done"
+      />
     </>
   );
 }
