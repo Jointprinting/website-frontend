@@ -13,12 +13,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
-// ─── constants ────────────────────────────────────────────────────────────────────
 const SIDEBAR_BG  = '#0c1a11';
 const GREEN       = '#4ade80';
 const MUTED       = 'rgba(255,255,255,0.55)';
 const SIDEBAR_W   = 230;
-const NAVBAR_H    = 64; // desktop sticky navbar height in px
+const NAVBAR_H    = 64;
 
 const GARMENT_CATEGORIES = [
   { label: 'All Styles',      value: '' },
@@ -35,7 +34,6 @@ const GARMENT_CATEGORIES = [
   { label: 'Hats & Caps',     value: 'Hats' },
 ];
 
-// "All fits" is the no-filter option; "Unisex" is the S&S-classified fit.
 const GENDER_TYPES = [
   { label: 'All fits',  value: '' },
   { label: "Men's",     value: 'Male' },
@@ -46,10 +44,17 @@ const GENDER_TYPES = [
 
 const TAG_COLOR = { 'Best Seller': 'success', 'New Arrival': 'error', 'Our Favorite': 'warning' };
 
-// ─── ProductCard ───────────────────────────────────────────────────────────────────
+// Single source of truth for the "Starting at $X" number a card should
+// display. Prefers the new priceFrom field; falls back to the legacy
+// priceRangeBottom for AlphaBroder / admin-imported products.
+function startingPrice(item) {
+  const v = Number(item?.priceFrom) || Number(item?.priceRangeBottom) || 0;
+  return v > 0 ? v : null;
+}
+
 function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   const imgSrc = item.image || item.productFrontImages?.[0];
-  const hasPrice = Number(item.priceRangeBottom) > 0 || Number(item.priceRangeTop) > 0;
+  const price  = startingPrice(item);
   return (
     <Paper elevation={isSelected ? 5 : 1} onClick={onNavigate} sx={{
       borderRadius: 2.5, overflow: 'hidden', position: 'relative',
@@ -102,12 +107,14 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
           {item.name}
         </Typography>
         <Rating value={item.rating || 4.5} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
-        {hasPrice && (
+        {price && (
           <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.5 }}>
-            <Typography fontWeight={700} sx={{ fontSize: { xs: 13, sm: 14 } }}>
-              ${item.priceRangeBottom} – ${item.priceRangeTop}
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
+              Starting at
             </Typography>
-            <Typography variant="caption" color="text.secondary" fontSize={10}>est.</Typography>
+            <Typography fontWeight={700} sx={{ fontSize: { xs: 14, sm: 16 } }}>
+              ${price}
+            </Typography>
           </Stack>
         )}
         {item.sizeRangeBottom && item.sizeRangeTop && (
@@ -137,7 +144,6 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
   );
 }
 
-// ─── Sidebar ──────────────────────────────────────────────────────────────────────
 function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) {
   const navBtn = (label, active, onClick) => (
     <Button key={label} onClick={() => { onClick(); onClose?.(); }}
@@ -147,8 +153,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
         color: active ? GREEN : MUTED,
         bgcolor: active ? 'rgba(74,222,128,0.1)' : 'transparent',
         '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: '#fff' },
-      }}
-    >
+      }}>
       {label}
     </Button>
   );
@@ -166,7 +171,6 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           </IconButton>
         </Stack>
       )}
-
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
         Garment Type
@@ -176,9 +180,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           navBtn(label, category === value, () => setCategory(value))
         )}
       </Stack>
-
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)', my: 2 }} />
-
       <Typography variant="overline"
         sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
         Gender / Fit
@@ -188,31 +190,22 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           navBtn(label, genderType === value, () => setGenderType(value))
         )}
       </Stack>
-
       <Box flexGrow={1} />
       <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.08)', pt: 2, mt: 3 }}>
         <Typography sx={{
           fontFamily: 'ui-monospace,"SF Mono",monospace',
           fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.3)',
           textTransform: 'uppercase', lineHeight: 2,
-        }}>
-          JOINT<br />
-          PRINTING
-        </Typography>
+        }}>JOINT<br />PRINTING</Typography>
       </Box>
     </Stack>
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────────────
 export default function Products() {
   const navigate  = useNavigate();
   const isMobile  = useMediaQuery('(max-width:768px)');
 
-  // Filter / pagination state lives entirely in the URL so the browser's
-  // back button restores it after visiting a product detail page. Going
-  // from page 5 -> product -> back now lands back on page 5 with the
-  // same filters applied.
   const [urlParams, setUrlParams] = useSearchParams();
   const category   = urlParams.get('category') || '';
   const genderType = urlParams.get('type') || '';
@@ -234,8 +227,6 @@ export default function Products() {
 
   const PER_PAGE = 24;
 
-  // Setters update the URL; useSearchParams above re-renders with the new
-  // values, so the component effectively gets the new state for free.
   const updateUrl = (mutator) => {
     const next = new URLSearchParams(urlParams);
     mutator(next);
@@ -253,7 +244,6 @@ export default function Products() {
     if (n > 1) p.set('page', String(n)); else p.delete('page');
   });
 
-  // ── session storage ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
       const s = window.sessionStorage.getItem('jpSelectedProducts');
@@ -264,10 +254,8 @@ export default function Products() {
     try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); } catch (_) {}
   }, [selectedProducts]);
 
-  // ── keep searchInput in sync when URL search changes (back/forward nav)
   useEffect(() => { setSearchInput(search); }, [search]);
 
-  // ── debounce search input → URL query param ─────────────────────────────────────
   useEffect(() => {
     if (searchInput === search) return;
     const t = setTimeout(() => {
@@ -279,7 +267,9 @@ export default function Products() {
     return () => clearTimeout(t);
   }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── fetch from S&S live browse ─────────────────────────────────────────────────────────
+  // Single fetch — backend's browseSS already merges Mongo data, so we don't
+  // need a separate /ss/details lazy follow-up. /ss/images fallback kept only
+  // for catalog rows missing an image URL (rare).
   const doFetch = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -291,16 +281,12 @@ export default function Products() {
     fetch(`${config.backendUrl}/api/products/ss/browse?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.message && !d.products) {
-          setError(d.message);
-          return;
-        }
+        if (d.message && !d.products) { setError(d.message); return; }
         const prods = d.products || [];
         setProducts(prods);
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
 
-        // Lazily backfill missing images.
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
           fetch(`${config.backendUrl}/api/products/ss/images?styles=${needsImage.join(',')}`)
@@ -311,22 +297,6 @@ export default function Products() {
             })
             .catch(() => {});
         }
-
-        // Lazily backfill real S&S price/size/colorCount on top of the
-        // category-based defaults the backend already provides.
-        const styleList = prods.map((p) => p.style);
-        if (styleList.length > 0) {
-          fetch(`${config.backendUrl}/api/products/ss/details?styles=${styleList.join(',')}`)
-            .then((r) => r.json())
-            .then(({ details }) => {
-              if (!details || !Object.keys(details).length) return;
-              setProducts((prev) => prev.map((p) => {
-                const d = details[p.style];
-                return d ? { ...p, ...d } : p;
-              }));
-            })
-            .catch(() => {});
-        }
       })
       .catch(() => setError('Could not reach the catalog server. Check your connection and try again.'))
       .finally(() => setLoading(false));
@@ -334,7 +304,6 @@ export default function Products() {
 
   useEffect(() => { doFetch(); }, [doFetch]);
 
-  // ── helpers ──────────────────────────────────────────────────────────────────────
   const toggleSelected = (item) => {
     setSelectedProducts((cur) => {
       if (cur.some((p) => p.style === item.style)) return cur.filter((p) => p.style !== item.style);
@@ -355,11 +324,8 @@ export default function Products() {
     setFetchKey((k) => k + 1);
   };
 
-  // ── render ──────────────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-
-      {/* DESKTOP SIDEBAR — sticky below the navbar so it doesn't hide under it */}
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
@@ -370,18 +336,13 @@ export default function Products() {
             genderType={genderType} setGenderType={setGenderType} onClose={null} />
         </Box>
       )}
-
-      {/* MOBILE DRAWER */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}
         PaperProps={{ sx: { width: 270, bgcolor: SIDEBAR_BG } }}>
         <Sidebar category={category} setCategory={setCategory}
           genderType={genderType} setGenderType={setGenderType} onClose={() => setDrawerOpen(false)} />
       </Drawer>
 
-      {/* MAIN CONTENT */}
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-
-        {/* SEARCH BAR */}
         <Box sx={{
           bgcolor: SIDEBAR_BG, px: { xs: 1.5, sm: 2.5, md: 3 }, py: { xs: 1, sm: 1.5 },
           position: 'sticky', top: { xs: 0, sm: NAVBAR_H }, zIndex: 100,
@@ -411,9 +372,7 @@ export default function Products() {
                 '& .MuiSvgIcon-root': { color: 'rgba(255,255,255,0.6)' },
               }}
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment>
-                ),
+                startAdornment: (<InputAdornment position="start"><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment>),
                 ...(searchInput ? {
                   endAdornment: (
                     <InputAdornment position="end">
@@ -429,7 +388,6 @@ export default function Products() {
           </Stack>
         </Box>
 
-        {/* PAGE HEADER */}
         <Box sx={{ px: { xs: 2, sm: 3 }, pt: 3, pb: 1 }}>
           <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap>
             <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 26 } }}>
@@ -447,51 +405,34 @@ export default function Products() {
           )}
         </Box>
 
-        {/* GRID */}
         <Box sx={{ flex: 1, px: { xs: 1.5, sm: 3 }, pb: selectedProducts.length > 0 ? { xs: 14, sm: 12 } : 5 }}>
-
           {loading && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
               <CircularProgress size={44} thickness={4} sx={{ color: '#1a3d2b' }} />
-              <Typography variant="body2" color="text.secondary" textAlign="center">
-                Loading catalog…
-              </Typography>
+              <Typography variant="body2" color="text.secondary" textAlign="center">Loading catalog…</Typography>
             </Box>
           )}
-
           {!loading && error && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={2}>
-              <Typography color="error" textAlign="center" sx={{ maxWidth: 380 }}>
-                {error}
-              </Typography>
-              <Button
-                variant="outlined" size="small" startIcon={<RefreshIcon />}
-                onClick={() => setFetchKey((k) => k + 1)}
-                sx={{ textTransform: 'none' }}
-              >
+              <Typography color="error" textAlign="center" sx={{ maxWidth: 380 }}>{error}</Typography>
+              <Button variant="outlined" size="small" startIcon={<RefreshIcon />}
+                onClick={() => setFetchKey((k) => k + 1)} sx={{ textTransform: 'none' }}>
                 Try again
               </Button>
             </Box>
           )}
-
           {!loading && !error && products.length === 0 && (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="45vh" gap={1.5}>
               <Typography color="text.secondary" textAlign="center">
-                {hasActiveFilters
-                  ? `No styles found${category ? ` in ${activeLabel}` : ''}.`
-                  : 'No styles found.'}
+                {hasActiveFilters ? `No styles found${category ? ` in ${activeLabel}` : ''}.` : 'No styles found.'}
               </Typography>
-              <Button
-                size="small" variant="outlined"
+              <Button size="small" variant="outlined"
                 startIcon={hasActiveFilters ? null : <RefreshIcon />}
-                onClick={clearFilters}
-                sx={{ textTransform: 'none' }}
-              >
+                onClick={clearFilters} sx={{ textTransform: 'none' }}>
                 {hasActiveFilters ? 'Clear filters' : 'Try again'}
               </Button>
             </Box>
           )}
-
           {!loading && !error && products.length > 0 && (
             <>
               <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: 0.5 }}>
@@ -522,12 +463,9 @@ export default function Products() {
         </Box>
       </Box>
 
-      {/* STICKY QUOTE BAR */}
       {selectedProducts.length > 0 && (
         <Box sx={{
-          position: 'fixed',
-          bottom: { xs: 12, sm: 20 },
-          left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: { xs: 12, sm: 20 }, left: '50%', transform: 'translateX(-50%)',
           bgcolor: 'background.paper', boxShadow: 8, borderRadius: 999,
           px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 1.25 },
           display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 },
@@ -539,15 +477,9 @@ export default function Products() {
               <Tooltip key={p.style} title={`Remove ${p.name || ''}`} arrow placement="top">
                 <Box onClick={() => setSelectedProducts((c) => c.filter((x) => x.style !== p.style))}
                   sx={{ position: 'relative', cursor: 'pointer', '&:hover .rx': { opacity: 1 } }}>
-                  <Avatar
-                    src={p.thumbnail || undefined}
-                    variant="rounded"
-                    sx={{
-                      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: 12,
-                      bgcolor: '#e8f5e9',
-                      '& img': { objectFit: 'contain', p: '2px' },
-                    }}
-                  >
+                  <Avatar src={p.thumbnail || undefined} variant="rounded"
+                    sx={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: 12, bgcolor: '#e8f5e9',
+                      '& img': { objectFit: 'contain', p: '2px' } }}>
                     {!p.thumbnail && (p.name?.[0] || '?')}
                   </Avatar>
                   <Box className="rx" sx={{
