@@ -53,8 +53,10 @@ function Product() {
   const [productTitle, setProductTitle]                       = useState(preloadedItem?.name || '');
   const [productPriceRangeBottom, setProductPriceRangeBottom] = useState(preloadedItem?.priceRangeBottom || '');
   const [productPriceRangeTop, setProductPriceRangeTop]       = useState(preloadedItem?.priceRangeTop || '');
-  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState(preloadedItem?.sizeRangeBottom || 'S');
-  const [productSizeRangeTop, setProductSizeRangeTop]         = useState(preloadedItem?.sizeRangeTop || 'XL');
+  // Sizes default to empty until the backend says otherwise — never
+  // fabricate "S - XL" since that's wrong for toddler/infant/tall items.
+  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState(preloadedItem?.sizeRangeBottom || '');
+  const [productSizeRangeTop, setProductSizeRangeTop]         = useState(preloadedItem?.sizeRangeTop || '');
   const [productTag, setProductTag]                           = useState(preloadedItem?.tag || '');
   const [productTagColor, setProductTagColor]                 = useState(getTagCode(preloadedItem?.tag));
   const [productColorOptions, setProductColorOptions]         = useState([]);
@@ -103,8 +105,8 @@ function Product() {
       setProductTitle(data.name || '');
       setProductPriceRangeBottom(data.priceRangeBottom || '');
       setProductPriceRangeTop(data.priceRangeTop || '');
-      setProductSizeRangeBottom(data.sizeRangeBottom || 'S');
-      setProductSizeRangeTop(data.sizeRangeTop || 'XL');
+      setProductSizeRangeBottom(data.sizeRangeBottom || '');
+      setProductSizeRangeTop(data.sizeRangeTop || '');
       setProductTag(data.tag || '');
       setProductTagColor(getTagCode(data.tag));
       const colors = (data.colors || []).map((c) => capitalize(c));
@@ -137,8 +139,6 @@ function Product() {
             return;
           }
         }
-        // Both endpoints failed. If we have preloaded info we still
-        // show that; otherwise surface a real error instead of a blank page.
         if (!preloadedItem) {
           setError("We couldn't load the full details for this style. Please try again or browse other items.");
         }
@@ -179,6 +179,7 @@ function Product() {
   const currentBackImg  = productBackImages[productIndex]  || null;
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
   const hasRealPrice    = Number(productPriceRangeBottom) > 0 || Number(productPriceRangeTop) > 0;
+  const hasRealSize     = !!(productSizeRangeBottom && productSizeRangeTop);
 
   // Error state — only shown when we have nothing to display.
   if (error) {
@@ -289,27 +290,24 @@ function Product() {
                 </Typography>
               )}
 
-              {hasRealPrice ? (
+              {(hasRealPrice || hasRealSize) && (
                 <Stack spacing={{ xs: 2, sm: 7 }} direction="row">
-                  <Stack spacing={0.5}>
-                    <Typography color="black">Typically</Typography>
-                    <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
-                      ${productPriceRangeBottom} – ${productPriceRangeTop}
-                    </Typography>
-                  </Stack>
-                  <Stack spacing={0.5}>
-                    <Typography color="black">Comes in</Typography>
-                    <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
-                      {productSizeRangeBottom} – {productSizeRangeTop}
-                    </Typography>
-                  </Stack>
-                </Stack>
-              ) : (
-                <Stack spacing={0.5}>
-                  <Typography color="black">Comes in</Typography>
-                  <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
-                    {productSizeRangeBottom} – {productSizeRangeTop}
-                  </Typography>
+                  {hasRealPrice && (
+                    <Stack spacing={0.5}>
+                      <Typography color="black">Typically</Typography>
+                      <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
+                        ${productPriceRangeBottom} – ${productPriceRangeTop}
+                      </Typography>
+                    </Stack>
+                  )}
+                  {hasRealSize && (
+                    <Stack spacing={0.5}>
+                      <Typography color="black">Comes in</Typography>
+                      <Typography sx={{ fontSize: { xs: 18, sm: 22 } }} color="black">
+                        {productSizeRangeBottom} – {productSizeRangeTop}
+                      </Typography>
+                    </Stack>
+                  )}
                 </Stack>
               )}
 
