@@ -260,19 +260,26 @@ export default function QuoterTab({ token, onBack }) {
   };
 
   // ── Add garment group ────────────────────────────────────────────────────
-  const addGroup = async () => {
+  const addGroup = async (startBlank = false) => {
+    const parsedTiers = newQtyTiersInput
+      .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+    const qtyTiers = parsedTiers.length > 1 ? parsedTiers : [];
+    const baseQty  = parsedTiers[0] || 48;
+
+    if (startBlank) {
+      const group = emptyGroup(newType);
+      group.qtyTiers = qtyTiers;
+      setQuote(prev => ({ ...prev, garmentGroups: [...(prev.garmentGroups || []), group] }));
+      setAddOpen(false);
+      return;
+    }
+
     setSuggesting(true); setSuggestErr('');
     try {
       const r = await axios.get(
         `${baseUrl}/suggest?garmentType=${encodeURIComponent(newType)}`, authHdr,
       );
       const { budget, mid, premium } = r.data || {};
-
-      // Parse qty tiers from the input (e.g. "48" or "25, 50, 75")
-      const parsedTiers = newQtyTiersInput
-        .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
-      const qtyTiers = parsedTiers.length > 1 ? parsedTiers : [];
-      const baseQty  = parsedTiers[0] || 48;
 
       const tiers = [
         { tier: 'budget', prod: budget },
@@ -951,6 +958,7 @@ function GarmentGroup({
                 key={row._uid || rIdx}
                 row={row} garmentType={group.garmentType}
                 activeQty={activeQty}
+                qtyTiers={group.qtyTiers?.length > 1 ? group.qtyTiers : null}
                 onChange={patch => onUpdateRow(rIdx, patch)}
                 onRemove={() => onRemoveRow(rIdx)}
                 onDuplicate={() => onDuplicateRow(rIdx)}
@@ -992,12 +1000,15 @@ const tinyInput = {
   },
 };
 
-function QuoteRow({ row, garmentType, activeQty, onChange, onRemove, onDuplicate, onLookup }) {
+function QuoteRow({ row, garmentType, activeQty, qtyTiers, onChange, onRemove, onDuplicate, onLookup }) {
   const [expanded, setExpanded] = React.useState(false);
   const [shipAnchor, setShipAnchor] = React.useState(null);
 
-  const cogs = calcCOGS(row, activeQty);
-  const qty = activeQty ?? (Number(row.quantity) || 1);
+  // When qty tiers exist, show all of them; otherwise use single qty
+  const tiersToShow = qtyTiers?.length > 1 ? qtyTiers : null;
+  const singleQty = activeQty ?? (Number(row.quantity) || 1);
+  const cogs = calcCOGS(row, singleQty);
+  const qty = singleQty;
   const lbPerPiece = GARMENT_WEIGHT_LB[garmentType] ?? 0.5;
   const totalLbs = lbPerPiece * qty;
   const estShip = estimateShipping(totalLbs);
@@ -1034,24 +1045,13 @@ function QuoteRow({ row, garmentType, activeQty, onChange, onRemove, onDuplicate
             : <RadioButtonUncheckedIcon sx={{ fontSize: 18 }} />}
         </IconButton>
 
-        {/* Tier badge */}
-        <Tooltip title="Click to cycle tier">
-          <Chip
-            label={TIER_META[row.tier]?.label || 'MID'}
-            size="small"
-            onClick={() => {
-              const order = ['budget', 'mid', 'premium'];
-              const next = order[(order.indexOf(row.tier) + 1) % 3];
-              onChange({ tier: next });
-            }}
-            sx={{
-              height: 22, fontSize: 9.5, fontWeight: 800, cursor: 'pointer',
-              bgcolor: (TIER_META[row.tier]?.color || B.mid) + '22',
-              color: TIER_META[row.tier]?.color || B.mid,
-              border: `1px solid ${(TIER_META[row.tier]?.color || B.mid)}55`,
-            }}
-          />
-        </Tooltip>
+        {/* Optional row label */}
+        <TextField
+          size="small" value={row.label || ''}
+          onChange={e => onChange({ label: e.target.value })}
+          placeholder="Label"
+          sx={{ ...tinyInput, '& .MuiInputBase-input': { color: B.muted, fontSize: 11, py: '5px' } }}
+        />
 
         {/* Style code */}
         <TextField
@@ -1167,35 +1167,52 @@ function QuoteRow({ row, garmentType, activeQty, onChange, onRemove, onDuplicate
         </IconButton>
       </Box>
 
-      {/* Margin strip */}
+      {/* Margin strip — one per qty tier, or single if no tiers */}
       <Box sx={{ px: 2, pb: 1, pt: 0.25 }}>
-        <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
-          {MARGINS.map(pct => {
-            const price = calcPrice(cogs, pct);
-            const isSel = row.selectedMargin === pct;
-            return (
-              <Box
-                key={pct}
-                onClick={() => onChange({ selectedMargin: pct, selected: true })}
-                sx={{
-                  flex: '1 1 0', minWidth: 64, textAlign: 'center',
-                  px: 0.5, py: 0.5, borderRadius: 1, cursor: 'pointer',
-                  bgcolor: marginBg(pct),
-                  border: isSel ? `2px solid ${B.green}` : `1px solid ${marginColor(pct)}33`,
-                  transition: 'all 0.12s',
-                  '&:hover': { transform: 'translateY(-1px)' },
-                }}
-              >
-                <Typography sx={{ fontSize: 11, fontWeight: 800, color: marginColor(pct), lineHeight: 1.3 }}>
-                  {pct}%
-                </Typography>
-                <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: B.white, lineHeight: 1.3 }}>
-                  {fmt(price)}
-                </Typography>
-              </Box>
-            );
-          })}
-        </Stack>
+        {(tiersToShow || [singleQty]).map((q, tIdx) => {
+          const cogsAtQty = tiersToShow ? calcCOGS(row, q) : cogs;
+          return (
+            <Box key={q} sx={{ mb: tiersToShow && tIdx < tiersToShow.length - 1 ? 0.75 : 0 }}>
+              {tiersToShow && (
+                <Stack direction="row" spacing={1} alignItems="center" mb={0.3}>
+                  <Typography sx={{ color: B.green, fontSize: 10, fontWeight: 800, fontFamily: 'monospace', minWidth: 60 }}>
+                    {q} units
+                  </Typography>
+                  <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+                    COGS {fmt(cogsAtQty)}
+                  </Typography>
+                </Stack>
+              )}
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                {MARGINS.map(pct => {
+                  const price = calcPrice(cogsAtQty, pct);
+                  const isSel = row.selectedMargin === pct && (row.selectedQty === q || (!tiersToShow && row.selectedMargin === pct));
+                  return (
+                    <Box
+                      key={pct}
+                      onClick={() => onChange({ selectedMargin: pct, selectedQty: q, selected: true })}
+                      sx={{
+                        flex: '1 1 0', minWidth: 58, textAlign: 'center',
+                        px: 0.5, py: 0.4, borderRadius: 1, cursor: 'pointer',
+                        bgcolor: marginBg(pct),
+                        border: isSel ? `2px solid ${B.green}` : `1px solid ${marginColor(pct)}33`,
+                        transition: 'all 0.12s',
+                        '&:hover': { transform: 'translateY(-1px)' },
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 10, fontWeight: 800, color: marginColor(pct), lineHeight: 1.3 }}>
+                        {pct}%
+                      </Typography>
+                      <Typography sx={{ fontSize: 11, fontFamily: 'monospace', color: B.white, lineHeight: 1.3 }}>
+                        {fmt(price)}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Box>
+          );
+        })}
       </Box>
 
       {/* Collapse section */}
@@ -1234,6 +1251,8 @@ function EstRow({ label, val, highlight }) {
 
 // ─── Add Group Dialog ────────────────────────────────────────────────────────
 function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qtyTiersInput, setQtyTiersInput, onAdd, suggesting, suggestErr }) {
+  const [startBlank, setStartBlank] = React.useState(false);
+
   return (
     <Dialog
       open={open} onClose={onClose}
@@ -1255,20 +1274,43 @@ function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qtyTiersIn
             </Select>
           </FormControl>
           <TextField
-            label="Qty / Qty Tiers" size="small" value={qtyTiersInput}
+            label="Qty Tiers" size="small" value={qtyTiersInput}
             onChange={e => setQtyTiersInput(e.target.value)}
-            placeholder="e.g. 48  or  25, 50, 75"
+            placeholder="e.g. 48  or  300, 450, 600"
             sx={darkInput}
             helperText={
               <Typography component="span" sx={{ color: B.muted, fontSize: 11 }}>
-                Single number = one qty. Comma-separated = qty tier tabs on the group.
+                Comma-separated = show all qtys side by side per row.
               </Typography>
             }
           />
-          <Typography sx={{ color: B.muted, fontSize: 12 }}>
-            Creates 3 product tiers (Budget / Mid / Premium) auto-filled from your
-            product database.
-          </Typography>
+          {/* Start blank vs. auto-suggest */}
+          <Box
+            onClick={() => setStartBlank(v => !v)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', p: 1.2,
+              borderRadius: 1.5, border: `1px solid ${startBlank ? B.green : B.border}`,
+              bgcolor: startBlank ? 'rgba(74,222,128,0.06)' : 'transparent',
+              transition: 'all 0.12s',
+            }}
+          >
+            <Box sx={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              border: `2px solid ${startBlank ? B.green : B.muted}`,
+              bgcolor: startBlank ? B.green : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {startBlank && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: B.greenDk }} />}
+            </Box>
+            <Box>
+              <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 600 }}>Start with blank rows</Typography>
+              <Typography sx={{ color: B.muted, fontSize: 11 }}>
+                {startBlank
+                  ? 'Group created empty — add rows manually'
+                  : 'Auto-fill 3 suggested products from the database'}
+              </Typography>
+            </Box>
+          </Box>
           {suggestErr && (
             <Alert severity="error" sx={{ bgcolor: 'rgba(248,113,113,0.08)', color: '#fca5a5', fontSize: 12 }}>
               {suggestErr}
@@ -1279,7 +1321,7 @@ function AddGroupDialog({ open, onClose, garmentType, setGarmentType, qtyTiersIn
       <DialogActions sx={{ px: 2.5, pb: 2 }}>
         <Button onClick={onClose} sx={{ color: B.muted }}>Cancel</Button>
         <Button
-          onClick={onAdd} disabled={suggesting} variant="contained"
+          onClick={() => onAdd(startBlank)} disabled={suggesting} variant="contained"
           sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}
         >
           {suggesting ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : 'Create Group'}
