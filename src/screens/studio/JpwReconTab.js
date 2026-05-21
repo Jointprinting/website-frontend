@@ -942,21 +942,17 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
 
-  // One sweep per day. If a sweep completed today, block. If the daily API
-  // budget is mostly used (even from manual searches), also block — would
-  // halt immediately anyway.
-  const today = new Date().toISOString().slice(0, 10);
-  const lastFinishedDate = status?.finished_at
-    ? new Date(status.finished_at).toISOString().slice(0, 10)
-    : null;
-  const ranToday = status?.status === 'completed' && lastFinishedDate === today;
-
+  // Only block when the daily Places API budget is actually exhausted.
+  // The previous "ranToday" gate (block after one completed sweep) caused
+  // problems: if a sweep completed early due to a bug or partial halt
+  // (e.g., the parseInt-fallback that ran 30 pairs instead of ~100), the
+  // user lost access to the rest of their daily budget. Budget-only is
+  // simpler and naturally enforces "one sweep a day" — when full budget
+  // is used in one sweep, there's nothing left and the button blocks.
   const remainingBudget = usage ? Math.max(0, (usage.daily_cap || 200) - (usage.places_calls_today || 0)) : null;
   const budgetExhausted = remainingBudget !== null && remainingBudget < 10;
-  const blocked = ranToday || budgetExhausted;
-  const blockReason = ranToday
-    ? "You've already run today's sweep. Resets at midnight."
-    : 'Daily Google Places budget is nearly used up. Resets at midnight.';
+  const blocked = budgetExhausted;
+  const blockReason = "Daily Google Places budget is used up. Resets at midnight.";
 
   const submit = async () => {
     setBusy(true); setErr('');
@@ -1029,8 +1025,8 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
             bgcolor: 'rgba(74,222,128,0.08)', color: TERM.text,
             border: `1px solid ${TERM.green}40`,
           }}>
-            <Box sx={{ fontWeight: 700, mb: 0.3 }}>{ranToday ? '✓ Daily sweep already ran today' : '✓ Daily budget used'}</Box>
-            {blockReason} Yesterday's results are still here for review.
+            <Box sx={{ fontWeight: 700, mb: 0.3 }}>✓ Daily budget used</Box>
+            {blockReason} Today's results are still here for review.
           </Alert>
         )}
         {usage && !blocked && (
