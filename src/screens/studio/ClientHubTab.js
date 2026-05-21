@@ -92,6 +92,10 @@ export default function ClientHubTab({ token, onBack }) {
 
   const [seeding, setSeeding]               = React.useState(false);
   const [settingsAnchor, setSettingsAnchor] = React.useState(null);
+  const [importDialogOpen, setImportDialogOpen] = React.useState(false);
+  const [importJson, setImportJson]             = React.useState('');
+  const [importing, setImporting]               = React.useState(false);
+  const [importResult, setImportResult]         = React.useState(null);
 
   const selectedClient = clients.find(c => c._id === selectedKey);
 
@@ -215,6 +219,20 @@ export default function ClientHubTab({ token, onBack }) {
     } catch (e) { alert(e?.response?.data?.message || 'Update failed'); }
   };
 
+  // ── Import Drive quotes ────────────────────────────────────────────────────
+  const runImportQuotes = async () => {
+    setImporting(true); setImportResult(null);
+    try {
+      const parsed = JSON.parse(importJson);
+      const r = await axios.post(`${base}/orders/import-quotes`, parsed, authHdr);
+      setImportResult(r.data);
+      setImportJson('');
+      await loadClients();
+    } catch (e) {
+      setImportResult({ error: e?.response?.data?.message || e.message || 'Failed' });
+    } finally { setImporting(false); }
+  };
+
   // ── Seed historical ────────────────────────────────────────────────────────
   const runSeedHistorical = async () => {
     setSeeding(true); setSettingsAnchor(null);
@@ -320,6 +338,18 @@ export default function ClientHubTab({ token, onBack }) {
                 secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
               />
             </ListItem>
+            <ListItem
+              button
+              onClick={() => { setSettingsAnchor(null); setImportDialogOpen(true); setImportResult(null); }}
+              sx={{ px: 2, py: 1, '&:hover': { bgcolor: B.faint } }}
+            >
+              <ListItemText
+                primary="Import Drive quotes"
+                primaryTypographyProps={{ sx: { color: B.white, fontSize: 13 } }}
+                secondary="Paste JSON from the Apps Script export"
+                secondaryTypographyProps={{ sx: { color: B.muted, fontSize: 11 } }}
+              />
+            </ListItem>
           </List>
         </Popover>
       </Box>
@@ -418,6 +448,50 @@ export default function ClientHubTab({ token, onBack }) {
           )}
         </Box>
       </Box>
+
+      {/* Import Drive Quotes Dialog */}
+      <Dialog open={importDialogOpen} onClose={() => { setImportDialogOpen(false); setImportResult(null); }} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+        <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 16, pb: 1 }}>
+          Import Drive Quotes
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: B.muted, fontSize: 13, mb: 1.5 }}>
+            Run the Google Apps Script, then paste the JSON output below.
+          </Typography>
+          {importResult ? (
+            <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: importResult.error ? 'rgba(248,113,113,0.1)' : 'rgba(74,222,128,0.1)', border: `1px solid ${importResult.error ? '#f87171' : B.green}` }}>
+              {importResult.error ? (
+                <Typography sx={{ color: '#f87171', fontSize: 13 }}>Error: {importResult.error}</Typography>
+              ) : (
+                <>
+                  <Typography sx={{ color: B.green, fontWeight: 700, fontSize: 15 }}>Done!</Typography>
+                  <Typography sx={{ color: B.white, fontSize: 13 }}>{importResult.created} quotes imported, {importResult.skipped} already existed.</Typography>
+                </>
+              )}
+            </Box>
+          ) : (
+            <TextField
+              multiline minRows={8} maxRows={16} fullWidth
+              placeholder={'[\n  {\n    "companyName": "Lean Gang Merch",\n    ...\n  }\n]'}
+              value={importJson}
+              onChange={e => setImportJson(e.target.value)}
+              sx={{ ...darkInput, fontFamily: 'monospace', fontSize: 12 }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, pb: 2 }}>
+          <Button onClick={() => { setImportDialogOpen(false); setImportResult(null); }} sx={{ color: B.muted }}>
+            {importResult && !importResult.error ? 'Close' : 'Cancel'}
+          </Button>
+          {!importResult && (
+            <Button onClick={runImportQuotes} disabled={importing || !importJson.trim()} variant="contained"
+              sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>
+              {importing ? <CircularProgress size={16} sx={{ color: B.greenDk }} /> : 'Import'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Order Dialog */}
       <OrderDialog
