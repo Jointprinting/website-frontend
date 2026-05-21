@@ -1893,25 +1893,23 @@ function StudioBody({ token, onLogout }) {
   React.useEffect(() => {
     if (view !== 'hub') return;
     let cancelled = false;
-    const url = `${config.backendUrl}/api/jpw/search/sweep/status`;
+    // Use /usage instead of /sweep/status. The sweep status doc gets
+    // overwritten on every click, so a second click that hit the cap
+    // (status='stopped', pairs_done=0) wipes out the morning's
+    // successful sweep state. Today's API usage is a more robust
+    // "did a sweep happen" signal — it doesn't reset on second clicks.
+    const url = `${config.backendUrl}/api/jpw/usage`;
     axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
       .then((res) => {
         if (cancelled) return;
-        const s = res.data || {};
-        const today = new Date().toISOString().slice(0, 10);
-        // Counts as "ran today" if it finished today AND did at least one
-        // pair, regardless of whether status is 'completed' or 'stopped'
-        // (stopped happens when daily budget halts a sweep mid-run — still
-        // counts). 'failed' or zero-pair runs don't count.
-        const finishedDate = s.finished_at
-          ? new Date(s.finished_at).toISOString().slice(0, 10)
-          : null;
-        const ranToday = finishedDate === today
-          && ['completed', 'stopped'].includes(s.status)
-          && (s.pairs_done || 0) > 0;
-        setSweepNeeded(!ranToday);
+        const u = res.data || {};
+        // If today's API budget has any meaningful usage, a sweep ran.
+        // Use > 5 as the threshold so a single accidental /search/places
+        // doesn't suppress the indicator (sweeps use ~30+ calls).
+        const usedToday = (u.places_calls_today || 0) > 5;
+        setSweepNeeded(!usedToday);
       })
-      .catch(() => { /* if the endpoint fails, just don't show the badge */ });
+      .catch(() => { /* if endpoint fails, hide the dot */ });
     return () => { cancelled = true; };
   }, [view, token]);
 
