@@ -9,7 +9,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 
@@ -209,11 +209,17 @@ export default function Products() {
   const navigate  = useNavigate();
   const isMobile  = useMediaQuery('(max-width:768px)');
 
-  const [category,    setCategory]    = useState('');
-  const [genderType,  setGenderType]  = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [search,      setSearch]      = useState('');
-  const [page,        setPage]        = useState(1);
+  // Filter / pagination state lives entirely in the URL so the browser's
+  // back button restores it after visiting a product detail page. Going
+  // from page 5 -> product -> back now lands back on page 5 with the
+  // same filters applied.
+  const [urlParams, setUrlParams] = useSearchParams();
+  const category   = urlParams.get('category') || '';
+  const genderType = urlParams.get('type') || '';
+  const search     = urlParams.get('q') || '';
+  const page       = Math.max(1, parseInt(urlParams.get('page'), 10) || 1);
+
+  const [searchInput, setSearchInput] = useState(search);
   const [drawerOpen,  setDrawerOpen]  = useState(false);
 
   const [products,   setProducts]   = useState([]);
@@ -228,6 +234,25 @@ export default function Products() {
 
   const PER_PAGE = 24;
 
+  // Setters update the URL; useSearchParams above re-renders with the new
+  // values, so the component effectively gets the new state for free.
+  const updateUrl = (mutator) => {
+    const next = new URLSearchParams(urlParams);
+    mutator(next);
+    setUrlParams(next, { replace: false });
+  };
+  const setCategory = (v) => updateUrl((p) => {
+    if (v) p.set('category', v); else p.delete('category');
+    p.delete('page');
+  });
+  const setGenderType = (v) => updateUrl((p) => {
+    if (v) p.set('type', v); else p.delete('type');
+    p.delete('page');
+  });
+  const setPage = (n) => updateUrl((p) => {
+    if (n > 1) p.set('page', String(n)); else p.delete('page');
+  });
+
   // ── session storage ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
@@ -239,13 +264,20 @@ export default function Products() {
     try { window.sessionStorage.setItem('jpSelectedProducts', JSON.stringify(selectedProducts)); } catch (_) {}
   }, [selectedProducts]);
 
-  // ── debounce search ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 600);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+  // ── keep searchInput in sync when URL search changes (back/forward nav)
+  useEffect(() => { setSearchInput(search); }, [search]);
 
-  useEffect(() => { setPage(1); }, [category, genderType]);
+  // ── debounce search input → URL query param ─────────────────────────────────────
+  useEffect(() => {
+    if (searchInput === search) return;
+    const t = setTimeout(() => {
+      updateUrl((p) => {
+        if (searchInput) p.set('q', searchInput); else p.delete('q');
+        p.delete('page');
+      });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── fetch from S&S live browse ─────────────────────────────────────────────────────────
   const doFetch = useCallback(() => {
@@ -268,8 +300,7 @@ export default function Products() {
         setTotalPages(d.totalPages || 0);
         setTotalItems(d.total || 0);
 
-        // Lazily backfill missing images. With the new backend most cards
-        // already have one; this is just a fallback.
+        // Lazily backfill missing images.
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
           fetch(`${config.backendUrl}/api/products/ss/images?styles=${needsImage.join(',')}`)
@@ -281,14 +312,11 @@ export default function Products() {
             .catch(() => {});
         }
 
-        // Lazily backfill missing price/size/colorCount. Backend hits S&S
-        // per-style with bounded concurrency and caches for 12h, so after
-        // the first browse of a brand subsequent visits are instant.
-        const needsDetails = prods
-          .filter((p) => !p.priceRangeBottom || !p.sizeRangeBottom)
-          .map((p) => p.style);
-        if (needsDetails.length > 0) {
-          fetch(`${config.backendUrl}/api/products/ss/details?styles=${needsDetails.join(',')}`)
+        // Lazily backfill real S&S price/size/colorCount on top of the
+        // category-based defaults the backend already provides.
+        const styleList = prods.map((p) => p.style);
+        if (styleList.length > 0) {
+          fetch(`${config.backendUrl}/api/products/ss/details?styles=${styleList.join(',')}`)
             .then((r) => r.json())
             .then(({ details }) => {
               if (!details || !Object.keys(details).length) return;
@@ -322,9 +350,7 @@ export default function Products() {
   const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
   const clearFilters = () => {
-    setCategory('');
-    setGenderType('');
-    setSearch('');
+    setUrlParams(new URLSearchParams(), { replace: false });
     setSearchInput('');
     setFetchKey((k) => k + 1);
   };
@@ -391,7 +417,7 @@ export default function Products() {
                 ...(searchInput ? {
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => { setSearch(''); setSearchInput(''); }}
+                      <IconButton size="small" onClick={() => { setSearchInput(''); }}
                         sx={{ color: 'rgba(255,255,255,0.5)', '&:hover': { color: '#fff' } }}>
                         <CloseIcon sx={{ fontSize: 15 }} />
                       </IconButton>
