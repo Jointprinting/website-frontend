@@ -6,7 +6,8 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
-import { useSearchParams } from 'react-router-dom';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import QuoteDialog from '../common/QuoteDialog';
 import config from '../config.json';
 
@@ -23,29 +24,37 @@ const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : 
 
 function Product() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const id = searchParams.get('styleCode');
   const isMobile = useMediaQuery('(max-width:768px)');
 
-  const [productVendor, setProductVendor]                     = useState('');
-  const [productStyle, setProductStyle]                       = useState('');
-  const [productRating, setProductRating]                     = useState(5);
-  const [productTitle, setProductTitle]                       = useState('');
-  const [productPriceRangeBottom, setProductPriceRangeBottom] = useState('');
-  const [productPriceRangeTop, setProductPriceRangeTop]       = useState('');
-  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState('S');
-  const [productSizeRangeTop, setProductSizeRangeTop]         = useState('XXL');
-  const [productTag, setProductTag]                           = useState('');
-  const [productTagColor, setProductTagColor]                 = useState('info');
+  // Catalog passes the item via navigation state so the page can paint
+  // instantly without waiting on (or being blocked by) the backend fetch.
+  const preloadedItem = location.state?.item || null;
+
+  const [productVendor, setProductVendor]                     = useState(preloadedItem?.vendor || '');
+  const [productStyle, setProductStyle]                       = useState(preloadedItem?.style || id || '');
+  const [productRating, setProductRating]                     = useState(preloadedItem?.rating || 0);
+  const [productTitle, setProductTitle]                       = useState(preloadedItem?.name || '');
+  const [productPriceRangeBottom, setProductPriceRangeBottom] = useState(preloadedItem?.priceRangeBottom || '');
+  const [productPriceRangeTop, setProductPriceRangeTop]       = useState(preloadedItem?.priceRangeTop || '');
+  const [productSizeRangeBottom, setProductSizeRangeBottom]   = useState(preloadedItem?.sizeRangeBottom || 'S');
+  const [productSizeRangeTop, setProductSizeRangeTop]         = useState(preloadedItem?.sizeRangeTop || 'XL');
+  const [productTag, setProductTag]                           = useState(preloadedItem?.tag || '');
+  const [productTagColor, setProductTagColor]                 = useState(getTagCode(preloadedItem?.tag));
   const [productColorOptions, setProductColorOptions]         = useState([]);
   const [productColorCodes, setProductColorCodes]             = useState([]);
-  const [productFrontImages, setProductFrontImages]           = useState([]);
+  const [productFrontImages, setProductFrontImages]           = useState(preloadedItem?.image ? [preloadedItem.image] : []);
   const [productBackImages, setProductBackImages]             = useState([]);
   const [productDescription, setProductDescription]           = useState('');
   const [frontSelected, setFrontSelected]                     = useState(true);
   const [productColor, setProductColor]                       = useState('');
   const [productColorCode, setProductColorCode]               = useState('');
   const [productIndex, setProductIndex]                       = useState(0);
-  const [loading, setLoading]                                 = useState(true);
+  // Only show the full-page spinner when we have nothing to display yet.
+  const [loading, setLoading]                                 = useState(!preloadedItem);
+  const [error, setError]                                     = useState(null);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
@@ -74,50 +83,63 @@ function Product() {
     if (!id) return;
 
     const applyProductData = (data) => {
-      setProductVendor(data.vendor);
-      setProductStyle(data.style);
-      setProductRating(data.rating);
-      setProductTitle(data.name);
-      setProductPriceRangeBottom(data.priceRangeBottom);
-      setProductPriceRangeTop(data.priceRangeTop);
-      setProductSizeRangeBottom(data.sizeRangeBottom);
-      setProductSizeRangeTop(data.sizeRangeTop);
-      setProductTag(data.tag);
+      setProductVendor(data.vendor || '');
+      setProductStyle(data.style || id);
+      setProductRating(data.rating || 5);
+      setProductTitle(data.name || '');
+      setProductPriceRangeBottom(data.priceRangeBottom || '');
+      setProductPriceRangeTop(data.priceRangeTop || '');
+      setProductSizeRangeBottom(data.sizeRangeBottom || 'S');
+      setProductSizeRangeTop(data.sizeRangeTop || 'XL');
+      setProductTag(data.tag || '');
       setProductTagColor(getTagCode(data.tag));
       const colors = (data.colors || []).map((c) => capitalize(c));
       setProductColorOptions(colors);
       setProductColorCodes(data.colorCodes || []);
-      setProductFrontImages(data.productFrontImages || []);
+      if (Array.isArray(data.productFrontImages) && data.productFrontImages.some(Boolean)) {
+        setProductFrontImages(data.productFrontImages);
+      }
       setProductBackImages(data.productBackImages || []);
-      setProductDescription(data.description);
+      setProductDescription(data.description || '');
       setProductColor(colors[0] || '');
       setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
     };
 
     const fetchProduct = async () => {
       try {
-        setLoading(true);
-        const res = await fetch(config.backendUrl + '/api/products/style/' + id);
+        if (!preloadedItem) setLoading(true);
+        const encoded = encodeURIComponent(id);
+        const res = await fetch(config.backendUrl + '/api/products/style/' + encoded);
         if (res.ok) {
           applyProductData(await res.json());
+          setError(null);
           return;
         }
         if (res.status === 404) {
-          const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + id);
+          const ssRes = await fetch(config.backendUrl + '/api/products/ss/style/' + encoded);
           if (ssRes.ok) {
             applyProductData(await ssRes.json());
+            setError(null);
             return;
           }
         }
+        // Both endpoints failed. If we have preloaded info we still
+        // show that; otherwise surface a real error instead of a blank page.
+        if (!preloadedItem) {
+          setError("We couldn't load the full details for this style. Please try again or browse other items.");
+        }
       } catch (err) {
         console.error(err);
+        if (!preloadedItem) {
+          setError("We couldn't reach the catalog server. Please check your connection and try again.");
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchProduct();
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isSelected = selectedProducts.some((p) => p.style === productStyle && productStyle);
 
@@ -142,6 +164,36 @@ function Product() {
   const currentFrontImg = productFrontImages[productIndex] || null;
   const currentBackImg  = productBackImages[productIndex]  || null;
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
+
+  // Error state — only shown when we have nothing to display.
+  if (error) {
+    return (
+      <Box bgcolor="#f5f5f5" minHeight="100vh">
+        <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>
+          <Stack spacing={3} alignItems="center" textAlign="center">
+            <CheckroomIcon sx={{ fontSize: 64, color: 'rgba(0,0,0,0.2)' }} />
+            <Typography variant="h6" fontWeight={700} color="text.primary">
+              Style not available
+            </Typography>
+            <Typography color="text.secondary" sx={{ maxWidth: 380 }}>
+              {error}
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/products')}
+              sx={{
+                textTransform: 'none', borderRadius: 999, px: 3,
+                bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
+              }}
+            >
+              Back to catalog
+            </Button>
+          </Stack>
+        </Container>
+      </Box>
+    );
+  }
 
   return (
     <Box bgcolor="#f5f5f5" minHeight="100vh">
@@ -210,10 +262,10 @@ function Product() {
             <Stack spacing={2.5} sx={{ flex: { md: 1 }, width: '100%', minWidth: 0 }}>
               <Stack spacing={1} direction={{ xs: 'column', sm: 'row' }}
                 alignItems={{ xs: 'flex-start', sm: 'center' }} flexWrap="wrap" useFlexGap>
-                <Typography color="black">{productVendor}</Typography>
+                {productVendor && <Typography color="black">{productVendor}</Typography>}
                 {productStyle && <Typography color="gray">Style #{productStyle}</Typography>}
                 {productTag && <Chip label={productTag} color={productTagColor} variant="outlined" size="small" />}
-                <Rating name="read-only" value={productRating} readOnly size="small" />
+                {productRating > 0 && <Rating name="read-only" value={productRating} readOnly size="small" />}
               </Stack>
 
               {productTitle && (
