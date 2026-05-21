@@ -32,7 +32,6 @@ const sanitizeHTML = (html) => {
     .replace(/javascript:/gi, '');
 };
 
-// Single source of truth for the displayed "Starting at $X" number.
 const startingPrice = (item) => {
   const v = Number(item?.priceFrom) || Number(item?.priceRangeBottom) || 0;
   return v > 0 ? v : null;
@@ -69,9 +68,6 @@ function Product() {
   const [loading, setLoading]                           = useState(!preloadedItem);
   const [error, setError]                               = useState(null);
   const [loadingMessage, setLoadingMessage]             = useState('');
-  // dataQuality === 'fallback' means the backend couldn't sync the style,
-  // so we're showing /styles/ basics only. Frontend renders a notice.
-  const [dataQuality, setDataQuality]                   = useState(null);
 
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [quoteDialogOpen, setQuoteDialogOpen]   = useState(false);
@@ -116,17 +112,15 @@ function Product() {
       setProductDescription(data.description || '');
       setProductColor(colors[0] || '');
       setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
-      setDataQuality(data.dataQuality || null);
     };
 
     const fetchProduct = async () => {
-      const t1 = setTimeout(() => setLoadingMessage('Loading colors and sizes from S&S…'), 3000);
-      const t2 = setTimeout(() => setLoadingMessage('First time loading this style — almost there.'), 8000);
+      // Only one progressive message — backend now does Mongo lookup + /styles/
+      // cache lookup, which is fast. No more 10s wait scenarios.
+      const t = setTimeout(() => setLoadingMessage('Loading product details…'), 1500);
       try {
         if (!preloadedItem) setLoading(true);
         const encoded = encodeURIComponent(id);
-        // Backend handler is Mongo -> on-demand sync -> live fallback.
-        // One request handles everything; no separate /ss/style call needed.
         const res = await fetch(config.backendUrl + '/api/products/style/' + encoded);
         if (res.ok) {
           applyProductData(await res.json());
@@ -142,7 +136,7 @@ function Product() {
           setError("We couldn't reach the catalog server. Please check your connection and try again.");
         }
       } finally {
-        clearTimeout(t1); clearTimeout(t2);
+        clearTimeout(t);
         setLoading(false);
         setLoadingMessage('');
       }
@@ -174,8 +168,10 @@ function Product() {
   const hasRealPrice    = Number(productPriceFrom) > 0;
   const hasRealSize     = !!(productSizeRangeBottom && productSizeRangeTop);
   const hasSwatches     = productColorOptions.length > 0;
-  const colorCountForBadge = hasSwatches ? productColorOptions.length : productColorCount;
-  const isFallback      = dataQuality === 'fallback';
+  // Show the "available in N colors — confirmed at quote" badge when we
+  // know the count but don't have per-color swatches (the current S&S
+  // path can't get per-color data, so this is the normal case).
+  const showColorCountBadge = !hasSwatches && productColorCount > 1;
 
   if (error) {
     return (
@@ -273,7 +269,6 @@ function Product() {
                 </Typography>
               )}
 
-              {/* Starting at $X + size range */}
               {(hasRealPrice || hasRealSize) && (
                 <Stack spacing={{ xs: 1.5, sm: 5 }} direction={{ xs: 'column', sm: 'row' }}>
                   {hasRealPrice && (
@@ -303,14 +298,6 @@ function Product() {
                 Final price depends on quantity, colors, and print placement — request a free quote below.
               </Typography>
 
-              {/* Fallback notice — colors not synced yet */}
-              {isFallback && (
-                <Alert severity="info" sx={{ fontSize: 13, '& .MuiAlert-message': { py: 0.25 } }}>
-                  Live colors and per-color images for this style are still loading.
-                  Request a quote and we'll send a mockup with every available color within 24 hours.
-                </Alert>
-              )}
-
               {hasSwatches ? (
                 <>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -325,7 +312,6 @@ function Product() {
                       ({productColorOptions.length} {productColorOptions.length === 1 ? 'option' : 'options'})
                     </Typography>
                   </Stack>
-
                   <Box sx={{
                     overflowX: 'auto', WebkitOverflowScrolling: 'touch',
                     width: '100%', py: 1, px: '2px',
@@ -351,15 +337,18 @@ function Product() {
                     </Box>
                   </Box>
                 </>
-              ) : colorCountForBadge > 1 ? (
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                  <Typography color="black" fontWeight="bold">
-                    Available in {colorCountForBadge} colors
-                  </Typography>
-                  <Typography color="gray" sx={{ fontSize: 12 }}>
-                    — request a quote to see all options
-                  </Typography>
-                </Stack>
+              ) : showColorCountBadge ? (
+                <Alert severity="info" icon={false} sx={{
+                  fontSize: 13, py: 1.25,
+                  bgcolor: 'rgba(74,222,128,0.08)',
+                  color: '#1a3d2b',
+                  border: '1px solid rgba(74,222,128,0.35)',
+                  '& .MuiAlert-message': { py: 0.25, fontWeight: 500 },
+                }}>
+                  <strong>Available in {productColorCount} colors.</strong> All color options
+                  are confirmed in your free mockup — request a quote below and we'll send
+                  one within 24 hours.
+                </Alert>
               ) : null}
 
               <Stack spacing={1.5}>
