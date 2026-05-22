@@ -21,7 +21,7 @@ import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
-const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Vinyl', 'Sublimation', 'None'];
+const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
 
 function normMockupKey(n) {
   return String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
@@ -29,8 +29,8 @@ function normMockupKey(n) {
 
 function emptyItem() {
   return {
-    mockupNum: '', customMockupDataUrl: '', showBack: false,
-    brandName: '', styleCode: '', printType: '', color: '',
+    mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
+    productName: '', brandName: '', styleCode: '', printType: '', color: '', printerName: '',
     sizes: DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: 0 })),
   };
 }
@@ -321,7 +321,8 @@ function Editor({ local, update, project, mockups, mockupMap }) {
 }
 
 function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, project, noSpinner }) {
-  const fileRef = React.useRef(null);
+  const singleFileRef = React.useRef(null);
+  const multiFileRef  = React.useRef(null);
   const updateSize = (sIdx, patch) => onUpdate({
     sizes: item.sizes.map((s, j) => j === sIdx ? { ...s, ...patch } : s),
   });
@@ -341,6 +342,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
                                 (m.name || '').toLowerCase().includes(co));
   }, [mockups, project.companyName, project.clientName]);
 
+  // Single-file upload replaces the primary mockup
   const onUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -350,10 +352,27 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
     e.target.value = '';
   };
 
+  // Multi-file upload appends variant snapshots
+  const onUploadMulti = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const reads = files.map(file => new Promise(resolve => {
+      const r = new FileReader();
+      r.onload = () => resolve({ dataUrl: r.result, label: file.name.replace(/\.[^.]+$/, '') });
+      r.readAsDataURL(file);
+    }));
+    const snaps = await Promise.all(reads);
+    onUpdate({ mockupSnapshots: [...(item.mockupSnapshots || []), ...snaps] });
+    e.target.value = '';
+  };
+  const removeSnapshot = (i) =>
+    onUpdate({ mockupSnapshots: (item.mockupSnapshots || []).filter((_, j) => j !== i) });
+
   const lookedUp = item.mockupNum
     ? (mockupMap[item.mockupNum] || mockupMap[normMockupKey(item.mockupNum)])
     : null;
   const hasBack = !!(lookedUp && lookedUp.pageState && lookedUp.pageState.backCompositeBase64);
+  const snapshots = item.mockupSnapshots || [];
 
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.2, bgcolor: 'rgba(255,255,255,0.02)' }}>
@@ -387,9 +406,9 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
               </MenuItem>
             ))}
           </Select>
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onUpload} />
-          <Tooltip title="Upload a custom mockup image instead">
-            <IconButton size="small" onClick={() => fileRef.current?.click()}
+          <input ref={singleFileRef} type="file" accept="image/*" hidden onChange={onUpload} />
+          <Tooltip title="Upload a custom mockup image (replaces primary)">
+            <IconButton size="small" onClick={() => singleFileRef.current?.click()}
               sx={{ color: item.customMockupDataUrl ? B.green : B.muted, border: `1px solid ${B.faint}`, borderRadius: 1 }}>
               <FileUploadOutlinedIcon sx={{ fontSize: 16 }} />
             </IconButton>
@@ -403,6 +422,53 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
             sx={{ mt: 0.3 }}
           />
         )}
+
+        {/* Variant snapshots — for multi-color items like headbands */}
+        <Box sx={{ mt: 0.8 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.3}>
+            <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Variants · {snapshots.length}
+            </Typography>
+            <input ref={multiFileRef} type="file" accept="image/*" multiple hidden onChange={onUploadMulti} />
+            <Button size="small" onClick={() => multiFileRef.current?.click()}
+              startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 13 }} />}
+              sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              Add variants
+            </Button>
+          </Stack>
+          {snapshots.length > 0 && (
+            <Stack direction="row" gap={0.6} flexWrap="wrap">
+              {snapshots.map((s, i) => (
+                <Box key={i} sx={{ position: 'relative', width: 64 }}>
+                  <Box component="img" src={s.dataUrl} alt=""
+                    sx={{ width: 64, height: 64, objectFit: 'contain', bgcolor: '#fff',
+                      borderRadius: 1, border: `1px solid ${B.faint}` }} />
+                  <TextField size="small" value={s.label || ''}
+                    placeholder="label"
+                    onChange={e => onUpdate({
+                      mockupSnapshots: snapshots.map((x, j) => j === i ? { ...x, label: e.target.value } : x),
+                    })}
+                    sx={{ ...darkInput, mt: 0.3,
+                      '& .MuiInputBase-input': { color: B.white, fontSize: 10, py: 0.2, textAlign: 'center' } }} />
+                  <IconButton size="small" onClick={() => removeSnapshot(i)}
+                    sx={{
+                      position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: B.bg,
+                      color: '#f87171', border: `1px solid ${B.border}`,
+                      '&:hover': { bgcolor: B.bg },
+                    }}>
+                    <CloseIcon sx={{ fontSize: 11 }} />
+                  </IconButton>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      </Box>
+
+      {/* Product naming */}
+      <Box sx={{ mb: 1 }}>
+        <SmallField label="Product name (overrides brand+style on confirmation)"
+          value={item.productName} onChange={v => onUpdate({ productName: v })} />
       </Box>
 
       {/* Garment fields */}
@@ -423,6 +489,10 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
           </Select>
         </Box>
         <SmallField label="Color"      value={item.color}     onChange={v => onUpdate({ color: v })} />
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <SmallField label="Printer (who's printing this)"
+            value={item.printerName} onChange={v => onUpdate({ printerName: v })} />
+        </Box>
       </Box>
 
       {/* Sizes */}
@@ -436,14 +506,14 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
             Size
           </Button>
         </Stack>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '50px 50px 70px 26px',
+        <Box sx={{ display: 'grid', gridTemplateColumns: '54px 76px 86px 26px',
           gap: 0.4, alignItems: 'center', mb: 0.2,
           fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.4, textTransform: 'uppercase' }}>
           <Box>Size</Box><Box sx={{ textAlign: 'right' }}>Qty</Box>
           <Box sx={{ textAlign: 'right' }}>Unit $</Box><Box />
         </Box>
         {item.sizes.map((s, sIdx) => (
-          <Box key={sIdx} sx={{ display: 'grid', gridTemplateColumns: '50px 50px 70px 26px',
+          <Box key={sIdx} sx={{ display: 'grid', gridTemplateColumns: '54px 76px 86px 26px',
             gap: 0.4, alignItems: 'center', mb: 0.3 }}>
             <TextField size="small" value={s.label} placeholder="M"
               onChange={e => updateSize(sIdx, { label: e.target.value })}
@@ -494,27 +564,33 @@ function SmallField({ label, value, onChange, type = 'text' }) {
 }
 
 // ── Preview (printable) ──────────────────────────────────────────────────────
+// Layout matches the user's Excel template: small brand mark + title at top,
+// Basic Info / Shipping Info two-col band, per-item row with mockup(s) on the
+// left and a Size/Qty/Unit/Total table on the right with Brand / Style /
+// Garment Color / Printer / Print Type labeled below the totals.
 
 function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
   return (
     <Box id="confirmation-preview" sx={{
       bgcolor: '#fff', color: '#111', borderRadius: 1, p: { xs: 2, md: 4 },
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      boxShadow: '0 2px 14px rgba(0,0,0,0.08)', maxWidth: 820, mx: 'auto',
+      boxShadow: '0 2px 14px rgba(0,0,0,0.08)', maxWidth: 880, mx: 'auto',
     }}>
-      {/* Header band */}
-      <Stack direction="row" alignItems="center" gap={2} mb={3}>
+      {/* Header band — brand logo + title together (Excel style) */}
+      <Stack direction="row" alignItems="center" gap={2} mb={2}>
         {brandLogo ? (
-          <Box component="img" src={brandLogo} alt=""
-            sx={{ maxHeight: 64, maxWidth: 220, objectFit: 'contain' }} />
+          <Box component="img" src={brandLogo} alt="Joint Printing"
+            sx={{ width: 64, height: 64, objectFit: 'contain' }} />
         ) : (
-          <Typography sx={{ fontWeight: 900, fontSize: 22, letterSpacing: -0.3 }}>
-            JOINT PRINTING
-          </Typography>
+          <Box sx={{ width: 64, height: 64, bgcolor: '#1a3d2b', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 900, fontSize: 22, borderRadius: 1 }}>JP</Box>
         )}
-        <Box sx={{ flex: 1 }} />
+        <Typography sx={{ fontWeight: 900, fontSize: 26, lineHeight: 1.1, color: '#111', flex: 1 }}>
+          {conf.orderTitle || `${project.companyName || 'Untitled'} Merch`}
+        </Typography>
         {clientLogo && (
-          <Box sx={{ width: 64, height: 64, p: 0.4, border: '1px solid #e6e6e0',
+          <Box sx={{ width: 56, height: 56, p: 0.4, border: '1px solid #e6e6e0',
             borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
             bgcolor: '#fff', overflow: 'hidden' }}>
             <Box component="img" src={clientLogo} alt=""
@@ -523,34 +599,28 @@ function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
         )}
       </Stack>
 
-      <Typography sx={{ fontWeight: 900, fontSize: 28, lineHeight: 1.1, mb: 2 }}>
-        {conf.orderTitle || `${project.companyName || 'Untitled'} Merch`}
-      </Typography>
-
       {/* Basic Info / Shipping Info */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 3 }}>
-        <Box sx={{ borderTop: '2px solid #111', pt: 1 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#666', mb: 0.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>
             Basic Info
           </Typography>
           <InfoRow label="Order Title"  value={conf.orderTitle} />
           <InfoRow label="Client Name"  value={project.clientName || project.companyName} />
-          <InfoRow label="Order Date"   value={conf.orderDate ? new Date(conf.orderDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''} />
+          <InfoRow label="Date"         value={conf.orderDate ? new Date(conf.orderDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''} />
         </Box>
-        <Box sx={{ borderTop: '2px solid #111', pt: 1 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#666', mb: 0.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>
             Shipping Info
           </Typography>
-          <InfoRow label="Shipping Name" value={conf.shipping.name} />
-          <InfoRow label="Attention"     value={conf.shipping.attention} />
-          <InfoRow label="Street"        value={conf.shipping.streetAddress} />
-          <InfoRow label="City/St/Zip"   value={conf.shipping.cityStateZip} />
+          <InfoRow label="Shipping Name"   value={conf.shipping.name} />
+          <InfoRow label="Attention Name"  value={conf.shipping.attention} />
+          <InfoRow label="Street Address"  value={conf.shipping.streetAddress} />
+          <InfoRow label="City, State, Zip" value={conf.shipping.cityStateZip} />
         </Box>
       </Box>
 
-      {/* Items */}
-      <Typography sx={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#666',
-        borderTop: '2px solid #111', pt: 1, mb: 1 }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.5 }}>
         Order Info
       </Typography>
       {conf.items.length === 0 ? (
@@ -563,14 +633,10 @@ function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
 
       {/* Totals + add-ons */}
       <Box sx={{ mt: 3, borderTop: '2px solid #111', pt: 1.5 }}>
-        <Stack direction="row" justifyContent="space-between" sx={{ fontSize: 13, py: 0.5 }}>
-          <Box>Items subtotal</Box>
-          <Box sx={{ fontFamily: 'monospace' }}>{fmt(totals.itemsSubtotal)}</Box>
-        </Stack>
         {totals.lines.map((l, i) => (
           <Stack key={i} direction="row" justifyContent="space-between" sx={{ fontSize: 13, py: 0.5, color: '#444' }}>
-            <Box>{l.label}{l.isPercent ? ` (${l.amount}%)` : ''}</Box>
-            <Box sx={{ fontFamily: 'monospace' }}>{fmt(l.value)}</Box>
+            <Box>{l.label || (l.isPercent ? 'Adjustment' : 'Add-on')}{l.isPercent ? ` - ${l.amount}%` : ''}</Box>
+            <Box sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(l.value)}</Box>
           </Stack>
         ))}
         <Stack direction="row" justifyContent="space-between" sx={{ fontSize: 18, fontWeight: 900, mt: 1, pt: 1, borderTop: '1px solid #111' }}>
@@ -578,15 +644,22 @@ function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
           <Box sx={{ fontFamily: 'monospace' }}>{fmt(totals.grandTotal)}</Box>
         </Stack>
       </Box>
+
+      {/* Payment footer */}
+      <Box sx={{ mt: 4, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
+        <Box>Credit Card Payments: 2.99% charge added to total</Box>
+        <Box>ACH Bank Transfers: 1% charge added to total</Box>
+        <Box>Venmo: 1.9% + $0.10   @jointprinting</Box>
+      </Box>
     </Box>
   );
 }
 
 function InfoRow({ label, value }) {
   return (
-    <Stack direction="row" sx={{ fontSize: 12, py: 0.25, gap: 1 }}>
-      <Box sx={{ color: '#777', minWidth: 100 }}>{label}:</Box>
-      <Box sx={{ color: '#111', fontWeight: 600 }}>{value || <span style={{ color: '#bbb' }}>—</span>}</Box>
+    <Stack direction="row" sx={{ fontSize: 12.5, py: 0.3, gap: 1 }}>
+      <Box sx={{ color: '#111', fontWeight: 700, minWidth: 130 }}>{label}:</Box>
+      <Box sx={{ color: '#111' }}>{value || <span style={{ color: '#bbb' }}>—</span>}</Box>
     </Stack>
   );
 }
@@ -595,70 +668,116 @@ function ItemPreview({ idx, item, mockupMap }) {
   const m = item.mockupNum ? (mockupMap[item.mockupNum] || mockupMap[normMockupKey(item.mockupNum)]) : null;
   const frontImg = item.customMockupDataUrl || (m && m.thumbnail);
   const backImg  = item.showBack && m && m.pageState && m.pageState.backCompositeBase64;
+  const snapshots = item.mockupSnapshots || [];
+  const hasVariants = snapshots.length > 0;
 
   const subtotal = item.sizes.reduce((s, x) => s + (Number(x.qty) || 0) * (Number(x.unitPrice) || 0), 0);
+  const totalQty = item.sizes.reduce((s, x) => s + (Number(x.qty) || 0), 0);
   const nonZeroSizes = item.sizes.filter(s => Number(s.qty) > 0);
-
   return (
-    <Box sx={{ mt: 2, mb: 1, pb: 2, borderBottom: '1px solid #eee' }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#666', mb: 0.5 }}>
+    <Box className="item-row" sx={{ mt: 2, mb: 2, pb: 2, borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#111', mb: 1 }}>
         Order Item {idx + 1})
       </Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: backImg ? '160px 160px 1fr' : '160px 1fr', gap: 2 }}>
-        <Box sx={{ aspectRatio: '1', bgcolor: '#f4f4f4', borderRadius: 1, overflow: 'hidden',
-          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {frontImg
-            ? <Box component="img" src={frontImg} alt=""
-                sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            : <DesignServicesIcon sx={{ color: '#bbb' }} />}
-        </Box>
-        {backImg && (
-          <Box sx={{ aspectRatio: '1', bgcolor: '#f4f4f4', borderRadius: 1, overflow: 'hidden',
-            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Box component="img" src={backImg} alt=""
-              sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </Box>
-        )}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '300px 1fr' }, gap: 2.5 }}>
+        {/* Left: mockup(s) */}
         <Box>
-          <Box sx={{ fontSize: 13, mb: 1 }}>
-            <Box sx={{ fontWeight: 700 }}>{[item.brandName, item.styleCode].filter(Boolean).join(' ')}</Box>
-            <Box sx={{ color: '#555' }}>
-              {[item.printType, item.color].filter(Boolean).join(' · ')}
+          {hasVariants ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center' }}>
+              {snapshots.map((s, i) => (
+                <Box key={i} sx={{ textAlign: 'center', width: snapshots.length > 3 ? 70 : 92 }}>
+                  <Box sx={{ aspectRatio: '1', bgcolor: '#fff', overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box component="img" src={s.dataUrl} alt=""
+                      sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  </Box>
+                  {s.label && (
+                    <Typography sx={{ fontSize: 11, color: '#444', mt: 0.3 }}>{s.label}</Typography>
+                  )}
+                </Box>
+              ))}
             </Box>
-          </Box>
-          {nonZeroSizes.length === 0 ? (
-            <Box sx={{ color: '#bbb', fontSize: 12, fontStyle: 'italic' }}>No quantities set.</Box>
           ) : (
-            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+              <Box sx={{ width: backImg ? 140 : 280, aspectRatio: '1', bgcolor: '#fff',
+                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {frontImg
+                  ? <Box component="img" src={frontImg} alt=""
+                      sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  : <DesignServicesIcon sx={{ color: '#bbb', fontSize: 36 }} />}
+              </Box>
+              {backImg && (
+                <Box sx={{ width: 140, aspectRatio: '1', bgcolor: '#fff',
+                  overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box component="img" src={backImg} alt=""
+                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+
+        {/* Right: size table + meta */}
+        <Box>
+          {nonZeroSizes.length === 0 ? (
+            <Box sx={{ color: '#bbb', fontSize: 12, fontStyle: 'italic', mb: 1 }}>No quantities set.</Box>
+          ) : (
+            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13,
+              border: '1px solid #111' }}>
               <thead>
-                <tr>
-                  <th style={{ textAlign: 'left',  fontSize: 9, color: '#777', padding: '4px 6px', borderBottom: '1px solid #ddd', textTransform: 'uppercase' }}>Size</th>
-                  <th style={{ textAlign: 'right', fontSize: 9, color: '#777', padding: '4px 6px', borderBottom: '1px solid #ddd', textTransform: 'uppercase' }}>Qty</th>
-                  <th style={{ textAlign: 'right', fontSize: 9, color: '#777', padding: '4px 6px', borderBottom: '1px solid #ddd', textTransform: 'uppercase' }}>Unit</th>
-                  <th style={{ textAlign: 'right', fontSize: 9, color: '#777', padding: '4px 6px', borderBottom: '1px solid #ddd', textTransform: 'uppercase' }}>Total</th>
+                <tr style={{ background: '#f6f6f4' }}>
+                  <th style={{ textAlign: 'left',  fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Size</th>
+                  <th style={{ textAlign: 'left',  fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Quantity</th>
+                  <th style={{ textAlign: 'right', fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Unit Price</th>
+                  <th style={{ textAlign: 'right', fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {nonZeroSizes.map((s, i) => (
                   <tr key={i}>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f1f1' }}>{s.label}</td>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f1f1', textAlign: 'right' }}>{s.qty}</td>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f1f1', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.unitPrice)}</td>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f1f1', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.qty * s.unitPrice)}</td>
+                    <td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{s.label}</td>
+                    <td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{s.qty}</td>
+                    <td style={{ padding: '4px 8px', border: '1px solid #ddd', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.unitPrice)}</td>
+                    <td style={{ padding: '4px 8px', border: '1px solid #ddd', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.qty * s.unitPrice)}</td>
                   </tr>
                 ))}
                 <tr>
-                  <td colSpan={3} style={{ padding: '6px', textAlign: 'right', fontWeight: 700, borderTop: '1px solid #111' }}>Item subtotal</td>
-                  <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, borderTop: '1px solid #111', fontFamily: 'monospace' }}>
-                    {fmt(subtotal)}
-                  </td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #111', fontWeight: 700 }}>Total</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #111', fontWeight: 700 }}>{totalQty}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #111' }}></td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #111', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(subtotal)}</td>
                 </tr>
               </tbody>
             </Box>
           )}
+
+          {/* Labeled spec rows underneath the table — match the Excel layout */}
+          <Box sx={{ mt: 1, fontSize: 12.5 }}>
+            {item.productName ? (
+              <SpecRow label="Product Name"  value={item.productName} />
+            ) : (
+              <>
+                <SpecRow label="Brand Name"   value={item.brandName} />
+                <SpecRow label="Style Code"   value={item.styleCode} />
+              </>
+            )}
+            {item.printType && <SpecRow label="Print Type"   value={item.printType} />}
+            <SpecRow label="Garment Color"  value={item.color} />
+            {item.printerName && <SpecRow label="Printer"    value={item.printerName} />}
+          </Box>
         </Box>
       </Box>
     </Box>
+  );
+}
+
+function SpecRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <Stack direction="row" sx={{ py: 0.15 }}>
+      <Box sx={{ minWidth: 130, color: '#111', fontWeight: 700 }}>{label}</Box>
+      <Box sx={{ color: '#111' }}>{value}</Box>
+    </Stack>
   );
 }
 
@@ -670,11 +789,13 @@ function seedItemFromQuote(line) {
   const description = line.description || '';
   const brandGuess = description.split(/\s/)[0] || '';
   return {
-    mockupNum: '', customMockupDataUrl: '', showBack: false,
+    mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
+    productName: '',
     brandName: brandGuess,
     styleCode: line.styleCode || '',
     printType: line.printType || '',
     color:     line.color || '',
+    printerName: line.supplier ? '' : '',
     sizes:     DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: Number(line.unitPrice) || 0 })),
   };
 }
@@ -703,16 +824,37 @@ function printConfirmation(elementId, project, brandLogo) {
     window.print();
     return;
   }
+  // CSS chosen to make the printed page match the on-screen preview closely:
+  // letter-sized page, 0.4in margins, tables keep borders, mockup rows never
+  // split across pages, no orphan headers, sensible image sizing.
   w.document.write(`
-    <html><head><title>Confirmation — Project #${project.projectNumber || ''}</title>
+    <!doctype html>
+    <html><head><meta charset="utf-8"><title>Confirmation — Project #${project.projectNumber || ''}</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111; margin: 28px; }
-      img { max-width: 100%; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #111;
+        font-size: 12.5px;
+        line-height: 1.45;
+        padding: 32px 36px;
+        background: #fff;
+      }
+      img { max-width: 100%; height: auto; display: inline-block; }
       table { width: 100%; border-collapse: collapse; }
-      @page { margin: 0.5in; }
+      .item-row { page-break-inside: avoid; }
+      @page { size: letter; margin: 0.4in; }
+      @media print {
+        body { padding: 0; }
+        .no-print, .MuiBackdrop-root { display: none !important; }
+      }
     </style>
     </head><body>${el.innerHTML}</body></html>
   `);
   w.document.close();
-  setTimeout(() => { w.focus(); w.print(); }, 400);
+  // Give the browser time to layout images before triggering print.
+  setTimeout(() => {
+    try { w.focus(); w.print(); } catch (_) {}
+  }, 600);
 }
