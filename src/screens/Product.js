@@ -149,18 +149,25 @@ function Product() {
 
   const isSelected = selectedProducts.some((p) => p.style === productStyle && productStyle);
 
+  const buildQuoteEntry = () => {
+    const sw = productColorSwatches[productIndex] || null;
+    return {
+      style:     productStyle,
+      name:      productTitle,
+      vendor:    productVendor,
+      tag:       productTag,
+      color:     sw?.name || productColor || '',
+      colorHex:  sw?.hex  || productColorCode || '',
+      thumbnail: sw?.front || productFrontImages?.[productIndex] || productFrontImages?.[0] || '',
+    };
+  };
+
   const toggleQuoteForCurrent = () => {
     if (!productStyle) return;
     setSelectedProducts((current) => {
       const exists = current.some((p) => p.style === productStyle);
       if (exists) return current.filter((p) => p.style !== productStyle);
-      return [
-        ...current,
-        {
-          style: productStyle, name: productTitle, vendor: productVendor, tag: productTag,
-          thumbnail: productFrontImages?.[productIndex] || '',
-        },
-      ];
+      return [...current, buildQuoteEntry()];
     });
   };
 
@@ -419,7 +426,7 @@ function Product() {
                 products={
                   selectedProducts.some((p) => p.style === productStyle)
                     ? selectedProducts
-                    : [...selectedProducts, { style: productStyle, name: productTitle, vendor: productVendor, thumbnail: currentFrontImg || '' }]
+                    : [...selectedProducts, buildQuoteEntry()]
                 }
               />
 
