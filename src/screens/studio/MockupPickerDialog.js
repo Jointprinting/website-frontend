@@ -30,15 +30,18 @@ export default function MockupPickerDialog({
 
   const keyFor = (m) => m.pageState?.mockupNum || m.name || m._id;
 
+  // Match on a slug (lowercase alnum-only) so "Bleu Leaf Dispensary" still
+  // matches a library item named "BleuLeafDispensary_Merch" — raw substring
+  // matching broke on spaces / punctuation and made the picker look empty.
   const matched = React.useMemo(() => {
-    const cn = (companyName || '').trim().toLowerCase();
-    const pn = (clientName  || '').trim().toLowerCase();
+    const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const cn = slug(companyName);
+    const pn = slug(clientName);
     if (!cn && !pn) return mockups;
     return mockups.filter(m => {
-      const mc = (m.client || '').toLowerCase();
-      const mn = (m.name   || '').toLowerCase();
-      return (cn && (mc.includes(cn) || mn.includes(cn))) ||
-             (pn && (mc.includes(pn) || mn.includes(pn)));
+      const hay = slug(`${m.client || ''} ${m.name || ''}`);
+      return (cn && cn.length >= 3 && hay.includes(cn)) ||
+             (pn && pn.length >= 3 && hay.includes(pn));
     });
   }, [mockups, companyName, clientName]);
 
