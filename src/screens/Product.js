@@ -295,7 +295,7 @@ function Product() {
                 {productVendor && <Typography color="black">{productVendor}</Typography>}
                 {productStyle && <Typography color="gray">Style #{productStyle}</Typography>}
                 {productTag && <Chip label={productTag} color={productTagColor} variant="outlined" size="small" />}
-                {productRating > 0 && <Rating name="read-only" value={productRating} readOnly size="small" />}
+                 readOnly size="small" />}
               </Stack>
 
               {productTitle && (
