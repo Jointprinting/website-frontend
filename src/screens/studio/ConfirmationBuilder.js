@@ -38,30 +38,69 @@ function emptyItem() {
 export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, brandLogo, onClose, onSave }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
 
+  // Load the draft on open. Order of precedence:
+  //   1. A localStorage draft for this project (always wins — if you typed
+  //      anything since the last server save, that's the freshest copy).
+  //   2. The server's saved confirmation.
+  //   3. A sensible seed pulled from project + quote lines.
   useEffect(() => {
     if (!project) return;
-    const seed = project.confirmation && Object.keys(project.confirmation).length > 0
-      ? project.confirmation
-      : {
-        orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
-        orderDate:   project.orderDate || new Date().toISOString(),
-        shipping:    { name: project.companyName || '', attention: project.clientName || '', streetAddress: '', cityStateZip: '' },
-        items:       (project.quoteLines || []).map(seedItemFromQuote),
-        customLines: [],
-      };
+    const key = `confirmation-draft:${project._id}`;
+    let restored = false;
+    let seed;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw) { seed = JSON.parse(raw); restored = true; }
+    } catch (_) {}
+    if (!seed) {
+      seed = project.confirmation && Object.keys(project.confirmation).length > 0
+        ? project.confirmation
+        : {
+          orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
+          orderDate:   project.orderDate || new Date().toISOString(),
+          shipping:    { name: project.companyName || '', attention: project.clientName || '', streetAddress: '', cityStateZip: '' },
+          items:       (project.quoteLines || []).map(seedItemFromQuote),
+          customLines: [],
+        };
+    }
     setLocal(JSON.parse(JSON.stringify(seed)));
+    setDirty(false);
+    setRestoredFromDraft(restored);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id]);
 
+  // Persist every edit to localStorage so an accidental backdrop click,
+  // tab close, or browser crash can't kill the user's work.
+  useEffect(() => {
+    if (!project || !local) return;
+    try {
+      window.localStorage.setItem(`confirmation-draft:${project._id}`, JSON.stringify(local));
+    } catch (_) { /* quota exceeded? give up silently */ }
+  }, [project, local]);
+
+  // Warn if the user closes the tab with unsaved changes.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const onUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty]);
+
   if (!project || !local) return null;
 
-  const update = (patch) => setLocal(prev => ({ ...prev, ...patch }));
+  const update = (patch) => { setLocal(prev => ({ ...prev, ...patch })); setDirty(true); };
 
   const persist = async () => {
     setSaving(true);
     try {
       await onSave({ confirmation: local });
+      // Server confirmed — drop the local draft.
+      try { window.localStorage.removeItem(`confirmation-draft:${project._id}`); } catch (_) {}
+      setDirty(false);
+      setRestoredFromDraft(false);
     } finally {
       setSaving(false);
     }
@@ -70,7 +109,15 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   const totals = computeTotals(local);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth={false} fullWidth
+    <Dialog open={open}
+      // Don't close on accidental backdrop click — too much work lives in
+      // this dialog to lose to a stray click. X button or Esc is required.
+      onClose={(_, reason) => {
+        if (reason === 'backdropClick') return;
+        if (dirty && !window.confirm('You have unsaved changes in this confirmation. Close anyway?')) return;
+        onClose();
+      }}
+      maxWidth={false} fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: B.panel,
@@ -79,13 +126,13 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Confirmation page
           <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
-            Project #{project.projectNumber || '—'}
+            Project #{project.projectNumber || '—'}{dirty ? ' · unsaved' : ''}
           </Typography>
         </Typography>
         <Button size="small" disabled={saving}
           onClick={persist}
-          sx={{ color: saving ? B.muted : B.green, fontSize: 12, textTransform: 'none', fontWeight: 700 }}>
-          {saving ? <CircularProgress size={12} sx={{ color: B.green }} /> : 'Save'}
+          sx={{ color: saving ? B.muted : (dirty ? B.green : B.muted), fontSize: 12, textTransform: 'none', fontWeight: 700 }}>
+          {saving ? <CircularProgress size={12} sx={{ color: B.green }} /> : (dirty ? 'Save *' : 'Save')}
         </Button>
         <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 16 }} />}
           onClick={() => printConfirmation('confirmation-preview', project, brandLogo)}
@@ -94,8 +141,19 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
             '&:hover': { bgcolor: '#3bd070' } }}>
           Print / Save PDF
         </Button>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={() => {
+          if (dirty && !window.confirm('You have unsaved changes in this confirmation. Close anyway?')) return;
+          onClose();
+        }}><CloseIcon fontSize="small" /></IconButton>
       </Box>
+
+      {restoredFromDraft && (
+        <Box sx={{ px: 2.5, py: 0.6, bgcolor: 'rgba(251,191,36,0.12)',
+          borderBottom: `1px solid rgba(251,191,36,0.25)`,
+          color: '#fbbf24', fontSize: 11, fontWeight: 600 }}>
+          Restored from a local draft you didn't save last time. Hit Save when you're done to commit it.
+        </Box>
+      )}
 
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '420px 1fr' },
