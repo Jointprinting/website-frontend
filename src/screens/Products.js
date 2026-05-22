@@ -202,9 +202,9 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.08)', pt: 2, mt: 3 }}>
         <Typography sx={{
           fontFamily: 'ui-monospace,"SF Mono",monospace',
-          fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.3)',
-          textTransform: 'uppercase', lineHeight: 2,
-        }}>JOINT<br />PRINTING</Typography>
+          fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.55)',
+          textTransform: 'uppercase', fontWeight: 700,
+        }}>JOINT PRINTING</Typography>
       </Box>
     </Stack>
   );
@@ -317,6 +317,7 @@ export default function Products() {
       if (cur.some((p) => p.style === item.style)) return cur.filter((p) => p.style !== item.style);
       return [...cur, {
         style: item.style, name: item.name, vendor: item.vendor, tag: item.tag,
+        color: '', colorHex: '',
         thumbnail: item.image || item.productFrontImages?.[0] || '',
       }];
     });
@@ -401,11 +402,6 @@ export default function Products() {
             <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 26 } }}>
               {activeLabel}
             </Typography>
-            {!loading && !error && totalItems > 0 && (
-              <Typography variant="body2" color="text.secondary">
-                {totalItems.toLocaleString()} style{totalItems !== 1 ? 's' : ''}
-              </Typography>
-            )}
           </Stack>
           {genderType && (
             <Chip label={genderLabel} size="small" onDelete={() => setGenderType('')}
