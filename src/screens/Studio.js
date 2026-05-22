@@ -65,6 +65,8 @@ import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
+import BackupTab from './studio/BackupTab';
+import BackupIcon from '@mui/icons-material/Backup';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -1792,6 +1794,7 @@ const HUB_GROUPS = [
       { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
       { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
       { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
+      { id: 'backup',      label: 'Backup & restore',     Icon: BackupIcon },
     ],
   },
   {
@@ -2044,8 +2047,13 @@ function StudioBody({ token, onLogout }) {
     return <OrderTracker token={token} onBack={() => setView('hub')} />;
   }
 
+  if (view === 'backup') {
+    return <BackupTab token={token} onBack={() => setView('hub')} />;
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 3, md: 5 } }}>
+      <BackupNagBanner token={token} onClick={() => setView('backup')} />
       <Container maxWidth="md">
         <Fade in timeout={350}>
           <Stack
@@ -2145,4 +2153,44 @@ export default function Studio() {
   return token
     ? <StudioBody token={token} onLogout={handleLogout} />
     : <Login onAuthed={setToken} />;
+}
+
+// ── BackupNagBanner ──────────────────────────────────────────────────────────
+// Sits at the top of the Studio hub. Pings /admin/backup/status on mount;
+// shows a soft amber banner if a weekly backup is overdue. Click to jump to
+// the Backup tab. Auto-hides if up to date.
+function BackupNagBanner({ token, onClick }) {
+  const [info, setInfo] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch(`${config.backendUrl}/api/admin/backup/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setInfo(data);
+      } catch (_) { /* silent */ }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  if (!info || !info.isDue) return null;
+  const msg = info.lastBackupAt
+    ? `Backup is ${info.lastBackupDays} days old — overdue.`
+    : `You haven't backed up yet. Take 30 seconds to download an archive.`;
+
+  return (
+    <Box onClick={onClick} sx={{
+      cursor: 'pointer', mx: 'auto', mt: -1, mb: 2,
+      bgcolor: 'rgba(251,191,36,0.10)', borderTop: '1px solid rgba(251,191,36,0.25)',
+      borderBottom: '1px solid rgba(251,191,36,0.25)',
+      color: '#fbbf24', textAlign: 'center', py: 1.1, px: 2, fontSize: 13, fontWeight: 600,
+      '&:hover': { bgcolor: 'rgba(251,191,36,0.16)' },
+    }}>
+      ⚠ {msg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
+    </Box>
+  );
 }
