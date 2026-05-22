@@ -345,6 +345,29 @@ const [loading,    setLoading]    = useState(true);
 
   const hasActiveFilters = category !== '' || genderType !== '' || search !== '';
   const activeLabel = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
+
+  // Curated cross-brand featured set. Order matters — first match in this
+  // list wins its slot in the marquee. If a style isn't in the catalog
+  // payload yet (e.g. backend cache still warming) it's skipped gracefully
+  // and the marquee renders with however many we found.
+  const FEATURED_PICKS = [
+    { brand: 'gildan',                   style: '5000'   },  // G500   Heavy Cotton Tee
+    { brand: 'bella + canvas',           style: '3001'   },  // BC3001 Jersey Tee
+    { brand: 'comfort colors',           style: '1717'   },  // C1717  Heavyweight Garment-Dyed
+    { brand: 'next level',               style: '3600'   },  // NL3600 Premium Fitted
+    { brand: 'gildan',                   style: '18500'  },  // G185   Heavy Blend Hoodie
+    { brand: 'hanes',                    style: '5250'   },  // H5250  Authentic Tee
+    { brand: 'independent trading co.',  style: 'ss4500' },  // IND SS4500 Fleece Hoodie
+    { brand: 'bella + canvas',           style: '6004'   },  // BC6004 Women's Tee
+    { brand: 'gildan',                   style: '64000'  },  // G640   Softstyle Tee
+    { brand: 'next level',               style: '6210'   },  // NL6210 CVC Crew
+  ];
+  const featuredItems = FEATURED_PICKS
+    .map((pick) => products.find((p) =>
+      String(p.vendor || '').toLowerCase() === pick.brand &&
+      String(p.style  || '').toLowerCase() === pick.style
+    ))
+    .filter(Boolean);
   const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
   const clearFilters = () => {
@@ -480,9 +503,9 @@ const [loading,    setLoading]    = useState(true);
               </Button>
             </Box>
           )}
-          {!loading && !error && products.length > 0 && !hasActiveFilters && page === 1 && (
+          {!loading && !error && featuredItems.length >= 4 && !hasActiveFilters && page === 1 && (
             <Box sx={{ mb: 4 }}>
-              <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1.5 }}>
+              <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
                 <Stack>
                   <Typography sx={{
                     color: GREEN, letterSpacing: 3, fontSize: 10, fontWeight: 800,
@@ -490,81 +513,130 @@ const [loading,    setLoading]    = useState(true);
                   }}>Featured</Typography>
                   <Typography sx={{
                     fontFamily: DISPLAY_SERIF, fontWeight: 700,
-                    fontSize: { xs: 18, sm: 22 }, lineHeight: 1.15, mt: 0.5,
+                    fontSize: { xs: 20, sm: 26 }, lineHeight: 1.1, mt: 0.5, letterSpacing: -0.3,
                   }}>
-                    Most-loved silhouettes
+                    Curated picks across brands
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: 12, color: 'text.secondary' }}>
+                    Hover to pause · click to jump in
                   </Typography>
                 </Stack>
                 <Box sx={{ height: 1, flex: 1, ml: 2.5, bgcolor: 'rgba(0,0,0,0.08)' }} />
               </Stack>
+
               <Box sx={{
-                display: 'grid',
-                gridAutoFlow: 'column',
-                gridAutoColumns: { xs: '78%', sm: '38%', md: '24%' },
-                gap: 1.5, overflowX: 'auto', overflowY: 'hidden',
-                pb: 1, scrollSnapType: 'x mandatory',
-                scrollbarWidth: 'thin',
-                '&::-webkit-scrollbar': { height: 6 },
-                '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(0,0,0,0.18)', borderRadius: 3 },
+                position: 'relative', overflow: 'hidden',
+                py: 1.5, mx: { xs: -1.5, sm: -3 }, px: { xs: 1.5, sm: 3 },
               }}>
-                {products.slice(0, 6).map((item) => (
-                  <Paper key={`feat-${item._id || item.style}`} elevation={0} onClick={() => {
-                    navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } });
-                  }} sx={{
-                    cursor: 'pointer', borderRadius: 2.5, overflow: 'hidden',
-                    border: '1px solid', borderColor: 'rgba(0,0,0,0.08)',
-                    scrollSnapAlign: 'start', bgcolor: '#fff',
-                    transition: 'transform 200ms cubic-bezier(.2,.7,.2,1), box-shadow 200ms',
-                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
-                    '& img': { transition: 'transform 320ms cubic-bezier(.2,.7,.2,1)' },
-                    '&:hover img': { transform: 'scale(1.06)' },
-                  }}>
-                    <Box sx={{
-                      position: 'relative', bgcolor: '#f3f3ed', height: { xs: 200, sm: 240 },
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                    }}>
-                      {(item.image || item.productFrontImages?.[0]) ? (
-                        <img src={item.image || item.productFrontImages?.[0]} alt={item.name} loading="lazy"
-                          style={{ maxHeight: '100%', width: '100%', objectFit: 'contain' }} />
-                      ) : (
-                        <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
-                      )}
-                      {item.tag && (
-                        <Chip label={item.tag} size="small" color={TAG_COLOR[item.tag] || 'info'}
-                          sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 700, fontSize: 11 }} />
-                      )}
-                    </Box>
-                    <Box sx={{ p: 1.5 }}>
-                      {item.brandImage ? (
-                        <Box component="img" src={item.brandImage} alt={item.vendor}
-                          sx={{ height: 14, width: 'auto', maxWidth: 64, objectFit: 'contain', opacity: 0.85, display: 'block', mb: 0.5 }} />
-                      ) : (
-                        <Typography variant="caption" color="text.secondary"
-                          sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 10 }}>
-                          {item.vendor}
-                        </Typography>
-                      )}
-                      <Typography sx={{
-                        fontFamily: DISPLAY_SERIF, fontWeight: 700, fontSize: 15, lineHeight: 1.2,
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                        minHeight: 36, mt: 0.25,
-                      }}>{item.name}</Typography>
-                      {startingPrice(item) && (
-                        <Typography sx={{ mt: 0.5, fontSize: 12, color: 'text.secondary' }}>
-                          From <Box component="span" sx={{ fontWeight: 800, color: '#1a1a1a' }}>${startingPrice(item)}</Box>
-                        </Typography>
-                      )}
-                    </Box>
-                  </Paper>
-                ))}
+                {/* Gradient fade — left + right */}
+                <Box sx={{
+                  position: 'absolute', top: 0, left: 0, bottom: 0, width: { xs: 24, sm: 60 },
+                  background: 'linear-gradient(to right, #e8e9e3, rgba(232,233,227,0))',
+                  zIndex: 3, pointerEvents: 'none',
+                }} />
+                <Box sx={{
+                  position: 'absolute', top: 0, right: 0, bottom: 0, width: { xs: 24, sm: 60 },
+                  background: 'linear-gradient(to left, #e8e9e3, rgba(232,233,227,0))',
+                  zIndex: 3, pointerEvents: 'none',
+                }} />
+
+                <Box sx={{
+                  display: 'flex', gap: 2, width: 'max-content',
+                  animation: `jpMarquee ${Math.max(28, featuredItems.length * 6)}s linear infinite`,
+                  '&:hover': { animationPlayState: 'paused' },
+                  '@keyframes jpMarquee': {
+                    '0%':   { transform: 'translateX(0)' },
+                    '100%': { transform: 'translateX(-50%)' },
+                  },
+                }}>
+                  {[...featuredItems, ...featuredItems].map((item, idx) => (
+                    <Paper
+                      key={`marq-${idx}-${item.style}`}
+                      elevation={0}
+                      onClick={() => navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } })}
+                      sx={{
+                        cursor: 'pointer',
+                        flex: '0 0 auto',
+                        width: { xs: 220, sm: 260 },
+                        borderRadius: 3, overflow: 'hidden',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        bgcolor: '#fff',
+                        transition: 'transform 220ms cubic-bezier(.2,.7,.2,1), box-shadow 220ms',
+                        '& .featImg': { transition: 'transform 360ms cubic-bezier(.2,.7,.2,1)' },
+                        '&:hover': { transform: 'translateY(-6px)', boxShadow: 8 },
+                        '&:hover .featImg': { transform: 'scale(1.06)' },
+                      }}
+                    >
+                      <Box sx={{
+                        position: 'relative', bgcolor: '#f3f3ed',
+                        height: { xs: 200, sm: 240 },
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden',
+                      }}>
+                        {(item.image || item.productFrontImages?.[0]) ? (
+                          <Box component="img" className="featImg"
+                            src={item.image || item.productFrontImages?.[0]} alt={item.name} loading="lazy"
+                            sx={{ maxHeight: '100%', width: '100%', objectFit: 'contain' }} />
+                        ) : (
+                          <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
+                        )}
+                        {item.tag && (
+                          <Chip label={item.tag} size="small" color={TAG_COLOR[item.tag] || 'info'}
+                            sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 700, fontSize: 11 }} />
+                        )}
+                        {item.colorCount > 1 && (
+                          <Box sx={{
+                            position: 'absolute', bottom: 10, right: 10,
+                            bgcolor: 'rgba(255,255,255,0.92)', borderRadius: 999,
+                            px: 1, py: 0.25, fontSize: 10, fontWeight: 700,
+                            color: '#1a1a1a', letterSpacing: 0.4,
+                          }}>
+                            {item.colorCount} colors
+                          </Box>
+                        )}
+                      </Box>
+                      <Box sx={{ p: 1.75 }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                          {item.brandImage ? (
+                            <Box component="img" src={item.brandImage} alt={item.vendor}
+                              sx={{ height: 14, width: 'auto', maxWidth: 72, objectFit: 'contain', opacity: 0.85 }} />
+                          ) : (
+                            <Typography variant="caption" color="text.secondary"
+                              sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 10, fontWeight: 700 }}>
+                              {item.vendor}
+                            </Typography>
+                          )}
+                          <Typography sx={{
+                            fontFamily: 'ui-monospace, "SF Mono", monospace',
+                            fontSize: 10, color: 'text.disabled', fontWeight: 600,
+                          }}>#{item.style}</Typography>
+                        </Stack>
+                        <Typography sx={{
+                          fontFamily: DISPLAY_SERIF, fontWeight: 700, fontSize: 15.5, lineHeight: 1.2,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                          minHeight: 38, color: '#1a1a1a',
+                        }}>{item.name}</Typography>
+                        {startingPrice(item) && (
+                          <Typography sx={{ mt: 0.75, fontSize: 12, color: 'text.secondary' }}>
+                            From <Box component="span" sx={{ fontWeight: 800, color: '#1a1a1a', fontSize: 14 }}>${startingPrice(item)}</Box>
+                          </Typography>
+                        )}
+                      </Box>
+                    </Paper>
+                  ))}
+                </Box>
               </Box>
+
               <Box sx={{ mt: 4, mb: 2.5, height: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
             </Box>
           )}
           {!loading && !error && products.length > 0 && (
             <>
               <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: 0.5 }}>
-                {(!hasActiveFilters && page === 1 ? products.slice(6) : products).map((item, idx) => {
+                {(!hasActiveFilters && page === 1 && featuredItems.length >= 4
+                    ? products.filter((p) => !featuredItems.some((f) => f.style === p.style && f.vendor === p.vendor))
+                    : products
+                  ).map((item, idx) => {
                   const isSel = selectedProducts.some((p) => p.style === item.style);
                   return (
                     <Grid item xs={6} sm={4} md={4} lg={3} key={item._id || item.style || idx}>
