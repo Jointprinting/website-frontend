@@ -687,6 +687,7 @@ export default function OrderTracker({ token, onBack }) {
         mockupMap={mockupMap}
         mockups={mockups}
         logo={confirmation ? logoFor(confirmation) : null}
+        token={token}
         onClose={() => setConfirmation(null)}
         onSave={async (patch) => {
           if (!confirmation) return;
