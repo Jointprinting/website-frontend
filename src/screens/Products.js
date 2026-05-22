@@ -17,6 +17,7 @@ const SIDEBAR_BG  = '#0c1a11';
 const GREEN       = '#4ade80';
 const MUTED       = 'rgba(255,255,255,0.55)';
 const SIDEBAR_W   = 230;
+const DISPLAY_SERIF = "'Fraunces', 'Playfair Display', Georgia, serif";
 const NAVBAR_H    = 64;
 
 const GARMENT_CATEGORIES = [
@@ -68,7 +69,9 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
       <Box sx={{
         position: 'relative', bgcolor: '#f3f3ed',
         display: 'flex', justifyContent: 'center', alignItems: 'center',
-        minHeight: { xs: 150, sm: 200 },
+        minHeight: { xs: 150, sm: 200 }, overflow: 'hidden',
+        '& img': { transition: 'transform 320ms cubic-bezier(.2,.7,.2,1)' },
+        '&:hover img': { transform: 'scale(1.045)' },
       }}>
         {imgSrc ? (
           <img src={imgSrc} alt={item.name} loading="lazy"
@@ -95,22 +98,29 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
       </Box>
 
       <Box sx={{ p: { xs: 1.25, sm: 1.75 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
-        <Stack direction="row" spacing={0.75} alignItems="baseline" flexWrap="wrap">
-          <Typography variant="caption" color="text.secondary"
-            sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
-            {item.vendor}
-          </Typography>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" sx={{ minHeight: 18 }}>
+          {item.brandImage ? (
+            <Box component="img" src={item.brandImage} alt={item.vendor}
+              sx={{ height: 14, width: 'auto', maxWidth: 64, objectFit: 'contain', opacity: 0.85,
+                    filter: 'grayscale(0.1) contrast(1.05)' }} />
+          ) : (
+            <Typography variant="caption" color="text.secondary"
+              sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
+              {item.vendor}
+            </Typography>
+          )}
           {item.style && (
             <Typography variant="caption" color="text.disabled"
-              sx={{ fontSize: { xs: 10, sm: 11 }, fontWeight: 600 }}>
+              sx={{ fontSize: { xs: 10, sm: 11 }, fontWeight: 600, fontFamily: 'ui-monospace, "SF Mono", monospace' }}>
               #{item.style}
             </Typography>
           )}
         </Stack>
-        <Typography fontWeight={600} sx={{
-          fontSize: { xs: 13, sm: 14 }, lineHeight: 1.3,
+        <Typography sx={{
+          fontFamily: DISPLAY_SERIF, fontWeight: 600,
+          fontSize: { xs: 15, sm: 16.5 }, lineHeight: 1.2,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          minHeight: { xs: 34, sm: 38 },
+          minHeight: { xs: 36, sm: 42 }, color: '#1a1a1a',
         }}>
           {item.name}
         </Typography>
@@ -181,8 +191,25 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           </IconButton>
         </Stack>
       )}
+      {!onClose && (
+        <Box sx={{ mb: 2.5 }}>
+          <Typography sx={{
+            fontFamily: DISPLAY_SERIF, fontWeight: 900, fontSize: 36, lineHeight: 0.95,
+            color: '#fff', letterSpacing: -1,
+          }}>
+            jp<Box component="span" sx={{ color: GREEN }}>.</Box>
+          </Typography>
+          <Typography sx={{
+            mt: 0.75, color: 'rgba(255,255,255,0.4)', fontSize: 9, letterSpacing: 2,
+            textTransform: 'uppercase', fontWeight: 700,
+          }}>
+            Garment Library
+          </Typography>
+          <Box sx={{ mt: 1.5, height: 1, width: 32, bgcolor: GREEN, opacity: 0.6 }} />
+        </Box>
+      )}
       <Typography variant="overline"
-        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 1 }}>
+        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 0 }}>
         Garment Type
       </Typography>
       <Stack spacing={0}>
@@ -392,14 +419,25 @@ const [loading,    setLoading]    = useState(true);
         </Box>
 
         <Box sx={{ px: { xs: 2, sm: 3 }, pt: 3, pb: 1 }}>
+          <Typography sx={{
+            color: GREEN, letterSpacing: 3, fontSize: 10, fontWeight: 800,
+            textTransform: 'uppercase', mb: 0.75,
+          }}>
+            {activeLabel === 'All Styles' ? 'The Library' : 'Category'}
+          </Typography>
           <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap>
-            <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 20, sm: 26 } }}>
+            <Typography sx={{
+              fontFamily: DISPLAY_SERIF, fontWeight: 900,
+              fontSize: { xs: 30, sm: 44 }, lineHeight: 1, letterSpacing: -0.5,
+              color: '#1a1a1a',
+            }}>
               {activeLabel}
             </Typography>
           </Stack>
+          <Box sx={{ mt: 1.5, height: 2, width: 56, bgcolor: GREEN, borderRadius: 1 }} />
           <Typography sx={{
-            mt: 0.75, color: 'text.secondary',
-            fontSize: { xs: 13, sm: 14 }, maxWidth: 560,
+            mt: 2, color: 'text.secondary',
+            fontSize: { xs: 13.5, sm: 15 }, maxWidth: 580, lineHeight: 1.55,
           }}>
             {activeLabel === 'All Styles'
               ? 'Premium blanks from the brands customers ask for — pick anything, we send a free mockup within 24 hours.'
@@ -437,6 +475,93 @@ const [loading,    setLoading]    = useState(true);
                 onClick={clearFilters} sx={{ textTransform: 'none' }}>
                 {hasActiveFilters ? 'Clear filters' : 'Try again'}
               </Button>
+            </Box>
+          )}
+          {!loading && !error && products.length > 0 && !hasActiveFilters && page === 1 && (
+            <Box sx={{ mb: 4 }}>
+              <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Stack>
+                  <Typography sx={{
+                    color: GREEN, letterSpacing: 3, fontSize: 10, fontWeight: 800,
+                    textTransform: 'uppercase',
+                  }}>Featured</Typography>
+                  <Typography sx={{
+                    fontFamily: DISPLAY_SERIF, fontWeight: 700,
+                    fontSize: { xs: 18, sm: 22 }, lineHeight: 1.15, mt: 0.5,
+                  }}>
+                    Most-loved silhouettes
+                  </Typography>
+                </Stack>
+                <Box sx={{ height: 1, flex: 1, ml: 2.5, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              </Stack>
+              <Box sx={{
+                display: 'grid',
+                gridAutoFlow: 'column',
+                gridAutoColumns: { xs: '78%', sm: '38%', md: '24%' },
+                gap: 1.5, overflowX: 'auto', overflowY: 'hidden',
+                pb: 1, scrollSnapType: 'x mandatory',
+                scrollbarWidth: 'thin',
+                '&::-webkit-scrollbar': { height: 6 },
+                '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(0,0,0,0.18)', borderRadius: 3 },
+              }}>
+                {products.slice(0, 6).map((item) => (
+                  <Paper key={`feat-${item._id || item.style}`} elevation={0} onClick={() => {
+                    navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } });
+                  }} sx={{
+                    cursor: 'pointer', borderRadius: 2.5, overflow: 'hidden',
+                    border: '1px solid', borderColor: 'rgba(0,0,0,0.08)',
+                    scrollSnapAlign: 'start', bgcolor: '#fff',
+                    transition: 'transform 200ms cubic-bezier(.2,.7,.2,1), box-shadow 200ms',
+                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
+                    '& img': { transition: 'transform 320ms cubic-bezier(.2,.7,.2,1)' },
+                    '&:hover img': { transform: 'scale(1.06)' },
+                  }}>
+                    <Box sx={{
+                      position: 'relative', bgcolor: '#f3f3ed', height: { xs: 200, sm: 240 },
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                    }}>
+                      {(item.image || item.productFrontImages?.[0]) ? (
+                        <img src={item.image || item.productFrontImages?.[0]} alt={item.name} loading="lazy"
+                          style={{ maxHeight: '100%', width: '100%', objectFit: 'contain' }} />
+                      ) : (
+                        <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
+                      )}
+                      {item.tag && (
+                        <Chip label={item.tag} size="small" color={TAG_COLOR[item.tag] || 'info'}
+                          sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 700, fontSize: 11 }} />
+                      )}
+                    </Box>
+                    <Box sx={{ p: 1.5 }}>
+                      {item.brandImage ? (
+                        <Box component="img" src={item.brandImage} alt={item.vendor}
+                          sx={{ height: 14, width: 'auto', maxWidth: 64, objectFit: 'contain', opacity: 0.85, display: 'block', mb: 0.5 }} />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary"
+                          sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 10 }}>
+                          {item.vendor}
+                        </Typography>
+                      )}
+                      <Typography sx={{
+                        fontFamily: DISPLAY_SERIF, fontWeight: 700, fontSize: 15, lineHeight: 1.2,
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        minHeight: 36, mt: 0.25,
+                      }}>{item.name}</Typography>
+                      {startingPrice(item) && (
+                        <Typography sx={{ mt: 0.5, fontSize: 12, color: 'text.secondary' }}>
+                          From <Box component="span" sx={{ fontWeight: 800, color: '#1a1a1a' }}>${startingPrice(item)}</Box>
+                        </Typography>
+                      )}
+                    </Box>
+                  </Paper>
+                ))}
+              </Box>
+              <Box sx={{ mt: 4, mb: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography sx={{
+                  color: GREEN, letterSpacing: 3, fontSize: 10, fontWeight: 800,
+                  textTransform: 'uppercase',
+                }}>All Styles</Typography>
+                <Box sx={{ height: 1, flex: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              </Box>
             </Box>
           )}
           {!loading && !error && products.length > 0 && (
