@@ -1394,7 +1394,7 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
         </Box>
       ) : (
         <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, overflow: 'hidden' }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 28px',
+          <Box sx={{ display: 'grid', gridTemplateColumns: '68px 1fr 28px',
             gap: 0.5, px: 0.8, py: 0.4, bgcolor: B.panelHi,
             fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             <Box>Qty</Box>
@@ -1402,7 +1402,7 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
             <Box />
           </Box>
           {list.map((it, i) => (
-            <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 28px',
+            <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '68px 1fr 28px',
               gap: 0.5, alignItems: 'center', px: 0.8, py: 0.4,
               borderTop: `1px solid ${B.faint}` }}>
               <TextField size="small" type="number" value={it.qty || ''}
