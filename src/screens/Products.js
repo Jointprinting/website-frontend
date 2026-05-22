@@ -251,6 +251,7 @@ export default function Products() {
   const [products,       setProducts]       = useState([]);
   const [totalPages,     setTotalPages]     = useState(0);
   const [relaxedFilter,  setRelaxedFilter]  = useState(null);
+  const [featuredItems,  setFeaturedItems]  = useState([]);
 const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [fetchKey,   setFetchKey]   = useState(0);
@@ -319,6 +320,7 @@ const [loading,    setLoading]    = useState(true);
         setProducts(prods);
         setTotalPages(d.totalPages || 0);
         setRelaxedFilter(d.relaxedFilter || null);
+        setFeaturedItems(d.featured || []);
 
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
@@ -351,38 +353,9 @@ const [loading,    setLoading]    = useState(true);
   const hasActiveFilters = category !== '' || genderType !== '' || search !== '';
   const activeLabel = GARMENT_CATEGORIES.find((c) => c.value === category)?.label || 'All Styles';
 
-  // Curated cross-brand featured set. Order matters — first match in this
-  // list wins its slot in the marquee. If a style isn't in the catalog
-  // payload yet (e.g. backend cache still warming) it's skipped gracefully
-  // and the marquee renders with however many we found.
-  const FEATURED_PICKS = [
-    { brand: 'gildan',                   style: '5000'   },  // G500   Heavy Cotton Tee
-    { brand: 'bella + canvas',           style: '3001'   },  // BC3001 Jersey Tee
-    { brand: 'comfort colors',           style: '1717'   },  // C1717  Heavyweight Garment-Dyed
-    { brand: 'next level',               style: '3600'   },  // NL3600 Premium Fitted
-    { brand: 'gildan',                   style: '18500'  },  // G185   Heavy Blend Hoodie
-    { brand: 'hanes',                    style: '5250'   },  // H5250  Authentic Tee
-    { brand: 'independent trading co.',  style: 'ss4500' },  // IND SS4500 Fleece Hoodie
-    { brand: 'bella + canvas',           style: '6004'   },  // BC6004 Women's Tee
-    { brand: 'gildan',                   style: '64000'  },  // G640   Softstyle Tee
-    { brand: 'next level',               style: '6210'   },  // NL6210 CVC Crew
-  ];
-  // Normalize for brand matching: lowercase + strip non-alphanumeric so
-  // 'Bella + Canvas' / 'Bella+Canvas®' / 'bella+canvas' all collapse to
-  // the same key. Some S&S brand strings have trailing symbols (®, ™, .)
-  // that broke exact-equality match.
-  const normalizeBrand = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9+]/g, '');
-  const featuredItems = FEATURED_PICKS
-    .map((pick) => {
-      const targetBrand = normalizeBrand(pick.brand);
-      const targetStyle = pick.style;
-      return products.find((p) => {
-        const vb = normalizeBrand(p.vendor);
-        const vs = String(p.style || '').toLowerCase();
-        return (vb === targetBrand || vb.startsWith(targetBrand) || targetBrand.startsWith(vb)) && vs === targetStyle;
-      });
-    })
-    .filter(Boolean);
+  // Featured items come from the backend (see /ss/browse response). The
+  // backend computes them against the full catalog so picks aren't missed
+  // due to pagination.
   const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
   const clearFilters = () => {
