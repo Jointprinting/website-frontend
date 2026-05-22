@@ -377,6 +377,7 @@ function SubmissionsTab({ token }) {
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [selected, setSelected] = React.useState(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [startingProject, setStartingProject] = React.useState(false);
 
   const fetchSubmissions = React.useCallback(async () => {
     setLoading(true);
@@ -637,6 +638,41 @@ function SubmissionsTab({ token }) {
           <Button onClick={() => setDialogOpen(false)} sx={{ textTransform: 'none', color: BRAND.muted, '&:hover': { color: BRAND.white } }}>
             Close
           </Button>
+          <Box sx={{ flex: 1 }} />
+          {selected?.orderId ? (
+            <Chip size="small" label={`Linked to project`} sx={{ bgcolor: 'rgba(74,222,128,0.14)', color: BRAND.green, fontWeight: 700, fontSize: 11 }} />
+          ) : (
+            <Button
+              onClick={async () => {
+                if (!selected) return;
+                setStartingProject(true);
+                try {
+                  const res = await axios.post(
+                    `${config.backendUrl}/api/orders/from-submission/${selected._id}`,
+                    {},
+                    { headers: { Authorization: `Bearer ${token}` } },
+                  );
+                  const orderId = res.data?.order?._id;
+                  setItems((arr) => arr.map((it) =>
+                    it._id === selected._id ? { ...it, orderId, status: 'quoted' } : it,
+                  ));
+                  setSelected((s) => s ? { ...s, orderId, status: 'quoted' } : s);
+                  alert(`Project created from inquiry. Open Order Tracker to find it (project #${res.data?.order?.projectNumber || '?'}).`);
+                } catch (e) {
+                  alert('Could not start project: ' + (e?.response?.data?.message || e.message));
+                } finally {
+                  setStartingProject(false);
+                }
+              }}
+              disabled={startingProject}
+              startIcon={startingProject ? <CircularProgress size={14} sx={{ color: BRAND.greenDk }} /> : null}
+              variant="contained"
+              sx={{ bgcolor: BRAND.green, color: BRAND.greenDk, fontWeight: 700, textTransform: 'none',
+                '&:hover': { bgcolor: '#3bd070' } }}
+            >
+              Start project from inquiry
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>
