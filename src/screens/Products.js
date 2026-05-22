@@ -192,24 +192,23 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
         </Stack>
       )}
       {!onClose && (
-        <Box sx={{ mb: 2.5 }}>
+        <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 3 }}>
           <Typography sx={{
-            fontFamily: DISPLAY_SERIF, fontWeight: 900, fontSize: 36, lineHeight: 0.95,
-            color: '#fff', letterSpacing: -1,
+            fontFamily: DISPLAY_SERIF, fontWeight: 900, fontSize: 24, lineHeight: 1,
+            color: '#fff', letterSpacing: -0.5,
           }}>
             jp<Box component="span" sx={{ color: GREEN }}>.</Box>
           </Typography>
           <Typography sx={{
-            mt: 0.75, color: 'rgba(255,255,255,0.4)', fontSize: 9, letterSpacing: 2,
+            color: 'rgba(255,255,255,0.4)', fontSize: 9, letterSpacing: 2,
             textTransform: 'uppercase', fontWeight: 700,
           }}>
-            Garment Library
+            Library
           </Typography>
-          <Box sx={{ mt: 1.5, height: 1, width: 32, bgcolor: GREEN, opacity: 0.6 }} />
-        </Box>
+        </Stack>
       )}
       <Typography variant="overline"
-        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5, mt: onClose ? 0 : 0 }}>
+        sx={{ color: 'rgba(255,255,255,0.35)', letterSpacing: 2, fontSize: 9, display: 'block', mb: 0.5 }}>
         Garment Type
       </Typography>
       <Stack spacing={0}>
@@ -355,7 +354,11 @@ const [loading,    setLoading]    = useState(true);
   };
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#e8e9e3' }}>
+    <Box sx={{
+      display: 'flex', alignItems: 'flex-start', minHeight: '100vh',
+      bgcolor: '#e8e9e3',
+      background: { md: `linear-gradient(to right, ${SIDEBAR_BG} 0, ${SIDEBAR_BG} ${SIDEBAR_W}px, #e8e9e3 ${SIDEBAR_W}px)` },
+    }}>
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
@@ -555,19 +558,13 @@ const [loading,    setLoading]    = useState(true);
                   </Paper>
                 ))}
               </Box>
-              <Box sx={{ mt: 4, mb: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{
-                  color: GREEN, letterSpacing: 3, fontSize: 10, fontWeight: 800,
-                  textTransform: 'uppercase',
-                }}>All Styles</Typography>
-                <Box sx={{ height: 1, flex: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
-              </Box>
+              <Box sx={{ mt: 4, mb: 2.5, height: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
             </Box>
           )}
           {!loading && !error && products.length > 0 && (
             <>
               <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: 0.5 }}>
-                {products.map((item, idx) => {
+                {(!hasActiveFilters && page === 1 ? products.slice(6) : products).map((item, idx) => {
                   const isSel = selectedProducts.some((p) => p.style === item.style);
                   return (
                     <Grid item xs={6} sm={4} md={4} lg={3} key={item._id || item.style || idx}>
