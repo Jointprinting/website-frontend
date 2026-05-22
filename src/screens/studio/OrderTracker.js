@@ -16,6 +16,7 @@ import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
 import RefreshIcon         from '@mui/icons-material/Refresh';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -60,6 +61,9 @@ export default function OrderTracker({ token, onBack }) {
   const [healthOpen,    setHealthOpen]    = useState(false);
   const [healthData,    setHealthData]    = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [analyticsOpen,    setAnalyticsOpen]    = useState(false);
+  const [analyticsData,    setAnalyticsData]    = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -282,6 +286,20 @@ export default function OrderTracker({ token, onBack }) {
     setPicker({ open: false, project: null });
   };
 
+  const handleOpenAnalytics = async () => {
+    setAnalyticsOpen(true);
+    setAnalyticsLoading(true);
+    try {
+      const r = await axios.get(`${base}/orders/analytics`, authHdr);
+      setAnalyticsData(r.data);
+    } catch (e) {
+      alert(`Couldn't load analytics: ${e.message}`);
+      setAnalyticsOpen(false);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -340,6 +358,15 @@ export default function OrderTracker({ token, onBack }) {
               px: 2, '&:hover': { bgcolor: '#3bd070' } }}>
             New project
           </Button>
+
+          <Tooltip title="Analytics">
+            <span>
+              <IconButton onClick={handleOpenAnalytics} size="small"
+                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
+                <InsightsOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
 
           <Tooltip title="Mockup health report">
             <span>
@@ -485,6 +512,13 @@ export default function OrderTracker({ token, onBack }) {
           const p = projects.find(x => x.projectNumber === projectNumber);
           if (p) { setHealthOpen(false); setActiveProject(p); }
         }}
+      />
+
+      <AnalyticsDialog
+        open={analyticsOpen}
+        data={analyticsData}
+        loading={analyticsLoading}
+        onClose={() => setAnalyticsOpen(false)}
       />
 
       <MockupPickerDialog
@@ -1821,5 +1855,148 @@ function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
         </Box>
       )}
     </Box>
+  );
+}
+
+// ── AnalyticsDialog ──────────────────────────────────────────────────────────
+// Lightweight visual dashboard: revenue by month bar chart (pure CSS,
+// no chart library), top clients by delivered revenue, top garment styles
+// by qty across all quote lines, overall margin %.
+function AnalyticsDialog({ open, data, loading, onClose }) {
+  const months = (data && data.revenueByMonth) || [];
+  const maxRev = months.reduce((m, x) => Math.max(m, x.revenue || 0), 0);
+  const topClients = (data && data.topClients) || [];
+  const topStyles  = (data && data.topStyles)  || [];
+  const overall    = (data && data.overall)    || { revenue: 0, cogs: 0, margin: 0, marginPct: 0 };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <InsightsOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Analytics
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {loading || !data ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <CircularProgress size={24} sx={{ color: B.green }} />
+          </Box>
+        ) : (
+          <>
+            {/* Overall margin */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 1, mb: 2.5 }}>
+              <HealthStat label="Lifetime revenue" value={fmt(overall.revenue)} accent={B.green} />
+              <HealthStat label="Lifetime COGS"    value={fmt(overall.cogs)} />
+              <HealthStat label="Profit"           value={fmt(overall.margin)} accent={overall.margin > 0 ? B.green : '#f87171'} />
+              <HealthStat label="Margin %"         value={`${overall.marginPct.toFixed(1)}%`} accent={overall.marginPct >= 30 ? B.green : '#fbbf24'} />
+            </Box>
+
+            {/* Revenue by month */}
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+              Delivered revenue · last 12 months
+            </Typography>
+            {maxRev === 0 ? (
+              <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 2, textAlign: 'center', color: B.muted, fontSize: 12, mb: 2.5 }}>
+                No delivered revenue in the last 12 months.
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.4, height: 110, mb: 0.5,
+                borderBottom: `1px solid ${B.faint}`, pb: 0.4 }}>
+                {months.map((m, i) => {
+                  const h = maxRev > 0 ? (m.revenue / maxRev) * 100 : 0;
+                  return (
+                    <Box key={i} title={`${m.month} · ${fmt(m.revenue)} · ${m.orders} order${m.orders === 1 ? '' : 's'}`}
+                      sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.3,
+                        cursor: 'help' }}>
+                      <Box sx={{
+                        height: `${Math.max(h, 1)}%`, width: '100%',
+                        bgcolor: m.revenue > 0 ? B.green : 'rgba(255,255,255,0.06)',
+                        borderRadius: '2px 2px 0 0',
+                        opacity: m.revenue > 0 ? 0.9 : 0.4,
+                        transition: 'opacity 0.12s',
+                        '&:hover': { opacity: 1 },
+                      }} />
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+            <Box sx={{ display: 'flex', gap: 0.4, mb: 2.5 }}>
+              {months.map((m, i) => (
+                <Box key={i} sx={{ flex: 1, textAlign: 'center', color: B.muted, fontSize: 8, fontFamily: 'monospace' }}>
+                  {m.month.slice(5)}
+                </Box>
+              ))}
+            </Box>
+
+            {/* Top clients */}
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+              Top clients · all-time delivered
+            </Typography>
+            {topClients.length === 0 ? (
+              <Box sx={{ color: B.muted, fontSize: 12, mb: 2.5 }}>No delivered revenue yet.</Box>
+            ) : (
+              <Box sx={{ mb: 2.5 }}>
+                {topClients.map((c, i) => {
+                  const max = topClients[0].revenue || 1;
+                  const w = (c.revenue / max) * 100;
+                  return (
+                    <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 90px', alignItems: 'center', gap: 1, py: 0.6, borderBottom: `1px solid ${B.faint}` }}>
+                      <Box sx={{ position: 'relative' }}>
+                        <Box sx={{ position: 'absolute', inset: 0, width: `${w}%`, bgcolor: 'rgba(74,222,128,0.08)', borderRadius: 0.5 }} />
+                        <Box sx={{ position: 'relative', px: 1, py: 0.4 }}>
+                          <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700 }}>
+                            {c.companyName || c.clientName || c.companyKey}
+                          </Typography>
+                          <Typography sx={{ color: B.muted, fontSize: 10 }}>
+                            {c.orders} order{c.orders === 1 ? '' : 's'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ color: B.green, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
+                        {fmt(c.revenue)}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+
+            {/* Top styles */}
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+              Top garment styles · qty across all quotes
+            </Typography>
+            {topStyles.length === 0 ? (
+              <Box sx={{ color: B.muted, fontSize: 12 }}>No quote lines with style codes yet. Add style codes in the quoter to populate this.</Box>
+            ) : (
+              <Box>
+                {topStyles.map((s, i) => {
+                  const max = topStyles[0].qty || 1;
+                  const w = (s.qty / max) * 100;
+                  return (
+                    <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px', alignItems: 'center', gap: 1, py: 0.5, borderBottom: `1px solid ${B.faint}` }}>
+                      <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>
+                        {s.styleCode}
+                      </Typography>
+                      <Box sx={{ position: 'relative', height: 14 }}>
+                        <Box sx={{ position: 'absolute', inset: 0, width: `${w}%`, bgcolor: 'rgba(96,165,250,0.18)', borderRadius: 0.5 }} />
+                      </Box>
+                      <Typography sx={{ color: B.white, fontSize: 12, fontFamily: 'monospace', textAlign: 'right' }}>
+                        {s.qty.toLocaleString()}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
