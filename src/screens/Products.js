@@ -568,7 +568,10 @@ const [loading,    setLoading]    = useState(true);
 
                 <Box
                   ref={marqueeRef}
+                  onDragStart={(e) => e.preventDefault()}
                   onPointerDown={(e) => {
+                    // Touch uses native horizontal scroll — only intercept mouse.
+                    if (e.pointerType !== 'mouse') return;
                     const el = marqueeRef.current;
                     if (!el) return;
                     isDraggingRef.current = true;
@@ -576,8 +579,10 @@ const [loading,    setLoading]    = useState(true);
                     dragStartXRef.current = e.clientX;
                     dragStartScrollRef.current = el.scrollLeft;
                     el.setPointerCapture?.(e.pointerId);
+                    el.style.cursor = 'grabbing';
                   }}
                   onPointerMove={(e) => {
+                    if (e.pointerType !== 'mouse') return;
                     const el = marqueeRef.current;
                     if (!isDraggingRef.current || !el) return;
                     const dx = e.clientX - dragStartXRef.current;
@@ -585,18 +590,30 @@ const [loading,    setLoading]    = useState(true);
                     el.scrollLeft = dragStartScrollRef.current - dx;
                   }}
                   onPointerUp={(e) => {
+                    if (e.pointerType !== 'mouse') return;
                     isDraggingRef.current = false;
-                    marqueeRef.current?.releasePointerCapture?.(e.pointerId);
+                    const el = marqueeRef.current;
+                    if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = 'grab'; }
                   }}
-                  onPointerCancel={() => { isDraggingRef.current = false; }}
+                  onPointerCancel={() => {
+                    isDraggingRef.current = false;
+                    if (marqueeRef.current) marqueeRef.current.style.cursor = 'grab';
+                  }}
                   onMouseEnter={() => { isPausedRef.current = true; }}
-                  onMouseLeave={() => { isPausedRef.current = false; isDraggingRef.current = false; }}
+                  onMouseLeave={() => {
+                    isPausedRef.current = false; isDraggingRef.current = false;
+                    if (marqueeRef.current) marqueeRef.current.style.cursor = 'grab';
+                  }}
+                  onTouchStart={() => { isPausedRef.current = true; }}
+                  onTouchEnd={() => { isPausedRef.current = false; }}
                   sx={{
                     display: 'flex', gap: 2,
                     overflowX: 'auto', overflowY: 'hidden',
                     scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
-                    cursor: 'grab', userSelect: 'none',
-                    '&:active': { cursor: 'grabbing' },
+                    cursor: 'grab',
+                    userSelect: 'none', WebkitUserSelect: 'none',
+                    touchAction: 'pan-x',
+                    '& *': { userSelect: 'none' },
                   }}>
                   {[...featuredItems, ...featuredItems].map((item, idx) => (
                     <Paper
@@ -607,7 +624,7 @@ const [loading,    setLoading]    = useState(true);
                         navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } });
                       }}
                       sx={{
-                        cursor: 'pointer',
+                        cursor: 'inherit',
                         flex: '0 0 auto',
                         width: { xs: 220, sm: 260 },
                         borderRadius: 3, overflow: 'hidden',
@@ -617,6 +634,7 @@ const [loading,    setLoading]    = useState(true);
                         '& .featImg': { transition: 'transform 360ms cubic-bezier(.2,.7,.2,1)' },
                         '&:hover': { transform: 'translateY(-6px)', boxShadow: 8 },
                         '&:hover .featImg': { transform: 'scale(1.06)' },
+                        '& img': { WebkitUserDrag: 'none' },
                       }}
                     >
                       <Box sx={{
@@ -657,7 +675,8 @@ const [loading,    setLoading]    = useState(true);
                               border: '1px solid rgba(0,0,0,0.08)',
                             }}>
                               <Box component="img" src={item.brandImage} alt={item.vendor}
-                                sx={{ height: 20, width: 'auto', maxWidth: 96, objectFit: 'contain', display: 'block' }} />
+                                draggable={false}
+                                sx={{ height: 20, width: 'auto', maxWidth: 96, objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
                             </Box>
                           ) : (
                             <Typography variant="caption" color="text.secondary"
