@@ -19,6 +19,8 @@ import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import AutoFixHighIcon    from '@mui/icons-material/AutoFixHigh';
+import ChecklistIcon      from '@mui/icons-material/Checklist';
+import CheckIcon          from '@mui/icons-material/Check';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -85,6 +87,9 @@ export default function OrderTracker({ token, onBack }) {
   const [autoLinkData,     setAutoLinkData]     = useState(null);
   const [autoLinkLoading,  setAutoLinkLoading]  = useState(false);
   const [autoLinkApplying, setAutoLinkApplying] = useState(false);
+  const [selectMode,  setSelectMode]  = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkSaving,  setBulkSaving]  = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -418,6 +423,28 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds([]); };
+  const handleBulkUpdate = async (patch, label) => {
+    if (selectedIds.length === 0) return;
+    const n = selectedIds.length;
+    if (!window.confirm(`${label} — apply to ${n} project${n === 1 ? '' : 's'}?`)) return;
+    setBulkSaving(true);
+    try {
+      for (const id of selectedIds) {
+        await axios.put(`${base}/orders/${id}`, patch, authHdr);
+      }
+      await loadProjects();
+      exitSelectMode();
+    } catch (e) {
+      alert(`Bulk update failed: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -524,6 +551,16 @@ export default function OrderTracker({ token, onBack }) {
             </span>
           </Tooltip>
 
+          <Tooltip title={selectMode ? 'Exit multi-select' : 'Select multiple projects'}>
+            <span>
+              <IconButton onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))} size="small"
+                sx={{ color: selectMode ? B.green : B.muted, opacity: selectMode ? 1 : 0.4,
+                  '&:hover': { opacity: 1, color: B.green } }}>
+                <ChecklistIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+
           <BrandLogoSlot logo={brandLogo} onUpload={uploadBrandLogo} onClear={clearBrandLogo} />
         </Stack>
 
@@ -609,7 +646,7 @@ export default function OrderTracker({ token, onBack }) {
       </Box>
 
       {/* Project grid */}
-      <Box sx={{ p: 3, pb: 6 }}>
+      <Box sx={{ p: 3, pb: selectMode ? 12 : 6 }}>
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
             <CircularProgress sx={{ color: B.green }} />
@@ -635,7 +672,9 @@ export default function OrderTracker({ token, onBack }) {
                 lookupMockup={lookupMockup}
                 companyMockupPool={companyMockupPool}
                 logo={logoFor(p)}
-                onClick={() => setActiveProject(p)} />
+                selectMode={selectMode}
+                selected={selectedIds.includes(p._id)}
+                onClick={() => (selectMode ? toggleSelect(p._id) : setActiveProject(p))} />
             ))}
           </Box>
         )}
@@ -748,6 +787,62 @@ export default function OrderTracker({ token, onBack }) {
         title={`Link mockups · Project #${picker.project?.projectNumber || ''}`}
         confirmLabel="Save"
       />
+
+      {/* Bulk action bar */}
+      {selectMode && (
+        <Box sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
+          bgcolor: 'rgba(12,20,16,0.97)', backdropFilter: 'blur(10px)',
+          borderTop: `1px solid ${B.border}`, px: { xs: 1.5, md: 3 }, py: 1.2,
+          display: 'flex', alignItems: 'center', gap: { xs: 1, md: 1.5 }, flexWrap: 'wrap' }}>
+          <Typography sx={{ color: B.white, fontWeight: 700, fontSize: 13 }}>
+            {selectedIds.length} selected
+          </Typography>
+          <Button size="small" onClick={() => setSelectedIds(filtered.map(p => p._id))}
+            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
+            Select all ({filtered.length})
+          </Button>
+          <Button size="small" onClick={() => setSelectedIds([])} disabled={selectedIds.length === 0}
+            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
+            Clear
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          {bulkSaving && <CircularProgress size={16} sx={{ color: B.green }} />}
+          <Button size="small" disabled={bulkSaving || selectedIds.length === 0}
+            onClick={() => handleBulkUpdate({ paid: true }, 'Mark paid')}
+            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700,
+              border: `1px solid ${B.green}40`, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } }}>
+            Mark paid
+          </Button>
+          <Button size="small" disabled={bulkSaving || selectedIds.length === 0}
+            onClick={() => handleBulkUpdate({ paid: false }, 'Mark unpaid')}
+            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 700,
+              border: `1px solid rgba(255,255,255,0.12)`, '&:hover': { color: B.white } }}>
+            Mark unpaid
+          </Button>
+          <Select
+            value=""
+            displayEmpty
+            disabled={bulkSaving || selectedIds.length === 0}
+            onChange={(e) => {
+              const opt = STATUS_OPTIONS.find(s => s.value === e.target.value);
+              if (opt) handleBulkUpdate({ status: opt.value }, `Set status to ${opt.label}`);
+            }}
+            renderValue={() => 'Set status…'}
+            size="small"
+            sx={{ fontSize: 11, height: 30, color: B.white,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
+              '& .MuiSelect-icon': { color: B.muted } }}>
+            {STATUS_OPTIONS.map(s => (
+              <MenuItem key={s.value} value={s.value} sx={{ fontSize: 12 }}>{s.label}</MenuItem>
+            ))}
+          </Select>
+          <Button size="small" onClick={exitSelectMode}
+            sx={{ bgcolor: B.green, color: B.greenDk, fontSize: 11, textTransform: 'none',
+              fontWeight: 700, px: 1.5, '&:hover': { bgcolor: '#3bd070' } }}>
+            Done
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -765,7 +860,7 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }) {
+function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, selectMode, selected }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
 
@@ -790,11 +885,12 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }
   return (
     <Box onClick={onClick} sx={{
       bgcolor: B.panel,
-      border: `1px solid ${B.border}`,
+      border: `1px solid ${selected ? B.green : B.border}`,
       borderRadius: 2,
       overflow: 'hidden',
       cursor: 'pointer',
       transition: 'all 0.15s',
+      boxShadow: selected ? `0 0 0 1px ${B.green}` : 'none',
       '&:hover': {
         borderColor: B.green,
         transform: 'translateY(-2px)',
@@ -803,6 +899,17 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }
     }}>
       {/* Mockup hero */}
       <Box sx={{ position: 'relative', aspectRatio: '4/3', bgcolor: B.bg, overflow: 'hidden' }}>
+        {selectMode && (
+          <Box sx={{
+            position: 'absolute', top: 8, left: 8, zIndex: 3,
+            width: 22, height: 22, borderRadius: '50%',
+            border: `2px solid ${selected ? B.green : 'rgba(255,255,255,0.65)'}`,
+            bgcolor: selected ? B.green : 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {selected && <CheckIcon sx={{ fontSize: 15, color: B.greenDk }} />}
+          </Box>
+        )}
         {usingFallback && (
           <Box sx={{
             position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
@@ -861,7 +968,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }
         )}
         {/* Project # badge */}
         <Box sx={{
-          position: 'absolute', top: 8, left: 8,
+          position: 'absolute', top: 8, left: selectMode ? 36 : 8,
           bgcolor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
           px: 1, py: 0.3, borderRadius: 1,
           color: B.white, fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
