@@ -61,6 +61,7 @@ function Product() {
   const [productFrontImages, setProductFrontImages]     = useState(preloadedItem?.image ? [preloadedItem.image] : []);
   const [productBackImages, setProductBackImages]       = useState([]);
   const [productColorSwatches, setProductColorSwatches] = useState([]);
+  const [productStyleImage,    setProductStyleImage]    = useState(preloadedItem?.image || '');
   const [productDescription, setProductDescription]     = useState('');
   const [frontSelected, setFrontSelected]               = useState(true);
   const [productColor, setProductColor]                 = useState('');
@@ -111,6 +112,7 @@ function Product() {
       }
       setProductBackImages(data.productBackImages || []);
       setProductColorSwatches(Array.isArray(data.colorSwatches) ? data.colorSwatches : []);
+      setProductStyleImage(data.styleImage || preloadedItem?.image || '');
       setProductDescription(data.description || '');
       setProductColor(colors[0] || '');
       setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
@@ -158,7 +160,10 @@ function Product() {
       tag:       productTag,
       color:     sw?.name || productColor || '',
       colorHex:  sw?.hex  || productColorCode || '',
-      thumbnail: sw?.front || productFrontImages?.[productIndex] || productFrontImages?.[0] || '',
+      // Prefer the catalog-style marketing photo so tray thumbnails are
+      // visually consistent with cards added from the catalog grid.
+      // Falls back to the per-color front shot, then the legacy array.
+      thumbnail: productStyleImage || sw?.front || productFrontImages?.[productIndex] || productFrontImages?.[0] || '',
     };
   };
 
