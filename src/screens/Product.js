@@ -60,6 +60,7 @@ function Product() {
   const [productColorCount, setProductColorCount]       = useState(preloadedItem?.colorCount || 0);
   const [productFrontImages, setProductFrontImages]     = useState(preloadedItem?.image ? [preloadedItem.image] : []);
   const [productBackImages, setProductBackImages]       = useState([]);
+  const [productColorSwatches, setProductColorSwatches] = useState([]);
   const [productDescription, setProductDescription]     = useState('');
   const [frontSelected, setFrontSelected]               = useState(true);
   const [productColor, setProductColor]                 = useState('');
@@ -109,6 +110,7 @@ function Product() {
         setProductFrontImages(data.productFrontImages);
       }
       setProductBackImages(data.productBackImages || []);
+      setProductColorSwatches(Array.isArray(data.colorSwatches) ? data.colorSwatches : []);
       setProductDescription(data.description || '');
       setProductColor(colors[0] || '');
       setProductColorCode((data.colorCodes && data.colorCodes[0]) || '');
@@ -162,8 +164,17 @@ function Product() {
     });
   };
 
-  const currentFrontImg = productFrontImages[productIndex] || null;
-  const currentBackImg  = productBackImages[productIndex]  || null;
+  // Prefer the per-color image from S&S (colorSwatches[i].front). Fall
+  // back to productFrontImages (legacy AlphaBroder/Mongo data), then to
+  // whatever single image we have.
+  const selectedSwatch = productColorSwatches[productIndex] || null;
+  const currentFrontImg = selectedSwatch?.front
+    || productFrontImages[productIndex]
+    || productFrontImages[0]
+    || null;
+  const currentBackImg = selectedSwatch?.back
+    || productBackImages[productIndex]
+    || null;
   const displayImg      = frontSelected ? currentFrontImg : (currentBackImg || currentFrontImg);
   const hasRealPrice    = Number(productPriceFrom) > 0;
   const hasRealSize     = !!(productSizeRangeBottom && productSizeRangeTop);
@@ -246,10 +257,22 @@ function Product() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 minHeight: { xs: 260, md: 420 }, overflow: 'hidden',
               }}>
-                {displayImg
-                  ? <Box component="img" src={displayImg} alt={productTitle || 'product'}
-                      sx={{ width: '100%', height: 'auto', maxHeight: 520, objectFit: 'contain', p: 2 }} />
-                  : <CheckroomIcon sx={{ fontSize: 120, color: 'rgba(0,0,0,0.07)' }} />}
+                {displayImg ? (
+                  <Box component="img" src={displayImg} alt={productTitle || 'product'}
+                    sx={{ width: '100%', height: 'auto', maxHeight: 520, objectFit: 'contain', p: 2 }} />
+                ) : loading ? (
+                  <Box sx={{
+                    width: '85%', height: 360,
+                    bgcolor: 'rgba(0,0,0,0.04)', borderRadius: 2,
+                    animation: 'jpPulse 1.2s ease-in-out infinite',
+                    '@keyframes jpPulse': {
+                      '0%, 100%': { opacity: 0.55 },
+                      '50%':       { opacity: 0.85 },
+                    },
+                  }} />
+                ) : (
+                  <CheckroomIcon sx={{ fontSize: 120, color: 'rgba(0,0,0,0.07)' }} />
+                )}
               </Box>
             </Stack>
 
@@ -308,9 +331,6 @@ function Product() {
                       border: '1px solid white', boxShadow: '0 0 0 1px gray', flexShrink: 0,
                     }} />
                     <Typography color="black" fontWeight="bold">{productColor}</Typography>
-                    <Typography color="gray" sx={{ fontSize: 12 }}>
-                      ({productColorOptions.length} {productColorOptions.length === 1 ? 'option' : 'options'})
-                    </Typography>
                   </Stack>
                   <Box sx={{
                     overflowX: 'auto', WebkitOverflowScrolling: 'touch',
@@ -320,7 +340,12 @@ function Product() {
                       {productColorOptions.map((item, index) => (
                         <Tooltip title={item} placement="top" arrow key={index}>
                           <Box
-                            onClick={() => { setProductColor(item); setProductColorCode(productColorCodes[index]); setProductIndex(index); }}
+                            onClick={() => {
+                              setProductColor(item);
+                              setProductColorCode(productColorCodes[index]);
+                              setProductIndex(index);
+                              setFrontSelected(true);
+                            }}
                             sx={{
                               cursor: 'pointer',
                               width: { xs: 36, sm: 28 }, height: { xs: 36, sm: 28 },
