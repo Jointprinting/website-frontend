@@ -48,7 +48,6 @@ function Product() {
 
   const [productVendor, setProductVendor]               = useState(preloadedItem?.vendor || '');
   const [productStyle, setProductStyle]                 = useState(preloadedItem?.style || id || '');
-  const [product setProductRating]               = useState(preloadedItem?.rating || 0);
   const [productTitle, setProductTitle]                 = useState(preloadedItem?.name || '');
   const [productPriceFrom, setProductPriceFrom]         = useState(startingPrice(preloadedItem) || '');
   const [productSizeRangeBottom, setProductSizeRangeBottom] = useState(preloadedItem?.sizeRangeBottom || '');
