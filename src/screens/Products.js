@@ -140,11 +140,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
             </Typography>
           </Stack>
         )}
-        {item.sizeRangeBottom && item.sizeRangeTop && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
-            Sizes {item.sizeRangeBottom} – {item.sizeRangeTop}
-          </Typography>
-        )}
+
         <Box flexGrow={1} />
         <Button
           variant={isSelected ? 'contained' : 'outlined'} size="small" fullWidth
