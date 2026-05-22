@@ -15,6 +15,7 @@ import SearchIcon          from '@mui/icons-material/Search';
 import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
 import RefreshIcon         from '@mui/icons-material/Refresh';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -51,6 +52,9 @@ export default function OrderTracker({ token, onBack }) {
   const [resyncing,     setResyncing]     = useState(false);
   const [picker,        setPicker]        = useState({ open: false, project: null });
   const [confirmation,  setConfirmation]  = useState(null);
+  const [healthOpen,    setHealthOpen]    = useState(false);
+  const [healthData,    setHealthData]    = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -174,6 +178,20 @@ export default function OrderTracker({ token, onBack }) {
     setPicker({ open: false, project: null });
   };
 
+  const handleOpenHealth = async () => {
+    setHealthOpen(true);
+    setHealthLoading(true);
+    try {
+      const r = await axios.get(`${base}/orders/mockup-health`, authHdr);
+      setHealthData(r.data);
+    } catch (e) {
+      alert(`Couldn't load mockup health: ${e.message}`);
+      setHealthOpen(false);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
       {/* Header */}
@@ -217,6 +235,15 @@ export default function OrderTracker({ token, onBack }) {
               px: 2, '&:hover': { bgcolor: '#3bd070' } }}>
             New project
           </Button>
+
+          <Tooltip title="Mockup health report">
+            <span>
+              <IconButton onClick={handleOpenHealth} size="small"
+                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
+                <FactCheckOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
 
           <Tooltip title="Re-sync with Notion (overwrites local edits)">
             <span>
@@ -317,6 +344,18 @@ export default function OrderTracker({ token, onBack }) {
         project={confirmation}
         mockupMap={mockupMap}
         onClose={() => setConfirmation(null)}
+      />
+
+      <MockupHealthDialog
+        open={healthOpen}
+        data={healthData}
+        loading={healthLoading}
+        projects={projects}
+        onClose={() => setHealthOpen(false)}
+        onJumpToProject={(projectNumber) => {
+          const p = projects.find(x => x.projectNumber === projectNumber);
+          if (p) { setHealthOpen(false); setActiveProject(p); }
+        }}
       />
 
       <MockupPickerDialog
@@ -1064,5 +1103,129 @@ function ConfirmationDialog({ open, project, mockupMap, onClose }) {
         </Box>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── MockupHealthDialog ───────────────────────────────────────────────────────
+// Diagnostic view of the link state between projects' mockupNumbers[] and the
+// jpstudio library. Shows totals, then drills into missing #s (projects that
+// reference a mockup not in the studio) and orphans (studio items not used
+// by any project).
+function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToProject }) {
+  const [tab, setTab] = React.useState('missing');
+
+  React.useEffect(() => { if (open) setTab('missing'); }, [open]);
+
+  const summary = data && data.summary;
+  const list = data ? (data[tab] || []) : [];
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <FactCheckOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Mockup health
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {loading ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <CircularProgress size={24} sx={{ color: B.green }} />
+          </Box>
+        ) : !data ? (
+          <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
+        ) : (
+          <>
+            {/* Summary tiles */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
+              <HealthStat label="Projects"    value={summary.projects} />
+              <HealthStat label="Studio items" value={summary.libraryItems} />
+              <HealthStat label="Linked"      value={summary.linked}   accent={B.green} />
+              <HealthStat label="Missing"     value={summary.missing}  accent={summary.missing  > 0 ? '#fbbf24' : undefined} />
+              <HealthStat label="Orphans"     value={summary.orphans}  accent={summary.orphans  > 0 ? '#60a5fa' : undefined} />
+            </Box>
+
+            {/* Tabs */}
+            <Stack direction="row" gap={0.5} mb={1.5}>
+              {[
+                { id: 'missing', label: `Missing (${summary.missing})`,  color: '#fbbf24' },
+                { id: 'linked',  label: `Linked (${summary.linked})`,    color: B.green   },
+                { id: 'orphans', label: `Orphans (${summary.orphans})`, color: '#60a5fa' },
+              ].map(t => {
+                const active = tab === t.id;
+                return (
+                  <Box key={t.id} onClick={() => setTab(t.id === 'linked' ? 'matched' : t.id)}
+                    sx={{
+                      px: 1.5, py: 0.6, borderRadius: 1, cursor: 'pointer',
+                      fontSize: 11, fontWeight: 700,
+                      bgcolor: active ? t.color : 'rgba(255,255,255,0.04)',
+                      color: active ? B.greenDk : B.muted,
+                      border: `1px solid ${active ? t.color : 'rgba(255,255,255,0.08)'}`,
+                      '&:hover': { color: active ? B.greenDk : B.white },
+                    }}>
+                    {t.label}
+                  </Box>
+                );
+              })}
+            </Stack>
+
+            {/* Hint */}
+            <Typography sx={{ color: B.muted, fontSize: 11, mb: 1 }}>
+              {tab === 'missing' && 'These mockup #s are assigned to projects but don\'t exist in your jpstudio library. Open jpstudio, pick the project, and save a mockup with the matching #.'}
+              {tab === 'matched' && 'These project mockup #s are paired with a library item. Healthy state.'}
+              {tab === 'orphans' && 'These library mockups aren\'t referenced by any project. Either link them via a project drawer or ignore — they may be drafts.'}
+            </Typography>
+
+            {/* List */}
+            {list.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 4, color: B.muted, fontSize: 12 }}>
+                Nothing here. ✓
+              </Box>
+            ) : (
+              <Box sx={{ maxHeight: 360, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`, borderRadius: 1 }}>
+                {list.map((row, i) => (
+                  <Box key={i} sx={{
+                    px: 1.5, py: 0.8, display: 'flex', alignItems: 'center', gap: 1.5,
+                    fontSize: 12, borderBottom: `1px solid ${B.faint}`,
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
+                  }}>
+                    <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                      {row.mockupNum || '—'}
+                    </Typography>
+                    <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {row.companyName || row.clientName || row.client || row.itemName || row.name || 'Untitled'}
+                    </Typography>
+                    {row.projectNumber && (
+                      <Box onClick={() => onJumpToProject(row.projectNumber)}
+                        sx={{ cursor: 'pointer', color: B.green, fontSize: 10, fontWeight: 700,
+                          fontFamily: 'monospace', '&:hover': { textDecoration: 'underline' } }}>
+                        Open #{row.projectNumber}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function HealthStat({ label, value, accent }) {
+  return (
+    <Box sx={{ bgcolor: 'rgba(255,255,255,0.03)', border: `1px solid ${B.faint}`, borderRadius: 1, p: 1 }}>
+      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ color: accent || B.white, fontSize: 18, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1, mt: 0.2 }}>
+        {value}
+      </Typography>
+    </Box>
   );
 }
