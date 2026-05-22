@@ -129,9 +129,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         }}>
           {item.name}
         </Typography>
-        {item.rating > 0 && (
-          <Rating value={item.rating} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
-        )}
+
         {price && (
           <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.5 }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
@@ -369,11 +367,21 @@ const [loading,    setLoading]    = useState(true);
     { brand: 'gildan',                   style: '64000'  },  // G640   Softstyle Tee
     { brand: 'next level',               style: '6210'   },  // NL6210 CVC Crew
   ];
+  // Normalize for brand matching: lowercase + strip non-alphanumeric so
+  // 'Bella + Canvas' / 'Bella+Canvas®' / 'bella+canvas' all collapse to
+  // the same key. Some S&S brand strings have trailing symbols (®, ™, .)
+  // that broke exact-equality match.
+  const normalizeBrand = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9+]/g, '');
   const featuredItems = FEATURED_PICKS
-    .map((pick) => products.find((p) =>
-      String(p.vendor || '').toLowerCase() === pick.brand &&
-      String(p.style  || '').toLowerCase() === pick.style
-    ))
+    .map((pick) => {
+      const targetBrand = normalizeBrand(pick.brand);
+      const targetStyle = pick.style;
+      return products.find((p) => {
+        const vb = normalizeBrand(p.vendor);
+        const vs = String(p.style || '').toLowerCase();
+        return (vb === targetBrand || vb.startsWith(targetBrand) || targetBrand.startsWith(vb)) && vs === targetStyle;
+      });
+    })
     .filter(Boolean);
   const genderLabel = GENDER_TYPES.find((g) => g.value === genderType)?.label;
 
