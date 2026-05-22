@@ -51,6 +51,7 @@ export default function OrderTracker({ token, onBack }) {
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
   const [statusFilter,  setStatusFilter]  = useState('all');
+  const [sortMode,      setSortMode]      = useState('projectNumber');  // projectNumber | totalValue | updatedAt | company
   const [activeProject, setActiveProject] = useState(null);
   const [creating,      setCreating]      = useState(false);
   const [resyncing,     setResyncing]     = useState(false);
@@ -81,6 +82,29 @@ export default function OrderTracker({ token, onBack }) {
   }, [authHdr]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  // Keyboard shortcuts: `/` focuses search, `n` creates a new project,
+  // `Esc` closes the drawer. Ignore when typing in any input.
+  const searchInputRef = React.useRef(null);
+  useEffect(() => {
+    const handler = (e) => {
+      const t = e.target;
+      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (typing && e.key !== 'Escape') return;
+      if (e.key === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        handleCreate();
+      } else if (e.key === 'Escape' && activeProject) {
+        setActiveProject(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject]);
 
   // Normalize a mockup # so old "61A" and new "#000061A" map to the same key.
   // Strips the leading hash, drops leading zeros, uppercases letters.
@@ -167,7 +191,7 @@ export default function OrderTracker({ token, onBack }) {
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
-    return projects.filter(p => {
+    const list = projects.filter(p => {
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (!s) return true;
       return [p.projectNumber, p.orderNumber, p.companyName, p.clientName,
@@ -175,7 +199,16 @@ export default function OrderTracker({ token, onBack }) {
               (p.mockupNumbers || []).join(' ')]
         .join(' ').toLowerCase().includes(s);
     });
-  }, [projects, search, statusFilter]);
+    const sorted = [...list];
+    if (sortMode === 'totalValue') {
+      sorted.sort((a, b) => (Number(b.totalValue) || 0) - (Number(a.totalValue) || 0));
+    } else if (sortMode === 'updatedAt') {
+      sorted.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+    } else if (sortMode === 'company') {
+      sorted.sort((a, b) => (a.companyName || a.clientName || '').localeCompare(b.companyName || b.clientName || ''));
+    } // else server's projectNumber order is the default
+    return sorted;
+  }, [projects, search, statusFilter, sortMode]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -285,9 +318,10 @@ export default function OrderTracker({ token, onBack }) {
 
           <TextField
             size="small"
-            placeholder="Search projects, mockups, invoices…"
+            placeholder="Search · press / to focus"
             value={search}
             onChange={e => setSearch(e.target.value)}
+            inputRef={searchInputRef}
             sx={{ ...darkInput, width: 320 }}
             InputProps={{
               startAdornment: (
@@ -335,8 +369,8 @@ export default function OrderTracker({ token, onBack }) {
           <Stat label="Unpaid"                value={fmt(stats.unpaidTotal)} accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined} />
         </Stack>
 
-        {/* Status filter chips */}
-        <Stack direction="row" gap={0.75} sx={{ mt: 1.5, pl: 6, flexWrap: 'wrap' }}>
+        {/* Status filter chips + sort */}
+        <Stack direction="row" gap={0.75} sx={{ mt: 1.5, pl: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {STATUS_FILTERS.map(f => {
             const active = f.value === statusFilter;
             const count = f.value === 'all'
@@ -360,6 +394,24 @@ export default function OrderTracker({ token, onBack }) {
               />
             );
           })}
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.5 }}>
+              Sort
+            </Typography>
+            <Select value={sortMode} onChange={e => setSortMode(e.target.value)} size="small"
+              sx={{
+                color: B.white, fontSize: 11, height: 26,
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
+                '& .MuiSelect-icon': { color: B.muted },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: B.green },
+              }}>
+              <MenuItem value="projectNumber">Project # (newest)</MenuItem>
+              <MenuItem value="updatedAt">Recently updated</MenuItem>
+              <MenuItem value="totalValue">Total $ (high → low)</MenuItem>
+              <MenuItem value="company">Company (A → Z)</MenuItem>
+            </Select>
+          </Box>
         </Stack>
       </Box>
 
@@ -694,6 +746,29 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           </Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
+        {(() => {
+          const total = Number(local.totalValue) || 0;
+          const cogs  = Number(local.cogs) || 0;
+          const margin = total - cogs;
+          const pct = total > 0 ? (margin / total) * 100 : 0;
+          if (total === 0 && cogs === 0) return null;
+          const ok = pct >= 30;
+          return (
+            <Box title={`Profit margin · total ${fmt(total)} − cogs ${fmt(cogs)}`} sx={{
+              textAlign: 'right', mr: 0.4,
+            }}>
+              <Typography sx={{ color: B.muted, fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Margin
+              </Typography>
+              <Typography sx={{ color: ok ? B.green : '#fbbf24', fontSize: 12, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
+                {fmt(margin)}
+                <Typography component="span" sx={{ color: B.muted, fontSize: 10, fontWeight: 600, ml: 0.5 }}>
+                  · {pct.toFixed(0)}%
+                </Typography>
+              </Typography>
+            </Box>
+          );
+        })()}
         <Box sx={{
           bgcolor: meta.bg, color: meta.color, border: `1px solid ${meta.color}40`,
           px: 1.2, py: 0.4, borderRadius: 1, fontSize: 10, fontWeight: 700,
