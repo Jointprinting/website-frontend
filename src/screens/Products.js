@@ -248,6 +248,30 @@ export default function Products() {
   const [totalPages,     setTotalPages]     = useState(0);
   const [relaxedFilter,  setRelaxedFilter]  = useState(null);
   const [featuredItems,  setFeaturedItems]  = useState([]);
+
+  // Marquee: refs for drag-to-scroll + a paused flag for hover.
+  // Auto-scroll runs via requestAnimationFrame; the loop snaps back to 0
+  // when scrollLeft reaches half the scrollWidth (items are duplicated).
+  const marqueeRef          = useRef(null);
+  const isDraggingRef       = useRef(false);
+  const dragMovedRef        = useRef(false);
+  const dragStartXRef       = useRef(0);
+  const dragStartScrollRef  = useRef(0);
+  const isPausedRef         = useRef(false);
+  useEffect(() => {
+    const el = marqueeRef.current;
+    if (!el || featuredItems.length < 4) return;
+    let raf;
+    const tick = () => {
+      if (el && !isPausedRef.current && !isDraggingRef.current) {
+        el.scrollLeft += 0.5;
+        if (el.scrollLeft >= el.scrollWidth / 2) el.scrollLeft = 0;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [featuredItems.length]);
 const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [fetchKey,   setFetchKey]   = useState(0);
@@ -520,7 +544,7 @@ const [loading,    setLoading]    = useState(true);
                     Curated picks across brands
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: 12, color: 'text.secondary' }}>
-                    Hover to pause · click to jump in
+                    Hover to pause · drag to scroll · click to open
                   </Typography>
                 </Stack>
                 <Box sx={{ height: 1, flex: 1, ml: 2.5, bgcolor: 'rgba(0,0,0,0.08)' }} />
@@ -542,20 +566,46 @@ const [loading,    setLoading]    = useState(true);
                   zIndex: 3, pointerEvents: 'none',
                 }} />
 
-                <Box sx={{
-                  display: 'flex', gap: 2, width: 'max-content',
-                  animation: `jpMarquee ${Math.max(28, featuredItems.length * 6)}s linear infinite`,
-                  '&:hover': { animationPlayState: 'paused' },
-                  '@keyframes jpMarquee': {
-                    '0%':   { transform: 'translateX(0)' },
-                    '100%': { transform: 'translateX(-50%)' },
-                  },
-                }}>
+                <Box
+                  ref={marqueeRef}
+                  onPointerDown={(e) => {
+                    const el = marqueeRef.current;
+                    if (!el) return;
+                    isDraggingRef.current = true;
+                    dragMovedRef.current = false;
+                    dragStartXRef.current = e.clientX;
+                    dragStartScrollRef.current = el.scrollLeft;
+                    el.setPointerCapture?.(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    const el = marqueeRef.current;
+                    if (!isDraggingRef.current || !el) return;
+                    const dx = e.clientX - dragStartXRef.current;
+                    if (Math.abs(dx) > 4) dragMovedRef.current = true;
+                    el.scrollLeft = dragStartScrollRef.current - dx;
+                  }}
+                  onPointerUp={(e) => {
+                    isDraggingRef.current = false;
+                    marqueeRef.current?.releasePointerCapture?.(e.pointerId);
+                  }}
+                  onPointerCancel={() => { isDraggingRef.current = false; }}
+                  onMouseEnter={() => { isPausedRef.current = true; }}
+                  onMouseLeave={() => { isPausedRef.current = false; isDraggingRef.current = false; }}
+                  sx={{
+                    display: 'flex', gap: 2,
+                    overflowX: 'auto', overflowY: 'hidden',
+                    scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
+                    cursor: 'grab', userSelect: 'none',
+                    '&:active': { cursor: 'grabbing' },
+                  }}>
                   {[...featuredItems, ...featuredItems].map((item, idx) => (
                     <Paper
                       key={`marq-${idx}-${item.style}`}
                       elevation={0}
-                      onClick={() => navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } })}
+                      onClick={() => {
+                        if (dragMovedRef.current) return;  // swallow click after drag
+                        navigate(`/product?styleCode=${encodeURIComponent(item.style)}`, { state: { item } });
+                      }}
                       sx={{
                         cursor: 'pointer',
                         flex: '0 0 auto',
@@ -578,7 +628,8 @@ const [loading,    setLoading]    = useState(true);
                         {(item.image || item.productFrontImages?.[0]) ? (
                           <Box component="img" className="featImg"
                             src={item.image || item.productFrontImages?.[0]} alt={item.name} loading="lazy"
-                            sx={{ maxHeight: '100%', width: '100%', objectFit: 'contain' }} />
+                            draggable={false}
+                            sx={{ maxHeight: '100%', width: '100%', objectFit: 'contain', pointerEvents: 'none', userSelect: 'none' }} />
                         ) : (
                           <CheckroomIcon sx={{ fontSize: 52, color: 'rgba(0,0,0,0.1)' }} />
                         )}
