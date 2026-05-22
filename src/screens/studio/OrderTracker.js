@@ -350,17 +350,23 @@ function Stat({ label, value, accent }) {
 function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
-  const ownMockups = (project.mockupNumbers || []).slice(0, 4).map(n => lookupMockup(n)).filter(Boolean);
-  // Fallback hero: if this project has no linked mockups, show recent
-  // mockups from any other project of the same company.
-  let mockupThumbs = ownMockups;
+
+  // Tiles for this project: one slot per mockup#, with the library item
+  // attached if we can find a match. Slots without a match render as
+  // amber-bordered placeholders so the card honestly reflects the project's
+  // intended mockup count, not just what happens to be in the studio.
+  const ownTiles = (project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
+  // Only use the "Client's work" fallback when the project has truly no
+  // mockup #s assigned. Don't replace partial state with someone else's mockups.
+  let mockupTiles = ownTiles;
   let usingFallback = false;
-  if (mockupThumbs.length === 0) {
+  if (mockupTiles.length === 0) {
     const companyKey = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const pool = (companyMockupPool && companyMockupPool[companyKey]) || [];
-    const others = pool.filter(n => !(project.mockupNumbers || []).includes(n))
-      .slice(0, 4).map(n => lookupMockup(n)).filter(Boolean);
-    if (others.length > 0) { mockupThumbs = others; usingFallback = true; }
+    const others = pool.slice(0, 4)
+      .map(n => ({ num: n, item: lookupMockup(n) }))
+      .filter(t => t.item);
+    if (others.length > 0) { mockupTiles = others; usingFallback = true; }
   }
 
   return (
@@ -389,29 +395,35 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
             Client&apos;s work
           </Box>
         )}
-        {mockupThumbs.length > 0 ? (
+        {mockupTiles.length > 0 ? (
           <Box sx={{
             display: 'grid',
-            gridTemplateColumns: mockupThumbs.length === 1 ? '1fr' :
-                                 mockupThumbs.length === 2 ? '1fr 1fr' :
+            gridTemplateColumns: mockupTiles.length === 1 ? '1fr' :
+                                 mockupTiles.length === 2 ? '1fr 1fr' :
                                  '2fr 1fr',
-            gridTemplateRows:    mockupThumbs.length <= 2 ? '1fr' : '1fr 1fr',
+            gridTemplateRows:    mockupTiles.length <= 2 ? '1fr' : '1fr 1fr',
             height: '100%',
             gap: '2px',
           }}>
-            {mockupThumbs.map((m, i) => (
+            {mockupTiles.map((t, i) => (
               <Box key={i} sx={{
-                bgcolor: B.bg,
-                gridColumn: mockupThumbs.length === 3 && i === 0 ? '1' : undefined,
-                gridRow:    mockupThumbs.length === 3 && i === 0 ? '1 / 3' : undefined,
+                bgcolor: B.bg, position: 'relative',
+                gridColumn: mockupTiles.length === 3 && i === 0 ? '1' : undefined,
+                gridRow:    mockupTiles.length === 3 && i === 0 ? '1 / 3' : undefined,
               }}>
-                {m.thumbnail ? (
-                  <Box component="img" src={m.thumbnail} alt=""
+                {t.item && t.item.thumbnail ? (
+                  <Box component="img" src={t.item.thumbnail} alt=""
                     sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 ) : (
-                  <Box sx={{ width: '100%', height: '100%', bgcolor: B.panelHi,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <DesignServicesIcon sx={{ color: B.muted, opacity: 0.3 }} />
+                  <Box sx={{ width: '100%', height: '100%',
+                    bgcolor: t.item ? B.panelHi : 'rgba(251,191,36,0.05)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.3 }}>
+                    <DesignServicesIcon sx={{ color: t.item ? B.muted : '#fbbf24', opacity: 0.45, fontSize: 22 }} />
+                    {!t.item && (
+                      <Typography sx={{ color: '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5 }}>
+                        NOT IN STUDIO
+                      </Typography>
+                    )}
                   </Box>
                 )}
               </Box>
@@ -503,7 +515,6 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
 
   const meta = STATUS_META[local.status] || STATUS_META.quoted;
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
-  const thumbs = (local.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
 
   const saveField = async (key, value) => {
     if (project[key] === value) return;
@@ -562,47 +573,77 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
 
       {/* Mockup grid */}
       <Box sx={{ px: 2.5, pt: 2 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Mockups · {thumbs.length}
-          </Typography>
-          <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
-            onClick={onOpenPicker}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-            {thumbs.length === 0 ? 'Link mockups' : 'Edit mockups'}
-          </Button>
-        </Stack>
-        {thumbs.length > 0 ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
-            {thumbs.map((m, i) => (
-              <Box key={i} sx={{
-                aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
-                border: `1px solid ${B.border}`, bgcolor: B.panelHi,
-              }}>
-                {m.thumbnail ? (
-                  <Box component="img" src={m.thumbnail} alt={m.name}
-                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <DesignServicesIcon sx={{ color: B.muted, opacity: 0.3 }} />
-                  </Box>
-                )}
-              </Box>
-            ))}
-          </Box>
-        ) : (
-          <Box sx={{
-            border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
-            textAlign: 'center', color: B.muted, fontSize: 12,
-          }}>
-            No mockups linked yet
-          </Box>
-        )}
-        {(local.mockupNumbers || []).length > 0 && (
-          <Typography sx={{ mt: 1, color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
-            {(local.mockupNumbers || []).join(' · ')}
-          </Typography>
-        )}
+        {(() => {
+          const nums = local.mockupNumbers || [];
+          const tiles = nums.map(n => ({ num: n, item: mockupMap[n] || mockupMap[_normKey(n)] || null }));
+          const matched = tiles.filter(t => t.item).length;
+          const missing = tiles.length - matched;
+          return (
+            <>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                  Mockups · {nums.length}
+                  {missing > 0 && (
+                    <Typography component="span" sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, ml: 1, textTransform: 'none', letterSpacing: 0 }}>
+                      ({missing} not in studio)
+                    </Typography>
+                  )}
+                </Typography>
+                <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
+                  onClick={onOpenPicker}
+                  sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+                  {nums.length === 0 ? 'Link mockups' : 'Edit mockups'}
+                </Button>
+              </Stack>
+              {nums.length === 0 ? (
+                <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
+                  textAlign: 'center', color: B.muted, fontSize: 12 }}>
+                  No mockups linked yet
+                </Box>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
+                  {tiles.map((t, i) => (
+                    <Box key={i} sx={{
+                      aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
+                      border: `1px solid ${t.item ? B.border : 'rgba(251,191,36,0.35)'}`,
+                      bgcolor: B.panelHi, position: 'relative',
+                    }}>
+                      {t.item && t.item.thumbnail ? (
+                        <Box component="img" src={t.item.thumbnail} alt={t.item.name}
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center', gap: 0.5,
+                          bgcolor: t.item ? B.panelHi : 'rgba(251,191,36,0.04)' }}>
+                          <DesignServicesIcon sx={{ color: t.item ? B.muted : '#fbbf24', opacity: 0.5, fontSize: 22 }} />
+                          {!t.item && (
+                            <Typography sx={{ color: '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5 }}>
+                              MISSING
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      <Box sx={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                        bgcolor: 'rgba(0,0,0,0.7)', color: B.white,
+                        fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
+                        textAlign: 'center', py: 0.2,
+                      }}>
+                        {t.num}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              {missing > 0 && (
+                <Typography sx={{ mt: 1, color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
+                  Missing mockups exist on this project in records but aren&apos;t in your jpstudio library.
+                  Open jpstudio → pick this project → save a mockup with the matching #, or use Link mockups above to attach an existing one.
+                </Typography>
+              )}
+            </>
+          );
+        })()}
       </Box>
 
       {/* Fields */}
