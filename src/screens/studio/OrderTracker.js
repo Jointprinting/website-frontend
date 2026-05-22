@@ -964,26 +964,46 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
         ))}
       </Box>
 
-      {/* Approval activity */}
-      {(local.approvalEvents || []).length > 0 && (
+      {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
+      {(() => {
+        const KIND_META = {
+          // client-side approvalEvents
+          viewed:             { color: B.muted,   label: 'Viewed',             actor: 'client' },
+          approved:           { color: B.green,   label: 'Approved',           actor: 'client' },
+          requested_changes:  { color: '#fbbf24', label: 'Requested changes',  actor: 'client' },
+          // admin / system activity
+          created:            { color: '#60a5fa', label: 'Created',            actor: 'admin'  },
+          status_changed:     { color: '#a78bfa', label: 'Status changed',     actor: 'admin'  },
+          paid_changed:       { color: B.green,   label: 'Paid changed',       actor: 'admin'  },
+          duplicated_from:    { color: '#60a5fa', label: 'Cloned',             actor: 'admin'  },
+          file_uploaded:      { color: '#2dd4bf', label: 'File uploaded',      actor: 'admin'  },
+          mockups_linked:     { color: B.green,   label: 'Mockup linked',      actor: 'admin'  },
+        };
+        const merged = [
+          ...(local.activity || []).map(e => ({ ...e, source: 'activity' })),
+          ...(local.approvalEvents || []).map(e => ({ ...e, source: 'approval', actor: 'client' })),
+        ].sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+
+        if (merged.length === 0) return null;
+        return (
         <Box sx={{ px: 2.5, pb: 2 }}>
           <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
-            Approval activity · {local.approvalEvents.length}
+            Activity · {merged.length}
           </Typography>
           <Stack gap={0.5}>
-            {[...local.approvalEvents].reverse().slice(0, 10).map((e, i) => {
-              const kindMeta = e.kind === 'approved'
-                ? { color: B.green,  label: 'Approved'        }
-                : e.kind === 'requested_changes'
-                ? { color: '#fbbf24', label: 'Requested changes' }
-                : { color: B.muted,  label: 'Viewed'          };
+            {merged.slice(0, 15).map((e, i) => {
+              const km = KIND_META[e.kind] || { color: B.muted, label: e.kind || '—', actor: e.actor || 'admin' };
+              const actorTag = (e.actor || km.actor) === 'client' ? '· client' : '';
               return (
                 <Box key={i} sx={{
-                  display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 1, alignItems: 'start',
+                  display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 1, alignItems: 'start',
                   py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 11,
                 }}>
-                  <Box sx={{ color: kindMeta.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                    {kindMeta.label}
+                  <Box>
+                    <Box sx={{ color: km.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                      {km.label}
+                    </Box>
+                    {actorTag && <Box sx={{ color: B.muted, fontSize: 9, fontStyle: 'italic' }}>{actorTag}</Box>}
                   </Box>
                   <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
                     {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
@@ -996,7 +1016,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
             })}
           </Stack>
         </Box>
-      )}
+        );
+      })()}
 
       {/* Footer actions */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.bg, borderTop: `1px solid ${B.border}`,
