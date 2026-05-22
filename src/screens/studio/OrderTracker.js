@@ -14,10 +14,10 @@ import AddIcon             from '@mui/icons-material/Add';
 import SearchIcon          from '@mui/icons-material/Search';
 import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
-import RefreshIcon         from '@mui/icons-material/Refresh';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -33,14 +33,20 @@ import MockupPickerDialog from './MockupPickerDialog';
 import config from '../../config.json';
 
 const base = `${config.backendUrl}/api`;
+// Primary filters: the ones you actually act on. Delivered / Cancelled stay
+// accessible via the overflow select beside the chips.
 const STATUS_FILTERS = [
-  { value: 'all',           label: 'All' },
+  { value: 'active',        label: 'Active' },          // virtual: everything except delivered/cancelled
   { value: 'quoted',        label: 'Quoted' },
   { value: 'approved',      label: 'Approved' },
   { value: 'placed',        label: 'Placed' },
   { value: 'in_production', label: 'In Production' },
   { value: 'shipped',       label: 'Shipped' },
+];
+const SECONDARY_FILTERS = [
+  { value: 'all',           label: 'All' },
   { value: 'delivered',     label: 'Delivered' },
+  { value: 'cancelled',     label: 'Cancelled' },
 ];
 
 export default function OrderTracker({ token, onBack }) {
@@ -49,14 +55,14 @@ export default function OrderTracker({ token, onBack }) {
   const [projects,      setProjects]      = useState([]);
   const [mockups,       setMockups]       = useState([]);
   const [logos,         setLogos]         = useState([]);
+  const [brandLogo,     setBrandLogo]     = useState('');
   const [stats,         setStats]         = useState({});
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
-  const [statusFilter,  setStatusFilter]  = useState('all');
+  const [statusFilter,  setStatusFilter]  = useState('active');
   const [sortMode,      setSortMode]      = useState('projectNumber');  // projectNumber | totalValue | updatedAt | company
   const [activeProject, setActiveProject] = useState(null);
   const [creating,      setCreating]      = useState(false);
-  const [resyncing,     setResyncing]     = useState(false);
   const [picker,        setPicker]        = useState({ open: false, project: null });
   const [confirmation,  setConfirmation]  = useState(null);
   const [healthOpen,    setHealthOpen]    = useState(false);
@@ -68,20 +74,25 @@ export default function OrderTracker({ token, onBack }) {
   const [clientsOpen,    setClientsOpen]    = useState(false);
   const [clientsData,    setClientsData]    = useState(null);
   const [clientsLoading, setClientsLoading] = useState(false);
+  const [cleanupOpen,    setCleanupOpen]    = useState(false);
+  const [cleanupData,    setCleanupData]    = useState(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const [pr, mk, ds, lg] = await Promise.all([
+      const [pr, mk, ds, lg, bl] = await Promise.all([
         axios.get(`${base}/orders/projects`, authHdr),
         axios.get(`${base}/studio/library/mockups`, authHdr),
         axios.get(`${base}/orders/dashboard`, authHdr),
         axios.get(`${base}/client-logos`, authHdr).catch(() => ({ data: { logos: [] } })),
+        axios.get(`${base}/site-settings/brandLogo`).catch(() => ({ data: { value: { dataUrl: '' } } })),
       ]);
       setProjects(pr.data.projects || []);
       setMockups(mk.data.items || []);
       setStats(ds.data || {});
       setLogos(lg.data.logos || []);
+      setBrandLogo((bl.data && bl.data.value && bl.data.value.dataUrl) || '');
     } catch (e) {
       console.error(e);
     } finally {
@@ -200,7 +211,11 @@ export default function OrderTracker({ token, onBack }) {
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     const list = projects.filter(p => {
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (statusFilter === 'active') {
+        if (p.status === 'delivered' || p.status === 'cancelled') return false;
+      } else if (statusFilter !== 'all' && p.status !== statusFilter) {
+        return false;
+      }
       if (!s) return true;
       return [p.projectNumber, p.orderNumber, p.companyName, p.clientName,
               (p.items || []).map(i => i.description).join(' '),
@@ -269,17 +284,32 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
-  const handleResync = async () => {
-    if (!window.confirm('Re-pull all orders from the Notion seed? This wipes stale Drive imports and refreshes every project to match Notion.')) return;
-    setResyncing(true);
+  const uploadBrandLogo = (file) => {
+    if (!file) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          await axios.put(`${base}/site-settings/brandLogo`,
+            { value: { dataUrl: reader.result } }, authHdr);
+          setBrandLogo(reader.result);
+          resolve();
+        } catch (e) {
+          alert(`Brand logo upload failed: ${e.response?.data?.message || e.message}`);
+          reject(e);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+  const clearBrandLogo = async () => {
+    if (!window.confirm('Remove your brand logo from approval pages?')) return;
     try {
-      const r = await axios.post(`${base}/orders/seed-historical`, {}, authHdr);
-      await loadProjects();
-      alert(`Done.\nWiped Drive imports: ${r.data.gdriveWiped}\nCreated: ${r.data.created}\nUpdated: ${r.data.updated}`);
+      await axios.put(`${base}/site-settings/brandLogo`, { value: { dataUrl: '' } }, authHdr);
+      setBrandLogo('');
     } catch (e) {
-      alert(`Re-sync failed: ${e.message}`);
-    } finally {
-      setResyncing(false);
+      alert(`Couldn't remove: ${e.message}`);
     }
   };
 
@@ -288,6 +318,39 @@ export default function OrderTracker({ token, onBack }) {
     if (!project) return;
     await handleSave(project._id, { mockupNumbers: selected });
     setPicker({ open: false, project: null });
+  };
+
+  const handleOpenCleanup = async () => {
+    setCleanupOpen(true);
+    setCleanupLoading(true);
+    try {
+      const r = await axios.get(`${base}/orders/cleanup-candidates`, authHdr);
+      setCleanupData(r.data);
+    } catch (e) {
+      alert(`Couldn't load cleanup: ${e.message}`);
+      setCleanupOpen(false);
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+  const handleCleanupDelete = async (ids) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} empty project${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    try {
+      await axios.post(`${base}/orders/cleanup-delete`, { ids }, authHdr);
+      await loadProjects();
+      await handleOpenCleanup();   // refresh the list
+    } catch (e) { alert(`Delete failed: ${e.message}`); }
+  };
+  const handleMergeCompany = async (from, to) => {
+    if (!from || !to || from === to) return;
+    if (!window.confirm(`Merge "${from}" into "${to}"?\n\nEvery project, mockup, and logo currently under "${from}" will be re-pointed to "${to}".`)) return;
+    try {
+      const r = await axios.post(`${base}/orders/merge-company`, { from, to }, authHdr);
+      await loadProjects();
+      await handleOpenCleanup();
+      alert(`Merged.\nProjects updated: ${r.data.ordersUpdated}\nMockups updated: ${r.data.mockupsUpdated}\nLogos consolidated: ${r.data.logosMerged}`);
+    } catch (e) { alert(`Merge failed: ${e.response?.data?.message || e.message}`); }
   };
 
   const handleOpenClients = async () => {
@@ -404,14 +467,16 @@ export default function OrderTracker({ token, onBack }) {
             </span>
           </Tooltip>
 
-          <Tooltip title="Re-sync with Notion (overwrites local edits)">
+          <Tooltip title="Cleanup / dedupe">
             <span>
-              <IconButton onClick={handleResync} disabled={resyncing} size="small"
+              <IconButton onClick={handleOpenCleanup} size="small"
                 sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                {resyncing ? <CircularProgress size={14} sx={{ color: B.green }} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+                <CleaningServicesOutlinedIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </span>
           </Tooltip>
+
+          <BrandLogoSlot logo={brandLogo} onUpload={uploadBrandLogo} onClear={clearBrandLogo} />
         </Stack>
 
         {/* Stat strip */}
@@ -427,8 +492,8 @@ export default function OrderTracker({ token, onBack }) {
         <Stack direction="row" gap={0.75} sx={{ mt: 1.5, pl: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {STATUS_FILTERS.map(f => {
             const active = f.value === statusFilter;
-            const count = f.value === 'all'
-              ? projects.length
+            const count = f.value === 'active'
+              ? projects.filter(p => p.status !== 'delivered' && p.status !== 'cancelled').length
               : projects.filter(p => p.status === f.value).length;
             return (
               <Chip
@@ -448,6 +513,32 @@ export default function OrderTracker({ token, onBack }) {
               />
             );
           })}
+          {/* Overflow: All / Delivered / Cancelled */}
+          <Select
+            value={SECONDARY_FILTERS.find(s => s.value === statusFilter)?.value || ''}
+            onChange={e => setStatusFilter(e.target.value)}
+            displayEmpty
+            size="small"
+            renderValue={(v) => {
+              if (!v) return 'More…';
+              const f = SECONDARY_FILTERS.find(s => s.value === v);
+              const count = v === 'all' ? projects.length : projects.filter(p => p.status === v).length;
+              return `${f.label} · ${count}`;
+            }}
+            sx={{
+              fontSize: 11, height: 24, ml: 0.5,
+              color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.greenDk : B.muted,
+              bgcolor: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.green : 'rgba(255,255,255,0.04)',
+              borderRadius: 999,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.08)' },
+              '& .MuiSelect-icon': { color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.greenDk : B.muted },
+              '& .MuiSelect-select': { py: 0.4, pr: 3 },
+            }}>
+            {SECONDARY_FILTERS.map(s => {
+              const c = s.value === 'all' ? projects.length : projects.filter(p => p.status === s.value).length;
+              return <MenuItem key={s.value} value={s.value}>{s.label} · {c}</MenuItem>;
+            })}
+          </Select>
           <Box sx={{ flex: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.5 }}>
@@ -526,6 +617,7 @@ export default function OrderTracker({ token, onBack }) {
         project={confirmation}
         mockupMap={mockupMap}
         logo={confirmation ? logoFor(confirmation) : null}
+        brandLogo={brandLogo}
         onClose={() => setConfirmation(null)}
       />
 
@@ -559,6 +651,15 @@ export default function OrderTracker({ token, onBack }) {
           setStatusFilter('all');
           setClientsOpen(false);
         }}
+      />
+
+      <CleanupDialog
+        open={cleanupOpen}
+        data={cleanupData}
+        loading={cleanupLoading}
+        onClose={() => setCleanupOpen(false)}
+        onBulkDelete={handleCleanupDelete}
+        onMerge={handleMergeCompany}
       />
 
       <MockupPickerDialog
@@ -991,18 +1092,6 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
             onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
         </Box>
-        <Box sx={{ gridColumn: '1 / -1' }}>
-          <InlineField label="Confirmation message (shown to client)" multiline
-            value={local.confirmationMessage || ''} savingHint={savingField === 'confirmationMessage'}
-            onChange={v => updateLocal({ confirmationMessage: v })}
-            onBlur={v => saveField('confirmationMessage', v)} />
-        </Box>
-        <Box sx={{ gridColumn: '1 / -1' }}>
-          <InlineField label="Confirmation terms (payment / turnaround)" multiline
-            value={local.confirmationTerms || ''} savingHint={savingField === 'confirmationTerms'}
-            onChange={v => updateLocal({ confirmationTerms: v })}
-            onBlur={v => saveField('confirmationTerms', v)} />
-        </Box>
       </Box>
 
       {/* Files */}
@@ -1285,7 +1374,7 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
 // ── ConfirmationDialog ───────────────────────────────────────────────────────
 // Client-facing confirmation page. Printable (window.print) and screenshottable.
 // Renders mockups, line items, totals, and a clean header.
-function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
+function ConfirmationDialog({ open, project, mockupMap, logo, brandLogo, onClose }) {
   if (!project) return null;
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
   const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
@@ -1379,9 +1468,14 @@ function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
               </Box>
             )}
             <Box>
-              <Typography sx={{ fontWeight: 800, fontSize: 24, mb: 0.3, color: '#111', lineHeight: 1 }}>
-                JOINT PRINTING
-              </Typography>
+              {brandLogo ? (
+                <Box component="img" src={brandLogo} alt="Joint Printing"
+                  sx={{ maxHeight: 56, maxWidth: 280, display: 'block', mb: 0.3 }} />
+              ) : (
+                <Typography sx={{ fontWeight: 800, fontSize: 24, mb: 0.3, color: '#111', lineHeight: 1 }}>
+                  JOINT PRINTING
+                </Typography>
+              )}
               <Typography sx={{ color: '#555', fontSize: 12 }}>
                 Project #{project.projectNumber || '—'}
                 {project.orderNumber ? `  ·  Invoice #${project.orderNumber}` : ''}
@@ -1481,9 +1575,6 @@ function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
             </Box>
           )}
 
-          <Typography sx={{ mt: 5, color: '#888', fontSize: 10, textAlign: 'center' }}>
-            Generated by Joint Printing · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-          </Typography>
         </Box>
       </DialogContent>
     </Dialog>
@@ -1906,7 +1997,6 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
   const months = (data && data.revenueByMonth) || [];
   const maxRev = months.reduce((m, x) => Math.max(m, x.revenue || 0), 0);
   const topClients = (data && data.topClients) || [];
-  const topStyles  = (data && data.topStyles)  || [];
   const overall    = (data && data.overall)    || { revenue: 0, cogs: 0, margin: 0, marginPct: 0 };
 
   return (
@@ -1945,16 +2035,27 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
                 No delivered revenue in the last 12 months.
               </Box>
             ) : (
-              <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.4, height: 110, mb: 0.5,
+              <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.4, height: 140, mb: 0.5,
                 borderBottom: `1px solid ${B.faint}`, pb: 0.4 }}>
                 {months.map((m, i) => {
                   const h = maxRev > 0 ? (m.revenue / maxRev) * 100 : 0;
                   return (
                     <Box key={i} title={`${m.month} · ${fmt(m.revenue)} · ${m.orders} order${m.orders === 1 ? '' : 's'}`}
-                      sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.3,
-                        cursor: 'help' }}>
+                      sx={{
+                        flex: 1, height: '100%', position: 'relative',
+                        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+                        cursor: 'help',
+                      }}>
+                      {m.revenue > 0 && (
+                        <Typography sx={{
+                          color: B.muted, fontSize: 8, fontWeight: 700, fontFamily: 'monospace',
+                          textAlign: 'center', mb: 0.3,
+                        }}>
+                          {Math.round(m.revenue / 1000)}k
+                        </Typography>
+                      )}
                       <Box sx={{
-                        height: `${Math.max(h, 1)}%`, width: '100%',
+                        height: `${Math.max(h, m.revenue > 0 ? 2 : 0)}%`, width: '100%',
                         bgcolor: m.revenue > 0 ? B.green : 'rgba(255,255,255,0.06)',
                         borderRadius: '2px 2px 0 0',
                         opacity: m.revenue > 0 ? 0.9 : 0.4,
@@ -2001,34 +2102,6 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
                       <Box sx={{ color: B.green, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
                         {fmt(c.revenue)}
                       </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
-
-            {/* Top styles */}
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
-              Top garment styles · qty across all quotes
-            </Typography>
-            {topStyles.length === 0 ? (
-              <Box sx={{ color: B.muted, fontSize: 12 }}>No quote lines with style codes yet. Add style codes in the quoter to populate this.</Box>
-            ) : (
-              <Box>
-                {topStyles.map((s, i) => {
-                  const max = topStyles[0].qty || 1;
-                  const w = (s.qty / max) * 100;
-                  return (
-                    <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px', alignItems: 'center', gap: 1, py: 0.5, borderBottom: `1px solid ${B.faint}` }}>
-                      <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>
-                        {s.styleCode}
-                      </Typography>
-                      <Box sx={{ position: 'relative', height: 14 }}>
-                        <Box sx={{ position: 'absolute', inset: 0, width: `${w}%`, bgcolor: 'rgba(96,165,250,0.18)', borderRadius: 0.5 }} />
-                      </Box>
-                      <Typography sx={{ color: B.white, fontSize: 12, fontFamily: 'monospace', textAlign: 'right' }}>
-                        {s.qty.toLocaleString()}
-                      </Typography>
                     </Box>
                   );
                 })}
@@ -2145,5 +2218,247 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── BrandLogoSlot ────────────────────────────────────────────────────────────
+// Small upload well in the Order Tracker header for the Joint Printing brand
+// logo (stored in SiteSetting 'brandLogo'). Rendered on approval page +
+// confirmation dialog so every client-facing surface stays on-brand.
+function BrandLogoSlot({ logo, onUpload, onClear }) {
+  const inputRef = React.useRef(null);
+  const [busy, setBusy] = React.useState(false);
+  const trigger = () => inputRef.current?.click();
+  const onChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try { await onUpload(file); } finally { setBusy(false); e.target.value = ''; }
+  };
+  return (
+    <Box sx={{ position: 'relative', ml: 0.5 }}>
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={onChange} />
+      {logo ? (
+        <Tooltip title="Brand logo — click to replace, × to clear">
+          <Box onClick={trigger} sx={{
+            width: 28, height: 28, p: 0.3, borderRadius: 0.8, cursor: 'pointer',
+            bgcolor: '#fff', border: `1px solid ${B.faint}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+            position: 'relative',
+            '&:hover .brand-x': { opacity: 1 },
+          }}>
+            <Box component="img" src={logo} alt=""
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            <IconButton className="brand-x" size="small"
+              onClick={(e) => { e.stopPropagation(); onClear(); }}
+              sx={{
+                position: 'absolute', top: -7, right: -7, p: 0.15, opacity: 0,
+                bgcolor: B.bg, color: '#f87171', border: `1px solid ${B.border}`,
+                transition: 'opacity 0.12s',
+                '&:hover': { bgcolor: B.bg, color: '#f87171' },
+              }}>
+              <CloseIcon sx={{ fontSize: 10 }} />
+            </IconButton>
+          </Box>
+        </Tooltip>
+      ) : (
+        <Tooltip title="Upload your brand logo (shown on approval / confirmation)">
+          <Box onClick={trigger} sx={{
+            width: 28, height: 28, borderRadius: 0.8, cursor: 'pointer',
+            border: `1px dashed ${B.border}`, opacity: 0.45,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: B.muted, '&:hover': { opacity: 1, borderColor: B.green, color: B.green },
+          }}>
+            {busy ? <CircularProgress size={12} sx={{ color: B.green }} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
+          </Box>
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+// ── CleanupDialog ────────────────────────────────────────────────────────────
+// Two sections:
+// 1) Empty projects — projects with no company, no items, no quote, no mockups,
+//    no files, no value. Usually leftover "New project" clicks. Bulk-delete.
+// 2) Company name collisions — multiple companyName strings that all reduce to
+//    the same companyKey (typos / variants). Merge into one canonical name.
+function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) {
+  const [selectedIds, setSelectedIds] = React.useState({});
+  const [mergeTargets, setMergeTargets] = React.useState({});  // companyKey → chosen canonical name
+  React.useEffect(() => { if (open) { setSelectedIds({}); setMergeTargets({}); } }, [open]);
+
+  const empty = (data && data.empty) || [];
+  const collisions = (data && data.nameCollisions) || [];
+  const selectedCount = Object.values(selectedIds).filter(Boolean).length;
+
+  const toggleAll = () => {
+    if (selectedCount === empty.length) setSelectedIds({});
+    else {
+      const next = {};
+      empty.forEach(e => { next[e._id] = true; });
+      setSelectedIds(next);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <CleaningServicesOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Cleanup
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {loading || !data ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <CircularProgress size={24} sx={{ color: B.green }} />
+          </Box>
+        ) : (
+          <>
+            {/* Empty projects */}
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                Empty projects · {empty.length}
+              </Typography>
+              {empty.length > 0 && (
+                <Stack direction="row" gap={1}>
+                  <Button size="small" onClick={toggleAll}
+                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    {selectedCount === empty.length ? 'Deselect all' : 'Select all'}
+                  </Button>
+                  <Button size="small"
+                    onClick={() => onBulkDelete(Object.keys(selectedIds).filter(k => selectedIds[k]))}
+                    disabled={selectedCount === 0}
+                    sx={{ color: '#f87171', fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                    Delete selected ({selectedCount})
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+            {empty.length === 0 ? (
+              <Box sx={{ color: B.muted, fontSize: 12, mb: 3, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1, textAlign: 'center' }}>
+                Nothing empty. ✓
+              </Box>
+            ) : (
+              <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, mb: 3, maxHeight: 200, overflow: 'auto', ...scrollbar }}>
+                {empty.map((e, i) => {
+                  const checked = !!selectedIds[e._id];
+                  return (
+                    <Box key={i}
+                      onClick={() => setSelectedIds(s => ({ ...s, [e._id]: !s[e._id] }))}
+                      sx={{
+                        display: 'grid', gridTemplateColumns: '20px 80px 1fr auto',
+                        gap: 1, alignItems: 'center', px: 1, py: 0.6,
+                        borderBottom: `1px solid ${B.faint}`, cursor: 'pointer',
+                        bgcolor: checked ? 'rgba(248,113,113,0.06)' : 'transparent',
+                        '&:hover': { bgcolor: checked ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)' },
+                      }}>
+                      <Box sx={{
+                        width: 14, height: 14, border: `1.5px solid ${checked ? '#f87171' : B.muted}`,
+                        bgcolor: checked ? '#f87171' : 'transparent',
+                        borderRadius: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {checked && <CloseIcon sx={{ color: '#fff', fontSize: 10 }} />}
+                      </Box>
+                      <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace' }}>
+                        #{e.projectNumber || '?'}
+                      </Typography>
+                      <Typography sx={{ color: B.muted, fontSize: 11 }}>
+                        Untitled · status {e.status || '?'} · no items
+                      </Typography>
+                      <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+                        {fmtRelative(e.createdAt)}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+
+            {/* Company collisions */}
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+              Company name variants · {collisions.length}
+            </Typography>
+            {collisions.length === 0 ? (
+              <Box sx={{ color: B.muted, fontSize: 12, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1, textAlign: 'center' }}>
+                No accidental variants. Clients are deduped.
+              </Box>
+            ) : (
+              <Stack gap={1}>
+                {collisions.map((c, i) => {
+                  const chosen = mergeTargets[c.companyKey] || c.variants[0].name;
+                  const sources = c.variants.filter(v => v.name !== chosen);
+                  return (
+                    <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1, p: 1.2 }}>
+                      <Typography sx={{ color: B.muted, fontSize: 10, mb: 0.5, fontFamily: 'monospace' }}>
+                        key: {c.companyKey} · {c.projectCount} project{c.projectCount === 1 ? '' : 's'}
+                      </Typography>
+                      <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
+                        {c.variants.map((v, j) => (
+                          <Chip key={j} size="small"
+                            label={`${v.name} · ${v.count}`}
+                            onClick={() => setMergeTargets(t => ({ ...t, [c.companyKey]: v.name }))}
+                            sx={{
+                              bgcolor: v.name === chosen ? B.green : 'rgba(255,255,255,0.04)',
+                              color:   v.name === chosen ? B.greenDk : B.white,
+                              fontWeight: v.name === chosen ? 700 : 500,
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              '&:hover': { bgcolor: v.name === chosen ? B.green : 'rgba(255,255,255,0.08)' },
+                            }}
+                          />
+                        ))}
+                      </Stack>
+                      <Stack direction="row" alignItems="center" gap={1}>
+                        <Typography sx={{ color: B.muted, fontSize: 11, flex: 1 }}>
+                          Click a name to choose canonical, then merge the rest into it.
+                        </Typography>
+                        {sources.map((s, j) => (
+                          <Button key={j} size="small" onClick={() => onMerge(s.name, chosen)}
+                            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                            Merge "{s.name}" → "{chosen}"
+                          </Button>
+                        ))}
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            )}
+
+            {/* Manual merge for non-collision cases (different keys entirely) */}
+            <Box sx={{ mt: 3, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1 }}>
+              <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+                Manual merge (different names, same client)
+              </Typography>
+              <ManualMergeForm onMerge={onMerge} />
+            </Box>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ManualMergeForm({ onMerge }) {
+  const [from, setFrom] = React.useState('');
+  const [to,   setTo]   = React.useState('');
+  return (
+    <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
+      <TextField size="small" placeholder="From (e.g. Green Gold)"
+        value={from} onChange={e => setFrom(e.target.value)} sx={{ ...darkInput, flex: 1 }} />
+      <TextField size="small" placeholder="To (e.g. Bract House)"
+        value={to} onChange={e => setTo(e.target.value)} sx={{ ...darkInput, flex: 1 }} />
+      <Button onClick={() => { onMerge(from.trim(), to.trim()); setFrom(''); setTo(''); }}
+        disabled={!from.trim() || !to.trim()}
+        sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#3bd070' } }}>
+        Merge
+      </Button>
+    </Stack>
   );
 }
