@@ -1,7 +1,7 @@
 // src/screens/Product.js
 import { React, useEffect, useState } from 'react';
 import {
-  Box, Stack, Typography, Chip, Button, Rating, Tooltip,
+  Box, Stack, Typography, Chip, Button, Tooltip,
   CircularProgress, Container, Avatar, useMediaQuery, Divider, Alert,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -48,7 +48,7 @@ function Product() {
 
   const [productVendor, setProductVendor]               = useState(preloadedItem?.vendor || '');
   const [productStyle, setProductStyle]                 = useState(preloadedItem?.style || id || '');
-  const [productRating, setProductRating]               = useState(preloadedItem?.rating || 0);
+  const [product setProductRating]               = useState(preloadedItem?.rating || 0);
   const [productTitle, setProductTitle]                 = useState(preloadedItem?.name || '');
   const [productPriceFrom, setProductPriceFrom]         = useState(startingPrice(preloadedItem) || '');
   const [productSizeRangeBottom, setProductSizeRangeBottom] = useState(preloadedItem?.sizeRangeBottom || '');
@@ -95,7 +95,6 @@ function Product() {
     const applyProductData = (data) => {
       setProductVendor(data.vendor || '');
       setProductStyle(data.style || id);
-      setProductRating(data.rating || 5);
       setProductTitle(data.name || '');
       setProductPriceFrom(startingPrice(data) || '');
       setProductSizeRangeBottom(data.sizeRangeBottom || '');
