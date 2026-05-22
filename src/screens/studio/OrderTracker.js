@@ -991,6 +991,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
 
   const updateLocal = (patch) => setLocal(prev => ({ ...prev, ...patch }));
 
+  // Drop one mockup # from this project (typo, wrong #, never-made design).
+  const removeMockup = async (num) => {
+    const next = (local.mockupNumbers || []).filter(n => n !== num);
+    updateLocal({ mockupNumbers: next });
+    await onSave(project._id, { mockupNumbers: next });
+  };
+
   return (
     <Drawer anchor="right" open={open} onClose={onClose}
       PaperProps={{ sx: { bgcolor: B.bg, color: B.white, width: { xs: '100%', md: 560 }, ...scrollbar } }}>
@@ -1078,7 +1085,19 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
                       aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
                       border: `1px solid ${t.item ? B.border : 'rgba(251,191,36,0.35)'}`,
                       bgcolor: B.panelHi, position: 'relative',
+                      '&:hover .tile-x': { opacity: 1 },
                     }}>
+                      <IconButton className="tile-x" size="small"
+                        onClick={() => removeMockup(t.num)}
+                        title={`Remove ${t.num} from this project`}
+                        sx={{
+                          position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
+                          opacity: 0, transition: 'opacity 0.12s',
+                          bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
+                          '&:hover': { bgcolor: '#ef4444', color: '#fff' },
+                        }}>
+                        <CloseIcon sx={{ fontSize: 12 }} />
+                      </IconButton>
                       {t.item && t.item.thumbnail ? (
                         <Box component="img" src={t.item.thumbnail} alt={t.item.name}
                           sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1108,8 +1127,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
               )}
               {missing > 0 && (
                 <Typography sx={{ mt: 1, color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
-                  Missing mockups exist on this project in records but aren&apos;t in your jpstudio library.
-                  Open jpstudio → pick this project → save a mockup with the matching #, or use Link mockups above to attach an existing one.
+                  Missing mockups are on this project in records but aren&apos;t in your jpstudio library.
+                  Open jpstudio → pick this project → save a mockup with the matching #, use Edit mockups to attach
+                  an existing one, or hover a tile and click ✕ to drop a wrong #.
                 </Typography>
               )}
             </>
