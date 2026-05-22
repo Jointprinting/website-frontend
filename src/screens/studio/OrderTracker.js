@@ -72,15 +72,39 @@ export default function OrderTracker({ token, onBack }) {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
+  // Normalize a mockup # so old "61A" and new "#000061A" map to the same key.
+  // Strips the leading hash, drops leading zeros, uppercases letters.
+  const normMockupKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+
   const mockupMap = useMemo(() => {
     const m = {};
     mockups.forEach(x => {
       const k = x.pageState?.mockupNum;
-      if (k) m[k] = x;
+      if (k) {
+        m[k] = x;
+        m[normMockupKey(k)] = x;
+      }
       if (x.name && !m[x.name]) m[x.name] = x;
     });
     return m;
   }, [mockups]);
+
+  const lookupMockup = (mockupNum) => mockupMap[mockupNum] || mockupMap[normMockupKey(mockupNum)];
+
+  // For card hero fallback: when a project has no mockups linked, show
+  // other mockups from the same company so the card isn't blank.
+  const companyMockupPool = useMemo(() => {
+    const byCompany = {};
+    projects.forEach(p => {
+      const key = (p.companyKey || (p.companyName || p.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, ''));
+      if (!key) return;
+      (p.mockupNumbers || []).forEach(n => {
+        if (!byCompany[key]) byCompany[key] = [];
+        if (!byCompany[key].includes(n)) byCompany[key].push(n);
+      });
+    });
+    return byCompany;
+  }, [projects]);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -185,15 +209,6 @@ export default function OrderTracker({ token, onBack }) {
             }}
           />
 
-          <Tooltip title="Re-pull from Notion seed">
-            <span>
-              <IconButton onClick={handleResync} disabled={resyncing}
-                sx={{ color: B.muted, '&:hover': { color: B.green } }}>
-                {resyncing ? <CircularProgress size={18} sx={{ color: B.green }} /> : <RefreshIcon />}
-              </IconButton>
-            </span>
-          </Tooltip>
-
           <Button
             startIcon={creating ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <AddIcon />}
             onClick={handleCreate}
@@ -202,6 +217,15 @@ export default function OrderTracker({ token, onBack }) {
               px: 2, '&:hover': { bgcolor: '#3bd070' } }}>
             New project
           </Button>
+
+          <Tooltip title="Re-sync with Notion (overwrites local edits)">
+            <span>
+              <IconButton onClick={handleResync} disabled={resyncing} size="small"
+                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
+                {resyncing ? <CircularProgress size={14} sx={{ color: B.green }} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+              </IconButton>
+            </span>
+          </Tooltip>
         </Stack>
 
         {/* Stat strip */}
@@ -264,7 +288,9 @@ export default function OrderTracker({ token, onBack }) {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           }}>
             {filtered.map(p => (
-              <ProjectCard key={p._id} project={p} mockupMap={mockupMap}
+              <ProjectCard key={p._id} project={p}
+                lookupMockup={lookupMockup}
+                companyMockupPool={companyMockupPool}
                 onClick={() => setActiveProject(p)} />
             ))}
           </Box>
@@ -321,10 +347,21 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function ProjectCard({ project, mockupMap, onClick }) {
+function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
-  const mockupThumbs = (project.mockupNumbers || []).slice(0, 4).map(n => mockupMap[n]).filter(Boolean);
+  const ownMockups = (project.mockupNumbers || []).slice(0, 4).map(n => lookupMockup(n)).filter(Boolean);
+  // Fallback hero: if this project has no linked mockups, show recent
+  // mockups from any other project of the same company.
+  let mockupThumbs = ownMockups;
+  let usingFallback = false;
+  if (mockupThumbs.length === 0) {
+    const companyKey = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const pool = (companyMockupPool && companyMockupPool[companyKey]) || [];
+    const others = pool.filter(n => !(project.mockupNumbers || []).includes(n))
+      .slice(0, 4).map(n => lookupMockup(n)).filter(Boolean);
+    if (others.length > 0) { mockupThumbs = others; usingFallback = true; }
+  }
 
   return (
     <Box onClick={onClick} sx={{
@@ -342,6 +379,16 @@ function ProjectCard({ project, mockupMap, onClick }) {
     }}>
       {/* Mockup hero */}
       <Box sx={{ position: 'relative', aspectRatio: '4/3', bgcolor: B.bg, overflow: 'hidden' }}>
+        {usingFallback && (
+          <Box sx={{
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 2, bgcolor: 'rgba(0,0,0,0.65)', color: B.muted,
+            px: 1, py: 0.2, borderRadius: 1, fontSize: 9, fontWeight: 700,
+            letterSpacing: 0.6, textTransform: 'uppercase',
+          }}>
+            Client&apos;s work
+          </Box>
+        )}
         {mockupThumbs.length > 0 ? (
           <Box sx={{
             display: 'grid',
@@ -455,7 +502,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
   if (!project || !local) return null;
 
   const meta = STATUS_META[local.status] || STATUS_META.quoted;
-  const thumbs = (local.mockupNumbers || []).map(n => mockupMap[n]).filter(Boolean);
+  const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+  const thumbs = (local.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
 
   const saveField = async (key, value) => {
     if (project[key] === value) return;
@@ -596,10 +644,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
             saving={savingField === 'items'}
             onChange={items => updateLocal({ items })}
             onCommit={async (items) => {
-              const totalValue = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
-              updateLocal({ items, totalValue });
+              updateLocal({ items });
               setSavingField('items');
-              await onSave(project._id, { items, totalValue });
+              await onSave(project._id, { items });
               setSavingField('');
             }}
           />
@@ -667,6 +714,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
 function InlineField({ label, value, onChange, onBlur, type = 'text', multiline = false, savingHint }) {
   const [v, setV] = useState(value ?? '');
   useEffect(() => { setV(value ?? ''); }, [value]);
+  const noSpinner = type === 'number' ? {
+    '& input[type=number]': { MozAppearance: 'textfield' },
+    '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+    '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  } : {};
   return (
     <Box>
       <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
@@ -681,7 +733,7 @@ function InlineField({ label, value, onChange, onBlur, type = 'text', multiline 
         value={v}
         onChange={e => { setV(e.target.value); onChange?.(e.target.value); }}
         onBlur={e => onBlur?.(e.target.value)}
-        sx={darkInput}
+        sx={{ ...darkInput, ...noSpinner }}
       />
     </Box>
   );
@@ -729,9 +781,11 @@ function InlineDateField({ label, value, onChange, savingHint }) {
 // ── ItemsEditor ──────────────────────────────────────────────────────────────
 // Real line-item editor (replaces the textarea). Adds/removes rows, edits qty,
 // description, unit price; auto-sums totalValue on commit.
+// Lightweight items editor for Order Tracker — just qty + description.
+// Real cost-breakdown quoting (blank cost, print cost, etc.) lives in the
+// dedicated quoter (not built yet).
 function ItemsEditor({ items, onChange, onCommit, saving }) {
   const list = items && items.length > 0 ? items : [];
-  const total = list.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
 
   const update = (i, patch) => {
     const next = list.map((x, idx) => idx === i ? { ...x, ...patch } : x);
@@ -745,6 +799,13 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
   const add = () => {
     const next = [...list, { description: '', qty: 1, unitPrice: 0 }];
     onChange(next);
+  };
+
+  // CSS to strip the native number spinners on QTY inputs.
+  const noSpinner = {
+    '& input[type=number]': { MozAppearance: 'textfield' },
+    '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+    '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
   };
 
   return (
@@ -761,59 +822,36 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
       </Stack>
       {list.length === 0 ? (
         <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
-          No line items yet. Add one to build the quote.
+          No items yet. Add one to describe what&apos;s in this project.
         </Box>
       ) : (
         <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, overflow: 'hidden' }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '46px 1fr 80px 80px 28px',
+          <Box sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 28px',
             gap: 0.5, px: 0.8, py: 0.4, bgcolor: B.panelHi,
             fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             <Box>Qty</Box>
             <Box>Description</Box>
-            <Box sx={{ textAlign: 'right' }}>Unit $</Box>
-            <Box sx={{ textAlign: 'right' }}>Line $</Box>
             <Box />
           </Box>
-          {list.map((it, i) => {
-            const line = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
-            return (
-              <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '46px 1fr 80px 80px 28px',
-                gap: 0.5, alignItems: 'center', px: 0.8, py: 0.4,
-                borderTop: `1px solid ${B.faint}` }}>
-                <TextField size="small" type="number" value={it.qty || ''}
-                  onChange={e => update(i, { qty: e.target.value })}
-                  onBlur={() => onCommit(list)}
-                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
-                <TextField size="small" value={it.description || ''}
-                  onChange={e => update(i, { description: e.target.value })}
-                  onBlur={() => onCommit(list)}
-                  placeholder="50 Bella+Canvas 3001, Black, screen print"
-                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4 } }} />
-                <TextField size="small" type="number" value={it.unitPrice || ''}
-                  onChange={e => update(i, { unitPrice: e.target.value })}
-                  onBlur={() => onCommit(list)}
-                  sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
-                <Box sx={{ color: B.white, fontSize: 12, fontFamily: 'monospace', textAlign: 'right', py: 0.4 }}>
-                  {fmt(line)}
-                </Box>
-                <IconButton size="small" onClick={() => remove(i)}
-                  sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
-                  <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Box>
-            );
-          })}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 28px',
-            gap: 0.5, alignItems: 'center', px: 0.8, py: 0.6,
-            borderTop: `2px solid ${B.border}`, bgcolor: B.panelHi }}>
-            <Box sx={{ color: B.muted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-              Quote total
+          {list.map((it, i) => (
+            <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 28px',
+              gap: 0.5, alignItems: 'center', px: 0.8, py: 0.4,
+              borderTop: `1px solid ${B.faint}` }}>
+              <TextField size="small" type="number" value={it.qty || ''}
+                onChange={e => update(i, { qty: e.target.value })}
+                onBlur={() => onCommit(list)}
+                sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
+              <TextField size="small" value={it.description || ''}
+                onChange={e => update(i, { description: e.target.value })}
+                onBlur={() => onCommit(list)}
+                placeholder="50 Bella+Canvas 3001, Black, screen print"
+                sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4 } }} />
+              <IconButton size="small" onClick={() => remove(i)}
+                sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
+              </IconButton>
             </Box>
-            <Box sx={{ color: B.green, fontSize: 14, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
-              {fmt(total)}
-            </Box>
-            <Box />
-          </Box>
+          ))}
         </Box>
       )}
     </Box>
@@ -825,7 +863,8 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
 // Renders mockups, line items, totals, and a clean header.
 function ConfirmationDialog({ open, project, mockupMap, onClose }) {
   if (!project) return null;
-  const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n]).filter(Boolean);
+  const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+  const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
   const items = project.items || [];
   const subtotal = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
   const total = Number(project.totalValue) || subtotal;
@@ -834,7 +873,13 @@ function ConfirmationDialog({ open, project, mockupMap, onClose }) {
     const el = document.getElementById('confirmation-printable');
     if (!el) return window.print();
     const w = window.open('', '_blank', 'width=900,height=1200');
-    if (!w) return;
+    if (!w) {
+      // Popup blocker stopped the new window — fall back to printing the
+      // current dialog so the user gets *something*.
+      alert('Popup was blocked. Printing this view instead — allow popups for jointprinting.com to get a cleaner print layout next time.');
+      window.print();
+      return;
+    }
     w.document.write(`
       <html><head><title>Confirmation #${project.projectNumber || ''}</title>
       <style>
