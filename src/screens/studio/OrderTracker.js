@@ -874,8 +874,36 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [client, setClient] = useState(null);
+  const [clientSaving, setClientSaving] = useState('');
 
   useEffect(() => { if (project) setLocal({ ...project }); }, [project]);
+
+  // Load (or auto-create) the client profile for this project's company.
+  useEffect(() => {
+    if (!project) { setClient(null); return; }
+    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!key) { setClient(null); return; }
+    let cancelled = false;
+    axios.get(`${base}/clients/${encodeURIComponent(key)}`, authHdr)
+      .then(r => { if (!cancelled) setClient(r.data.client); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [project, authHdr]);
+
+  const saveClient = async (field, value) => {
+    if (!client) return;
+    setClientSaving(field);
+    try {
+      const r = await axios.put(`${base}/clients/${encodeURIComponent(client.companyKey)}`,
+        { [field]: value }, authHdr);
+      setClient(r.data.client);
+    } catch (e) {
+      alert(`Couldn't save client field: ${e.message}`);
+    } finally {
+      setClientSaving('');
+    }
+  };
 
   if (!project || !local) return null;
 
@@ -1100,7 +1128,26 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
             onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
         </Box>
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <InlineField label="QuickBooks invoice URL" value={local.quickbooksInvoiceUrl || ''}
+            savingHint={savingField === 'quickbooksInvoiceUrl'}
+            onChange={v => updateLocal({ quickbooksInvoiceUrl: v })}
+            onBlur={v => saveField('quickbooksInvoiceUrl', v)} />
+          {local.quickbooksInvoiceUrl && (
+            <Typography component="a" href={local.quickbooksInvoiceUrl} target="_blank" rel="noreferrer"
+              sx={{ display: 'inline-block', mt: 0.4, color: B.green, fontSize: 11,
+                textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+              Open in QuickBooks ↗
+            </Typography>
+          )}
+        </Box>
       </Box>
+
+      {/* Tasks */}
+      <TasksSection local={local} updateLocal={updateLocal} saveField={saveField} savingField={savingField} />
+
+      {/* Client profile (sticky info that follows this company across projects) */}
+      <ClientProfileSection client={client} saving={clientSaving} saveClient={saveClient} />
 
       {/* Files */}
       <Box sx={{ px: 2.5, pb: 2 }}>
@@ -2279,5 +2326,152 @@ function ManualMergeForm({ onMerge }) {
         Merge
       </Button>
     </Stack>
+  );
+}
+
+// ── TasksSection ─────────────────────────────────────────────────────────────
+// Lightweight per-project checklist. Add a line, check it off, see when it
+// was completed. Saves on blur / toggle. Different from notes — these are
+// the "what's left to do" list that prevents things falling through.
+function TasksSection({ local, updateLocal, saveField, savingField }) {
+  const tasks = local.tasks || [];
+  const remaining = tasks.filter(t => !t.done).length;
+  const [draft, setDraft] = React.useState('');
+
+  const update = (next) => {
+    updateLocal({ tasks: next });
+    saveField('tasks', next);
+  };
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    update([...tasks, { text, done: false, dueDate: null, completedAt: null }]);
+    setDraft('');
+  };
+  const toggle = (i) => {
+    update(tasks.map((t, j) => j === i
+      ? { ...t, done: !t.done, completedAt: !t.done ? new Date().toISOString() : null }
+      : t));
+  };
+  const remove = (i) => update(tasks.filter((_, j) => j !== i));
+
+  return (
+    <Box sx={{ px: 2.5, pb: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Tasks · {remaining}/{tasks.length}
+          {savingField === 'tasks' && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+        </Typography>
+      </Stack>
+      <Stack gap={0.4}>
+        {tasks.length === 0 && (
+          <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic', mb: 0.5 }}>
+            No tasks. Add one to track what's left on this project.
+          </Typography>
+        )}
+        {tasks.map((t, i) => (
+          <Stack key={i} direction="row" alignItems="center" gap={0.5}
+            sx={{ py: 0.4, borderBottom: `1px solid ${B.faint}`, fontSize: 12 }}>
+            <Box onClick={() => toggle(i)} sx={{
+              width: 16, height: 16, borderRadius: 0.5, cursor: 'pointer',
+              border: `1.5px solid ${t.done ? B.green : 'rgba(255,255,255,0.3)'}`,
+              bgcolor: t.done ? B.green : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: B.greenDk, fontSize: 11, fontWeight: 900, lineHeight: 1,
+            }}>
+              {t.done && '✓'}
+            </Box>
+            <Box sx={{ flex: 1, color: t.done ? B.muted : B.white, fontSize: 12,
+              textDecoration: t.done ? 'line-through' : 'none' }}>
+              {t.text}
+            </Box>
+            {t.done && t.completedAt && (
+              <Typography sx={{ color: B.muted, fontSize: 9, fontFamily: 'monospace' }}>
+                {fmtRelative(t.completedAt)}
+              </Typography>
+            )}
+            <IconButton size="small" onClick={() => remove(i)}
+              sx={{ color: B.muted, p: 0.2, '&:hover': { color: '#f87171' } }}>
+              <RemoveCircleOutlineIcon sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Stack>
+        ))}
+      </Stack>
+      <Stack direction="row" gap={0.5} mt={0.6}>
+        <TextField size="small" fullWidth placeholder="New task — Enter to add"
+          value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } }} />
+        <Button size="small" onClick={add} disabled={!draft.trim()}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Add
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+// ── ClientProfileSection ─────────────────────────────────────────────────────
+// Sticky per-company info (email, phone, payment terms, default printer /
+// supplier / markup, freeform notes) that follows the client across every
+// project of theirs. Defaults auto-fill on new projects (server-side).
+function ClientProfileSection({ client, saving, saveClient }) {
+  const [open, setOpen] = React.useState(false);
+  if (!client) return null;
+
+  const Field = ({ label, field, type = 'text', multiline = false }) => {
+    const [v, setV] = React.useState(client[field] ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    React.useEffect(() => { setV(client[field] ?? ''); }, [client[field], field]);
+    const noSpinner = type === 'number' ? {
+      '& input[type=number]': { MozAppearance: 'textfield' },
+      '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+      '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+    } : {};
+    return (
+      <Box>
+        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
+          {label} {saving === field && <CircularProgress size={8} sx={{ color: B.green, ml: 0.5 }} />}
+        </Typography>
+        <TextField size="small" fullWidth type={type} multiline={multiline}
+          minRows={multiline ? 2 : undefined}
+          value={v}
+          onChange={e => setV(e.target.value)}
+          onBlur={e => {
+            const next = type === 'number' ? Number(e.target.value) || 0 : e.target.value;
+            if (next !== client[field]) saveClient(field, next);
+          }}
+          sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } }} />
+      </Box>
+    );
+  };
+
+  return (
+    <Box sx={{ px: 2.5, pb: 2 }}>
+      <Stack direction="row" alignItems="center" gap={0.5} onClick={() => setOpen(o => !o)}
+        sx={{ cursor: 'pointer', mb: open ? 1 : 0,
+          '&:hover .lbl': { color: B.white } }}>
+        <Typography className="lbl" sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Client profile {open ? '▾' : '▸'}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
+          Follows the company across every project
+        </Typography>
+      </Stack>
+      {open && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2 }}>
+          <Field label="Email"            field="email" />
+          <Field label="Phone"            field="phone" />
+          <Field label="Payment terms"    field="paymentTerms" />
+          <Field label="Default markup"   field="defaultMarkup" type="number" />
+          <Field label="Default printer"  field="defaultPrinter" />
+          <Field label="Default supplier" field="defaultSupplier" />
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <Field label="Sticky notes (per client)" field="notes" multiline />
+          </Box>
+        </Box>
+      )}
+    </Box>
   );
 }
