@@ -129,11 +129,27 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
             </Typography>
             <Stack spacing={0.75}>
               {localProducts.map((p) => (
-                <Stack key={p.style} direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography variant="body2" color="text.primary">
-                    {p.name || 'Product'}{p.vendor ? ` — ${p.vendor}` : ''}
-                    {p.style ? ` (Style #${p.style})` : ''}
-                  </Typography>
+                <Stack key={p.style} direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0, flex: 1 }}>
+                    {p.thumbnail ? (
+                      <Box component="img" src={p.thumbnail} alt={p.name || ''}
+                        sx={{ width: 32, height: 32, objectFit: 'contain', bgcolor: '#fff', borderRadius: 1, border: '1px solid rgba(0,0,0,0.08)', flexShrink: 0 }} />
+                    ) : null}
+                    <Stack sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" color="text.primary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.name || 'Product'}{p.vendor ? ` — ${p.vendor}` : ''}
+                        {p.style ? ` (Style #${p.style})` : ''}
+                      </Typography>
+                      {p.color && (
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.25 }}>
+                          {p.colorHex && (
+                            <Box sx={{ width: 10, height: 10, bgcolor: p.colorHex, borderRadius: '50%', border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
+                          )}
+                          <Typography variant="caption" color="text.secondary">{p.color}</Typography>
+                        </Stack>
+                      )}
+                    </Stack>
+                  </Stack>
                   <IconButton
                     size="small"
                     onClick={() => removeProduct(p.style)}
