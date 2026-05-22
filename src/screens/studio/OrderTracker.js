@@ -17,6 +17,7 @@ import DesignServicesIcon  from '@mui/icons-material/DesignServices';
 import RefreshIcon         from '@mui/icons-material/Refresh';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -64,6 +65,9 @@ export default function OrderTracker({ token, onBack }) {
   const [analyticsOpen,    setAnalyticsOpen]    = useState(false);
   const [analyticsData,    setAnalyticsData]    = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [clientsOpen,    setClientsOpen]    = useState(false);
+  const [clientsData,    setClientsData]    = useState(null);
+  const [clientsLoading, setClientsLoading] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -286,6 +290,20 @@ export default function OrderTracker({ token, onBack }) {
     setPicker({ open: false, project: null });
   };
 
+  const handleOpenClients = async () => {
+    setClientsOpen(true);
+    setClientsLoading(true);
+    try {
+      const r = await axios.get(`${base}/orders/clients-summary`, authHdr);
+      setClientsData(r.data);
+    } catch (e) {
+      alert(`Couldn't load clients: ${e.message}`);
+      setClientsOpen(false);
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
   const handleOpenAnalytics = async () => {
     setAnalyticsOpen(true);
     setAnalyticsLoading(true);
@@ -358,6 +376,15 @@ export default function OrderTracker({ token, onBack }) {
               px: 2, '&:hover': { bgcolor: '#3bd070' } }}>
             New project
           </Button>
+
+          <Tooltip title="Clients overview">
+            <span>
+              <IconButton onClick={handleOpenClients} size="small"
+                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
+                <PeopleAltOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
 
           <Tooltip title="Analytics">
             <span>
@@ -519,6 +546,19 @@ export default function OrderTracker({ token, onBack }) {
         data={analyticsData}
         loading={analyticsLoading}
         onClose={() => setAnalyticsOpen(false)}
+      />
+
+      <ClientsDialog
+        open={clientsOpen}
+        data={clientsData}
+        loading={clientsLoading}
+        logoMap={logoMap}
+        onClose={() => setClientsOpen(false)}
+        onPickClient={(name) => {
+          setSearch(name);
+          setStatusFilter('all');
+          setClientsOpen(false);
+        }}
       />
 
       <MockupPickerDialog
@@ -1995,6 +2035,113 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
               </Box>
             )}
           </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── ClientsDialog ────────────────────────────────────────────────────────────
+// One row per unique client (by companyKey), with logo, project counts,
+// delivered revenue, open value, unpaid AR, last activity. Click any row to
+// filter the project grid down to that client.
+function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) {
+  const [q, setQ] = React.useState('');
+  React.useEffect(() => { if (open) setQ(''); }, [open]);
+
+  const clients = (data && data.clients) || [];
+  const filtered = q.trim()
+    ? clients.filter(c => (c.companyName || c.clientName || '').toLowerCase().includes(q.toLowerCase()))
+    : clients;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <PeopleAltOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Clients · {clients.length}
+        </Typography>
+        <TextField size="small" placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)}
+          sx={{ ...darkInput, width: 180 }} />
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {loading || !data ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <CircularProgress size={24} sx={{ color: B.green }} />
+          </Box>
+        ) : filtered.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 6, color: B.muted, fontSize: 12 }}>
+            {q ? 'No clients match.' : 'No clients yet.'}
+          </Box>
+        ) : (
+          <Box sx={{ maxHeight: 500, overflow: 'auto', ...scrollbar }}>
+            {filtered.map((c, i) => {
+              const name = c.companyName || c.clientName || c.companyKey;
+              const logo = logoMap && logoMap[c.companyKey];
+              return (
+                <Box key={i}
+                  onClick={() => onPickClient(name)}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '44px 1fr 80px 110px 110px 90px',
+                    alignItems: 'center', gap: 1.2, px: 1, py: 1,
+                    borderBottom: `1px solid ${B.faint}`, cursor: 'pointer',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                  }}>
+                  <Box sx={{
+                    width: 36, height: 36, p: 0.4, borderRadius: 1,
+                    bgcolor: logo ? '#fff' : B.panelHi, border: `1px solid ${B.faint}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                  }}>
+                    {logo ? (
+                      <Box component="img" src={logo} alt=""
+                        sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <Typography sx={{ color: B.muted, fontSize: 14, fontWeight: 800 }}>
+                        {name.charAt(0).toUpperCase()}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {name}
+                    </Typography>
+                    {c.clientName && c.companyName && c.clientName !== c.companyName && (
+                      <Typography sx={{ color: B.muted, fontSize: 11 }}>{c.clientName}</Typography>
+                    )}
+                  </Box>
+                  <Box sx={{ textAlign: 'center' }}>
+                    <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
+                      {c.projectCount}
+                    </Typography>
+                    <Typography sx={{ color: B.muted, fontSize: 9 }}>projects</Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography sx={{ color: B.green, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}>
+                      {fmt(c.deliveredRevenue)}
+                    </Typography>
+                    <Typography sx={{ color: B.muted, fontSize: 9 }}>
+                      {c.deliveredCount} delivered
+                    </Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography sx={{ color: c.unpaidValue > 0 ? '#fbbf24' : B.muted, fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>
+                      {fmt(c.unpaidValue)}
+                    </Typography>
+                    <Typography sx={{ color: B.muted, fontSize: 9 }}>unpaid</Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'right', color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+                    {fmtRelative(c.lastActivity)}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
         )}
       </DialogContent>
     </Dialog>
