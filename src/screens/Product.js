@@ -299,9 +299,16 @@ function Product() {
               </Stack>
 
               {productTitle && (
-                <Typography sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 900, color: 'black', lineHeight: 1.25 }}>
-                  {productTitle}
-                </Typography>
+                <>
+                  <Typography sx={{
+                    fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                    fontSize: { xs: 28, sm: 38 }, fontWeight: 900,
+                    color: '#1a1a1a', lineHeight: 1.1, letterSpacing: -0.5,
+                  }}>
+                    {productTitle}
+                  </Typography>
+                  <Box sx={{ height: 2, width: 48, bgcolor: '#4ade80', borderRadius: 1, mt: 1 }} />
+                </>
               )}
 
               {(hasRealPrice || hasRealSize) && (
