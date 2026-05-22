@@ -400,9 +400,9 @@ export default function OrderTracker({ token, onBack }) {
       {/* Header */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 5,
         bgcolor: 'rgba(12,20,16,0.92)', backdropFilter: 'blur(10px)',
-        borderBottom: `1px solid ${B.border}`, px: 3, py: 1.5,
+        borderBottom: `1px solid ${B.border}`, px: { xs: 1.5, md: 3 }, py: 1.5,
       }}>
-        <Stack direction="row" alignItems="center" gap={2}>
+        <Stack direction="row" alignItems="center" gap={{ xs: 1, md: 2 }} flexWrap="wrap">
           <IconButton onClick={onBack} sx={{ color: B.muted, '&:hover': { color: B.white } }}>
             <ArrowBackIcon />
           </IconButton>
@@ -421,7 +421,7 @@ export default function OrderTracker({ token, onBack }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             inputRef={searchInputRef}
-            sx={{ ...darkInput, width: 320 }}
+            sx={{ ...darkInput, width: { xs: '100%', sm: 220, md: 320 }, order: { xs: 5, md: 0 }, flex: { xs: '1 1 100%', sm: 'unset' } }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -436,8 +436,10 @@ export default function OrderTracker({ token, onBack }) {
             onClick={handleCreate}
             disabled={creating}
             sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none',
-              px: 2, '&:hover': { bgcolor: '#3bd070' } }}>
-            New project
+              px: { xs: 1.5, md: 2 }, minWidth: 0,
+              '&:hover': { bgcolor: '#3bd070' },
+              '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.7 } } }}>
+            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>New project</Box>
           </Button>
 
           <Tooltip title="Clients overview">
@@ -480,7 +482,7 @@ export default function OrderTracker({ token, onBack }) {
         </Stack>
 
         {/* Stat strip */}
-        <Stack direction="row" gap={4} sx={{ mt: 1.5, pl: 6 }}>
+        <Stack direction="row" gap={{ xs: 2.5, md: 4 }} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', rowGap: 1 }}>
           <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} accent={B.green} />
           <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)} />
           <Stat label="Open orders"           value={String(stats.openOrders || 0)} />
@@ -489,7 +491,7 @@ export default function OrderTracker({ token, onBack }) {
         </Stack>
 
         {/* Status filter chips + sort */}
-        <Stack direction="row" gap={0.75} sx={{ mt: 1.5, pl: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Stack direction="row" gap={0.75} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', alignItems: 'center' }}>
           {STATUS_FILTERS.map(f => {
             const active = f.value === statusFilter;
             const count = f.value === 'active'
@@ -579,8 +581,8 @@ export default function OrderTracker({ token, onBack }) {
         ) : (
           <Box sx={{
             display: 'grid',
-            gap: 2,
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: { xs: 1.2, md: 2 },
+            gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(160px, 1fr))', sm: 'repeat(auto-fill, minmax(220px, 1fr))', md: 'repeat(auto-fill, minmax(280px, 1fr))' },
           }}>
             {filtered.map(p => (
               <ProjectCard key={p._id} project={p}
@@ -1036,7 +1038,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
       </Box>
 
       {/* Fields */}
-      <Box sx={{ p: 2.5, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+      <Box sx={{ p: { xs: 1.5, md: 2.5 }, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         <InlineField label="Company"      value={local.companyName} savingHint={savingField === 'companyName'}
           onChange={v => updateLocal({ companyName: v })} onBlur={v => saveField('companyName', v)} />
         <InlineField label="Client name"  value={local.clientName} savingHint={savingField === 'clientName'}
@@ -1587,7 +1589,12 @@ function QuoteEditor({ lines, onChange, onCommit, saving }) {
             return (
               <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.2, bgcolor: 'rgba(255,255,255,0.02)' }}>
                 {/* Row 1: garment basics */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '54px 90px 1fr 100px 30px', gap: 0.6, alignItems: 'end' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '50px 1fr 30px', sm: '54px 90px 1fr 100px 30px' }, gridAutoRows: 'auto', gap: 0.6, alignItems: 'end',
+                  '& > *:nth-of-type(2)': { gridColumn: { xs: '2 / 3', sm: 'auto' } },
+                  '& > *:nth-of-type(3)': { gridColumn: { xs: '1 / 3', sm: 'auto' }, mt: { xs: 0.4, sm: 0 } },
+                  '& > *:nth-of-type(4)': { gridColumn: { xs: '1 / 3', sm: 'auto' }, mt: { xs: 0.4, sm: 0 } },
+                  '& > *:nth-of-type(5)': { gridColumn: { xs: '3 / 4', sm: 'auto' }, gridRow: { xs: '1', sm: 'auto' } },
+                }}>
                   <QField label="Qty">
                     <TextField size="small" type="number" value={line.qty || ''}
                       onChange={e => update(i, { qty: e.target.value })}
@@ -1616,7 +1623,7 @@ function QuoteEditor({ lines, onChange, onCommit, saving }) {
 
                 {/* Row 2: blank cost */}
                 <QSubhead>Garment</QSubhead>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 0.6, alignItems: 'end' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 80px', sm: '1fr 90px' }, gap: 0.6, alignItems: 'end' }}>
                   <QField label="Supplier">
                     <TextField size="small" value={line.supplier || ''} placeholder="S&S Activewear"
                       onChange={e => update(i, { supplier: e.target.value })}
@@ -1631,7 +1638,10 @@ function QuoteEditor({ lines, onChange, onCommit, saving }) {
 
                 {/* Row 3: print */}
                 <QSubhead>Print</QSubhead>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px', gap: 0.6, alignItems: 'end' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '110px 1fr', sm: '110px 1fr 90px' }, gap: 0.6, alignItems: 'end',
+                  '& > *:nth-of-type(2)': { gridColumn: { xs: '2 / 3', sm: 'auto' } },
+                  '& > *:nth-of-type(3)': { gridColumn: { xs: '1 / 3', sm: 'auto' }, mt: { xs: 0.4, sm: 0 } },
+                }}>
                   <QField label="Type">
                     <FormControl size="small" fullWidth>
                       <Select value={line.printType || ''}
@@ -1663,7 +1673,10 @@ function QuoteEditor({ lines, onChange, onCommit, saving }) {
 
                 {/* Row 4: pricing */}
                 <QSubhead>Pricing</QSubhead>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '70px 100px 1fr', gap: 0.6, alignItems: 'end' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '60px 1fr', sm: '70px 100px 1fr' }, gap: 0.6, alignItems: 'end',
+                  '& > *:nth-of-type(2)': { gridColumn: { xs: '2 / 3', sm: 'auto' } },
+                  '& > *:nth-of-type(3)': { gridColumn: { xs: '1 / 3', sm: 'auto' }, mt: { xs: 0.4, sm: 0 } },
+                }}>
                   <QField label="Markup">
                     <TextField size="small" type="number" value={line.markup || ''}
                       onChange={e => update(i, { markup: e.target.value })}
@@ -1815,7 +1828,7 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
         ) : (
           <>
             {/* Overall margin */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 1, mb: 2.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(auto-fit, minmax(140px, 1fr))' }, gap: 1, mb: 2.5 }}>
               <HealthStat label="Lifetime revenue" value={fmt(overall.revenue)} accent={B.green} />
               <HealthStat label="Lifetime COGS"    value={fmt(overall.cogs)} />
               <HealthStat label="Profit"           value={fmt(overall.margin)} accent={overall.margin > 0 ? B.green : '#f87171'} />
@@ -1956,10 +1969,14 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
                   onClick={() => onPickClient(name)}
                   sx={{
                     display: 'grid',
-                    gridTemplateColumns: '44px 1fr 80px 110px 110px 90px',
+                    gridTemplateColumns: { xs: '44px 1fr', sm: '44px 1fr 80px 110px 110px 90px' },
                     alignItems: 'center', gap: 1.2, px: 1, py: 1,
                     borderBottom: `1px solid ${B.faint}`, cursor: 'pointer',
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                    '& > *:nth-of-type(3)': { display: { xs: 'none', sm: 'block' } },
+                    '& > *:nth-of-type(4)': { display: { xs: 'none', sm: 'block' } },
+                    '& > *:nth-of-type(5)': { display: { xs: 'none', sm: 'block' } },
+                    '& > *:nth-of-type(6)': { display: { xs: 'none', sm: 'block' } },
                   }}>
                   <Box sx={{
                     width: 36, height: 36, p: 0.4, borderRadius: 1,
@@ -1983,6 +2000,12 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
                     {c.clientName && c.companyName && c.clientName !== c.companyName && (
                       <Typography sx={{ color: B.muted, fontSize: 11 }}>{c.clientName}</Typography>
                     )}
+                    {/* Mobile-only compact stats line */}
+                    <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 1.2, mt: 0.3, fontSize: 10, fontFamily: 'monospace' }}>
+                      <Box sx={{ color: B.muted }}>{c.projectCount} proj</Box>
+                      <Box sx={{ color: B.green }}>{fmt(c.deliveredRevenue)}</Box>
+                      {c.unpaidValue > 0 && <Box sx={{ color: '#fbbf24' }}>{fmt(c.unpaidValue)} unpaid</Box>}
+                    </Box>
                   </Box>
                   <Box sx={{ textAlign: 'center' }}>
                     <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
