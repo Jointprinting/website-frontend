@@ -225,8 +225,7 @@ export default function Products() {
 
   const [products,   setProducts]   = useState([]);
   const [totalPages, setTotalPages] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
-  const [loading,    setLoading]    = useState(true);
+const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [fetchKey,   setFetchKey]   = useState(0);
 
@@ -293,7 +292,6 @@ export default function Products() {
         const prods = d.products || [];
         setProducts(prods);
         setTotalPages(d.totalPages || 0);
-        setTotalItems(d.total || 0);
 
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
