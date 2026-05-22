@@ -192,7 +192,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                value={shipToState} label="Ship-to state / province *" variant="outlined" fullWidth size="small"
+                value={shipToState} label="Ship-to state *" variant="outlined" fullWidth size="small"
                 onChange={(e) => setShipToState(e.target.value)} disabled={submitting || success}
               />
             </Grid>
