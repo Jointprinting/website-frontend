@@ -36,6 +36,7 @@ import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import QuoteBuilder from './QuoteBuilder';
 import config from '../../config.json';
+import jpLogoWhite from '../../modules/images/logo_white.webp';
 
 const base = `${config.backendUrl}/api`;
 // Primary filters: the ones you actually act on. Delivered / Cancelled stay
@@ -60,7 +61,6 @@ export default function OrderTracker({ token, onBack }) {
   const [projects,      setProjects]      = useState([]);
   const [mockups,       setMockups]       = useState([]);
   const [logos,         setLogos]         = useState([]);
-  const [brandLogo,     setBrandLogo]     = useState('');
   const [stats,         setStats]         = useState({});
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
@@ -94,18 +94,16 @@ export default function OrderTracker({ token, onBack }) {
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const [pr, mk, ds, lg, bl] = await Promise.all([
+      const [pr, mk, ds, lg] = await Promise.all([
         axios.get(`${base}/orders/projects`, authHdr),
         axios.get(`${base}/studio/library/mockups`, authHdr),
         axios.get(`${base}/orders/dashboard`, authHdr),
         axios.get(`${base}/client-logos`, authHdr).catch(() => ({ data: { logos: [] } })),
-        axios.get(`${base}/site-settings/brandLogo`).catch(() => ({ data: { value: { dataUrl: '' } } })),
       ]);
       setProjects(pr.data.projects || []);
       setMockups(mk.data.items || []);
       setStats(ds.data || {});
       setLogos(lg.data.logos || []);
-      setBrandLogo((bl.data && bl.data.value && bl.data.value.dataUrl) || '');
     } catch (e) {
       console.error(e);
     } finally {
@@ -294,35 +292,6 @@ export default function OrderTracker({ token, onBack }) {
       setActiveProject(r.data);
     } catch (e) {
       alert(`Duplicate failed: ${e.message}`);
-    }
-  };
-
-  const uploadBrandLogo = (file) => {
-    if (!file) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          await axios.put(`${base}/site-settings/brandLogo`,
-            { value: { dataUrl: reader.result } }, authHdr);
-          setBrandLogo(reader.result);
-          resolve();
-        } catch (e) {
-          alert(`Brand logo upload failed: ${e.response?.data?.message || e.message}`);
-          reject(e);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-  const clearBrandLogo = async () => {
-    if (!window.confirm('Remove your brand logo from approval pages?')) return;
-    try {
-      await axios.put(`${base}/site-settings/brandLogo`, { value: { dataUrl: '' } }, authHdr);
-      setBrandLogo('');
-    } catch (e) {
-      alert(`Couldn't remove: ${e.message}`);
     }
   };
 
@@ -561,7 +530,8 @@ export default function OrderTracker({ token, onBack }) {
             </span>
           </Tooltip>
 
-          <BrandLogoSlot logo={brandLogo} onUpload={uploadBrandLogo} onClear={clearBrandLogo} />
+          <Box component="img" src={jpLogoWhite} alt="Joint Printing"
+            sx={{ height: 22, width: 'auto', ml: 0.5, opacity: 0.92 }} />
         </Stack>
 
         {/* Stat strip */}
@@ -717,7 +687,6 @@ export default function OrderTracker({ token, onBack }) {
         mockupMap={mockupMap}
         mockups={mockups}
         logo={confirmation ? logoFor(confirmation) : null}
-        brandLogo={brandLogo}
         onClose={() => setConfirmation(null)}
         onSave={async (patch) => {
           if (!confirmation) return;
@@ -2205,62 +2174,6 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── BrandLogoSlot ────────────────────────────────────────────────────────────
-// Small upload well in the Order Tracker header for the Joint Printing brand
-// logo (stored in SiteSetting 'brandLogo'). Rendered on approval page +
-// confirmation dialog so every client-facing surface stays on-brand.
-function BrandLogoSlot({ logo, onUpload, onClear }) {
-  const inputRef = React.useRef(null);
-  const [busy, setBusy] = React.useState(false);
-  const trigger = () => inputRef.current?.click();
-  const onChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    try { await onUpload(file); } finally { setBusy(false); e.target.value = ''; }
-  };
-  return (
-    <Box sx={{ position: 'relative', ml: 0.5 }}>
-      <input ref={inputRef} type="file" accept="image/*" hidden onChange={onChange} />
-      {logo ? (
-        <Tooltip title="Brand logo — click to replace, × to clear">
-          <Box onClick={trigger} sx={{
-            width: 28, height: 28, p: 0.3, borderRadius: 0.8, cursor: 'pointer',
-            bgcolor: '#fff', border: `1px solid ${B.faint}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-            position: 'relative',
-            '&:hover .brand-x': { opacity: 1 },
-          }}>
-            <Box component="img" src={logo} alt=""
-              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            <IconButton className="brand-x" size="small"
-              onClick={(e) => { e.stopPropagation(); onClear(); }}
-              sx={{
-                position: 'absolute', top: -7, right: -7, p: 0.15, opacity: 0,
-                bgcolor: B.bg, color: '#f87171', border: `1px solid ${B.border}`,
-                transition: 'opacity 0.12s',
-                '&:hover': { bgcolor: B.bg, color: '#f87171' },
-              }}>
-              <CloseIcon sx={{ fontSize: 10 }} />
-            </IconButton>
-          </Box>
-        </Tooltip>
-      ) : (
-        <Tooltip title="Upload your brand logo (shown on approval / confirmation)">
-          <Box onClick={trigger} sx={{
-            width: 28, height: 28, borderRadius: 0.8, cursor: 'pointer',
-            border: `1px dashed ${B.border}`, opacity: 0.45,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: B.muted, '&:hover': { opacity: 1, borderColor: B.green, color: B.green },
-          }}>
-            {busy ? <CircularProgress size={12} sx={{ color: B.green }} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
-          </Box>
-        </Tooltip>
-      )}
-    </Box>
   );
 }
 

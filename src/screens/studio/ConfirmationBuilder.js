@@ -19,6 +19,10 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DesignServicesIcon     from '@mui/icons-material/DesignServices';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import { B, scrollbar, darkInput, fmt } from './_shared';
+import jpLogoColored from '../../modules/images/logo_colored.webp';
+
+// Absolute URL so the logo also resolves inside the about:blank print popup.
+const BRAND_LOGO = `${window.location.origin}${jpLogoColored}`;
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
@@ -35,7 +39,7 @@ function emptyItem() {
   };
 }
 
-export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, brandLogo, onClose, onSave }) {
+export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, onClose, onSave }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -135,7 +139,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           {saving ? <CircularProgress size={12} sx={{ color: B.green }} /> : (dirty ? 'Save *' : 'Save')}
         </Button>
         <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 16 }} />}
-          onClick={() => printConfirmation('confirmation-preview', project, brandLogo)}
+          onClick={() => printConfirmation('confirmation-preview', project)}
           sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700,
             bgcolor: B.green, color: B.greenDk, px: 1.5,
             '&:hover': { bgcolor: '#3bd070' } }}>
@@ -167,7 +171,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           <Box sx={{ p: { xs: 1.5, md: 3 }, bgcolor: '#e6e6df', overflow: 'auto', ...scrollbar,
             maxHeight: { md: '85vh' } }}>
             <Preview conf={local} project={project} mockupMap={mockupMap}
-              clientLogo={logo} brandLogo={brandLogo} totals={totals} />
+              clientLogo={logo} totals={totals} />
           </Box>
         </Box>
       </DialogContent>
@@ -569,7 +573,7 @@ function SmallField({ label, value, onChange, type = 'text' }) {
 // left and a Size/Qty/Unit/Total table on the right with Brand / Style /
 // Garment Color / Printer / Print Type labeled below the totals.
 
-function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
+function Preview({ conf, project, mockupMap, clientLogo, totals }) {
   return (
     <Box id="confirmation-preview" sx={{
       bgcolor: '#fff', color: '#111', borderRadius: 1, p: { xs: 2, md: 4 },
@@ -578,14 +582,8 @@ function Preview({ conf, project, mockupMap, clientLogo, brandLogo, totals }) {
     }}>
       {/* Header band — brand logo + title together (Excel style) */}
       <Stack direction="row" alignItems="center" gap={2} mb={2}>
-        {brandLogo ? (
-          <Box component="img" src={brandLogo} alt="Joint Printing"
-            sx={{ width: 64, height: 64, objectFit: 'contain' }} />
-        ) : (
-          <Box sx={{ width: 64, height: 64, bgcolor: '#1a3d2b', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 900, fontSize: 22, borderRadius: 1 }}>JP</Box>
-        )}
+        <Box component="img" src={BRAND_LOGO} alt="Joint Printing"
+          sx={{ height: 56, width: 'auto', objectFit: 'contain' }} />
         <Typography sx={{ fontWeight: 900, fontSize: 26, lineHeight: 1.1, color: '#111', flex: 1 }}>
           {conf.orderTitle || `${project.companyName || 'Untitled'} Merch`}
         </Typography>
@@ -815,7 +813,7 @@ function computeTotals(conf) {
   return { itemsSubtotal, lines, grandTotal: running };
 }
 
-function printConfirmation(elementId, project, brandLogo) {
+function printConfirmation(elementId, project) {
   const el = document.getElementById(elementId);
   if (!el) return window.print();
   const w = window.open('', '_blank', 'width=900,height=1200');
