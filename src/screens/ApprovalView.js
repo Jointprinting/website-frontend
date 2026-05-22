@@ -13,6 +13,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import axios from 'axios';
 import config from '../config.json';
+import jpLogoColored from '../modules/images/logo_colored.webp';
 
 const COLORS = {
   bg:     '#f6f6f4',
@@ -34,7 +35,6 @@ export default function ApprovalView() {
   const token = params.get('token');
 
   const [data, setData]   = useState(null);
-  const [brandLogo, setBrandLogo] = useState('');
   const [err, setErr]     = useState('');
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
@@ -47,13 +47,10 @@ export default function ApprovalView() {
     async function load() {
       if (!token) { setErr('This link is missing a token.'); setLoading(false); return; }
       try {
-        const [r, bl] = await Promise.all([
-          axios.get(`${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`),
-          axios.get(`${config.backendUrl}/api/site-settings/brandLogo`).catch(() => ({ data: { value: { dataUrl: '' } } })),
-        ]);
+        const r = await axios.get(
+          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
         if (cancelled) return;
         setData(r.data);
-        setBrandLogo((bl.data && bl.data.value && bl.data.value.dataUrl) || '');
       } catch (e) {
         if (cancelled) return;
         setErr(e.response?.data?.message || 'This link is invalid or expired.');
@@ -152,14 +149,8 @@ export default function ApprovalView() {
               </Box>
             )}
             <Box>
-              {brandLogo ? (
-                <Box component="img" src={brandLogo} alt="Joint Printing"
-                  sx={{ maxHeight: 56, maxWidth: 260, display: 'block', mb: 0.5 }} />
-              ) : (
-                <Typography sx={{ fontWeight: 800, fontSize: 22, lineHeight: 1, color: COLORS.text }}>
-                  JOINT PRINTING
-                </Typography>
-              )}
+              <Box component="img" src={jpLogoColored} alt="Joint Printing"
+                sx={{ maxHeight: 56, maxWidth: 260, display: 'block', mb: 0.5 }} />
               <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
                 Project #{p.projectNumber || '—'}
                 {p.orderNumber ? ` · Invoice #${p.orderNumber}` : ''}
