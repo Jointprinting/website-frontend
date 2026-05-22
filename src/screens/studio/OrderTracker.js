@@ -7,7 +7,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
-  Dialog, DialogContent,
+  Dialog, DialogContent, DialogActions,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
 import AddIcon             from '@mui/icons-material/Add';
@@ -18,6 +18,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
+import AutoFixHighIcon    from '@mui/icons-material/AutoFixHigh';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -77,6 +78,10 @@ export default function OrderTracker({ token, onBack }) {
   const [cleanupOpen,    setCleanupOpen]    = useState(false);
   const [cleanupData,    setCleanupData]    = useState(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [autoLinkOpen,     setAutoLinkOpen]     = useState(false);
+  const [autoLinkData,     setAutoLinkData]     = useState(null);
+  const [autoLinkLoading,  setAutoLinkLoading]  = useState(false);
+  const [autoLinkApplying, setAutoLinkApplying] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -381,6 +386,35 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
+  const handleOpenAutoLink = async () => {
+    setAutoLinkOpen(true);
+    setAutoLinkLoading(true);
+    setAutoLinkData(null);
+    try {
+      const r = await axios.post(`${base}/orders/mockups/auto-link`, { commit: false }, authHdr);
+      setAutoLinkData(r.data);
+    } catch (e) {
+      alert(`Couldn't scan the library: ${e.response?.data?.message || e.message}`);
+      setAutoLinkOpen(false);
+    } finally {
+      setAutoLinkLoading(false);
+    }
+  };
+  const handleApplyAutoLink = async () => {
+    setAutoLinkApplying(true);
+    try {
+      const r = await axios.post(`${base}/orders/mockups/auto-link`, { commit: true }, authHdr);
+      await loadProjects();
+      setAutoLinkOpen(false);
+      const s = r.data.summary;
+      alert(`Linked ${s.mockupsLinked} mockup${s.mockupsLinked === 1 ? '' : 's'} across ${s.projectsAffected} project${s.projectsAffected === 1 ? '' : 's'}.`);
+    } catch (e) {
+      alert(`Apply failed: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setAutoLinkApplying(false);
+    }
+  };
+
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -465,6 +499,15 @@ export default function OrderTracker({ token, onBack }) {
               <IconButton onClick={handleOpenHealth} size="small"
                 sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
                 <FactCheckOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          <Tooltip title="Auto-link library mockups">
+            <span>
+              <IconButton onClick={handleOpenAutoLink} size="small"
+                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
+                <AutoFixHighIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </span>
           </Tooltip>
@@ -639,6 +682,15 @@ export default function OrderTracker({ token, onBack }) {
           const p = projects.find(x => x.projectNumber === projectNumber);
           if (p) { setHealthOpen(false); setActiveProject(p); }
         }}
+      />
+
+      <AutoLinkDialog
+        open={autoLinkOpen}
+        data={autoLinkData}
+        loading={autoLinkLoading}
+        applying={autoLinkApplying}
+        onClose={() => setAutoLinkOpen(false)}
+        onApply={handleApplyAutoLink}
       />
 
       <AnalyticsDialog
@@ -1547,6 +1599,128 @@ function HealthStat({ label, value, accent }) {
         {value}
       </Typography>
     </Box>
+  );
+}
+
+// ── AutoLinkDialog ───────────────────────────────────────────────────────────
+// Preview + apply for the auto-link scan. Shows which orphan jpstudio mockups
+// can be attached to a project (by batch number or company name) before the
+// user commits the bulk update. Nothing changes until Apply is pressed.
+function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
+  const summary   = data && data.summary;
+  const links     = (data && data.links) || [];
+  const ambiguous = (data && data.ambiguous) || [];
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <AutoFixHighIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Auto-link library mockups
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {loading ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <CircularProgress size={24} sx={{ color: B.green }} />
+          </Box>
+        ) : !data || !summary ? (
+          <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
+        ) : (
+          <>
+            <Typography sx={{ color: B.muted, fontSize: 11, mb: 1.5 }}>
+              Scans every saved jpstudio mockup and matches it to a project by batch
+              number (#000061A–D all belong to one project) or by the company name in
+              its title. Nothing changes until you press Apply.
+            </Typography>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
+              <HealthStat label="Library"        value={summary.libraryMockups} />
+              <HealthStat label="Already linked" value={summary.alreadyLinked} />
+              <HealthStat label="To link"        value={summary.proposed}  accent={summary.proposed  > 0 ? B.green : undefined} />
+              <HealthStat label="Ambiguous"      value={summary.ambiguous} accent={summary.ambiguous > 0 ? '#fbbf24' : undefined} />
+              <HealthStat label="Unmatched"      value={summary.unmatched} accent={summary.unmatched > 0 ? '#60a5fa' : undefined} />
+            </Box>
+
+            {links.length > 0 && (
+              <>
+                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+                  Will link {summary.proposed} mockup{summary.proposed === 1 ? '' : 's'} → {summary.projectsAffected} project{summary.projectsAffected === 1 ? '' : 's'}
+                </Typography>
+                <Box sx={{ maxHeight: 300, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`,
+                  borderRadius: 1, mb: ambiguous.length ? 2 : 0 }}>
+                  {links.map((l, i) => (
+                    <Box key={i} sx={{ px: 1.5, py: 0.8, display: 'flex', alignItems: 'center', gap: 1.5,
+                      fontSize: 12, borderBottom: `1px solid ${B.faint}` }}>
+                      <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                        {l.mockupNum || '—'}
+                      </Typography>
+                      <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {l.itemName || 'Untitled'}
+                      </Typography>
+                      <Typography sx={{ color: B.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'right' }}>
+                        #{l.projectNumber} · {l.projectCompany || '—'}
+                      </Typography>
+                      <Box sx={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
+                        color: l.via === 'base' ? B.green : '#60a5fa',
+                        border: `1px solid ${l.via === 'base' ? B.green : '#60a5fa'}`,
+                        borderRadius: 0.5, px: 0.5, py: 0.1, whiteSpace: 'nowrap' }}>
+                        {l.via === 'base' ? 'batch #' : 'name'}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            )}
+
+            {ambiguous.length > 0 && (
+              <>
+                <Typography sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+                  {ambiguous.length} ambiguous — link these by hand
+                </Typography>
+                <Box sx={{ maxHeight: 160, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`, borderRadius: 1 }}>
+                  {ambiguous.map((a, i) => (
+                    <Box key={i} sx={{ px: 1.5, py: 0.8, fontSize: 12, borderBottom: `1px solid ${B.faint}` }}>
+                      <Stack direction="row" alignItems="center" gap={1.5}>
+                        <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                          {a.mockupNum || '—'}
+                        </Typography>
+                        <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.itemName || 'Untitled'}
+                        </Typography>
+                      </Stack>
+                      <Typography sx={{ color: B.muted, fontSize: 10, mt: 0.3 }}>
+                        Matches: {(a.candidates || []).map(c => `#${c.projectNumber} ${c.companyName}`).join(' · ')}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            )}
+
+            {links.length === 0 && ambiguous.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 4, color: B.muted, fontSize: 12 }}>
+                Nothing to link — every library mockup is already attached. ✓
+              </Box>
+            )}
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 2.5, pb: 2 }}>
+        <Button onClick={onClose} sx={{ color: B.muted }} disabled={applying}>Close</Button>
+        <Button onClick={onApply} variant="contained"
+          disabled={applying || loading || !summary || summary.proposed === 0}
+          sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>
+          {applying ? <CircularProgress size={16} sx={{ color: B.greenDk }} />
+            : `Apply${summary && summary.proposed ? ` · ${summary.proposed}` : ''}`}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
