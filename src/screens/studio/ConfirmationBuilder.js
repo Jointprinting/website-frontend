@@ -14,10 +14,13 @@ import {
 } from '@mui/material';
 import CloseIcon              from '@mui/icons-material/Close';
 import PrintIcon              from '@mui/icons-material/Print';
+import PictureAsPdfIcon       from '@mui/icons-material/PictureAsPdf';
 import AddCircleOutlineIcon   from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DesignServicesIcon     from '@mui/icons-material/DesignServices';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
+import axios from 'axios';
+import config from '../../config.json';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 import jpLogoColored from '../../modules/images/logo_colored.webp';
 
@@ -39,10 +42,11 @@ function emptyItem() {
   };
 }
 
-export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, onClose, onSave }) {
+export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
 
   // Load the draft on open. Order of precedence:
@@ -110,6 +114,29 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     }
   };
 
+  // Server-rendered PDF. Saves first so the backend renders the latest state.
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      if (dirty) await persist();
+      const r = await axios.post(
+        `${config.backendUrl}/api/orders/${project._id}/confirmation/pdf`, {},
+        { headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `confirmation-project-${project.projectNumber || project._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      alert(`PDF generation failed: ${e.response?.data?.message || e.message}.\nThe Print button still works.`);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const totals = computeTotals(local);
 
   return (
@@ -140,10 +167,19 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         </Button>
         <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 16 }} />}
           onClick={() => printConfirmation('confirmation-preview', project)}
+          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.muted,
+            '&:hover': { color: B.white } }}>
+          Print
+        </Button>
+        <Button size="small" disabled={pdfBusy}
+          startIcon={pdfBusy
+            ? <CircularProgress size={12} sx={{ color: B.greenDk }} />
+            : <PictureAsPdfIcon sx={{ fontSize: 16 }} />}
+          onClick={downloadPdf}
           sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700,
             bgcolor: B.green, color: B.greenDk, px: 1.5,
             '&:hover': { bgcolor: '#3bd070' } }}>
-          Print / Save PDF
+          Download PDF
         </Button>
         <IconButton size="small" onClick={() => {
           if (dirty && !window.confirm('You have unsaved changes in this confirmation. Close anyway?')) return;
