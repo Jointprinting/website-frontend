@@ -475,6 +475,7 @@ function Product() {
               )}
             </Stack>
           </Stack>
+                  </>
         )}
       </Container>
 
