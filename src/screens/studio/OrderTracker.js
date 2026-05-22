@@ -732,6 +732,19 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
           />
         </Box>
         <Box sx={{ gridColumn: '1 / -1' }}>
+          <QuoteEditor
+            lines={local.quoteLines || []}
+            saving={savingField === 'quoteLines'}
+            onChange={lines => updateLocal({ quoteLines: lines })}
+            onCommit={async (lines) => {
+              updateLocal({ quoteLines: lines });
+              setSavingField('quoteLines');
+              await onSave(project._id, { quoteLines: lines });
+              setSavingField('');
+            }}
+          />
+        </Box>
+        <Box sx={{ gridColumn: '1 / -1' }}>
           <InlineField label="Notes" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
             onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
         </Box>
@@ -945,8 +958,27 @@ function ConfirmationDialog({ open, project, mockupMap, onClose }) {
   if (!project) return null;
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
   const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
+
+  // Prefer the structured quote if present; fall back to simple items.
+  const quoteLines = project.quoteLines || [];
   const items = project.items || [];
-  const subtotal = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
+  const itemRows = quoteLines.length > 0
+    ? quoteLines.map(l => {
+        const blank = Number(l.blankCost) || 0;
+        const print = Number(l.printCost) || 0;
+        const m     = Number(l.markup)    || 1;
+        const derivedUnit = +((blank + print) * m).toFixed(2);
+        const unit = Number(l.unitPrice) || derivedUnit;
+        const desc = [l.styleCode, l.description, l.color, l.printType && `(${l.printType}${l.printDetails ? ' · ' + l.printDetails : ''})`]
+          .filter(Boolean).join(' · ');
+        return { qty: l.qty, description: desc, unitPrice: unit, lineTotal: (Number(l.qty) || 0) * unit };
+      })
+    : items.map(i => ({
+        qty: i.qty, description: i.description,
+        unitPrice: i.unitPrice,
+        lineTotal: (Number(i.qty) || 0) * (Number(i.unitPrice) || 0),
+      }));
+  const subtotal = itemRows.reduce((s, r) => s + (Number(r.lineTotal) || 0), 0);
   const total = Number(project.totalValue) || subtotal;
 
   const handlePrint = () => {
@@ -1057,25 +1089,22 @@ function ConfirmationDialog({ open, project, mockupMap, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {items.length === 0 ? (
+                {itemRows.length === 0 ? (
                   <tr><td colSpan={4} style={{ padding: '14px 8px', color: '#999', fontStyle: 'italic' }}>
                     No line items
                   </td></tr>
-                ) : items.map((it, i) => {
-                  const line = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
-                  return (
-                    <tr key={i}>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.qty || ''}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.description || ''}</td>
-                      <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                        {it.unitPrice ? fmt(it.unitPrice) : ''}
-                      </td>
-                      <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                        {line ? fmt(line) : ''}
-                      </td>
-                    </tr>
-                  );
-                })}
+                ) : itemRows.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.qty || ''}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.description || ''}</td>
+                    <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      {r.unitPrice ? fmt(r.unitPrice) : ''}
+                    </td>
+                    <td className="r" style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      {r.lineTotal ? fmt(r.lineTotal) : ''}
+                    </td>
+                  </tr>
+                ))}
                 <tr className="total-row">
                   <td colSpan={3} className="r" style={{ padding: 10, textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 15 }}>Total</td>
                   <td className="r" style={{ padding: 10, textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 15 }}>
@@ -1227,5 +1256,231 @@ function HealthStat({ label, value, accent }) {
         {value}
       </Typography>
     </Box>
+  );
+}
+
+// ── QuoteEditor ──────────────────────────────────────────────────────────────
+// Full cost-breakdown quoter (blank + print + markup → unit price → line total).
+// Each line is a small card; quote total flows back to Order.totalValue server-side.
+function QuoteEditor({ lines, onChange, onCommit, saving }) {
+  const list = lines || [];
+  const total = list.reduce((s, l) => {
+    const unit = Number(l.unitPrice) || ((Number(l.blankCost) || 0) + (Number(l.printCost) || 0)) * (Number(l.markup) || 1);
+    return s + (Number(l.qty) || 0) * unit;
+  }, 0);
+
+  const noSpinner = {
+    '& input[type=number]': { MozAppearance: 'textfield' },
+    '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+    '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  };
+  const tfStyle = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } };
+
+  const update = (i, patch) => {
+    const next = list.map((x, idx) => {
+      if (idx !== i) return x;
+      const merged = { ...x, ...patch };
+      // Auto-recompute unitPrice if blank/print/markup change and the user
+      // hasn't manually overridden (we detect by whether unitPrice was empty
+      // OR matches the previously-derived value).
+      if (patch.unitPrice === undefined &&
+          (patch.blankCost !== undefined || patch.printCost !== undefined || patch.markup !== undefined)) {
+        const blank = Number(merged.blankCost) || 0;
+        const print = Number(merged.printCost) || 0;
+        const m     = Number(merged.markup)    || 1;
+        merged.unitPrice = +((blank + print) * m).toFixed(2);
+      }
+      return merged;
+    });
+    onChange(next);
+  };
+  const remove = (i) => {
+    const next = list.filter((_, idx) => idx !== i);
+    onChange(next);
+    onCommit(next);
+  };
+  const add = () => {
+    const next = [...list, {
+      qty: 1, styleCode: '', description: '', color: '',
+      supplier: '', blankCost: 0,
+      printType: '', printDetails: '', printCost: 0,
+      markup: 2, unitPrice: 0,
+    }];
+    onChange(next);
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
+        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Quote {saving && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+          {list.length > 0 && (
+            <Typography component="span" sx={{ color: B.muted, fontSize: 10, ml: 0.6, textTransform: 'none', letterSpacing: 0 }}>
+              · {list.length} line{list.length === 1 ? '' : 's'} · {fmt(total)}
+            </Typography>
+          )}
+        </Typography>
+        <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+          onClick={add}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Add line
+        </Button>
+      </Stack>
+
+      {list.length === 0 ? (
+        <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
+          No quote yet. Add a line to start pricing this project.
+        </Box>
+      ) : (
+        <Stack gap={1.2}>
+          {list.map((line, i) => {
+            const blank = Number(line.blankCost) || 0;
+            const print = Number(line.printCost) || 0;
+            const m     = Number(line.markup)    || 1;
+            const derivedUnit = +((blank + print) * m).toFixed(2);
+            const unitPrice = Number(line.unitPrice) || derivedUnit;
+            const lineTotal = (Number(line.qty) || 0) * unitPrice;
+            const unitOverridden = Number(line.unitPrice) > 0 && Math.abs(Number(line.unitPrice) - derivedUnit) > 0.01;
+
+            return (
+              <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.2, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                {/* Row 1: garment basics */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: '54px 90px 1fr 100px 30px', gap: 0.6, alignItems: 'end' }}>
+                  <QField label="Qty">
+                    <TextField size="small" type="number" value={line.qty || ''}
+                      onChange={e => update(i, { qty: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <QField label="Style">
+                    <TextField size="small" value={line.styleCode || ''} placeholder="SS4500"
+                      onChange={e => update(i, { styleCode: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <QField label="Description">
+                    <TextField size="small" value={line.description || ''} placeholder="T-shirt"
+                      onChange={e => update(i, { description: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <QField label="Color">
+                    <TextField size="small" value={line.color || ''} placeholder="Black"
+                      onChange={e => update(i, { color: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <IconButton size="small" onClick={() => remove(i)}
+                    sx={{ color: B.muted, alignSelf: 'end', mb: 0.3, '&:hover': { color: '#f87171' } }}>
+                    <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+
+                {/* Row 2: blank cost */}
+                <QSubhead>Garment</QSubhead>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 0.6, alignItems: 'end' }}>
+                  <QField label="Supplier">
+                    <TextField size="small" value={line.supplier || ''} placeholder="S&S Activewear"
+                      onChange={e => update(i, { supplier: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <QField label="Blank $ ea">
+                    <TextField size="small" type="number" value={line.blankCost || ''}
+                      onChange={e => update(i, { blankCost: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                </Box>
+
+                {/* Row 3: print */}
+                <QSubhead>Print</QSubhead>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px', gap: 0.6, alignItems: 'end' }}>
+                  <QField label="Type">
+                    <FormControl size="small" fullWidth>
+                      <Select value={line.printType || ''}
+                        onChange={e => { update(i, { printType: e.target.value }); onCommit(list); }}
+                        displayEmpty
+                        sx={{ ...tfStyle['& .MuiInputBase-input'], color: B.white, fontSize: 12, '& .MuiSelect-icon': { color: B.muted } }}>
+                        <MenuItem value=""><em>—</em></MenuItem>
+                        <MenuItem value="Screen Print">Screen Print</MenuItem>
+                        <MenuItem value="DTG">DTG</MenuItem>
+                        <MenuItem value="DTF">DTF</MenuItem>
+                        <MenuItem value="Embroidery">Embroidery</MenuItem>
+                        <MenuItem value="Vinyl">Vinyl</MenuItem>
+                        <MenuItem value="Sublimation">Sublimation</MenuItem>
+                        <MenuItem value="None">None</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </QField>
+                  <QField label="Details">
+                    <TextField size="small" value={line.printDetails || ''} placeholder="1c front + 2c back"
+                      onChange={e => update(i, { printDetails: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <QField label="Print $ ea">
+                    <TextField size="small" type="number" value={line.printCost || ''}
+                      onChange={e => update(i, { printCost: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                </Box>
+
+                {/* Row 4: pricing */}
+                <QSubhead>Pricing</QSubhead>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '70px 100px 1fr', gap: 0.6, alignItems: 'end' }}>
+                  <QField label="Markup">
+                    <TextField size="small" type="number" value={line.markup || ''}
+                      onChange={e => update(i, { markup: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle}
+                      InputProps={{ endAdornment: <Typography sx={{ color: B.muted, fontSize: 11 }}>×</Typography> }} />
+                  </QField>
+                  <QField label={`Unit $${unitOverridden ? ' (override)' : ''}`}>
+                    <TextField size="small" type="number" value={line.unitPrice || ''} placeholder={String(derivedUnit)}
+                      onChange={e => update(i, { unitPrice: e.target.value })}
+                      onBlur={() => onCommit(list)} sx={tfStyle} />
+                  </QField>
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                      Line $
+                    </Typography>
+                    <Typography sx={{ color: B.green, fontSize: 16, fontWeight: 800, fontFamily: 'monospace', mt: 0.2 }}>
+                      {fmt(lineTotal)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            );
+          })}
+
+          {/* Total bar */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.4,
+            bgcolor: 'rgba(74,222,128,0.08)', border: `1px solid ${B.green}40`, borderRadius: 1, px: 1.4, py: 1 }}>
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, flex: 1 }}>
+              Quote total
+            </Typography>
+            <Typography sx={{ color: B.green, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>
+              {fmt(total)}
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+function QField({ label, children }) {
+  return (
+    <Box>
+      <Typography sx={{ color: B.muted, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.25 }}>
+        {label}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+function QSubhead({ children }) {
+  return (
+    <Typography sx={{
+      color: B.muted, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase',
+      mt: 1, mb: 0.4, opacity: 0.55,
+      borderBottom: `1px solid ${B.faint}`, pb: 0.3,
+    }}>
+      {children}
+    </Typography>
   );
 }
