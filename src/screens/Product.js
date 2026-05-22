@@ -160,10 +160,10 @@ function Product() {
       tag:       productTag,
       color:     sw?.name || productColor || '',
       colorHex:  sw?.hex  || productColorCode || '',
-      // Prefer the catalog-style marketing photo so tray thumbnails are
-      // visually consistent with cards added from the catalog grid.
-      // Falls back to the per-color front shot, then the legacy array.
-      thumbnail: productStyleImage || sw?.front || productFrontImages?.[productIndex] || productFrontImages?.[0] || '',
+      // ALWAYS reflect the selected color. The per-color front shot wins.
+      // styleImage is only a fallback when there is no swatch data (older
+      // Mongo-only products or styles where S&S hasn't populated colors).
+      thumbnail: sw?.front || productFrontImages?.[productIndex] || productStyleImage || productFrontImages?.[0] || '',
     };
   };
 
@@ -198,7 +198,7 @@ function Product() {
 
   if (error) {
     return (
-      <Box bgcolor="#f5f5f5" minHeight="100vh">
+      <Box bgcolor="#e8e9e3" minHeight="100vh">
         <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>
           <Stack spacing={3} alignItems="center" textAlign="center">
             <CheckroomIcon sx={{ fontSize: 64, color: 'rgba(0,0,0,0.2)' }} />
@@ -219,7 +219,7 @@ function Product() {
   }
 
   return (
-    <Box bgcolor="#f5f5f5" minHeight="100vh">
+    <Box bgcolor="#e8e9e3" minHeight="100vh">
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 7 }, px: { xs: 2, md: 4 } }}>
         {loading ? (
           <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="60vh" gap={2}>
