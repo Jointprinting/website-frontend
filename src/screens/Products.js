@@ -66,7 +66,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
       cursor: onNavigate ? 'pointer' : 'default',
     }}>
       <Box sx={{
-        position: 'relative', bgcolor: '#f7f7f7',
+        position: 'relative', bgcolor: '#f3f3ed',
         display: 'flex', justifyContent: 'center', alignItems: 'center',
         minHeight: { xs: 150, sm: 200 },
       }}>
@@ -201,6 +201,28 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
         )}
       </Stack>
 
+      <Box flexGrow={1} />
+
+      <Box sx={{ mt: 3, pt: 2.5, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <Stack spacing={1.25}>
+          {[
+            '1,000+ styles in stock',
+            'Free mockups in 24 hours',
+            'Quote with no commitment',
+          ].map((line) => (
+            <Stack key={line} direction="row" alignItems="center" spacing={1}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: GREEN, flexShrink: 0 }} />
+              <Typography sx={{ color: 'rgba(255,255,255,0.62)', fontSize: 11.5, lineHeight: 1.35 }}>{line}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+        <Typography sx={{
+          mt: 2.5, color: 'rgba(255,255,255,0.32)',
+          fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600,
+        }}>
+          Joint Printing · Merch Studio
+        </Typography>
+      </Box>
     </Stack>
   );
 }
@@ -327,11 +349,11 @@ const [loading,    setLoading]    = useState(true);
   };
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', minHeight: '100vh', bgcolor: '#e8e9e3' }}>
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
-          position: 'sticky', top: NAVBAR_H,
+          position: 'sticky', top: NAVBAR_H, height: `calc(100vh - ${NAVBAR_H}px)`,
           alignSelf: 'flex-start',
         }}>
           <Sidebar category={category} setCategory={setCategory}
@@ -396,6 +418,14 @@ const [loading,    setLoading]    = useState(true);
               {activeLabel}
             </Typography>
           </Stack>
+          <Typography sx={{
+            mt: 0.75, color: 'text.secondary',
+            fontSize: { xs: 13, sm: 14 }, maxWidth: 560,
+          }}>
+            {activeLabel === 'All Styles'
+              ? 'Premium blanks from the brands customers ask for — pick anything, we send a free mockup within 24 hours.'
+              : `Browse every ${activeLabel.toLowerCase().replace(/s$/, '')} we stock. Add to your tray, quote in 24 hours.`}
+          </Typography>
           {genderType && (
             <Chip label={genderLabel} size="small" onDelete={() => setGenderType('')}
               sx={{ mt: 0.75, fontSize: 11, height: 22 }} />
