@@ -114,7 +114,9 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
         }}>
           {item.name}
         </Typography>
-        <Rating value={item.rating || 4.5} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
+        {item.rating > 0 && (
+          <Rating value={item.rating} readOnly size="small" precision={0.5} sx={{ mt: 0.25 }} />
+        )}
         {price && (
           <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.5 }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 11 } }}>
@@ -198,14 +200,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
           navBtn(label, genderType === value, () => setGenderType(value))
         )}
       </Stack>
-      <Box flexGrow={1} />
-      <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.08)', pt: 2, mt: 3 }}>
-        <Typography sx={{
-          fontFamily: 'ui-monospace,"SF Mono",monospace',
-          fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.55)',
-          textTransform: 'uppercase', fontWeight: 700,
-        }}>JOINT PRINTING</Typography>
-      </Box>
+
     </Stack>
   );
 }
@@ -336,7 +331,7 @@ const [loading,    setLoading]    = useState(true);
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
-          position: 'sticky', top: NAVBAR_H, height: `calc(100vh - ${NAVBAR_H}px)`,
+          position: 'sticky', top: NAVBAR_H,
           alignSelf: 'flex-start',
         }}>
           <Sidebar category={category} setCategory={setCategory}
