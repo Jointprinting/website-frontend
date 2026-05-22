@@ -23,6 +23,7 @@ import PrintIcon           from '@mui/icons-material/Print';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import LinkIcon from '@mui/icons-material/Link';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -870,6 +871,40 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
         ))}
       </Box>
 
+      {/* Approval activity */}
+      {(local.approvalEvents || []).length > 0 && (
+        <Box sx={{ px: 2.5, pb: 2 }}>
+          <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            Approval activity · {local.approvalEvents.length}
+          </Typography>
+          <Stack gap={0.5}>
+            {[...local.approvalEvents].reverse().slice(0, 10).map((e, i) => {
+              const kindMeta = e.kind === 'approved'
+                ? { color: B.green,  label: 'Approved'        }
+                : e.kind === 'requested_changes'
+                ? { color: '#fbbf24', label: 'Requested changes' }
+                : { color: B.muted,  label: 'Viewed'          };
+              return (
+                <Box key={i} sx={{
+                  display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 1, alignItems: 'start',
+                  py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 11,
+                }}>
+                  <Box sx={{ color: kindMeta.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                    {kindMeta.label}
+                  </Box>
+                  <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                    {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
+                  </Box>
+                  <Box sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
+                    {fmtRelative(e.at)}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Stack>
+        </Box>
+      )}
+
       {/* Footer actions */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.bg, borderTop: `1px solid ${B.border}`,
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -880,6 +915,22 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           onClick={() => onOpenConfirmation()}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Confirmation page
+        </Button>
+        <Button startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
+          onClick={async () => {
+            try {
+              const r = await axios.post(`${base}/orders/${project._id}/approval-link`, {}, authHdr);
+              const url = `${window.location.origin}/approve/${project._id}?token=${r.data.token}`;
+              try {
+                await navigator.clipboard.writeText(url);
+                alert(`Approval link copied to clipboard:\n\n${url}\n\nSend it to your client.`);
+              } catch (_) {
+                window.prompt('Copy this approval link and send it to your client:', url);
+              }
+            } catch (e) { alert(`Couldn't generate link: ${e.message}`); }
+          }}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Share for approval
         </Button>
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}

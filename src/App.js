@@ -15,11 +15,13 @@ import Customize from './screens/Customize';
 import Studio from './screens/Studio';
 import Catalogs from './screens/Catalogs';
 import Demos from './screens/demos';
+import ApprovalView from './screens/ApprovalView';
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
-// marketing site chrome doesn't belong on it.
-const STUDIO_ROUTES = ['/studio', '/admin'];
+// marketing site chrome doesn't belong on it. Approval view is a clean
+// client-facing surface, also bare.
+const STUDIO_ROUTES = ['/studio', '/admin', '/approve'];
 
 function AppShell() {
   const { pathname } = useLocation();
@@ -44,6 +46,7 @@ function AppShell() {
         <Route exact path="/admin" element={<Studio />} />
         <Route exact path="/catalogs" element={<Catalogs />} />
         <Route exact path="/demos" element={<Demos />} />
+        <Route exact path="/approve/:projectId" element={<ApprovalView />} />
       </Routes>
       {!isStudio && <Footer />}
     </>
