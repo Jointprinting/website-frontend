@@ -229,6 +229,22 @@ function Product() {
             )}
           </Box>
         ) : (
+          <>
+          <Button
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+              else navigate('/products');
+            }}
+            startIcon={<Box component="span" sx={{ fontSize: 16, lineHeight: 1 }}>←</Box>}
+            sx={{
+              alignSelf: 'flex-start', mb: { xs: 2, md: 3 },
+              textTransform: 'none', color: '#1a3d2b', fontWeight: 700, fontSize: 13,
+              borderRadius: 999, px: 1.5, py: 0.5,
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.12)' },
+            }}
+          >
+            Back to catalog
+          </Button>
           <Stack
             direction={{ xs: 'column', md: 'row' }}
             spacing={{ xs: 3, md: 6 }}
@@ -293,7 +309,6 @@ function Product() {
                 {productVendor && <Typography color="black">{productVendor}</Typography>}
                 {productStyle && <Typography color="gray">Style #{productStyle}</Typography>}
                 {productTag && <Chip label={productTag} color={productTagColor} variant="outlined" size="small" />}
-                 readOnly size="small" />}
               </Stack>
 
               {productTitle && (
@@ -327,7 +342,9 @@ function Product() {
                         Comes in
                       </Typography>
                       <Typography sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 700, lineHeight: 1.1 }} color="black">
-                        {productSizeRangeBottom} – {productSizeRangeTop}
+                        {productSizeRangeBottom === productSizeRangeTop
+                          ? productSizeRangeBottom
+                          : `${productSizeRangeBottom} – ${productSizeRangeTop}`}
                       </Typography>
                     </Stack>
                   )}
