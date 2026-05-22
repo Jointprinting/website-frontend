@@ -22,6 +22,7 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PrintIcon           from '@mui/icons-material/Print';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -43,6 +44,7 @@ export default function OrderTracker({ token, onBack }) {
 
   const [projects,      setProjects]      = useState([]);
   const [mockups,       setMockups]       = useState([]);
+  const [logos,         setLogos]         = useState([]);
   const [stats,         setStats]         = useState({});
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
@@ -59,14 +61,16 @@ export default function OrderTracker({ token, onBack }) {
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const [pr, mk, ds] = await Promise.all([
+      const [pr, mk, ds, lg] = await Promise.all([
         axios.get(`${base}/orders/projects`, authHdr),
         axios.get(`${base}/studio/library/mockups`, authHdr),
         axios.get(`${base}/orders/dashboard`, authHdr),
+        axios.get(`${base}/client-logos`, authHdr).catch(() => ({ data: { logos: [] } })),
       ]);
       setProjects(pr.data.projects || []);
       setMockups(mk.data.items || []);
       setStats(ds.data || {});
+      setLogos(lg.data.logos || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -109,6 +113,55 @@ export default function OrderTracker({ token, onBack }) {
     });
     return byCompany;
   }, [projects]);
+
+  // Map company → logo data URL for cards + drawer + confirmation page.
+  const logoMap = useMemo(() => {
+    const m = {};
+    logos.forEach(l => { if (l.companyKey) m[l.companyKey] = l.imageDataUrl; });
+    return m;
+  }, [logos]);
+  const logoFor = (project) => {
+    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    return key ? logoMap[key] : null;
+  };
+
+  const uploadLogo = async (project, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = async () => {
+        try {
+          const r = await axios.post(`${base}/client-logos`, {
+            companyName: project.companyName || '',
+            clientName:  project.clientName  || '',
+            imageDataUrl: reader.result,
+          }, authHdr);
+          setLogos(prev => {
+            const filtered = prev.filter(l => l.companyKey !== r.data.logo.companyKey);
+            return [...filtered, r.data.logo];
+          });
+          resolve(r.data.logo);
+        } catch (e) {
+          alert(`Logo upload failed: ${e.response?.data?.message || e.message}`);
+          reject(e);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeLogo = async (project) => {
+    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!key) return;
+    if (!window.confirm('Remove the logo for this company?')) return;
+    try {
+      await axios.delete(`${base}/client-logos/${encodeURIComponent(key)}`, authHdr);
+      setLogos(prev => prev.filter(l => l.companyKey !== key));
+    } catch (e) {
+      alert(`Couldn't remove: ${e.message}`);
+    }
+  };
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -318,6 +371,7 @@ export default function OrderTracker({ token, onBack }) {
               <ProjectCard key={p._id} project={p}
                 lookupMockup={lookupMockup}
                 companyMockupPool={companyMockupPool}
+                logo={logoFor(p)}
                 onClick={() => setActiveProject(p)} />
             ))}
           </Box>
@@ -330,6 +384,9 @@ export default function OrderTracker({ token, onBack }) {
         project={activeProject}
         mockupMap={mockupMap}
         mockups={mockups}
+        logo={activeProject ? logoFor(activeProject) : null}
+        onUploadLogo={(file) => activeProject && uploadLogo(activeProject, file)}
+        onRemoveLogo={() => activeProject && removeLogo(activeProject)}
         onClose={() => setActiveProject(null)}
         onSave={handleSave}
         onDelete={handleDelete}
@@ -343,6 +400,7 @@ export default function OrderTracker({ token, onBack }) {
         open={!!confirmation}
         project={confirmation}
         mockupMap={mockupMap}
+        logo={confirmation ? logoFor(confirmation) : null}
         onClose={() => setConfirmation(null)}
       />
 
@@ -386,7 +444,7 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
+function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
 
@@ -510,6 +568,21 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
             PAID
           </Box>
         )}
+        {/* Client logo (corner) */}
+        {logo && (
+          <Box sx={{
+            position: 'absolute', bottom: 8, left: 8,
+            width: 36, height: 36, borderRadius: 1,
+            bgcolor: '#fff', p: 0.4,
+            border: `1px solid rgba(255,255,255,0.2)`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden',
+          }}>
+            <Box component="img" src={logo} alt="logo"
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          </Box>
+        )}
       </Box>
 
       {/* Body */}
@@ -543,7 +616,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, onClick }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -590,6 +663,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, onClose, onSave, onD
       {/* Drawer header */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.bg, borderBottom: `1px solid ${B.border}`,
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <ClientLogoSlot logo={logo} companyName={local.companyName || local.clientName}
+          onUpload={onUploadLogo} onRemove={onRemoveLogo} />
         <Box>
           <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', letterSpacing: 0.4 }}>
             PROJECT #{local.projectNumber || '—'}
@@ -954,7 +1029,7 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
 // ── ConfirmationDialog ───────────────────────────────────────────────────────
 // Client-facing confirmation page. Printable (window.print) and screenshottable.
 // Renders mockups, line items, totals, and a clean header.
-function ConfirmationDialog({ open, project, mockupMap, onClose }) {
+function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
   if (!project) return null;
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
   const mockupThumbs = (project.mockupNumbers || []).map(n => mockupMap[n] || mockupMap[_normKey(n)]).filter(Boolean);
@@ -1035,14 +1110,29 @@ function ConfirmationDialog({ open, project, mockupMap, onClose }) {
           bgcolor: '#fff', color: '#111', p: 4, borderRadius: 1,
           fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
         }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 24, mb: 0.3, color: '#111' }}>
-            JOINT PRINTING
-          </Typography>
-          <Typography sx={{ color: '#555', fontSize: 12 }}>
-            Project #{project.projectNumber || '—'}
-            {project.orderNumber ? `  ·  Invoice #${project.orderNumber}` : ''}
-            {project.orderDate ? `  ·  ${new Date(project.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0.5 }}>
+            {logo && (
+              <Box sx={{
+                width: 64, height: 64, p: 0.4,
+                border: '1px solid #e6e6e0', borderRadius: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                bgcolor: '#fff', overflow: 'hidden',
+              }}>
+                <Box component="img" src={logo} alt=""
+                  sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              </Box>
+            )}
+            <Box>
+              <Typography sx={{ fontWeight: 800, fontSize: 24, mb: 0.3, color: '#111', lineHeight: 1 }}>
+                JOINT PRINTING
+              </Typography>
+              <Typography sx={{ color: '#555', fontSize: 12 }}>
+                Project #{project.projectNumber || '—'}
+                {project.orderNumber ? `  ·  Invoice #${project.orderNumber}` : ''}
+                {project.orderDate ? `  ·  ${new Date(project.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+              </Typography>
+            </Box>
+          </Box>
 
           <Box className="section" sx={{ mt: 3 }}>
             <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
@@ -1482,5 +1572,63 @@ function QSubhead({ children }) {
     }}>
       {children}
     </Typography>
+  );
+}
+
+// ── ClientLogoSlot ────────────────────────────────────────────────────────────
+// 40×40 logo well used in the drawer header. Empty state = upload icon + click
+// target. Filled = the logo with hover overlay to swap or remove.
+function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
+  const inputRef = React.useRef(null);
+  const [busy, setBusy] = React.useState(false);
+  const trigger = () => inputRef.current?.click();
+  const onChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try { await onUpload(file); } finally { setBusy(false); e.target.value = ''; }
+  };
+
+  return (
+    <Box sx={{ position: 'relative' }}>
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={onChange} />
+      {logo ? (
+        <Box onClick={trigger} title={`Replace ${companyName} logo`}
+          sx={{
+            width: 44, height: 44, p: 0.5, borderRadius: 1, cursor: 'pointer',
+            bgcolor: '#fff', border: `1px solid ${B.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', position: 'relative',
+            '&:hover .logo-overlay': { opacity: 1 },
+          }}>
+          <Box component="img" src={logo} alt=""
+            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          <Box className="logo-overlay" sx={{
+            position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.55)',
+            color: B.white, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: 0, transition: 'opacity 0.12s',
+          }}>{busy ? '…' : 'REPLACE'}</Box>
+          <IconButton size="small" onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            sx={{
+              position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: B.bg,
+              color: '#f87171', border: `1px solid ${B.border}`,
+              '&:hover': { bgcolor: B.bg, color: '#f87171' },
+            }}>
+            <CloseIcon sx={{ fontSize: 11 }} />
+          </IconButton>
+        </Box>
+      ) : (
+        <Box onClick={trigger} title={`Add logo for ${companyName || 'this company'}`}
+          sx={{
+            width: 44, height: 44, borderRadius: 1, cursor: 'pointer',
+            border: `1px dashed ${B.border}`, bgcolor: 'rgba(255,255,255,0.02)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: B.muted, '&:hover': { borderColor: B.green, color: B.green },
+          }}>
+          {busy ? <CircularProgress size={14} sx={{ color: B.green }} /> : <ImageOutlinedIcon sx={{ fontSize: 18 }} />}
+        </Box>
+      )}
+    </Box>
   );
 }
