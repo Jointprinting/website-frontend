@@ -1,6 +1,6 @@
 import { React, useState, useEffect, useCallback } from 'react';
 import {
-  Box, Stack, Typography, Chip, Divider, Rating, Pagination,
+  Box, Stack, Typography, Chip, Divider, Pagination,
   CircularProgress, Button, Tooltip, TextField, InputAdornment,
   useMediaQuery, Grid, Paper, Avatar, IconButton, Drawer,
 } from '@mui/material';
