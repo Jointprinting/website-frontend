@@ -202,27 +202,6 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       </Stack>
 
       <Box flexGrow={1} />
-
-      <Box sx={{ mt: 3, pt: 2.5, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <Stack spacing={1.25}>
-          {[
-            '1,000+ styles in stock',
-            'Free mockups in 24 hours',
-            'Quote with no commitment',
-          ].map((line) => (
-            <Stack key={line} direction="row" alignItems="center" spacing={1}>
-              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: GREEN, flexShrink: 0 }} />
-              <Typography sx={{ color: 'rgba(255,255,255,0.62)', fontSize: 11.5, lineHeight: 1.35 }}>{line}</Typography>
-            </Stack>
-          ))}
-        </Stack>
-        <Typography sx={{
-          mt: 2.5, color: 'rgba(255,255,255,0.32)',
-          fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600,
-        }}>
-          Joint Printing · Merch Studio
-        </Typography>
-      </Box>
     </Stack>
   );
 }
