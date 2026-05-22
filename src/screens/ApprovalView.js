@@ -34,6 +34,7 @@ export default function ApprovalView() {
   const token = params.get('token');
 
   const [data, setData]   = useState(null);
+  const [brandLogo, setBrandLogo] = useState('');
   const [err, setErr]     = useState('');
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
@@ -46,9 +47,13 @@ export default function ApprovalView() {
     async function load() {
       if (!token) { setErr('This link is missing a token.'); setLoading(false); return; }
       try {
-        const r = await axios.get(`${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
+        const [r, bl] = await Promise.all([
+          axios.get(`${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`),
+          axios.get(`${config.backendUrl}/api/site-settings/brandLogo`).catch(() => ({ data: { value: { dataUrl: '' } } })),
+        ]);
         if (cancelled) return;
         setData(r.data);
+        setBrandLogo((bl.data && bl.data.value && bl.data.value.dataUrl) || '');
       } catch (e) {
         if (cancelled) return;
         setErr(e.response?.data?.message || 'This link is invalid or expired.');
@@ -147,9 +152,14 @@ export default function ApprovalView() {
               </Box>
             )}
             <Box>
-              <Typography sx={{ fontWeight: 800, fontSize: 22, lineHeight: 1, color: COLORS.text }}>
-                JOINT PRINTING
-              </Typography>
+              {brandLogo ? (
+                <Box component="img" src={brandLogo} alt="Joint Printing"
+                  sx={{ maxHeight: 56, maxWidth: 260, display: 'block', mb: 0.5 }} />
+              ) : (
+                <Typography sx={{ fontWeight: 800, fontSize: 22, lineHeight: 1, color: COLORS.text }}>
+                  JOINT PRINTING
+                </Typography>
+              )}
               <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
                 Project #{p.projectNumber || '—'}
                 {p.orderNumber ? ` · Invoice #${p.orderNumber}` : ''}
@@ -240,24 +250,44 @@ export default function ApprovalView() {
           )}
         </Box>
 
-        {/* Action panel */}
+        {/* Action panel — always allow Request changes, even after approval */}
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          {done === 'approved' || alreadyApproved ? (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 40, mb: 1 }} />
-              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                We&apos;ll get production rolling and follow up over email with timing.
-              </Typography>
-            </Box>
-          ) : done === 'changes' ? (
+          {done === 'changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
               <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Got it — we&apos;ll revise.</Typography>
               <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
                 Your notes are with the team. We&apos;ll send a new proof shortly.
               </Typography>
+              <Button onClick={() => { setDone(null); setChangesOpen(true); }}
+                sx={{ mt: 2, color: COLORS.muted, fontSize: 12, textTransform: 'none' }}>
+                Send another note
+              </Button>
             </Box>
+          ) : done === 'approved' || alreadyApproved ? (
+            <>
+              <Box sx={{ textAlign: 'center', py: 1 }}>
+                <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
+                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
+                <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2 }}>
+                  We&apos;ll get production rolling and follow up over email with timing.
+                </Typography>
+              </Box>
+              <Box sx={{ borderTop: `1px solid ${COLORS.border}`, pt: 2, mt: 1 }}>
+                <Typography sx={{ color: COLORS.muted, fontSize: 12, mb: 1.5, textAlign: 'center' }}>
+                  Notice something? You can still send a note before production starts.
+                </Typography>
+                <Button onClick={() => setChangesOpen(true)} disabled={actionBusy}
+                  startIcon={<EditNoteIcon />}
+                  variant="outlined"
+                  fullWidth
+                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
+                    textTransform: 'none', py: 1, fontSize: 13,
+                    '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
+                  Request a change
+                </Button>
+              </Box>
+            </>
           ) : (
             <>
               <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
@@ -284,10 +314,6 @@ export default function ApprovalView() {
             </>
           )}
         </Box>
-
-        <Typography sx={{ mt: 3, color: COLORS.muted, fontSize: 10, textAlign: 'center' }}>
-          Joint Printing · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-        </Typography>
       </Box>
 
       <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth>
