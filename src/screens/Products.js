@@ -95,10 +95,18 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
       </Box>
 
       <Box sx={{ p: { xs: 1.25, sm: 1.75 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
-        <Typography variant="caption" color="text.secondary"
-          sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
-          {item.vendor}
-        </Typography>
+        <Stack direction="row" spacing={0.75} alignItems="baseline" flexWrap="wrap">
+          <Typography variant="caption" color="text.secondary"
+            sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
+            {item.vendor}
+          </Typography>
+          {item.style && (
+            <Typography variant="caption" color="text.disabled"
+              sx={{ fontSize: { xs: 10, sm: 11 }, fontWeight: 600 }}>
+              #{item.style}
+            </Typography>
+          )}
+        </Stack>
         <Typography fontWeight={600} sx={{
           fontSize: { xs: 13, sm: 14 }, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
