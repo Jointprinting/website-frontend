@@ -24,6 +24,7 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -211,6 +212,22 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
+  const handleDuplicate = async (project) => {
+    const carryMockups = window.confirm(
+      'Carry the mockups over to the new project?\n\n' +
+      'OK = re-order with the same mockups linked.\n' +
+      'Cancel = blank slate (start a fresh design).'
+    );
+    try {
+      const r = await axios.post(`${base}/orders/${project._id}/duplicate`,
+        { carryMockups }, authHdr);
+      await loadProjects();
+      setActiveProject(r.data);
+    } catch (e) {
+      alert(`Duplicate failed: ${e.message}`);
+    }
+  };
+
   const handleResync = async () => {
     if (!window.confirm('Re-pull all orders from the Notion seed? This wipes stale Drive imports and refreshes every project to match Notion.')) return;
     setResyncing(true);
@@ -391,6 +408,7 @@ export default function OrderTracker({ token, onBack }) {
         onClose={() => setActiveProject(null)}
         onSave={handleSave}
         onDelete={handleDelete}
+        onDuplicate={() => activeProject && handleDuplicate(activeProject)}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
         onOpenConfirmation={() => setConfirmation(activeProject)}
         token={token}
@@ -617,7 +635,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick }
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onDuplicate, onOpenPicker, onOpenConfirmation, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -931,6 +949,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           }}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Share for approval
+        </Button>
+        <Button startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />}
+          onClick={onDuplicate}
+          sx={{ color: B.muted, fontSize: 11, textTransform: 'none', '&:hover': { color: B.white } }}>
+          Duplicate
         </Button>
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
