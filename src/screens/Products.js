@@ -100,9 +100,14 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
       <Box sx={{ p: { xs: 1.25, sm: 1.75 }, display: 'flex', flexDirection: 'column', gap: 0.5, flexGrow: 1 }}>
         <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" sx={{ minHeight: 18 }}>
           {item.brandImage ? (
-            <Box component="img" src={item.brandImage} alt={item.vendor}
-              sx={{ height: 14, width: 'auto', maxWidth: 64, objectFit: 'contain', opacity: 0.85,
-                    filter: 'grayscale(0.1) contrast(1.05)' }} />
+            <Box sx={{
+              display: 'inline-flex', alignItems: 'center',
+              bgcolor: '#fff', borderRadius: 1, px: 0.75, py: 0.4,
+              border: '1px solid rgba(0,0,0,0.08)',
+            }}>
+              <Box component="img" src={item.brandImage} alt={item.vendor}
+                sx={{ height: 18, width: 'auto', maxWidth: 88, objectFit: 'contain', display: 'block' }} />
+            </Box>
           ) : (
             <Typography variant="caption" color="text.secondary"
               sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: { xs: 10, sm: 11 } }}>
@@ -245,8 +250,9 @@ export default function Products() {
   const [searchInput, setSearchInput] = useState(search);
   const [drawerOpen,  setDrawerOpen]  = useState(false);
 
-  const [products,   setProducts]   = useState([]);
-  const [totalPages, setTotalPages] = useState(0);
+  const [products,       setProducts]       = useState([]);
+  const [totalPages,     setTotalPages]     = useState(0);
+  const [relaxedFilter,  setRelaxedFilter]  = useState(null);
 const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [fetchKey,   setFetchKey]   = useState(0);
@@ -314,6 +320,7 @@ const [loading,    setLoading]    = useState(true);
         const prods = d.products || [];
         setProducts(prods);
         setTotalPages(d.totalPages || 0);
+        setRelaxedFilter(d.relaxedFilter || null);
 
         const needsImage = prods.filter((p) => !p.image).map((p) => p.style);
         if (needsImage.length > 0) {
@@ -469,6 +476,24 @@ const [loading,    setLoading]    = useState(true);
               ? 'Premium blanks from the brands customers ask for — pick anything, we send a free mockup within 24 hours.'
               : `Browse every ${activeLabel.toLowerCase().replace(/s$/, '')} we stock. Add to your tray, quote in 24 hours.`}
           </Typography>
+          {relaxedFilter && (
+            <Box sx={{
+              mt: 2.5, p: 1.5, borderRadius: 1.5,
+              bgcolor: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.35)',
+              display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap',
+            }}>
+              <Typography sx={{ fontSize: 13, color: '#1a3d2b', flex: 1, minWidth: 0 }}>
+                No matches for <Box component="span" sx={{ fontWeight: 700 }}>"{relaxedFilter.search}"</Box>
+                {relaxedFilter.ignored.category ? ` in ${activeLabel}` : ''}
+                {relaxedFilter.ignored.type ? ` for ${relaxedFilter.ignored.type}` : ''}
+                {' '}— showing matches across all styles instead.
+              </Typography>
+              <Button size="small" variant="text" onClick={clearFilters}
+                sx={{ textTransform: 'none', color: '#1a3d2b', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+                Clear filter
+              </Button>
+            </Box>
+          )}
           {genderType && (
             <Chip label={genderLabel} size="small" onDelete={() => setGenderType('')}
               sx={{ mt: 0.75, fontSize: 11, height: 22 }} />
@@ -598,8 +623,14 @@ const [loading,    setLoading]    = useState(true);
                       <Box sx={{ p: 1.75 }}>
                         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
                           {item.brandImage ? (
-                            <Box component="img" src={item.brandImage} alt={item.vendor}
-                              sx={{ height: 14, width: 'auto', maxWidth: 72, objectFit: 'contain', opacity: 0.85 }} />
+                            <Box sx={{
+                              display: 'inline-flex', alignItems: 'center',
+                              bgcolor: '#fff', borderRadius: 1, px: 0.75, py: 0.4,
+                              border: '1px solid rgba(0,0,0,0.08)',
+                            }}>
+                              <Box component="img" src={item.brandImage} alt={item.vendor}
+                                sx={{ height: 20, width: 'auto', maxWidth: 96, objectFit: 'contain', display: 'block' }} />
+                            </Box>
                           ) : (
                             <Typography variant="caption" color="text.secondary"
                               sx={{ textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 10, fontWeight: 700 }}>
