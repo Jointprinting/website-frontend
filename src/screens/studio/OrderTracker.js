@@ -820,8 +820,20 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
           />
         </Box>
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <InlineField label="Notes" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
+          <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
             onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
+        </Box>
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <InlineField label="Confirmation message (shown to client)" multiline
+            value={local.confirmationMessage || ''} savingHint={savingField === 'confirmationMessage'}
+            onChange={v => updateLocal({ confirmationMessage: v })}
+            onBlur={v => saveField('confirmationMessage', v)} />
+        </Box>
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <InlineField label="Confirmation terms (payment / turnaround)" multiline
+            value={local.confirmationTerms || ''} savingHint={savingField === 'confirmationTerms'}
+            onChange={v => updateLocal({ confirmationTerms: v })}
+            onBlur={v => saveField('confirmationTerms', v)} />
         </Box>
       </Box>
 
@@ -1146,6 +1158,15 @@ function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
             )}
           </Box>
 
+          {project.confirmationMessage && (
+            <Box className="section" sx={{ mt: 3 }}>
+              <Typography sx={{ color: '#333', fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5,
+                p: 1.5, borderLeft: '3px solid #4ade80', bgcolor: '#f6fef9', borderRadius: '0 4px 4px 0' }}>
+                {project.confirmationMessage}
+              </Typography>
+            </Box>
+          )}
+
           {mockupThumbs.length > 0 && (
             <Box className="section" sx={{ mt: 3 }}>
               <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
@@ -1205,13 +1226,13 @@ function ConfirmationDialog({ open, project, mockupMap, logo, onClose }) {
             </Box>
           </Box>
 
-          {project.notes && (
+          {project.confirmationTerms && (
             <Box className="section" sx={{ mt: 3 }}>
               <Typography className="section-h" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#777', mb: 1, borderBottom: '1px solid #eee', pb: 0.5 }}>
-                Notes
+                Terms
               </Typography>
-              <Typography sx={{ color: '#333', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                {project.notes}
+              <Typography sx={{ color: '#555', fontSize: 11, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {project.confirmationTerms}
               </Typography>
             </Box>
           )}
