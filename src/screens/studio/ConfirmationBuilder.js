@@ -13,8 +13,8 @@ import {
   Dialog, DialogContent, FormControlLabel, Switch, CircularProgress, MenuItem, Select, Tooltip,
 } from '@mui/material';
 import CloseIcon              from '@mui/icons-material/Close';
-import PrintIcon              from '@mui/icons-material/Print';
 import PictureAsPdfIcon       from '@mui/icons-material/PictureAsPdf';
+import ShareIcon              from '@mui/icons-material/Share';
 import AddCircleOutlineIcon   from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DesignServicesIcon     from '@mui/icons-material/DesignServices';
@@ -26,6 +26,36 @@ import jpLogoColored from '../../modules/images/logo_colored.webp';
 
 // Absolute URL so the logo also resolves inside the about:blank print popup.
 const BRAND_LOGO = `${window.location.origin}${jpLogoColored}`;
+
+// Resize + JPEG-recompress uploaded mockup images before stuffing them into
+// the confirmation document. Without this the doc inflates with multi-MB
+// base64 blobs and the PUT /orders/:id either 413s or breaks Mongo's 16MB
+// per-doc limit — the source of the "save failed: 500" the user hit.
+async function compressImageToDataUrl(file, maxDim = 1400, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('Could not read file.'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const r = width / height;
+          if (r >= 1) { width = maxDim; height = Math.round(maxDim / r); }
+          else        { height = maxDim; width = Math.round(maxDim * r); }
+        }
+        const c = document.createElement('canvas');
+        c.width = width; c.height = height;
+        c.getContext('2d').drawImage(img, 0, 0, width, height);
+        try { resolve(c.toDataURL('image/jpeg', quality)); }
+        catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('Could not decode image.'));
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
@@ -42,11 +72,12 @@ function emptyItem() {
   };
 }
 
-export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave }) {
+export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
 
   // Load the draft on open. Order of precedence:
@@ -131,10 +162,28 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alert(`PDF generation failed: ${e.response?.data?.message || e.message}.\nThe Print button still works.`);
+      alert(`PDF generation failed: ${e.response?.data?.message || e.message}.`);
     } finally {
       setPdfBusy(false);
     }
+  };
+
+  // Share-for-approval button in the header — saves first (so the link points
+  // at the latest state) and delegates to the parent for the actual token mint.
+  const shareApproval = async () => {
+    if (!onShareApproval) return;
+    setShareBusy(true);
+    try {
+      if (dirty) await persist();
+      await onShareApproval();
+    } finally { setShareBusy(false); }
+  };
+
+  // Closing the dialog now auto-saves dirty changes instead of asking. The
+  // localStorage draft was the safety net before; now we just commit on close.
+  const closeWithSave = async () => {
+    if (dirty) { try { await persist(); } catch (e) { /* draft survives in localStorage */ } }
+    onClose();
   };
 
   const totals = computeTotals(local);
@@ -145,8 +194,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
       // this dialog to lose to a stray click. X button or Esc is required.
       onClose={(_, reason) => {
         if (reason === 'backdropClick') return;
-        if (dirty && !window.confirm('You have unsaved changes in this confirmation. Close anyway?')) return;
-        onClose();
+        closeWithSave();
       }}
       maxWidth={false} fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
@@ -165,12 +213,17 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           sx={{ color: saving ? B.muted : (dirty ? B.green : B.muted), fontSize: 12, textTransform: 'none', fontWeight: 700 }}>
           {saving ? <CircularProgress size={12} sx={{ color: B.green }} /> : (dirty ? 'Save *' : 'Save')}
         </Button>
-        <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 16 }} />}
-          onClick={() => printConfirmation('confirmation-preview', project)}
-          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.muted,
-            '&:hover': { color: B.white } }}>
-          Print
-        </Button>
+        {onShareApproval && (
+          <Button size="small" disabled={shareBusy}
+            startIcon={shareBusy
+              ? <CircularProgress size={12} sx={{ color: B.green }} />
+              : <ShareIcon sx={{ fontSize: 16 }} />}
+            onClick={shareApproval}
+            sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.green,
+              '&:hover': { color: '#3bd070' } }}>
+            Share for approval
+          </Button>
+        )}
         <Button size="small" disabled={pdfBusy}
           startIcon={pdfBusy
             ? <CircularProgress size={12} sx={{ color: B.greenDk }} />
@@ -181,10 +234,9 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
             '&:hover': { bgcolor: '#3bd070' } }}>
           Download PDF
         </Button>
-        <IconButton size="small" onClick={() => {
-          if (dirty && !window.confirm('You have unsaved changes in this confirmation. Close anyway?')) return;
-          onClose();
-        }}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={closeWithSave}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
       </Box>
 
       {restoredFromDraft && (
@@ -382,27 +434,32 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
                                 (m.name || '').toLowerCase().includes(co));
   }, [mockups, project.companyName, project.clientName]);
 
-  // Single-file upload replaces the primary mockup
+  // Single-file upload replaces the primary mockup. Compressed on the way in.
   const onUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onUpdate({ customMockupDataUrl: reader.result, mockupNum: '' });
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      onUpdate({ customMockupDataUrl: dataUrl, mockupNum: '' });
+    } catch (err) {
+      alert(`Couldn't process image: ${err.message || err}`);
+    }
     e.target.value = '';
   };
 
-  // Multi-file upload appends variant snapshots
+  // Multi-file upload appends variant snapshots. Each compressed before storing.
   const onUploadMulti = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const reads = files.map(file => new Promise(resolve => {
-      const r = new FileReader();
-      r.onload = () => resolve({ dataUrl: r.result, label: file.name.replace(/\.[^.]+$/, '') });
-      r.readAsDataURL(file);
-    }));
-    const snaps = await Promise.all(reads);
-    onUpdate({ mockupSnapshots: [...(item.mockupSnapshots || []), ...snaps] });
+    try {
+      const snaps = await Promise.all(files.map(async (file) => ({
+        dataUrl: await compressImageToDataUrl(file),
+        label: file.name.replace(/\.[^.]+$/, ''),
+      })));
+      onUpdate({ mockupSnapshots: [...(item.mockupSnapshots || []), ...snaps] });
+    } catch (err) {
+      alert(`Couldn't process images: ${err.message || err}`);
+    }
     e.target.value = '';
   };
   const removeSnapshot = (i) =>
@@ -541,10 +598,25 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             Sizes · {item.sizes.length}
           </Typography>
-          <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 13 }} />}
-            onClick={addSize} sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-            Size
-          </Button>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Take the unit $ from the first size that has one and apply it to all sizes">
+              <span>
+                <Button size="small"
+                  onClick={() => {
+                    const first = item.sizes.find(s => Number(s.unitPrice) > 0);
+                    if (!first) { alert('Type a unit price in any size first, then click "$ to all" to copy it across.'); return; }
+                    onUpdate({ sizes: item.sizes.map(s => ({ ...s, unitPrice: first.unitPrice })) });
+                  }}
+                  sx={{ color: B.muted, fontSize: 10, textTransform: 'none', '&:hover': { color: B.green } }}>
+                  $ to all
+                </Button>
+              </span>
+            </Tooltip>
+            <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 13 }} />}
+              onClick={addSize} sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              Size
+            </Button>
+          </Box>
         </Stack>
         <Box sx={{ display: 'grid', gridTemplateColumns: '54px 76px 86px 26px',
           gap: 0.4, alignItems: 'center', mb: 0.2,
@@ -787,17 +859,12 @@ function ItemPreview({ idx, item, mockupMap }) {
 
           {/* Labeled spec rows underneath the table — match the Excel layout */}
           <Box sx={{ mt: 1, fontSize: 12.5 }}>
-            {item.productName ? (
-              <SpecRow label="Product Name"  value={item.productName} />
-            ) : (
-              <>
-                <SpecRow label="Brand Name"   value={item.brandName} />
-                <SpecRow label="Style Code"   value={item.styleCode} />
-              </>
-            )}
-            {item.printType && <SpecRow label="Print Type"   value={item.printType} />}
+            {item.productName && <SpecRow label="Product Name" value={item.productName} />}
+            {!item.productName && item.brandName && <SpecRow label="Brand Name" value={item.brandName} />}
+            {item.styleCode && <SpecRow label="Style Code" value={item.styleCode} />}
+            {item.printType && <SpecRow label="Print Type" value={item.printType} />}
             <SpecRow label="Garment Color"  value={item.color} />
-            {item.printerName && <SpecRow label="Printer"    value={item.printerName} />}
+            {/* Printer is internal info — kept off the client-facing confirmation. */}
           </Box>
         </Box>
       </Box>
@@ -847,48 +914,4 @@ function computeTotals(conf) {
     return { label: l.label || (l.isPercent ? 'Adjustment' : 'Add-on'), amount: l.amount, isPercent: l.isPercent, value };
   });
   return { itemsSubtotal, lines, grandTotal: running };
-}
-
-function printConfirmation(elementId, project) {
-  const el = document.getElementById(elementId);
-  if (!el) return window.print();
-  const w = window.open('', '_blank', 'width=900,height=1200');
-  if (!w) {
-    alert('Popup was blocked. Printing this view instead — allow popups for jointprinting.com to get a cleaner print layout next time.');
-    window.print();
-    return;
-  }
-  // CSS chosen to make the printed page match the on-screen preview closely:
-  // letter-sized page, 0.4in margins, tables keep borders, mockup rows never
-  // split across pages, no orphan headers, sensible image sizing.
-  w.document.write(`
-    <!doctype html>
-    <html><head><meta charset="utf-8"><title>Confirmation — Project #${project.projectNumber || ''}</title>
-    <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-        color: #111;
-        font-size: 12.5px;
-        line-height: 1.45;
-        padding: 32px 36px;
-        background: #fff;
-      }
-      img { max-width: 100%; height: auto; display: inline-block; }
-      table { width: 100%; border-collapse: collapse; }
-      .item-row { page-break-inside: avoid; }
-      @page { size: letter; margin: 0.4in; }
-      @media print {
-        body { padding: 0; }
-        .no-print, .MuiBackdrop-root { display: none !important; }
-      }
-    </style>
-    </head><body>${el.innerHTML}</body></html>
-  `);
-  w.document.close();
-  // Give the browser time to layout images before triggering print.
-  setTimeout(() => {
-    try { w.focus(); w.print(); } catch (_) {}
-  }, 600);
 }

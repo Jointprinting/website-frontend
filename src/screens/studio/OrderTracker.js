@@ -442,6 +442,28 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
+  // Mint an approval-link token + copy to clipboard. Shared between the
+  // project drawer's "Share for approval" button and the confirmation
+  // builder's header button.
+  const shareApprovalFor = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const r = await axios.post(`${base}/orders/${projectId}/approval-link`, {}, authHdr);
+      const url = `${window.location.origin}/approve/${projectId}?token=${r.data.token}`;
+      const expiry = r.data.expiresAt
+        ? `\n\nLink expires: ${new Date(r.data.expiresAt).toLocaleString()}`
+        : '';
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(`Approval link copied to clipboard:\n\n${url}${expiry}\n\nSend it to your client.`);
+      } catch (_) {
+        window.prompt('Copy this approval link and send it to your client:', url);
+      }
+    } catch (e) {
+      alert(`Couldn't generate link: ${e.response?.data?.message || e.message}`);
+    }
+  };
+
   const loadQbStatus = async () => {
     setQbLoading(true);
     try {
@@ -741,6 +763,7 @@ export default function OrderTracker({ token, onBack }) {
         onClose={() => setActiveProject(null)}
         onSave={handleSave}
         onDelete={handleDelete}
+        onShareApproval={() => activeProject && shareApprovalFor(activeProject._id)}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
         onOpenConfirmation={() => setConfirmation(activeProject)}
         onOpenQuote={() => setQuote(activeProject)}
@@ -767,6 +790,7 @@ export default function OrderTracker({ token, onBack }) {
         logo={confirmation ? logoFor(confirmation) : null}
         token={token}
         onClose={() => setConfirmation(null)}
+        onShareApproval={() => confirmation && shareApprovalFor(confirmation._id)}
         onSave={async (patch) => {
           if (!confirmation) return;
           const updated = await handleSave(confirmation._id, patch);
@@ -1104,7 +1128,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1450,19 +1474,6 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
             onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
         </Box>
-        <Box sx={{ gridColumn: '1 / -1' }}>
-          <InlineField label="QuickBooks invoice URL" value={local.quickbooksInvoiceUrl || ''}
-            savingHint={savingField === 'quickbooksInvoiceUrl'}
-            onChange={v => updateLocal({ quickbooksInvoiceUrl: v })}
-            onBlur={v => saveField('quickbooksInvoiceUrl', v)} />
-          {local.quickbooksInvoiceUrl && (
-            <Typography component="a" href={local.quickbooksInvoiceUrl} target="_blank" rel="noreferrer"
-              sx={{ display: 'inline-block', mt: 0.4, color: B.green, fontSize: 11,
-                textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-              Open in QuickBooks ↗
-            </Typography>
-          )}
-        </Box>
       </Box>
 
       {/* Tasks */}
@@ -1571,18 +1582,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           Build confirmation
         </Button>
         <Button startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
-          onClick={async () => {
-            try {
-              const r = await axios.post(`${base}/orders/${project._id}/approval-link`, {}, authHdr);
-              const url = `${window.location.origin}/approve/${project._id}?token=${r.data.token}`;
-              try {
-                await navigator.clipboard.writeText(url);
-                alert(`Approval link copied to clipboard:\n\n${url}\n\nSend it to your client.`);
-              } catch (_) {
-                window.prompt('Copy this approval link and send it to your client:', url);
-              }
-            } catch (e) { alert(`Couldn't generate link: ${e.message}`); }
-          }}
+          onClick={() => onShareApproval && onShareApproval()}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Share for approval
         </Button>
