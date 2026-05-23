@@ -7,7 +7,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
-  Dialog, DialogContent, DialogActions,
+  Dialog, DialogContent, DialogActions, Menu, ListItemIcon, ListItemText, Divider,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
 import AddIcon             from '@mui/icons-material/Add';
@@ -22,6 +22,7 @@ import AutoFixHighIcon    from '@mui/icons-material/AutoFixHigh';
 import ChecklistIcon      from '@mui/icons-material/Checklist';
 import CheckIcon          from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import MoreVertIcon       from '@mui/icons-material/MoreVert';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -30,7 +31,6 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -95,6 +95,7 @@ export default function OrderTracker({ token, onBack }) {
   const [qbStatus,    setQbStatus]    = useState(null);
   const [qbLoading,   setQbLoading]   = useState(false);
   const [qbBusy,      setQbBusy]      = useState(false);
+  const [moreAnchor,  setMoreAnchor]  = useState(null);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -322,22 +323,6 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
-  const handleDuplicate = async (project) => {
-    const carryMockups = window.confirm(
-      'Carry the mockups over to the new project?\n\n' +
-      'OK = re-order with the same mockups linked.\n' +
-      'Cancel = blank slate (start a fresh design).'
-    );
-    try {
-      const r = await axios.post(`${base}/orders/${project._id}/duplicate`,
-        { carryMockups }, authHdr);
-      await loadProjects();
-      setActiveProject(r.data);
-    } catch (e) {
-      alert(`Duplicate failed: ${e.message}`);
-    }
-  };
-
   const handleConfirmMockups = async (selected) => {
     const project = picker.project;
     if (!project) return;
@@ -558,56 +543,13 @@ export default function OrderTracker({ token, onBack }) {
             <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>New project</Box>
           </Button>
 
-          <Tooltip title="Clients overview">
-            <span>
-              <IconButton onClick={handleOpenClients} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <PeopleAltOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Analytics">
-            <span>
-              <IconButton onClick={handleOpenAnalytics} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <InsightsOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Mockup health report">
-            <span>
-              <IconButton onClick={handleOpenHealth} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <FactCheckOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Auto-link library mockups">
-            <span>
-              <IconButton onClick={handleOpenAutoLink} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <AutoFixHighIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Cleanup / dedupe">
-            <span>
-              <IconButton onClick={handleOpenCleanup} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <CleaningServicesOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
+          {/* Priority-ordered: workflow (QB, multi-select) and lookup (clients)
+              stay visible. Diagnostics/reports/maintenance live in More. */}
           <Tooltip title="QuickBooks">
             <span>
               <IconButton onClick={handleOpenQb} size="small"
-                sx={{ color: B.muted, opacity: 0.4, '&:hover': { opacity: 1, color: B.green } }}>
-                <ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />
+                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
+                <ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </span>
           </Tooltip>
@@ -615,12 +557,56 @@ export default function OrderTracker({ token, onBack }) {
           <Tooltip title={selectMode ? 'Exit multi-select' : 'Select multiple projects'}>
             <span>
               <IconButton onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))} size="small"
-                sx={{ color: selectMode ? B.green : B.muted, opacity: selectMode ? 1 : 0.4,
+                sx={{ color: selectMode ? B.green : B.muted, opacity: selectMode ? 1 : 0.55,
                   '&:hover': { opacity: 1, color: B.green } }}>
-                <ChecklistIcon sx={{ fontSize: 16 }} />
+                <ChecklistIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </span>
           </Tooltip>
+
+          <Tooltip title="Clients overview">
+            <span>
+              <IconButton onClick={handleOpenClients} size="small"
+                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
+                <PeopleAltOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          <Tooltip title="More — analytics, mockup health, auto-link, cleanup">
+            <span>
+              <IconButton onClick={(e) => setMoreAnchor(e.currentTarget)} size="small"
+                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
+                <MoreVertIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Menu anchorEl={moreAnchor} open={!!moreAnchor} onClose={() => setMoreAnchor(null)}
+            PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, minWidth: 220 } }}>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenAnalytics(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><InsightsOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}>Analytics</ListItemText>
+            </MenuItem>
+            <Divider sx={{ borderColor: B.border }} />
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenHealth(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Find missing / orphan mockups">Mockup health</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenAutoLink(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><AutoFixHighIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Bulk-link orphan mockups">Auto-link mockups</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenCleanup(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><CleaningServicesOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Empty projects + duplicates">Cleanup</ListItemText>
+            </MenuItem>
+          </Menu>
 
           <Box component="img" src={jpLogoWhite} alt="Joint Printing"
             sx={{ height: 22, width: 'auto', ml: 0.5, opacity: 0.92 }} />
@@ -755,7 +741,6 @@ export default function OrderTracker({ token, onBack }) {
         onClose={() => setActiveProject(null)}
         onSave={handleSave}
         onDelete={handleDelete}
-        onDuplicate={() => activeProject && handleDuplicate(activeProject)}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
         onOpenConfirmation={() => setConfirmation(activeProject)}
         onOpenQuote={() => setQuote(activeProject)}
@@ -1119,7 +1104,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onDuplicate, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1600,11 +1585,6 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           }}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Share for approval
-        </Button>
-        <Button startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />}
-          onClick={onDuplicate}
-          sx={{ color: B.muted, fontSize: 11, textTransform: 'none', '&:hover': { color: B.white } }}>
-          Duplicate
         </Button>
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
