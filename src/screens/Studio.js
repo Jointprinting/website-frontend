@@ -1411,6 +1411,19 @@ function EditableScript({
   );
 }
 
+// Bounded localStorage write so we don't silently fail on quota or stale
+// schemas. Returns true on success, false otherwise; callers can show toast.
+const CC_SCHEMA_VERSION = 2;
+const CC_HISTORY_MAX = 50;
+function _lsSet(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch (e) { console.warn(`[ColdCall] localStorage write failed for ${key}:`, e.message); return false; }
+}
+function _lsGet(key, fallback) {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : v; }
+  catch (e) { return fallback; }
+}
+
 function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
   const [svc, setSvc] = React.useState('');
@@ -1418,53 +1431,69 @@ function ColdCallTab({ token }) {
   const [history, setHistory] = React.useState(['start']);
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
+  const [storageWarning, setStorageWarning] = React.useState('');
 
   // Overrides keyed by `${nodeId}::${field}` -> string (the edited text).
-  // Persisted to localStorage. One override per field. No versions.
+  // Persisted to localStorage with a schema version so older shapes can be
+  // migrated or discarded cleanly.
   const [overrides, setOverrides] = React.useState({});
 
   // Load persisted setup, notes, and overrides
   React.useEffect(() => {
-    setBiz(localStorage.getItem('jpw_cc_biz') || '');
-    setSvc(localStorage.getItem('jpw_cc_svc') || '');
-    setName(localStorage.getItem('jpw_cc_name') || '');
-    setNotes(localStorage.getItem('jpw_cc_notes') || '');
+    setBiz(_lsGet('jpw_cc_biz', ''));
+    setSvc(_lsGet('jpw_cc_svc', ''));
+    setName(_lsGet('jpw_cc_name', ''));
+    setNotes(_lsGet('jpw_cc_notes', ''));
     try {
-      const saved = JSON.parse(localStorage.getItem('jpw_cc_overrides') || '{}');
-      if (saved && typeof saved === 'object') setOverrides(saved);
-    } catch (e) {}
+      const raw = _lsGet('jpw_cc_overrides', '{}');
+      const saved = JSON.parse(raw);
+      if (saved && typeof saved === 'object') {
+        // v1 = flat { 'nodeId::field': text }. v2 = { _v:2, data: {…} }.
+        // Accept either shape; drop anything malformed.
+        const data = saved._v ? (saved.data || {}) : saved;
+        const clean = {};
+        Object.keys(data).forEach(k => {
+          if (typeof k === 'string' && k.includes('::') && typeof data[k] === 'string') clean[k] = data[k];
+        });
+        setOverrides(clean);
+      }
+    } catch (e) { console.warn('[ColdCall] overrides parse failed; resetting:', e.message); }
 
-    // One-shot handoff from the JPW Lead Recon tab: when the user clicks
-    // "Cold Call Tree" on a lead, that tab writes the lead context to
-    // sessionStorage just before switching views. We pick it up here and
-    // pre-fill the three setup fields, then clear it so re-entering the
-    // tree later doesn't re-apply the same lead.
+    // One-shot handoff from the JPW Lead Recon tab.
     try {
       const handoff = sessionStorage.getItem('jpwColdCallContext');
       if (handoff) {
         const ctx = JSON.parse(handoff);
         if (ctx && typeof ctx === 'object') {
-          if (ctx.biz)  setBiz(ctx.biz);
-          if (ctx.svc)  setSvc(ctx.svc);
-          if (ctx.name) setName(ctx.name);
+          if (typeof ctx.biz  === 'string') setBiz(ctx.biz);
+          if (typeof ctx.svc  === 'string') setSvc(ctx.svc);
+          if (typeof ctx.name === 'string') setName(ctx.name);
         }
         sessionStorage.removeItem('jpwColdCallContext');
       }
-    } catch (e) { /* malformed handoff — skip */ }
+    } catch (e) { console.warn('[ColdCall] handoff parse failed:', e.message); }
   }, []);
 
-  React.useEffect(() => { localStorage.setItem('jpw_cc_biz', biz); }, [biz]);
-  React.useEffect(() => { localStorage.setItem('jpw_cc_svc', svc); }, [svc]);
-  React.useEffect(() => { localStorage.setItem('jpw_cc_name', name); }, [name]);
-  React.useEffect(() => {
-    localStorage.setItem('jpw_cc_overrides', JSON.stringify(overrides));
-  }, [overrides]);
+  React.useEffect(() => { _lsSet('jpw_cc_biz', biz); }, [biz]);
+  React.useEffect(() => { _lsSet('jpw_cc_svc', svc); }, [svc]);
+  React.useEffect(() => { _lsSet('jpw_cc_name', name); }, [name]);
 
-  // Debounced notes save to localStorage
+  // Debounced overrides save — every keystroke shouldn't punish localStorage.
   React.useEffect(() => {
     const t = setTimeout(() => {
-      localStorage.setItem('jpw_cc_notes', notes);
-      setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      const payload = JSON.stringify({ _v: CC_SCHEMA_VERSION, data: overrides });
+      const ok = _lsSet('jpw_cc_overrides', payload);
+      setStorageWarning(ok ? '' : 'Edits not saved — browser storage is full or blocked.');
+    }, 300);
+    return () => clearTimeout(t);
+  }, [overrides]);
+
+  // Debounced notes save
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      const ok = _lsSet('jpw_cc_notes', notes);
+      if (ok) setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      else setStorageWarning('Notes not saved — browser storage is full or blocked.');
     }, 400);
     return () => clearTimeout(t);
   }, [notes]);
@@ -1477,9 +1506,17 @@ function ColdCallTab({ token }) {
   }, [biz, svc, name]);
 
   const currentId = history[history.length - 1];
-  const node = COLD_CALL_NODES[currentId];
+  const node = COLD_CALL_NODES[currentId] || COLD_CALL_NODES.start;
 
-  const goTo = (id) => setHistory((h) => [...h, id]);
+  // Cap history at CC_HISTORY_MAX so a long call session can't grow the
+  // array unbounded; oldest entries roll off the front.
+  const goTo = (id) => {
+    if (!COLD_CALL_NODES[id]) { console.warn(`[ColdCall] unknown node id: ${id}`); return; }
+    setHistory((h) => {
+      const next = [...h, id];
+      return next.length > CC_HISTORY_MAX ? next.slice(-CC_HISTORY_MAX) : next;
+    });
+  };
   const goBack = () => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
   const restart = () => setHistory(['start']);
 
@@ -1514,6 +1551,10 @@ function ColdCallTab({ token }) {
         Live decision tree for cold calls. Fill the owner's first name, business name, and service type at the top —
         every line autofills as you go. The owner name is the highest-leverage one: it changes the open from "is this the owner of ABC Plumbing" to "is this Mike" — sounds like you know them. Click "Edit" on any script to tweak it; edits stay on this device until you reset.
       </MuiTypography>
+
+      {storageWarning && (
+        <Alert severity="warning" sx={{ mb: 2 }}>{storageWarning}</Alert>
+      )}
 
       {/* Setup inputs */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
