@@ -448,6 +448,18 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   50%      { box-shadow: 0 0 0 8px transparent; }
 }
 
+/* Mockup # pill on saved-mockup-cards */
+.num-pill {
+  display: inline-block; background: var(--s2); color: var(--tx);
+  font-family: var(--fm); font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 4px; margin-right: 6px;
+  letter-spacing: .3px;
+}
+/* Cloud sync state dot on saved-mockup-cards */
+.sync-dot { font-size: 11px; font-weight: 700; margin-left: 2px; }
+.sync-dot.synced { color: var(--ac); }
+.sync-dot.pending { color: #f59e0b; }
+
 /* Client tag chip on saved-mockup-cards */
 .client-chip {
   display: inline-block;
@@ -1015,12 +1027,31 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <div class="lib-sec-hdr">
         <div class="lib-sec-title">Saved Mockups</div>
         <div class="lib-count" id="mockup-count">0</div>
-        <div style="flex:1"></div>
+      </div>
+      <p class="sec-note">Mockups saved here appear in the Lookbook + auto-attach to the matching Order Tracker project by client name.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px;align-items:center">
+        <input id="library-search" type="search" placeholder="Search by mockup #, title, or client…" oninput="refreshLibrary()"
+          style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 10px;font-size:12px;font-family:var(--f);min-width:240px;flex:1"/>
         <select id="library-client-filter" onchange="refreshLibrary()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:5px 9px;font-size:11px;font-family:var(--f);cursor:pointer;min-width:140px">
           <option value="">All clients</option>
         </select>
+        <select id="library-sort" onchange="refreshLibrary()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:5px 9px;font-size:11px;font-family:var(--f);cursor:pointer">
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="num">Mockup #</option>
+          <option value="title">Title (A–Z)</option>
+          <option value="client">Client (A–Z)</option>
+        </select>
+        <select id="library-sync-filter" onchange="refreshLibrary()" title="Cloud sync state" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:5px 9px;font-size:11px;font-family:var(--f);cursor:pointer">
+          <option value="">All</option>
+          <option value="synced">Synced ☁</option>
+          <option value="pending">Pending ↑</option>
+        </select>
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2);cursor:pointer">
+          <input id="library-group" type="checkbox" onchange="refreshLibrary()" style="margin:0"/>
+          Group by client
+        </label>
       </div>
-      <p class="sec-note">Mockups saved here appear in the Lookbook. Use <strong>+ Mockup Image</strong> to add a finished image directly.</p>
       <div id="library-mockups"><div class="empty-state">No saved mockups yet.</div></div>
     </div>
   </div>
@@ -2678,18 +2709,50 @@ async function refreshLibrary() {
   document.getElementById('logo-count').textContent=logos.length;
   // Refresh client suggestions (datalist + filter dropdowns) when library opens
   await refreshClientSuggestions();
-  // Apply client filter + optional name filter (set by ?filter= URL param from Client Hub)
+
+  // Filter, sort, group — all derived from the toolbar controls.
   const clientFilterEl = document.getElementById('library-client-filter');
-  const clientFilter = (clientFilterEl?.value || '').trim();
-  const nameFilter = (clientFilterEl?._nameFilter || '').trim().toLowerCase();
-  let filteredMockups = clientFilter ? mockups.filter(m => (m.client || '') === clientFilter) : mockups;
-  if (nameFilter) filteredMockups = filteredMockups.filter(m => (m.name || '').toLowerCase().includes(nameFilter));
-  document.getElementById('mockup-count').textContent = (clientFilter || nameFilter)
-    ? `${filteredMockups.length}/${mockups.length}`
+  const clientFilter   = (clientFilterEl?.value || '').trim();
+  const searchEl       = document.getElementById('library-search');
+  // Honor the legacy ?filter= URL param from the Client Hub.
+  const legacyNameFilter = (clientFilterEl?._nameFilter || '').trim().toLowerCase();
+  const searchTerm     = ((searchEl?.value || '') + ' ' + legacyNameFilter).trim().toLowerCase();
+  const sort           = document.getElementById('library-sort')?.value || 'newest';
+  const syncFilter     = document.getElementById('library-sync-filter')?.value || '';
+  const groupByClient  = !!document.getElementById('library-group')?.checked;
+
+  const mockupNum   = (m) => (m.pageState && m.pageState.mockupNum) || '';
+  const isSynced    = (m) => !!(m.cloudSyncedAt && m.cloudSyncedAt >= (m.savedAt || 0));
+
+  let filtered = mockups.slice();
+  if (clientFilter) filtered = filtered.filter(m => (m.client || '') === clientFilter);
+  if (searchTerm) {
+    filtered = filtered.filter(m => {
+      const hay = [(m.name || ''), (m.client || ''), mockupNum(m)].join(' ').toLowerCase();
+      return hay.includes(searchTerm);
+    });
+  }
+  if (syncFilter === 'synced')  filtered = filtered.filter(isSynced);
+  if (syncFilter === 'pending') filtered = filtered.filter(m => !isSynced(m));
+
+  // Sort
+  const cmp = {
+    newest: (a, b) => (b.savedAt || 0) - (a.savedAt || 0),
+    oldest: (a, b) => (a.savedAt || 0) - (b.savedAt || 0),
+    num:    (a, b) => String(mockupNum(a) || '').localeCompare(String(mockupNum(b) || ''), undefined, { numeric: true }),
+    title:  (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
+    client: (a, b) => String(a.client || '').localeCompare(String(b.client || '')) || (b.savedAt || 0) - (a.savedAt || 0),
+  }[sort] || ((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  filtered.sort(cmp);
+
+  const countEl = document.getElementById('mockup-count');
+  countEl.textContent = (filtered.length !== mockups.length)
+    ? `${filtered.length}/${mockups.length}`
     : mockups.length;
+
   renderAssetGrid('library-blanks',blanks,'blank');
   renderAssetGrid('library-logos',logos,'logo');
-  renderMockupList('library-mockups',filteredMockups);
+  renderMockupList('library-mockups', filtered, { groupByClient, isSynced, mockupNum });
 }
 function renderAssetGrid(containerId,items,type) {
   const c=document.getElementById(containerId);
@@ -2704,21 +2767,54 @@ function renderAssetGrid(containerId,items,type) {
     c.appendChild(card);
   });
 }
-function renderMockupList(containerId,items) {
-  const c=document.getElementById(containerId);
-  if(!items.length){c.innerHTML='<div class="empty-state">No saved mockups.</div>';return;}
-  c.innerHTML='';
-  items.forEach((item, idx)=>{
-    const card=document.createElement('div');
-    card.className='saved-mockup-card';
-    card.style.animation = `fadeSlideIn .25s ease-out ${Math.min(idx*30,400)}ms backwards`;
-    const d=new Date(item.savedAt).toLocaleDateString();
-    const clientChip = item.client
-      ? `<span class="client-chip">${item.client.replace(/</g,'&lt;')}</span>`
+function renderMockupList(containerId, items, opts) {
+  const c = document.getElementById(containerId);
+  if (!items.length) { c.innerHTML = '<div class="empty-state">No saved mockups match these filters.</div>'; return; }
+  const { groupByClient = false, isSynced = () => true, mockupNum = () => '' } = (opts || {});
+  const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
+  const renderCard = (item, idx) => {
+    const d = new Date(item.savedAt).toLocaleDateString();
+    const num = mockupNum(item);
+    const numPill = num
+      ? `<span class="num-pill">#${esc(String(num).replace(/^#/, ''))}</span>`
       : '';
-    card.innerHTML=`<div class="mockup-icon">${item.thumbnail?`<img src="${item.thumbnail}"/>`:'📋'}</div><div class="mockup-info"><div class="mockup-name">${(item.name||'').replace(/</g,'&lt;')}${clientChip}</div><div class="mockup-date">${d}</div></div><div class="mockup-actions"><button class="btn btn-ghost btn-xs" onclick="loadMockup(${item.id},event)">Load</button><button class="btn btn-danger" onclick="deleteAsset('mockups',${item.id},event)">✕</button></div>`;
-    c.appendChild(card);
-  });
+    const clientChip = item.client ? `<span class="client-chip">${esc(item.client)}</span>` : '';
+    const syncDot = isSynced(item)
+      ? `<span class="sync-dot synced" title="Synced to cloud">☁</span>`
+      : `<span class="sync-dot pending" title="Not yet pushed to cloud — hit ☁ Sync All">↑</span>`;
+    return `<div class="saved-mockup-card" style="animation:fadeSlideIn .25s ease-out ${Math.min(idx*30,400)}ms backwards">
+      <div class="mockup-icon">${item.thumbnail ? `<img src="${item.thumbnail}"/>` : '📋'}</div>
+      <div class="mockup-info">
+        <div class="mockup-name">${numPill}${esc(item.name)}${clientChip}</div>
+        <div class="mockup-date">${d} · ${syncDot}</div>
+      </div>
+      <div class="mockup-actions">
+        <button class="btn btn-ghost btn-xs" onclick="loadMockup(${item.id},event)">Load</button>
+        <button class="btn btn-danger" onclick="deleteAsset('mockups',${item.id},event)">✕</button>
+      </div>
+    </div>`;
+  };
+
+  if (!groupByClient) {
+    c.innerHTML = items.map(renderCard).join('');
+    return;
+  }
+  // Group by client (blank client = "(no client)") with collapsible headers.
+  const groups = items.reduce((acc, it) => {
+    const k = (it.client || '').trim() || '(no client)';
+    (acc[k] = acc[k] || []).push(it);
+    return acc;
+  }, {});
+  const keys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+  c.innerHTML = keys.map(k => {
+    const list = groups[k];
+    return `<div class="lib-group" style="margin-bottom:14px">
+      <div class="lib-group-hdr" style="display:flex;align-items:center;gap:6px;color:var(--ac);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bd2)">
+        <span>${esc(k)}</span><span style="color:var(--tx2);font-weight:500">· ${list.length}</span>
+      </div>
+      ${list.map(renderCard).join('')}
+    </div>`;
+  }).join('');
 }
 async function loadAssetToStudio(type,item) {
   const pg=state.pages[state.currentPage];
