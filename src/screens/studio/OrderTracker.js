@@ -160,6 +160,44 @@ export default function OrderTracker({ token, onBack }) {
 
   const lookupMockup = (mockupNum) => mockupMap[mockupNum] || mockupMap[normMockupKey(mockupNum)];
 
+  // Index mockups by slugged client so "Highway 90 Merch" auto-attaches to
+  // the Highway 90 project without anyone typing a mockup #.
+  const _slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const mockupsByClientSlug = useMemo(() => {
+    const map = {};
+    mockups.forEach(m => {
+      const client = m.pageState?.client || m.client || '';
+      const name = m.name || '';
+      // Pull a client guess from the title — "Highway 90 Merch" → "highway90".
+      const titleClient = name.replace(/\s+merch\s*$/i, '').trim();
+      [client, titleClient].forEach(raw => {
+        const k = _slug(raw);
+        if (!k) return;
+        (map[k] = map[k] || []).push(m);
+      });
+    });
+    return map;
+  }, [mockups]);
+
+  const autoMockupsFor = (project) => {
+    if (!project) return [];
+    const tried = new Set();
+    const out = [];
+    const seenIds = new Set();
+    [project.companyName, project.clientName].forEach(raw => {
+      const k = _slug(raw);
+      if (!k || tried.has(k)) return;
+      tried.add(k);
+      (mockupsByClientSlug[k] || []).forEach(m => {
+        const id = m._id || m.remoteId || m.name;
+        if (seenIds.has(id)) return;
+        seenIds.add(id);
+        out.push(m);
+      });
+    });
+    return out;
+  };
+
   // For card hero fallback: when a project has no mockups linked, show
   // other mockups from the same company so the card isn't blank.
   const companyMockupPool = useMemo(() => {
@@ -710,6 +748,7 @@ export default function OrderTracker({ token, onBack }) {
         project={activeProject}
         mockupMap={mockupMap}
         mockups={mockups}
+        autoMatched={activeProject ? autoMockupsFor(activeProject) : []}
         logo={activeProject ? logoFor(activeProject) : null}
         onUploadLogo={(file) => activeProject && uploadLogo(activeProject, file)}
         onRemoveLogo={() => activeProject && removeLogo(activeProject)}
@@ -1080,7 +1119,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onDuplicate, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onDuplicate, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1210,15 +1249,31 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
       {/* Mockup grid */}
       <Box sx={{ px: 2.5, pt: 2 }}>
         {(() => {
-          const nums = local.mockupNumbers || [];
-          const tiles = nums.map(n => ({ num: n, item: mockupMap[n] || mockupMap[_normKey(n)] || null }));
-          const matched = tiles.filter(t => t.item).length;
-          const missing = tiles.length - matched;
+          const explicitNums = local.mockupNumbers || [];
+          const explicitKeys = new Set(explicitNums.map(n => _normKey(n)));
+          // Auto-matched mockups (by client/title slug) that aren't already in
+          // the explicit list. These appear without anyone manually typing #s.
+          const autoTiles = (autoMatched || [])
+            .filter(m => {
+              const k = _normKey(m.pageState?.mockupNum || '');
+              return k && !explicitKeys.has(k);
+            })
+            .map(m => ({ num: m.pageState?.mockupNum || '', item: m, source: 'auto' }));
+          const explicitTiles = explicitNums.map(n => ({
+            num: n, item: mockupMap[n] || mockupMap[_normKey(n)] || null, source: 'linked',
+          }));
+          const tiles = [...explicitTiles, ...autoTiles];
+          const missing = explicitTiles.length - explicitTiles.filter(t => t.item).length;
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
                 <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                  Mockups · {nums.length}
+                  Mockups · {tiles.length}
+                  {autoTiles.length > 0 && (
+                    <Typography component="span" sx={{ color: B.green, fontSize: 10, fontWeight: 700, ml: 1, textTransform: 'none', letterSpacing: 0 }}>
+                      ({autoTiles.length} auto-matched)
+                    </Typography>
+                  )}
                   {missing > 0 && (
                     <Typography component="span" sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, ml: 1, textTransform: 'none', letterSpacing: 0 }}>
                       ({missing} not in studio)
@@ -1228,13 +1283,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
                 <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                   onClick={onOpenPicker}
                   sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-                  {nums.length === 0 ? 'Link mockups' : 'Edit mockups'}
+                  {explicitNums.length === 0 ? 'Link mockups' : 'Edit mockups'}
                 </Button>
               </Stack>
-              {nums.length === 0 ? (
+              {tiles.length === 0 ? (
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
-                  No mockups linked yet
+                  No mockups for this client yet — save one in jpstudio with title "{(project.companyName || project.clientName || '').trim() || 'Company'} Merch" and it'll auto-appear here.
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
@@ -1245,17 +1300,27 @@ function ProjectDrawer({ open, project, mockupMap, mockups, logo, onUploadLogo, 
                       bgcolor: B.panelHi, position: 'relative',
                       '&:hover .tile-x': { opacity: 1 },
                     }}>
-                      <IconButton className="tile-x" size="small"
-                        onClick={() => removeMockup(t.num)}
-                        title={`Remove ${t.num} from this project`}
-                        sx={{
-                          position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
-                          opacity: 0, transition: 'opacity 0.12s',
-                          bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
-                          '&:hover': { bgcolor: '#ef4444', color: '#fff' },
-                        }}>
-                        <CloseIcon sx={{ fontSize: 12 }} />
-                      </IconButton>
+                      {t.source !== 'auto' && (
+                        <IconButton className="tile-x" size="small"
+                          onClick={() => removeMockup(t.num)}
+                          title={`Remove ${t.num} from this project`}
+                          sx={{
+                            position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
+                            opacity: 0, transition: 'opacity 0.12s',
+                            bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
+                            '&:hover': { bgcolor: '#ef4444', color: '#fff' },
+                          }}>
+                          <CloseIcon sx={{ fontSize: 12 }} />
+                        </IconButton>
+                      )}
+                      {t.source === 'auto' && (
+                        <Box sx={{
+                          position: 'absolute', top: 2, left: 2, zIndex: 1,
+                          bgcolor: 'rgba(34,197,94,0.85)', color: '#062414',
+                          fontSize: 7, fontWeight: 800, letterSpacing: 0.6,
+                          px: 0.6, py: 0.1, borderRadius: 0.5,
+                        }} title="Matched automatically by client name">AUTO</Box>
+                      )}
                       {t.item && t.item.thumbnail ? (
                         <Box component="img" src={t.item.thumbnail} alt={t.item.name}
                           sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
