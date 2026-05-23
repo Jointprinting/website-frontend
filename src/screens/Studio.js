@@ -1785,23 +1785,25 @@ function ColdCallTab({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Hub — picks which tool to enter, grouped by brand
 // ─────────────────────────────────────────────────────────────────────────────
+// Ordered by daily frequency of use — Order Tracker first, maintenance last.
+// Subtitles give the page some weight and tell new-tab-me what each tile does.
 const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
     tools: [
-      { id: 'submissions', label: 'Inquiries',            Icon: InboxIcon },
-      { id: 'clients',     label: 'Order Tracker',         Icon: PeopleOutlineIcon },
-      { id: 'catalogs',    label: 'Catalogs',             Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Field Map',             Icon: ExploreOutlinedIcon },
-      { id: 'mockup',      label: 'Mockup Studio',        Icon: DesignServicesIcon },
-      { id: 'backup',      label: 'Backup & restore',     Icon: BackupIcon },
+      { id: 'clients',     label: 'Order Tracker',  sub: 'Projects · quotes · confirmations · payments', Icon: PeopleOutlineIcon },
+      { id: 'mockup',      label: 'Mockup Studio',  sub: 'Build mockups · export PDFs · client lookbook', Icon: DesignServicesIcon },
+      { id: 'submissions', label: 'Inquiries',      sub: 'Inbox from the public site contact form',       Icon: InboxIcon },
+      { id: 'catalogs',    label: 'Catalogs',       sub: 'S&S / SanMar reference + style lookup',         Icon: MenuBookOutlinedIcon },
+      { id: 'roadtrip',    label: 'Field Map',      sub: 'Door-to-door pin map for cold visits',          Icon: ExploreOutlinedIcon },
+      { id: 'backup',      label: 'Backup & restore', sub: 'Snapshot the whole studio to download',       Icon: BackupIcon },
     ],
   },
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
-      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
+      { id: 'coldcall',  label: 'Cold Call Tree', sub: 'Branching script for live cold calls',  Icon: PhoneInTalkIcon },
+      { id: 'jpwrecon',  label: 'Lead Recon',     sub: 'Daily lead sweep + qualification queue', Icon: TrackChangesOutlinedIcon },
     ],
   },
 ];
@@ -1810,7 +1812,7 @@ const HUB_GROUPS = [
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
 function HubCard({ tool, onClick, delay, notice, badge }) {
-  const { label, Icon } = tool;
+  const { label, sub, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
     <Grow in timeout={400 + delay}>
@@ -1822,7 +1824,8 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
           bgcolor: BRAND.panel,
           border: `1px solid ${BRAND.border}`,
           borderRadius: 2,
-          p: { xs: 1.75, sm: 2 },
+          p: { xs: 2, sm: 2.5 },
+          minHeight: 88,
           transition: 'all 0.18s ease',
           position: 'relative',
           '&:hover': {
@@ -1834,19 +1837,19 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
           },
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={1.5}>
+        <Stack direction="row" alignItems="center" spacing={2}>
           <Box
             className="hub-icon"
             sx={{
               flexShrink: 0,
-              width: 38, height: 38, borderRadius: 1.5,
+              width: 46, height: 46, borderRadius: 1.5,
               bgcolor: BRAND.greenDk, color: BRAND.green,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.18s ease',
               position: 'relative',
             }}
           >
-            <Icon sx={{ fontSize: 20 }} />
+            <Icon sx={{ fontSize: 24 }} />
             {notice && !badge && (
               <Box sx={{
                 position: 'absolute', top: -3, right: -3,
@@ -1872,15 +1875,25 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
               </Box>
             )}
           </Box>
-          <MuiTypography fontWeight={700} sx={{
-            color: BRAND.white, fontSize: 14.5, flexGrow: 1,
-          }}>
-            {label}
-          </MuiTypography>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <MuiTypography fontWeight={700} sx={{
+              color: BRAND.white, fontSize: 15.5, lineHeight: 1.2,
+            }}>
+              {label}
+            </MuiTypography>
+            {sub && (
+              <MuiTypography sx={{
+                color: BRAND.muted, fontSize: 11.5, mt: 0.4, lineHeight: 1.35,
+                overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {sub}
+              </MuiTypography>
+            )}
+          </Box>
           <ChevronRightIcon
             className="hub-arrow"
             sx={{
-              color: BRAND.green, fontSize: 18,
+              color: BRAND.green, fontSize: 20,
               opacity: 0,
               transform: 'translateX(-4px)',
               transition: 'all 0.18s ease',
@@ -1909,8 +1922,14 @@ function Hub({ onPick, sweepNeeded, unseenInquiries }) {
           </MuiTypography>
           <Box sx={{
             display: 'grid',
-            gap: 1,
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+            gap: 1.25,
+            // Tighter column count for small groups so the row doesn't
+            // leave a yawning empty column on wider screens.
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+            },
           }}>
             {group.tools.map((t) => {
               const showNotice = t.id === 'jpwrecon' && sweepNeeded;
