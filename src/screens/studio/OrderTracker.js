@@ -444,14 +444,19 @@ export default function OrderTracker({ token, onBack }) {
 
   // Mint an approval-link token + copy to clipboard. Shared between the
   // project drawer's "Share for approval" button and the confirmation
-  // builder's header button.
+  // builder's header button. Prompts for an expiry (default 7d) so the
+  // client feels appropriate urgency and stale prices can't be approved.
   const shareApprovalFor = async (projectId) => {
     if (!projectId) return;
+    const raw = window.prompt('How many days should this approval link stay live?\n\nDefault 7. Type a number, or Cancel to abort.', '7');
+    if (raw === null) return;
+    const ttlDays = Math.max(1, Math.min(365, Math.round(Number(raw) || 7)));
     try {
-      const r = await axios.post(`${base}/orders/${projectId}/approval-link`, {}, authHdr);
+      const r = await axios.post(`${base}/orders/${projectId}/approval-link`,
+        { ttlDays, rotate: true }, authHdr);
       const url = `${window.location.origin}/approve/${projectId}?token=${r.data.token}`;
       const expiry = r.data.expiresAt
-        ? `\n\nLink expires: ${new Date(r.data.expiresAt).toLocaleString()}`
+        ? `\n\nExpires: ${new Date(r.data.expiresAt).toLocaleString()} (${ttlDays} day${ttlDays !== 1 ? 's' : ''})`
         : '';
       try {
         await navigator.clipboard.writeText(url);

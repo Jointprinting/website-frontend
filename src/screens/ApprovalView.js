@@ -38,9 +38,13 @@ export default function ApprovalView() {
   const [err, setErr]     = useState('');
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
-  const [done, setDone]   = useState(null);   // 'approved' | 'changes'
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesText, setChangesText] = useState('');
+
+  // Derived from the server's approvalStatus so reopening the link shows the
+  // same locked state for the client every time.
+  const p = data?.project || {};
+  const approvalStatus = p.approvalStatus || 'pending';   // 'pending' | 'approved' | 'requested_changes'
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +66,19 @@ export default function ApprovalView() {
     return () => { cancelled = true; };
   }, [projectId, token]);
 
+  const refresh = async () => {
+    try {
+      const r = await axios.get(
+        `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
+      setData(r.data);
+    } catch (_) { /* keep existing data */ }
+  };
+
   const handleApprove = async () => {
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`);
-      setDone('approved');
+      await refresh();
     } catch (e) {
       alert(e.response?.data?.message || 'Approval failed. Try again or contact us directly.');
     } finally {
@@ -79,8 +91,9 @@ export default function ApprovalView() {
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
         { message: changesText });
-      setDone('changes');
       setChangesOpen(false);
+      setChangesText('');
+      await refresh();
     } catch (e) {
       alert(e.response?.data?.message || 'Could not send your feedback. Try again or reply to our email.');
     } finally {
@@ -110,7 +123,6 @@ export default function ApprovalView() {
     );
   }
 
-  const p = data.project;
   const mockups = data.mockups || [];
   const logo = data.logo;
   const quoteLines = p.quoteLines || [];
@@ -133,7 +145,6 @@ export default function ApprovalView() {
       }));
   const subtotal = itemRows.reduce((s, r) => s + (Number(r.lineTotal) || 0), 0);
   const total = Number(p.totalValue) || subtotal;
-  const alreadyApproved = ['approved', 'placed', 'in_production', 'shipped', 'delivered'].includes(p.status);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, color: COLORS.text, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
@@ -241,44 +252,35 @@ export default function ApprovalView() {
           )}
         </Box>
 
-        {/* Action panel — always allow Request changes, even after approval */}
+        {/* Action panel — locked once the client has either approved OR
+            requested changes, so the link stays consistent on every reload. */}
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          {done === 'changes' ? (
+          {approvalStatus === 'requested_changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
               <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Got it — we&apos;ll revise.</Typography>
               <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
                 Your notes are with the team. We&apos;ll send a new proof shortly.
               </Typography>
-              <Button onClick={() => { setDone(null); setChangesOpen(true); }}
-                sx={{ mt: 2, color: COLORS.muted, fontSize: 12, textTransform: 'none' }}>
-                Send another note
-              </Button>
+              {p.approvalAt && (
+                <Typography sx={{ color: COLORS.muted, fontSize: 11, mt: 1.5 }}>
+                  Sent {new Date(p.approvalAt).toLocaleString()}
+                </Typography>
+              )}
             </Box>
-          ) : done === 'approved' || alreadyApproved ? (
-            <>
-              <Box sx={{ textAlign: 'center', py: 1 }}>
-                <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
-                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
-                <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2 }}>
-                  We&apos;ll get production rolling and follow up over email with timing.
+          ) : approvalStatus === 'approved' ? (
+            <Box sx={{ textAlign: 'center', py: 1 }}>
+              <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
+              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
+              <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
+                We&apos;ll get production rolling and follow up over email with timing.
+              </Typography>
+              {p.approvalAt && (
+                <Typography sx={{ color: COLORS.muted, fontSize: 11, mt: 1.5 }}>
+                  Approved {new Date(p.approvalAt).toLocaleString()}
                 </Typography>
-              </Box>
-              <Box sx={{ borderTop: `1px solid ${COLORS.border}`, pt: 2, mt: 1 }}>
-                <Typography sx={{ color: COLORS.muted, fontSize: 12, mb: 1.5, textAlign: 'center' }}>
-                  Notice something? You can still send a note before production starts.
-                </Typography>
-                <Button onClick={() => setChangesOpen(true)} disabled={actionBusy}
-                  startIcon={<EditNoteIcon />}
-                  variant="outlined"
-                  fullWidth
-                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
-                    textTransform: 'none', py: 1, fontSize: 13,
-                    '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
-                  Request a change
-                </Button>
-              </Box>
-            </>
+              )}
+            </Box>
           ) : (
             <>
               <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
