@@ -29,6 +29,11 @@ export default function BackupTab({ token, onBack }) {
     setLoading(true);
     try {
       const res = await fetch(`${base}/admin/backup/status`, authHdr);
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); if (j && j.message) msg = j.message; } catch (_) {}
+        throw new Error(msg);
+      }
       const data = await res.json();
       setStat(data);
     } catch (e) {
@@ -50,7 +55,9 @@ export default function BackupTab({ token, onBack }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `joint-printing-backup-${new Date().toISOString().slice(0,10)}.zip`;
+      // ISO timestamp (with time, colons swapped) so two same-day backups don't overwrite each other.
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.download = `joint-printing-backup-${ts}.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -115,6 +122,12 @@ export default function BackupTab({ token, onBack }) {
         </Box>
       ) : (
         <Box sx={{ maxWidth: 720 }}>
+          {stat && stat.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Could not reach the backup service — {stat.error}
+            </Alert>
+          )}
+
           {/* Status */}
           <Box sx={{ bgcolor: B.panel, border: `1px solid ${isDue ? '#fbbf24' : B.border}`,
             borderRadius: 2, p: { xs: 2, md: 3 }, mb: 2 }}>
