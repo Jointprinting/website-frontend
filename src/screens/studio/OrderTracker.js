@@ -1839,21 +1839,23 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
           <>
             {/* Summary tiles */}
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
-              <HealthStat label="Projects"    value={summary.projects} />
+              <HealthStat label="Projects"     value={summary.projects} />
               <HealthStat label="Studio items" value={summary.libraryItems} />
-              <HealthStat label="Linked"      value={summary.linked}   accent={B.green} />
-              <HealthStat label="Missing"     value={summary.missing}  accent={summary.missing  > 0 ? '#fbbf24' : undefined} />
-              <HealthStat label="Orphans"     value={summary.orphans}  accent={summary.orphans  > 0 ? '#60a5fa' : undefined} />
+              <HealthStat label="Linked"       value={summary.linked}      accent={B.green} />
+              <HealthStat label="Auto-matched" value={summary.autoMatched ?? 0} accent={(summary.autoMatched ?? 0) > 0 ? B.green : undefined} />
+              <HealthStat label="Missing"      value={summary.missing}     accent={summary.missing > 0 ? '#fbbf24' : undefined} />
+              <HealthStat label="Orphans"      value={summary.orphans}     accent={summary.orphans > 0 ? '#60a5fa' : undefined} />
             </Box>
 
             {/* Tabs */}
-            <Stack direction="row" gap={0.5} mb={1.5}>
+            <Stack direction="row" gap={0.5} mb={1.5} flexWrap="wrap">
               {[
-                { id: 'missing', label: `Missing (${summary.missing})`,  color: '#fbbf24' },
-                { id: 'linked',  label: `Linked (${summary.linked})`,    color: B.green   },
-                { id: 'orphans', label: `Orphans (${summary.orphans})`, color: '#60a5fa' },
+                { id: 'missing',     label: `Missing (${summary.missing})`,             color: '#fbbf24' },
+                { id: 'linked',      label: `Linked (${summary.linked})`,               color: B.green   },
+                { id: 'autoMatched', label: `Auto-matched (${summary.autoMatched ?? 0})`, color: B.green   },
+                { id: 'orphans',     label: `Orphans (${summary.orphans})`,             color: '#60a5fa' },
               ].map(t => {
-                const active = tab === t.id;
+                const active = tab === (t.id === 'linked' ? 'matched' : t.id);
                 return (
                   <Box key={t.id} onClick={() => setTab(t.id === 'linked' ? 'matched' : t.id)}
                     sx={{
@@ -1872,9 +1874,10 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
 
             {/* Hint */}
             <Typography sx={{ color: B.muted, fontSize: 11, mb: 1 }}>
-              {tab === 'missing' && 'These mockup #s are assigned to projects but don\'t exist in your jpstudio library. Open jpstudio, pick the project, and save a mockup with the matching #.'}
-              {tab === 'matched' && 'These project mockup #s are paired with a library item. Healthy state.'}
-              {tab === 'orphans' && 'These library mockups aren\'t referenced by any project. Either link them via a project drawer or ignore — they may be drafts.'}
+              {tab === 'missing'     && 'These mockup #s are assigned to projects but don\'t exist in your jpstudio library. Open jpstudio, pick the project, and save a mockup with the matching #.'}
+              {tab === 'matched'     && 'These project mockup #s are paired with a library item. Healthy state.'}
+              {tab === 'autoMatched' && 'These library mockups aren\'t in any project\'s mockupNumbers list, but their client name matches a project — they auto-appear there with the green AUTO badge. Open the project drawer + hit Tidy to make the link permanent.'}
+              {tab === 'orphans'     && 'These library mockups aren\'t referenced by any project AND don\'t client-match any project. Probably drafts or mockups for a client you haven\'t created a project for yet.'}
             </Typography>
 
             {/* List */}
