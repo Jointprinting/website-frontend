@@ -193,7 +193,7 @@ function buildMarkerEl(layer, place) {
 }
 
 // Popup HTML/DOM
-function buildPopupContent({ place, layer, onSave, onHide, onError, savedAsLeadId, hideAvailable }) {
+function buildPopupContent({ place, layer, onSave, onHide, onError, onSetAsSleep, onValidate, savedAsLeadId, hideAvailable }) {
   const div = document.createElement('div');
   div.style.cssText = `
     font-family: ${MONO};
@@ -280,6 +280,28 @@ function buildPopupContent({ place, layer, onSave, onHide, onError, savedAsLeadI
     });
     btnRow.appendChild(hideBtn);
   }
+
+  // Dispensaries get a VALIDATE entry point so the user has a visible way
+  // to trigger the density tool from any pin on the map.
+  if (onValidate && layer.id === 'dispensaries') {
+    const valBtn = document.createElement('button');
+    valBtn.textContent = '🔍 SCAN AREA';
+    valBtn.style.cssText = btnStyle('neutral');
+    valBtn.addEventListener('click', () => onValidate(place));
+    btnRow.appendChild(valBtn);
+  }
+
+  // Campgrounds (and any kind of "stop") get a one-tap "set as sleep"
+  // affordance so the user can promote any pin to TONIGHT without going
+  // through the address-search editor.
+  if (onSetAsSleep && (layer.id === 'campgrounds' || layer.id === 'parks')) {
+    const sleepBtn = document.createElement('button');
+    sleepBtn.textContent = '🌙 SET AS SLEEP';
+    sleepBtn.style.cssText = btnStyle('amber');
+    sleepBtn.addEventListener('click', () => onSetAsSleep(place));
+    btnRow.appendChild(sleepBtn);
+  }
+
   div.appendChild(btnRow);
 
   return div;
@@ -302,6 +324,8 @@ function btnStyle(kind) {
   if (kind === 'primary') return base + `border-color:${TERM.green};color:${TERM.green};background:rgba(74,222,128,0.06);`;
   if (kind === 'success') return base + `border-color:${TERM.green};color:${TERM.greenDk};background:${TERM.green};cursor:default;`;
   if (kind === 'danger')  return base + `border-color:${TERM.red};color:${TERM.red};background:rgba(248,113,113,0.04);`;
+  if (kind === 'amber')   return base + `border-color:${TERM.amber};color:${TERM.amber};background:rgba(251,191,36,0.08);`;
+  if (kind === 'neutral') return base + `border-color:${TERM.borderDim};color:${TERM.muted};`;
   return base;
 }
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -475,18 +499,6 @@ const actionBtnSx = (color, hoverColor) => ({
   '&:hover': { color: hoverColor, borderColor: hoverColor, bgcolor: `${hoverColor}1a` },
 });
 
-function Stat({ label, value, color = TERM.text }) {  return (
-    <Stack direction="row" justifyContent="space-between" alignItems="baseline"
-      sx={{ borderBottom: `1px dashed ${TERM.borderDim}`, py: 0.75 }}>
-      <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, letterSpacing: 0.5 }}>
-        [{label}]
-      </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: 12, color, fontWeight: 600 }}>
-        {value}
-      </Typography>
-    </Stack>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main tab
@@ -865,17 +877,21 @@ export default function RoadTripTab({ token }) {
       map.addLayer({
         id: HEATMAP_LAYER, type: 'heatmap', source: HEATMAP_SOURCE,
         paint: {
-          'heatmap-weight': 1,
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 12, 2],
-          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 22, 10, 38],
-          'heatmap-opacity': 0.72,
+          // Per-point weight 0.25 so it takes ~4 dispensaries clustered close
+          // to saturate the gradient. Isolated 1-2 pin areas stay yellow/green
+          // instead of turning red.
+          'heatmap-weight': 0.25,
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.35, 12, 1.1],
+          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 18, 10, 32],
+          'heatmap-opacity': 0.7,
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
-            0,   'rgba(0,0,0,0)',
-            0.2, 'rgba(74,222,128,0.25)',
-            0.5, 'rgba(251,191,36,0.65)',
-            0.8, 'rgba(248,113,113,0.85)',
-            1,   'rgba(248,113,113,1)',
+            0,    'rgba(0,0,0,0)',
+            0.1,  'rgba(74,222,128,0.18)',
+            0.35, 'rgba(74,222,128,0.45)',
+            0.6,  'rgba(251,191,36,0.6)',
+            0.85, 'rgba(248,113,113,0.85)',
+            1,    'rgba(248,113,113,1)',
           ],
         },
       }, 'waterway-label'); // insert below labels so city names stay readable
@@ -1284,6 +1300,8 @@ export default function RoadTripTab({ token }) {
                  onSave: onSaveLead,
                  onHide: onHideDispensary,
                  onError: (msg) => showToast(msg, 'error'),
+                 onSetAsSleep: (p) => { popup.remove(); promptSetAsSleep(p); },
+                 onValidate:   (p) => { popup.remove(); openValidator({ lat: p.lat, lng: p.lng, label: p.name }); },
                  savedAsLeadId: leadsByExtIdRef.current.get(place.externalId),
                  hideAvailable: layer.id === 'dispensaries',
                }))
@@ -1415,6 +1433,82 @@ export default function RoadTripTab({ token }) {
     });
   };
 
+  const clearSleep = async (lead) => {
+    if (!lead) return;
+    try {
+      await axios.put(`${config.backendUrl}/api/roadtrip/leads/${lead._id}`,
+        { sleepRole: '', sleepKind: '', isActiveSleep: false },
+        { headers: { Authorization: `Bearer ${token}` } });
+      setSavedItems(prev => prev.map(s =>
+        s._id === lead._id ? { ...s, sleepRole: '', sleepKind: '', isActiveSleep: false } : s));
+      showToast('Cleared sleep pin.', 'info');
+    } catch {
+      showToast('Failed to clear.', 'error');
+    }
+  };
+
+  // Auto-pick the nearest campground to a day's last sales stop. Uses the
+  // existing /search/campgrounds endpoint (RIDB + Google, cached). Saves
+  // the closest one as the day's primary sleep without further input.
+  // Promotes any map place (campground / park / arbitrary point) into a
+  // TONIGHT sleep pin. Opens a small picker so the user chooses which day
+  // + which role. Defaults to today + primary.
+  const [setAsSleepPicker, setSetAsSleepPicker] = React.useState(null);
+  const promptSetAsSleep = (place) => {
+    setSetAsSleepPicker({
+      place,
+      day: currentDayLabel,
+      role: 'primary',
+      kind: 'campground',
+    });
+  };
+
+  const confirmSetAsSleep = async () => {
+    if (!setAsSleepPicker) return;
+    const { place, day, role, kind } = setAsSleepPicker;
+    await assignSleep({
+      feature: {
+        center: [place.lng, place.lat],
+        text: place.name,
+        place_name: place.address || place.name,
+      },
+      day, role, kind,
+    });
+    setSetAsSleepPicker(null);
+  };
+
+  const autoSuggestPrimarySleep = async (day) => {
+    const stops = stopsForDay(day).filter(s => !s.sleepRole);
+    const anchor = stops[stops.length - 1] || stops[0];
+    if (!anchor) { showToast('Add at least one stop to this day first.', 'error'); return; }
+    showToast('Finding the closest campground…', 'info');
+    try {
+      const r = await axios.get(
+        `${config.backendUrl}/api/roadtrip/search/campgrounds?lat=${anchor.lat}&lng=${anchor.lng}&radius=50000`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const candidates = (r.data?.results || [])
+        .filter(p => isFinite(p.lat) && isFinite(p.lng))
+        .map(p => ({ ...p, _dist: haversineMiles(anchor.lat, anchor.lng, p.lat, p.lng) }))
+        .sort((a, b) => a._dist - b._dist);
+      if (!candidates.length) {
+        showToast('No campgrounds nearby. Try EDIT to set manually.', 'error');
+        return;
+      }
+      const pick = candidates[0];
+      await assignSleep({
+        feature: {
+          center: [pick.lng, pick.lat],
+          text: pick.name,
+          place_name: pick.address || pick.name,
+        },
+        day, role: 'primary', kind: 'campground',
+      });
+    } catch (e) {
+      showToast('Campground search failed.', 'error');
+    }
+  };
+
   const sleepEditorSearch = async (q) => {
     setSleepEditor(s => ({ ...s, query: q, searching: true }));
     try {
@@ -1489,10 +1583,15 @@ export default function RoadTripTab({ token }) {
   const openPitchPlanner = async (day) => {
     const sleep = activeSleepFor(day);
     if (!sleep) {
-      showToast('Set a TONIGHT sleep pin for this day first.', 'error');
-      return;
+      // Intelligence: no sleep set — offer auto-pick instead of bailing.
+      showToast('No TONIGHT pin — auto-picking closest campground…', 'info');
+      await autoSuggestPrimarySleep(day);
+      const fresh = activeSleepFor(day);
+      if (!fresh) return;
+      return openPitchPlanner(day);
     }
-    setPlanning(p => ({ ...p, open: true, day, sleep, loading: true, candidates: [], route: null }));
+    setPlanning(p => ({ ...p, open: true, day, sleep, loading: true, candidates: [], route: null,
+                       googleScan: null, scanMessage: '' }));
     let origin = await resolveOrigin();
     if (!origin) {
       // Final fallback: first stop of the day, otherwise sleep itself (will
@@ -1504,23 +1603,69 @@ export default function RoadTripTab({ token }) {
       showToast('Using ' + origin.label + ' as start (geolocation unavailable).', 'info');
     }
     try {
-      const r = await axios.post(
+      // Step 1: pull the user's existing saved leads in the corridor (zero-cost).
+      const savedResp = await axios.post(
         `${config.backendUrl}/api/roadtrip/corridor/leads`,
         { from: { lat: origin.lat, lng: origin.lng },
           to:   { lat: sleep.lat,  lng: sleep.lng  },
           corridorMi: 8, types: ['dispensary'] },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      // Pre-check candidates already on this day.
+      const savedLeads = savedResp.data.leads || [];
+
+      // Step 2: if the saved corridor is sparse (<3 leads), auto-scan
+      // Google along the route to surface candidates the user hasn't pinned.
+      // The backend heavily caches each sample point.
+      let googleScan = null;
+      let scanMessage = '';
+      if (savedLeads.length < 3) {
+        try {
+          const scanResp = await axios.post(
+            `${config.backendUrl}/api/roadtrip/corridor/scan`,
+            { from: { lat: origin.lat, lng: origin.lng },
+              to:   { lat: sleep.lat,  lng: sleep.lng  },
+              corridorMi: 8 },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          googleScan = scanResp.data.leads || [];
+          scanMessage = scanResp.data.message || '';
+        } catch (e) {
+          console.warn('[planner] corridor scan failed:', e?.response?.data || e.message);
+        }
+      }
+
+      // Merge: saved leads take priority (vetted), then google scans fill gaps.
+      const savedExtIds = new Set(savedLeads.map(s => s.externalId).filter(Boolean));
+      const merged = [
+        ...savedLeads.map(s => ({ ...s, _isSaved: true })),
+        ...((googleScan || [])
+          .filter(s => !savedExtIds.has(s.externalId))
+          .map(s => ({ ...s, _isSaved: false, _id: 'g:' + s.externalId }))),
+      ];
+      merged.sort((a, b) => a.progress - b.progress);
+
+      // Intelligence: auto-pre-check up to 10 best candidates.
+      // Prefer saved + low cross-track. Anything already on today stays pre-checked.
       const todays = new Set(stopsForDay(day)
         .filter(s => s.type === 'dispensary')
         .map(s => s._id));
-      const selected = new Set(r.data.leads
-        .filter(c => todays.has(c._id))
-        .map(c => c._id));
+      const scored = merged.map((c) => ({
+        ...c,
+        _score: (c._isSaved ? 100 : 0)
+              + (todays.has(c._id) ? 50 : 0)
+              + (10 - Math.min(10, c.crossTrackMi ?? 10)),
+      }));
+      scored.sort((a, b) => b._score - a._score);
+      const topPicks = scored.slice(0, Math.min(10, merged.length));
+      const selected = new Set(topPicks.map(c => c._id));
+      // Always include items already on today's plan.
+      for (const c of merged) if (todays.has(c._id)) selected.add(c._id);
+
       setPlanning(p => ({
-        ...p, origin, candidates: r.data.leads,
+        ...p, origin, candidates: merged,
         selectedIds: selected, loading: false,
+        googleScan: googleScan ? googleScan.length : null,
+        scanMessage,
       }));
     } catch (e) {
       console.error('[planner] corridor fetch failed:', e);
@@ -1545,17 +1690,57 @@ export default function RoadTripTab({ token }) {
       return;
     }
     const plan = buildPitchPlan({ origin, sleep, candidates, selectedIds });
-    // Persist day + sortOrder for each selected stop.
+
+    // Some selected items are Google scan results (synthetic _id starting
+    // with "g:"); save those to the DB first so they become real leads.
+    const created = new Map(); // tempId -> realLead
     try {
-      await Promise.all(plan.stops.map((stop, idx) =>
+      for (const stop of plan.stops) {
+        if (stop._isSaved) continue;
+        const body = {
+          source:     'google_places',
+          externalId: stop.externalId,
+          name:       stop.name,
+          address:    stop.address || '',
+          phone:      stop.phone   || '',
+          website:    stop.website || '',
+          lat:        stop.lat,
+          lng:        stop.lng,
+          type:       'dispensary',
+          kind:       'lead',
+          status:     'planned',
+          dayLabel:   day,
+          tripLabel:  '',
+          score:      '',
+        };
+        try {
+          const r = await axios.post(`${config.backendUrl}/api/roadtrip/leads`, body,
+            { headers: { Authorization: `Bearer ${token}` } });
+          created.set(stop._id, r.data);
+        } catch (err) {
+          // 409 means already saved with this externalId — fetch the
+          // existing one and use it.
+          if (err.response?.status === 409 && err.response.data?.existing) {
+            created.set(stop._id, err.response.data.existing);
+          } else {
+            console.warn('[planner] create lead failed for', stop.name, err.response?.data || err.message);
+          }
+        }
+      }
+    } catch (e) { console.warn('[planner] auto-save failed', e); }
+
+    // Persist day + sortOrder for each stop (saved + just-created).
+    const realStops = plan.stops.map(s => s._isSaved ? s : (created.get(s._id) || s));
+    try {
+      await Promise.all(realStops.map((stop, idx) =>
         axios.put(`${config.backendUrl}/api/roadtrip/leads/${stop._id}`,
           { dayLabel: day, sortOrder: idx + 1 },
           { headers: { Authorization: `Bearer ${token}` } })
       ));
-      setSavedItems(prev => prev.map(s => {
-        const stop = plan.stops.find(p => p._id === s._id);
-        return stop ? { ...s, dayLabel: day, sortOrder: plan.stops.indexOf(stop) + 1 } : s;
-      }));
+      // Refresh full list so newly-created google-scan leads show up.
+      const list = await axios.get(`${config.backendUrl}/api/roadtrip/leads`,
+        { headers: { Authorization: `Bearer ${token}` } });
+      setSavedItems(list.data);
     } catch (e) {
       console.warn('[planner] persist failed', e);
     }
@@ -1578,25 +1763,40 @@ export default function RoadTripTab({ token }) {
   // VALIDATE AREA — density count + denser nearby alternatives.
   // ─────────────────────────────────────────────────────────────────────────
 
-  const openValidator = async ({ lat, lng, label = '' }, { fresh = false } = {}) => {
-    setValidation({ open: true, center: { lat, lng }, label, data: null, loading: true });
+  // Free-by-default: open the modal with a local count of the user's
+  // SAVED leads within 5mi. No API call. From the modal the user can opt
+  // into a deeper Google scan ($0.03 first time, free for 7d after).
+  const openValidator = ({ lat, lng, label = '' }) => {
+    const savedLeads = savedItems.filter(s => s.type === 'dispensary' && isFinite(s.lat) && isFinite(s.lng));
+    const within5 = savedLeads.filter(s => haversineMiles(lat, lng, s.lat, s.lng) <= 5);
+    setValidation({
+      open: true, center: { lat, lng }, label,
+      data: null, loading: false,
+      savedCount: within5.length,
+      savedSample: within5.slice(0, 5),
+      googleScanned: false,
+    });
+  };
+
+  // Optional deeper scan via Google (cached 7d). Triggers backend density/area.
+  const deeperScan = async ({ fresh = false } = {}) => {
+    if (!validation.center) return;
+    setValidation(v => ({ ...v, loading: true }));
     try {
       const r = await axios.post(
         `${config.backendUrl}/api/roadtrip/density/area`,
-        { lat, lng, fresh },
+        { lat: validation.center.lat, lng: validation.center.lng, fresh },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setValidation(v => ({ ...v, data: r.data, loading: false }));
+      setValidation(v => ({ ...v, data: r.data, loading: false, googleScanned: true }));
     } catch (e) {
-      console.error('[validator] failed:', e);
-      showToast('Validation failed.', 'error');
-      setValidation(v => ({ ...v, loading: false, open: false }));
+      console.error('[validator] deeper scan failed:', e);
+      showToast('Deeper scan failed.', 'error');
+      setValidation(v => ({ ...v, loading: false }));
     }
   };
 
-  const refreshValidator = () => {
-    if (validation.center) openValidator(validation.center, { fresh: true });
-  };
+  const refreshValidator = () => deeperScan({ fresh: true });
 
   // ─────────────────────────────────────────────────────────────────────────
   // GO / live execution — watchPosition, NEXT STOP, VISITED / SKIP.
@@ -2004,21 +2204,6 @@ export default function RoadTripTab({ token }) {
               </Box>
             </PanelSection>
 
-            <PanelSection title="ASSETS">
-              {LAYERS.map((l) => (
-                <Stat key={l.id}
-                  label={l.short}
-                  value={layerState[l.id].active
-                    ? (layerState[l.id].loading ? '…' : layerState[l.id].count)
-                    : '—'}
-                  color={layerState[l.id].active ? l.color : TERM.text}
-                />
-              ))}
-              <Stat label="STOPS"
-                value={stopCount}
-                color={stopCount > 0 ? TERM.green : TERM.text} />
-            </PanelSection>
-
             <PanelSection title={`SALES · ${stopCount}`}>
               {/* Day picker — which day new pin saves go to */}
               <Box sx={{ mb: 1.5 }}>
@@ -2150,76 +2335,104 @@ export default function RoadTripTab({ token }) {
                           </Box>
                         )}
                       </Stack>
-                      {/* TONIGHT row — primary + backup with active toggle */}
+                      {/* TONIGHT — two rows so the name has full sidebar width */}
                       <Box sx={{
-                        display: 'flex', alignItems: 'center', gap: 0.75,
-                        py: 0.5, px: 0.5, mb: 0.5,
+                        py: 0.5, px: 0.75, mb: 0.5,
                         bgcolor: 'rgba(74,222,128,0.025)', borderRadius: 0.5,
                         border: `1px solid ${sleepActive ? sleepActiveColor + '40' : TERM.borderDim}`,
                       }}>
-                        <Box sx={{ fontSize: 12, color: sleepActiveColor, lineHeight: 1 }}>🌙</Box>
-                        <Typography sx={{
-                          fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                          color: TERM.muted, flexShrink: 0,
-                        }}>TONIGHT:</Typography>
-                        {sleepActive ? (
-                          <Box role="button"
-                            onClick={() => flyToSaved(sleepActive)}
-                            sx={{
-                              fontFamily: MONO, fontSize: 10, fontWeight: 700,
-                              color: sleepActiveColor, flexGrow: 1, minWidth: 0,
-                              cursor: 'pointer', whiteSpace: 'nowrap',
-                              overflow: 'hidden', textOverflow: 'ellipsis',
-                              '&:hover': { textDecoration: 'underline' },
-                            }}>{sleepActive.name}</Box>
-                        ) : (
+                        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.5 }}>
+                          <Box sx={{ fontSize: 12, color: sleepActiveColor, lineHeight: 1 }}>🌙</Box>
+                          <Typography sx={{
+                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                            color: TERM.muted, flexShrink: 0,
+                          }}>TONIGHT:</Typography>
+                          {sleepActive ? (
+                            <Box role="button"
+                              onClick={() => flyToSaved(sleepActive)}
+                              sx={{
+                                fontFamily: MONO, fontSize: 10.5, fontWeight: 700,
+                                color: sleepActiveColor, flexGrow: 1, minWidth: 0,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                '&:hover': { textDecoration: 'underline' },
+                              }}>{sleepActive.name}</Box>
+                          ) : (
+                            <Box sx={{
+                              fontFamily: MONO, fontSize: 10, color: TERM.muted,
+                              flexGrow: 1, fontStyle: 'italic',
+                            }}>not set</Box>
+                          )}
+                        </Stack>
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          {/* Segmented toggle: PRI | BAK */}
                           <Box sx={{
-                            fontFamily: MONO, fontSize: 9, color: TERM.muted,
-                            flexGrow: 1, fontStyle: 'italic',
-                          }}>not set</Box>
-                        )}
-                        {/* Segmented toggle: PRI | BAK */}
-                        <Box sx={{
-                          display: 'flex', border: `1px solid ${TERM.borderDim}`,
-                          borderRadius: 0.5, overflow: 'hidden', flexShrink: 0,
-                        }}>
-                          <Box role="button"
-                            onClick={() => {
-                              if (sleepPri) {
-                                if (sleepActive?._id !== sleepPri._id) flipActiveSleep(day);
-                              } else { openSleepEditor(day, 'primary'); }
-                            }}
-                            sx={{
-                              fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
-                              px: 0.75, py: 0.25, cursor: 'pointer',
-                              color: sleepActive?.sleepRole === 'primary'
-                                ? TERM.greenDk : (sleepPri ? TERM.green : TERM.muted),
-                              bgcolor: sleepActive?.sleepRole === 'primary' ? TERM.green : 'transparent',
-                            }}>⛺ PRI</Box>
-                          <Box role="button"
-                            onClick={() => {
-                              if (sleepBak) {
-                                if (sleepActive?._id !== sleepBak._id) flipActiveSleep(day);
-                              } else { openSleepEditor(day, 'backup'); }
-                            }}
-                            sx={{
-                              fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
-                              px: 0.75, py: 0.25, cursor: 'pointer',
-                              borderLeft: `1px solid ${TERM.borderDim}`,
-                              color: sleepActive?.sleepRole === 'backup'
-                                ? '#000' : (sleepBak ? TERM.amber : TERM.muted),
-                              bgcolor: sleepActive?.sleepRole === 'backup' ? TERM.amber : 'transparent',
-                            }}>🅿 BAK</Box>
-                        </Box>
-                        <Box role="button"
-                          onClick={() => openSleepEditor(day, sleepPri ? 'backup' : 'primary')}
-                          sx={{
-                            fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
-                            px: 0.5, py: 0.25, cursor: 'pointer',
-                            color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
-                            borderRadius: 0.25, flexShrink: 0,
-                            '&:hover': { color: TERM.text },
-                          }}>EDIT</Box>
+                            display: 'flex', border: `1px solid ${TERM.borderDim}`,
+                            borderRadius: 0.5, overflow: 'hidden', flexShrink: 0,
+                          }}>
+                            <Box role="button"
+                              onClick={() => {
+                                if (sleepPri) {
+                                  if (sleepActive?._id !== sleepPri._id) flipActiveSleep(day);
+                                } else { openSleepEditor(day, 'primary'); }
+                              }}
+                              sx={{
+                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                px: 1, py: 0.4, cursor: 'pointer',
+                                color: sleepActive?.sleepRole === 'primary'
+                                  ? TERM.greenDk : (sleepPri ? TERM.green : TERM.muted),
+                                bgcolor: sleepActive?.sleepRole === 'primary' ? TERM.green : 'transparent',
+                              }}>⛺ {sleepPri ? 'PRI' : '+ PRI'}</Box>
+                            <Box role="button"
+                              onClick={() => {
+                                if (sleepBak) {
+                                  if (sleepActive?._id !== sleepBak._id) flipActiveSleep(day);
+                                } else { openSleepEditor(day, 'backup'); }
+                              }}
+                              sx={{
+                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                px: 1, py: 0.4, cursor: 'pointer',
+                                borderLeft: `1px solid ${TERM.borderDim}`,
+                                color: sleepActive?.sleepRole === 'backup'
+                                  ? '#000' : (sleepBak ? TERM.amber : TERM.muted),
+                                bgcolor: sleepActive?.sleepRole === 'backup' ? TERM.amber : 'transparent',
+                              }}>🅿 {sleepBak ? 'BAK' : '+ BAK'}</Box>
+                          </Box>
+                          {sleepPri && (
+                            <Box role="button"
+                              onClick={() => openSleepEditor(day, 'primary')}
+                              title="Edit primary sleep"
+                              sx={{
+                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                color: TERM.green, border: `1px solid ${TERM.borderDim}`,
+                                '&:hover': { borderColor: TERM.green },
+                              }}>✎ ⛺</Box>
+                          )}
+                          {sleepBak && (
+                            <Box role="button"
+                              onClick={() => openSleepEditor(day, 'backup')}
+                              title="Edit backup sleep"
+                              sx={{
+                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                color: TERM.amber, border: `1px solid ${TERM.borderDim}`,
+                                '&:hover': { borderColor: TERM.amber },
+                              }}>✎ 🅿</Box>
+                          )}
+                          {sleepActive && (
+                            <Box role="button"
+                              onClick={() => clearSleep(sleepActive)}
+                              title="Clear active sleep pin"
+                              sx={{
+                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                ml: 'auto',
+                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+                                '&:hover': { color: TERM.red, borderColor: TERM.red + '66' },
+                              }}>×</Box>
+                          )}
+                        </Stack>
                       </Box>
                       {stops.map((item, i) => {
                         const layerForItem =
@@ -2339,23 +2552,9 @@ export default function RoadTripTab({ token }) {
                               <Box sx={{ width: '100%', mt: 0.5, ml: 2, pl: 1, borderLeft: `2px solid ${TERM.borderDim}` }}
                                 onClick={(e) => e.stopPropagation()}>
                                 {item.kind === 'lead' ? (
-                                  /* ── Full sales pipeline editor ── */
+                                  /* ── Slimmed dispensary editor: SCORE + VISITED + CALLED only. ── */
+                                  /* Everything else (status pipeline, buyer, notes, interests) lives in the CRM. */
                                   <>
-                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>STATUS</Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1 }}>
-                                      {SALES_STATUSES.map((s) => (
-                                        <Box key={s.value} role="button"
-                                          onClick={() => updateStopField(item, { status: s.value })}
-                                          sx={{
-                                            fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
-                                            px: 0.75, py: 0.25, borderRadius: 0.25, cursor: 'pointer',
-                                            color: item.status === s.value ? '#000' : s.color,
-                                            bgcolor: item.status === s.value ? s.color : 'transparent',
-                                            border: `1px solid ${s.color}`,
-                                            '&:hover': { bgcolor: s.color + '22' },
-                                          }}>{s.label}</Box>
-                                      ))}
-                                    </Box>
                                     <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SCORE</Typography>
                                     <Box sx={{ display: 'flex', gap: 0.5, mb: 1 }}>
                                       {SCORE_OPTIONS.map((sc) => (
@@ -2363,7 +2562,7 @@ export default function RoadTripTab({ token }) {
                                           onClick={() => updateStopField(item, { score: sc.value })}
                                           sx={{
                                             fontFamily: MONO, fontSize: 9, fontWeight: 900, letterSpacing: 0.5,
-                                            px: 1, py: 0.4, borderRadius: 0.25, cursor: 'pointer',
+                                            px: 1.2, py: 0.4, borderRadius: 0.25, cursor: 'pointer',
                                             color: item.score === sc.value ? '#000' : sc.color,
                                             bgcolor: item.score === sc.value ? sc.color : 'transparent',
                                             border: `1px solid ${sc.color}`,
@@ -2371,36 +2570,32 @@ export default function RoadTripTab({ token }) {
                                           }}>{sc.label}</Box>
                                       ))}
                                     </Box>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4, mb: 0.75 }}>
-                                      <input placeholder="Buyer name…" defaultValue={item.contactName || ''}
-                                        onBlur={(e) => { if (e.target.value !== (item.contactName || '')) updateStopField(item, { contactName: e.target.value }); }}
-                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%' }} />
-                                      <textarea placeholder="Notes…" defaultValue={item.notes || ''} rows={3}
-                                        onBlur={(e) => { if (e.target.value !== (item.notes || '')) updateStopField(item, { notes: e.target.value }); }}
-                                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TERM.borderDim}`, borderRadius: 2, padding: '4px 7px', fontFamily: MONO, fontSize: 9.5, color: TERM.text, outline: 'none', width: '100%', resize: 'vertical', minHeight: 54 }} />
-                                    </Box>
-                                    <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, letterSpacing: 1, mb: 0.4 }}>INTERESTS</Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.5 }}>
-                                      {ITEM_TAGS.map((tag) => {
-                                        const active = (item.itemInterests || []).includes(tag);
-                                        return (
-                                          <Box key={tag} role="button"
-                                            onClick={() => {
-                                              const cur = item.itemInterests || [];
-                                              const next = active ? cur.filter(t => t !== tag) : [...cur, tag];
-                                              updateStopField(item, { itemInterests: next });
-                                            }}
-                                            sx={{
-                                              fontFamily: MONO, fontSize: 8, px: 0.7, py: 0.2,
-                                              borderRadius: 0.25, cursor: 'pointer',
-                                              border: `1px solid ${active ? TERM.green : TERM.borderDim}`,
-                                              color: active ? TERM.green : TERM.muted,
-                                              bgcolor: active ? 'rgba(74,222,128,0.1)' : 'transparent',
-                                              transition: 'all 0.12s',
-                                              '&:hover': { borderColor: TERM.green, color: TERM.green },
-                                            }}>{tag}</Box>
-                                        );
-                                      })}
+                                    <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                                      <Box role="button"
+                                        onClick={() => updateStopField(item, {
+                                          status: item.status === 'visited' ? 'planned' : 'visited',
+                                          visitedAt: item.status === 'visited' ? null : new Date().toISOString(),
+                                        })}
+                                        sx={{
+                                          flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                                          px: 1, py: 0.5, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
+                                          color: item.status === 'visited' ? '#000' : TERM.amber,
+                                          bgcolor: item.status === 'visited' ? TERM.amber : 'transparent',
+                                          border: `1px solid ${TERM.amber}`,
+                                          '&:hover': { bgcolor: 'rgba(251,191,36,0.2)' },
+                                        }}>{item.status === 'visited' ? '✓ VISITED' : 'VISITED?'}</Box>
+                                      <Box role="button"
+                                        onClick={() => updateStopField(item, {
+                                          status: item.status === 'pre_called' ? 'planned' : 'pre_called',
+                                        })}
+                                        sx={{
+                                          flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                                          px: 1, py: 0.5, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
+                                          color: item.status === 'pre_called' ? '#000' : '#84cc16',
+                                          bgcolor: item.status === 'pre_called' ? '#84cc16' : 'transparent',
+                                          border: `1px solid #84cc16`,
+                                          '&:hover': { bgcolor: 'rgba(132,204,22,0.18)' },
+                                        }}>{item.status === 'pre_called' ? '✓ CALLED' : 'CALLED?'}</Box>
                                     </Box>
                                   </>
                                 ) : item.customType === 'printer' ? (
@@ -2499,6 +2694,31 @@ export default function RoadTripTab({ token }) {
           />
 
           <MapStyleSwitcher current={styleId} onChange={onStyleChange} />
+
+          {/* Always-visible AREA SCAN button — counts your saved leads
+              within 5mi of map center (free), with an optional Google
+              "deeper scan" inside the modal. */}
+          <Box
+            role="button" tabIndex={0}
+            onClick={() => {
+              const c = mapRef.current?.getCenter();
+              if (!c) return;
+              openValidator({ lat: c.lat, lng: c.lng, label: '' });
+            }}
+            sx={{
+              position: 'absolute', top: 12, left: 12, zIndex: 2,
+              cursor: 'pointer',
+              bgcolor: 'rgba(5,8,10,0.82)',
+              border: `1px solid ${TERM.borderDim}`,
+              color: TERM.green,
+              px: 1, py: 0.4, borderRadius: 0.5,
+              fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2,
+              display: 'flex', alignItems: 'center', gap: 0.6,
+              transition: 'all 0.15s ease',
+              '&:hover': { borderColor: TERM.green, bgcolor: 'rgba(74,222,128,0.12)' },
+            }}>
+            🔍 SCAN AREA
+          </Box>
 
           {/* Heatmap toggle — only visible when dispensaries are loaded */}
           {layerState.dispensaries.active && (
@@ -3147,18 +3367,29 @@ export default function RoadTripTab({ token }) {
 
             {planning.loading ? (
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2 }}>
-                Loading corridor candidates…
+                Scanning corridor (this may auto-Google sparse areas)…
               </Typography>
             ) : planning.candidates.length === 0 ? (
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2, fontStyle: 'italic' }}>
-                No saved dispensary leads inside the 8mi corridor. Drop more pins on the map first
-                (DISPENSARIES layer), then come back.
+                No dispensaries within 8mi of the line between you and tonight's sleep. The corridor
+                might be too rural — try pinning a different sleep destination, or scan manually using
+                the DISPENSARIES layer.
               </Typography>
             ) : (
               <>
                 <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>
                   CORRIDOR · {planning.candidates.length} CANDIDATES · {planning.selectedIds.size} PICKED
+                  {planning.googleScan != null && (
+                    <Box component="span" sx={{ ml: 1, color: TERM.amber, fontSize: 8 }}>
+                      · {planning.googleScan} from auto-scan
+                    </Box>
+                  )}
                 </Typography>
+                {planning.scanMessage && (
+                  <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.faint, letterSpacing: 0.5, mb: 0.5, fontStyle: 'italic' }}>
+                    {planning.scanMessage}
+                  </Typography>
+                )}
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', borderTop: `1px solid ${TERM.borderDim}`, mb: 1 }}>
                   {bucketByProgress(planning.candidates).map(({ bucket, items }) => (
                     <Box key={bucket} sx={{ mb: 0.5 }}>
@@ -3185,6 +3416,9 @@ export default function RoadTripTab({ token }) {
                               color: TERM.greenDk, fontSize: 9, fontWeight: 900,
                             }}>{picked ? '✓' : ''}</Box>
                             <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.text, flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {c._isSaved
+                                ? <Box component="span" sx={{ color: TERM.green, fontSize: 8, mr: 0.5 }}>★</Box>
+                                : <Box component="span" sx={{ color: TERM.amber, fontSize: 8, mr: 0.5 }}>NEW</Box>}
                               {c.name}
                               {c.chainName && <Box component="span" sx={{ color: TERM.amber, ml: 0.5, fontSize: 8 }}>CHAIN</Box>}
                             </Typography>
@@ -3243,26 +3477,68 @@ export default function RoadTripTab({ token }) {
               <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.green, letterSpacing: 1, flexGrow: 1 }}>
                 ⓘ AREA SCAN {validation.label && '· ' + validation.label.toUpperCase()}
               </Typography>
-              <Box role="button" onClick={refreshValidator} title="Bypass cache"
-                sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, cursor: 'pointer',
-                      border: `1px solid ${TERM.borderDim}`, px: 0.75, py: 0.25, borderRadius: 0.25, mr: 0.75,
-                      '&:hover': { color: TERM.green } }}>↻ REFRESH</Box>
+              {validation.googleScanned && (
+                <Box role="button" onClick={refreshValidator} title="Re-scan Google (paid if not cached)"
+                  sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, cursor: 'pointer',
+                        border: `1px solid ${TERM.borderDim}`, px: 0.75, py: 0.25, borderRadius: 0.25, mr: 0.75,
+                        '&:hover': { color: TERM.green } }}>↻ RE-SCAN</Box>
+              )}
               <Box role="button" onClick={() => setValidation(v => ({ ...v, open: false }))}
                 sx={{ color: TERM.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, px: 0.5 }}>×</Box>
             </Stack>
+
+            {/* Default view: instant local count of user's saved leads (free). */}
+            {!validation.googleScanned && !validation.loading && (
+              <>
+                <Typography sx={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: TERM.green, lineHeight: 1 }}>
+                  {validation.savedCount || 0}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, mt: 0.5, mb: 1 }}>
+                  of your saved dispensary leads within 5mi
+                </Typography>
+                {(validation.savedSample?.length || 0) > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, letterSpacing: 1, mb: 0.25 }}>
+                      YOUR LEADS HERE:
+                    </Typography>
+                    {validation.savedSample.map((s, i) => (
+                      <Typography key={i} sx={{ fontFamily: MONO, fontSize: 10, color: TERM.text, lineHeight: 1.5 }}>
+                        · {s.name}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+                <Box sx={{ mt: 1.5, p: 1, border: `1px dashed ${TERM.amber}`, borderRadius: 0.5 }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.text, mb: 0.75, lineHeight: 1.45 }}>
+                    Want more? A deeper Google scan finds dispensaries you haven't saved + suggests denser nearby areas. Free if cached (last 7 days), otherwise ~$0.03 per fresh scan.
+                  </Typography>
+                  <Box role="button" onClick={() => deeperScan({})}
+                    sx={{
+                      fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                      px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25, textAlign: 'center',
+                      bgcolor: TERM.amber, color: '#000',
+                      '&:hover': { opacity: 0.9 },
+                    }}>🔍 DEEPER SCAN (GOOGLE)</Box>
+                </Box>
+              </>
+            )}
 
             {validation.loading && (
               <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2 }}>
                 Scanning…
               </Typography>
             )}
-            {!validation.loading && validation.data && (
+
+            {!validation.loading && validation.data && validation.googleScanned && (
               <>
                 <Typography sx={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: TERM.green, lineHeight: 1 }}>
                   {validation.data.density.count}
                 </Typography>
                 <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, mt: 0.5, mb: 1 }}>
-                  dispensaries within 5mi · {validation.data.cached ? `cached ${new Date(validation.data.fetchedAt).toLocaleString()}` : 'fresh from Google'}
+                  dispensaries within 5mi · {validation.data.cached ? 'cached (free)' : 'fresh from Google'}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.green, mb: 1 }}>
+                  You have {validation.savedCount} saved here · {Math.max(0, validation.data.density.count - validation.savedCount)} more you haven't pinned
                 </Typography>
                 {(validation.data.alternatives?.length || 0) > 0 ? (
                   <Box sx={{ mt: 1.5 }}>
@@ -3304,20 +3580,101 @@ export default function RoadTripTab({ token }) {
                     No denser spots within 20mi. This is the densest area nearby.
                   </Typography>
                 )}
-                {(validation.data.density.sample?.length || 0) > 0 && (
-                  <Box sx={{ mt: 1.5 }}>
-                    <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, letterSpacing: 1, mb: 0.25 }}>
-                      SAMPLE (within 5mi):
-                    </Typography>
-                    {validation.data.density.sample.slice(0, 5).map((s, i) => (
-                      <Typography key={i} sx={{ fontFamily: MONO, fontSize: 10, color: TERM.text, lineHeight: 1.5 }}>
-                        · {s.name}
-                      </Typography>
-                    ))}
-                  </Box>
-                )}
               </>
             )}
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Set-as-Sleep quick picker ───────────────────────────────────── */}
+      {setAsSleepPicker && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          p: { xs: 1, sm: 2 },
+        }} onClick={() => setSetAsSleepPicker(null)}>
+          <Box sx={{
+            bgcolor: TERM.panel,
+            border: `1px solid ${setAsSleepPicker.role === 'backup' ? TERM.amber : TERM.green}`,
+            borderRadius: 0.5, p: 2,
+            width: { xs: '100%', sm: 380 },
+            fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Typography sx={{
+              fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: 1,
+              color: setAsSleepPicker.role === 'backup' ? TERM.amber : TERM.green, mb: 0.5,
+            }}>🌙 SET AS TONIGHT'S SLEEP</Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text, mb: 1.25 }}>
+              {setAsSleepPicker.place.name}
+            </Typography>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>DAY</Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+              {knownDays.map((d) => (
+                <Box key={d} role="button"
+                  onClick={() => setSetAsSleepPicker(p => ({ ...p, day: d }))}
+                  sx={{
+                    fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1,
+                    px: 1, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                    color: setAsSleepPicker.day === d ? TERM.greenDk : TERM.muted,
+                    bgcolor: setAsSleepPicker.day === d ? TERM.green : 'transparent',
+                    border: `1px solid ${setAsSleepPicker.day === d ? TERM.green : TERM.borderDim}`,
+                  }}>{/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDayLabel(d) : d.replace(/^Day /, 'D')}</Box>
+              ))}
+            </Box>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>ROLE</Typography>
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+              {[{ v: 'primary', l: '⛺ PRIMARY', c: TERM.green },
+                { v: 'backup',  l: '🅿 BACKUP',  c: TERM.amber }].map((opt) => (
+                <Box key={opt.v} role="button"
+                  onClick={() => setSetAsSleepPicker(p => ({ ...p, role: opt.v }))}
+                  sx={{
+                    flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                    px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25, textAlign: 'center',
+                    color: setAsSleepPicker.role === opt.v ? '#000' : opt.c,
+                    bgcolor: setAsSleepPicker.role === opt.v ? opt.c : 'transparent',
+                    border: `1px solid ${opt.c}`,
+                  }}>{opt.l}</Box>
+              ))}
+            </Box>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>KIND</Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 1.5 }}>
+              {[
+                { v: 'campground',    l: '⛺ CAMP' },
+                { v: 'park_and_ride', l: '🅿 P&R' },
+                { v: 'hotel',         l: '🏨 HOTEL' },
+                { v: 'friend',        l: '🏠 FRIEND' },
+                { v: 'other',         l: '· OTHER' },
+              ].map((opt) => (
+                <Box key={opt.v} role="button"
+                  onClick={() => setSetAsSleepPicker(p => ({ ...p, kind: opt.v }))}
+                  sx={{
+                    fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                    color: setAsSleepPicker.kind === opt.v ? TERM.greenDk : TERM.muted,
+                    bgcolor: setAsSleepPicker.kind === opt.v ? TERM.green : 'transparent',
+                    border: `1px solid ${setAsSleepPicker.kind === opt.v ? TERM.green : TERM.borderDim}`,
+                  }}>{opt.l}</Box>
+              ))}
+            </Box>
+
+            <Stack direction="row" spacing={1}>
+              <Box role="button" onClick={confirmSetAsSleep}
+                sx={{
+                  flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 1,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  bgcolor: TERM.green, color: TERM.greenDk,
+                }}>CONFIRM</Box>
+              <Box role="button" onClick={() => setSetAsSleepPicker(null)}
+                sx={{
+                  fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  px: 2, py: 1, borderRadius: 0.5, cursor: 'pointer',
+                  border: `1px solid ${TERM.borderDim}`, color: TERM.muted,
+                }}>CANCEL</Box>
+            </Stack>
           </Box>
         </Box>
       )}
@@ -3369,6 +3726,23 @@ export default function RoadTripTab({ token }) {
                   }}>{opt.l}</Box>
               ))}
             </Box>
+
+            {/* Intelligent auto-pick: closest campground to the day's last stop. */}
+            {sleepEditor.role === 'primary' && (
+              <Box role="button"
+                onClick={async () => {
+                  setSleepEditor(s => ({ ...s, open: false }));
+                  await autoSuggestPrimarySleep(sleepEditor.day);
+                }}
+                sx={{
+                  fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  px: 1, py: 0.5, mb: 1.5, cursor: 'pointer', borderRadius: 0.25,
+                  textAlign: 'center',
+                  bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green,
+                  border: `1px dashed ${TERM.green}`,
+                  '&:hover': { bgcolor: 'rgba(74,222,128,0.16)' },
+                }}>✨ AUTO-PICK CLOSEST CAMPGROUND</Box>
+            )}
 
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SEARCH ADDRESS OR PLACE NAME</Typography>
             <input
