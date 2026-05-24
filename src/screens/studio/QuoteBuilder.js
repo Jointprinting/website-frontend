@@ -1,21 +1,24 @@
 // src/screens/studio/QuoteBuilder.js
 //
-// Full-screen quote builder. Replaces the cramped in-drawer QuoteEditor.
-// Each line breaks out its blank + print cost, then shows a strip of markup
-// tiers (5%–70%) with the resulting unit price under each — click a tier to
-// lock that price onto the line. A manual unit-price override is still there.
+// Full-screen quote builder. Each line: qty, style, description, blank cost,
+// print type/details, print cost. Markup tier strip (5%–70%) per line; manual
+// unit-price override. Above the lines: project-wide meta (ship-to state, the
+// printer, one-time setup, shipping). Sticky footer shows units · COGS ·
+// profit · margin (red→green) · client total.
+//
+// Persists `quoteLines`, `shipToState`, `printerName`, `setupCost`,
+// `shippingCost` on the project via onSave().
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress,
+  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress, InputAdornment,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 
-// Markup tiers shown on every line: cost + N%. A $10 cost at 10% → $11.
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
 
@@ -23,42 +26,61 @@ const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer'
 
 const num = (v) => Number(v) || 0;
 
+// Margin colour spectrum: 0% → red, ~40% → green. Capped so 50%+ stays green.
+function marginColor(pct) {
+  const hue = Math.max(0, Math.min(135, pct * 3.4));   // 0 → red, 40 → ~136 → green
+  return `hsl(${hue.toFixed(0)}, 70%, 55%)`;
+}
+
 function emptyLine() {
   return {
-    qty: 1, styleCode: '', description: '', color: '',
-    supplier: '', blankCost: 0,
+    qty: 1, styleCode: '', description: '',
+    blankCost: 0,
     printType: '', printDetails: '', printCost: 0,
     markup: 1.4, unitPrice: 0,
   };
 }
 
 export default function QuoteBuilder({ open, project, onClose, onSave }) {
-  const [lines, setLines]   = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty]   = useState(false);
+  const [lines,        setLines]        = useState([]);
+  const [shipToState,  setShipToState]  = useState('');
+  const [printerName,  setPrinterName]  = useState('');
+  const [setupCost,    setSetupCost]    = useState('');
+  const [shippingCost, setShippingCost] = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [dirty,        setDirty]        = useState(false);
 
   useEffect(() => {
     if (open && project) {
       setLines((project.quoteLines || []).map(l => ({ ...l })));
+      setShipToState(project.shipToState || '');
+      setPrinterName(project.printerName || '');
+      setSetupCost(project.setupCost ? String(project.setupCost) : '');
+      setShippingCost(project.shippingCost ? String(project.shippingCost) : '');
       setDirty(false);
     }
   }, [open, project]);
 
   const totals = useMemo(() => {
-    let qty = 0, cost = 0, price = 0;
+    let qty = 0, cogs = 0, lineRevenue = 0;
     lines.forEach(l => {
       const q = num(l.qty);
-      const c = num(l.blankCost) + num(l.printCost);
-      const u = num(l.unitPrice) || c * (num(l.markup) || 1);
-      qty   += q;
-      cost  += q * c;
-      price += q * u;
+      const lineCogs = num(l.blankCost) + num(l.printCost);
+      const u = num(l.unitPrice) || lineCogs * (num(l.markup) || 1);
+      qty         += q;
+      cogs        += q * lineCogs;
+      lineRevenue += q * u;
     });
+    const extras = num(setupCost) + num(shippingCost);
+    const clientTotal = lineRevenue + extras;
+    const totalCogs   = cogs + extras;
+    const profit      = clientTotal - totalCogs;
     return {
-      qty, cost, price, profit: price - cost,
-      marginPct: price > 0 ? ((price - cost) / price) * 100 : 0,
+      qty, cogs: totalCogs, lineRevenue, extras,
+      clientTotal, profit,
+      marginPct: clientTotal > 0 ? (profit / clientTotal) * 100 : 0,
     };
-  }, [lines]);
+  }, [lines, setupCost, shippingCost]);
 
   if (!project) return null;
 
@@ -77,10 +99,18 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const addLine    = () => { setLines(prev => [...prev, emptyLine()]); setDirty(true); };
   const removeLine = (i) => { setLines(prev => prev.filter((_, idx) => idx !== i)); setDirty(true); };
 
+  const setMeta = (setter) => (v) => { setter(v); setDirty(true); };
+
   const persist = async () => {
     setSaving(true);
     try {
-      await onSave({ quoteLines: lines });
+      await onSave({
+        quoteLines: lines,
+        shipToState,
+        printerName,
+        setupCost:    num(setupCost),
+        shippingCost: num(shippingCost),
+      });
       setDirty(false);
     } finally {
       setSaving(false);
@@ -90,6 +120,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     if (dirty && !window.confirm('You have unsaved quote changes. Close anyway?')) return;
     onClose();
   };
+
+  const marginCol = marginColor(totals.marginPct);
+  const inkInput  = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
 
   return (
     <Dialog open={open}
@@ -119,6 +152,30 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
+        {/* Project-level meta — sticks with the quote so re-quotes don't forget */}
+        <Box sx={{ display: 'grid', gap: 1, mb: 2,
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' } }}>
+          <QF label="Ship to (state)">
+            <TextField size="small" value={shipToState} placeholder="PA"
+              onChange={e => setMeta(setShipToState)(e.target.value)} sx={inkInput} />
+          </QF>
+          <QF label="Printer">
+            <TextField size="small" value={printerName} placeholder="In-house · Heritage · Anchor…"
+              onChange={e => setMeta(setPrinterName)(e.target.value)} sx={inkInput} />
+          </QF>
+          <QF label="Setup cost (one-time)">
+            <TextField size="small" type="number" value={setupCost} placeholder="0"
+              onChange={e => setMeta(setSetupCost)(e.target.value)} sx={inkInput}
+              InputProps={{ startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { color: B.muted } }}>$</InputAdornment> }} />
+          </QF>
+          <QF label="Shipping cost">
+            <TextField size="small" type="number" value={shippingCost} placeholder="0"
+              onChange={e => setMeta(setShippingCost)(e.target.value)} sx={inkInput}
+              InputProps={{ startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { color: B.muted } }}>$</InputAdornment> }} />
+          </QF>
+        </Box>
+
+        {/* Lines */}
         {lines.length === 0 ? (
           <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 6, textAlign: 'center', color: B.muted }}>
             <Typography sx={{ fontSize: 13, mb: 1.5 }}>No quote lines yet.</Typography>
@@ -146,22 +203,31 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         )}
       </DialogContent>
 
-      {/* Totals footer */}
+      {/* Totals footer — minimal green, margin spectrum carries the visual cue */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.panel, borderTop: `1px solid ${B.border}`,
-        px: 2.5, py: 1.2, display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 }, flexWrap: 'wrap' }}>
+        px: 2.5, py: 1.2, display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 }, flexWrap: 'wrap' }}>
         <FooterStat label="Units"  value={String(totals.qty)} />
-        <FooterStat label="Cost"   value={fmt(totals.cost)} />
+        <FooterStat label="COGS"   value={fmt(totals.cogs)} />
+        {totals.extras > 0 && (
+          <FooterStat label="Setup + Ship" value={fmt(totals.extras)} dim />
+        )}
         <FooterStat label="Profit" value={fmt(totals.profit)}
-          accent={totals.profit >= 0 ? B.green : '#f87171'} />
-        <FooterStat label="Margin" value={`${totals.marginPct.toFixed(1)}%`}
-          accent={totals.marginPct >= 30 ? B.green : '#fbbf24'} />
+          accent={totals.profit >= 0 ? marginCol : '#f87171'} />
+        <Box>
+          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            Margin
+          </Typography>
+          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
+            {totals.marginPct.toFixed(1)}%
+          </Typography>
+        </Box>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ textAlign: 'right' }}>
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Quote total
+            Client total
           </Typography>
-          <Typography sx={{ color: B.green, fontSize: 22, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
-            {fmt(totals.price)}
+          <Typography sx={{ color: B.white, fontSize: 22, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
+            {fmt(totals.clientTotal)}
           </Typography>
         </Box>
       </Box>
@@ -169,9 +235,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   );
 }
 
-function FooterStat({ label, value, accent }) {
+function FooterStat({ label, value, accent, dim }) {
   return (
-    <Box>
+    <Box sx={{ opacity: dim ? 0.6 : 1 }}>
       <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
         {label}
       </Typography>
@@ -188,7 +254,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
     '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
   };
-  const tf = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 } };
+  const tf = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
 
   const cost      = num(line.blankCost) + num(line.printCost);
   const qty       = num(line.qty);
@@ -196,18 +262,19 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
   const lineTotal = qty * unitPrice;
   const profit    = unitPrice - cost;
   const marginPct = unitPrice > 0 ? (profit / unitPrice) * 100 : 0;
+  const marginCol = marginColor(marginPct);
   const selectedPct = cost > 0 && num(line.unitPrice) > 0
     ? Math.round((num(line.unitPrice) / cost - 1) * 100)
     : null;
 
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
-      {/* Inputs */}
+      {/* Inputs — color + supplier dropped (printer is project-level now) */}
       <Box sx={{ p: 1.5, display: 'grid', gap: 1, alignItems: 'end',
         gridTemplateColumns: {
           xs: 'repeat(2, 1fr)',
           sm: 'repeat(4, 1fr)',
-          lg: '68px 104px 1.4fr 104px 140px 92px 132px 1.4fr 92px 36px',
+          lg: '68px 104px 1.6fr 100px 140px 1.6fr 100px 36px',
         } }}>
         <QF label="Qty">
           <TextField size="small" type="number" value={line.qty ?? ''}
@@ -218,16 +285,8 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
             onChange={e => onPatch({ styleCode: e.target.value })} sx={tf} />
         </QF>
         <QF label="Description">
-          <TextField size="small" value={line.description || ''} placeholder="T-shirt"
+          <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
             onChange={e => onPatch({ description: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Color">
-          <TextField size="small" value={line.color || ''} placeholder="Black"
-            onChange={e => onPatch({ color: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Supplier">
-          <TextField size="small" value={line.supplier || ''} placeholder="S&S Activewear"
-            onChange={e => onPatch({ supplier: e.target.value })} sx={tf} />
         </QF>
         <QF label="Blank $ ea">
           <TextField size="small" type="number" value={line.blankCost ?? ''}
@@ -257,7 +316,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
         </IconButton>
       </Box>
 
-      {/* Markup tier strip */}
+      {/* Markup tier strip — only the SELECTED tier wears the green; the rest stay neutral */}
       <Box sx={{ px: 1.5, pb: 0.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.5} flexWrap="wrap">
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
@@ -283,9 +342,9 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
                   <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
                     cursor: 'pointer', borderRadius: 1, py: 0.6, textAlign: 'center',
                     border: `1px solid ${sel ? B.green : B.border}`,
-                    bgcolor: sel ? 'rgba(74,222,128,0.16)' : 'rgba(255,255,255,0.02)',
-                    transition: 'border-color 0.1s',
-                    '&:hover': { borderColor: B.green },
+                    bgcolor: sel ? 'rgba(74,222,128,0.14)' : 'transparent',
+                    transition: 'border-color 0.1s, background 0.1s',
+                    '&:hover': { borderColor: sel ? B.green : '#666' },
                   }}>
                     <Typography sx={{ color: sel ? B.green : B.muted, fontSize: 10, fontWeight: 700 }}>
                       +{pct}%
@@ -301,7 +360,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
         )}
       </Box>
 
-      {/* Committed price + line total */}
+      {/* Committed price + line total + per-unit profit with color-coded margin */}
       <Box sx={{ px: 1.5, py: 1, mt: 0.5, borderTop: `1px solid ${B.faint}`,
         display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
         <QF label="Unit price">
@@ -312,7 +371,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Profit / unit
           </Typography>
-          <Typography sx={{ color: profit >= 0 ? B.green : '#f87171', fontSize: 13, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: marginCol, fontSize: 13, fontWeight: 800, fontFamily: 'monospace' }}>
             {fmt(profit)} · {marginPct.toFixed(0)}%
           </Typography>
         </Box>
@@ -321,7 +380,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Line total · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
-          <Typography sx={{ color: B.green, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: B.white, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>
             {fmt(lineTotal)}
           </Typography>
         </Box>
