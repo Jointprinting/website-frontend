@@ -1775,7 +1775,16 @@ async function loadProjects() {
         const label = `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`;
         return `<option value="${p._id}">${label.replace(/</g,'&lt;')}</option>`;
       }).join('');
-    sel.value = current;
+    // Honor ?project=<id> from the launch URL so the OrderTracker can deep-link
+    // straight into "save a mockup for this project". Otherwise keep whatever
+    // the user had selected.
+    const initialProject = new URLSearchParams(window.location.search).get('project');
+    if (initialProject && window.PROJECTS_CACHE.find(p => p._id === initialProject)) {
+      sel.value = initialProject;
+      try { onProjectChange(); } catch (_) {}
+    } else {
+      sel.value = current;
+    }
   } catch(e) { /* best-effort */ }
 }
 
