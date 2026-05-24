@@ -1585,7 +1585,29 @@ let ssLoadedBack  = null;
 // ── IndexedDB + Cloud Sync ────────────────────────────────────────
 let db = null;
 
-function getStudioToken(){ try{ return sessionStorage.getItem('jpStudioToken'); }catch(_){ return null; } }
+// Token lookup falls back through the four places a token can live, in order
+// of freshness. Without this, opening jpstudio directly (no ?t= param, no
+// iframe) hit a blank dropdown + a permanently amber sync — because every
+// backend call silently 401'd.
+function getStudioToken(){
+  try {
+    const t = sessionStorage.getItem('jpStudioToken')
+           || localStorage.getItem('jpStudioToken')    // Studio app's saved login (same origin)
+           || null;
+    // Mirror back into sessionStorage so the rest of the file stays uniform.
+    if (t) { try { sessionStorage.setItem('jpStudioToken', t); } catch(_){} }
+    return t;
+  } catch (_) { return null; }
+}
+
+// If there's no usable token, send the user to /studio with a return-URL so
+// they sign in once and bounce back automatically — instead of staring at
+// a silent broken dropdown.
+function _ensureAuthBanner() {
+  if (getStudioToken()) return;
+  const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.replace(`/studio?return=${returnTo}`);
+}
 function generateUUID(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); }
 
 // Strip the heavy embedded image base64 strings from pageState before sending
@@ -1776,6 +1798,7 @@ function initDB() {
         // Auto-pull from cloud, then auto-push anything still pending. No
         // manual Sync button required — the user just hits Refresh on
         // another device and everything is there.
+        try { _ensureAuthBanner(); } catch (_) {}
         try { await syncFromBackend(); } catch (_) {}
         try { await loadProjects(); } catch (_) {}
         try { await syncToCloud(); } catch (_) {}

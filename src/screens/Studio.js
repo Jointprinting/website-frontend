@@ -2245,18 +2245,33 @@ function StudioBody({ token, onLogout }) {
 export default function Studio() {
   const [token, setToken] = React.useState(null);
 
+  // Bounce-back support: when another tool (jpstudio) redirected here to
+  // collect a login, it tagged the URL with ?return=/wherever. After we have
+  // a verified token we send the user straight back there — same-origin only
+  // so an attacker can't smuggle in an off-site URL.
+  const handleAuthed = React.useCallback((t) => {
+    setToken(t);
+    try {
+      const ret = new URLSearchParams(window.location.search).get('return');
+      if (ret && ret.startsWith('/')) {
+        // Strip the return param from the URL so a refresh doesn't bounce again.
+        window.location.replace(ret);
+      }
+    } catch (_) { /* no-op */ }
+  }, []);
+
   React.useEffect(() => {
     const t = localStorage.getItem(TOKEN_KEY);
     if (t) {
       axios
         .get(`${config.backendUrl}/api/auth/verify`, { headers: { Authorization: `Bearer ${t}` } })
-        .then(() => setToken(t))
+        .then(() => handleAuthed(t))
         .catch(() => {
           localStorage.removeItem(TOKEN_KEY);
           setToken(null);
         });
     }
-  }, []);
+  }, [handleAuthed]);
 
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -2265,7 +2280,7 @@ export default function Studio() {
 
   return token
     ? <StudioBody token={token} onLogout={handleLogout} />
-    : <Login onAuthed={setToken} />;
+    : <Login onAuthed={handleAuthed} />;
 }
 
 // ── BackupNagBanner ──────────────────────────────────────────────────────────
