@@ -22,28 +22,6 @@ const getTagCode = (tag) => {
 
 const capitalize = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
-// Map the backend's `type` enum to a human-readable gender label. Returns
-// '' for Unisex (so the UI can skip rendering it) and for unknown values.
-const genderLabel = (type) => {
-  switch (type) {
-    case 'Female': return "Women's";
-    case 'Male':   return "Men's";
-    case 'Kids':   return "Kids'";
-    default:       return '';
-  }
-};
-
-// True when the title text already mentions the gender, so the UI doesn't
-// say "Women's BELLA + CANVAS 6004 Ladies Favorite Tee".
-const titleMentionsGender = (title, type) => {
-  if (!title || !type) return false;
-  const t = String(title).toLowerCase();
-  if (type === 'Female') return /\b(ladies|women|womens|women's|woman's|female)\b/.test(t);
-  if (type === 'Male')   return /\b(mens|men's|man's)\b/.test(t);
-  if (type === 'Kids')   return /\b(youth|kid|kids|toddler|infant|baby|junior)\b/.test(t);
-  return false;
-};
-
 const sanitizeHTML = (html) => {
   if (typeof html !== 'string') return '';
   return html
@@ -51,7 +29,12 @@ const sanitizeHTML = (html) => {
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
     .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/javascript:/gi, '');
+    .replace(/javascript:/gi, '')
+    // S&S's product descriptions wrap brand-term words like "Airlume" in
+    // <abbr> / <dfn> / <acronym> / <u>, which browsers auto-decorate with
+    // a dotted or solid underline — looks like spell-check or a broken
+    // link on our site. Drop the wrapper but keep the inner text.
+    .replace(/<\/?(?:abbr|dfn|acronym|u|mark)(?:\s+[^>]*)?>/gi, '');
 };
 
 const startingPrice = (item) => {
@@ -71,7 +54,6 @@ function Product() {
   const [productVendor, setProductVendor]               = useState(preloadedItem?.vendor || '');
   const [productStyle, setProductStyle]                 = useState(preloadedItem?.style || id || '');
   const [productTitle, setProductTitle]                 = useState(preloadedItem?.name || '');
-  const [productType, setProductType]                   = useState(preloadedItem?.type || '');
   const [productPriceFrom, setProductPriceFrom]         = useState(startingPrice(preloadedItem) || '');
   const [productSizeRangeBottom, setProductSizeRangeBottom] = useState(preloadedItem?.sizeRangeBottom || '');
   const [productSizeRangeTop, setProductSizeRangeTop]       = useState(preloadedItem?.sizeRangeTop || '');
@@ -118,7 +100,6 @@ function Product() {
       setProductVendor(data.vendor || '');
       setProductStyle(data.style || id);
       setProductTitle(data.name || '');
-      setProductType(data.type || '');
       setProductPriceFrom(startingPrice(data) || '');
       setProductSizeRangeBottom(data.sizeRangeBottom || '');
       setProductSizeRangeTop(data.sizeRangeTop || '');
@@ -332,17 +313,6 @@ function Product() {
                 alignItems={{ xs: 'flex-start', sm: 'center' }} flexWrap="wrap" useFlexGap>
                 {productVendor && <Typography color="black">{productVendor}</Typography>}
                 {productStyle && <Typography color="gray">Style #{productStyle}</Typography>}
-                {/* Only show the gender chip when it's not the catch-all
-                    "Unisex" — otherwise every adult tee would carry a
-                    redundant label. */}
-                {genderLabel(productType) && (
-                  <Chip
-                    label={genderLabel(productType)}
-                    size="small"
-                    variant="outlined"
-                    sx={{ borderColor: '#1a1a1a', color: '#1a1a1a', fontWeight: 600 }}
-                  />
-                )}
                 {productTag && <Chip label={productTag} color={productTagColor} variant="outlined" size="small" />}
               </Stack>
 
@@ -353,12 +323,7 @@ function Product() {
                     fontSize: { xs: 28, sm: 38 }, fontWeight: 900,
                     color: '#1a1a1a', lineHeight: 1.1, letterSpacing: -0.5,
                   }}>
-                    {/* If the title already says "Ladies" or "Men's", don't
-                        double up. Otherwise prepend the gender so the
-                        headline answers the obvious question. */}
-                    {genderLabel(productType) && !titleMentionsGender(productTitle, productType)
-                      ? `${genderLabel(productType)} ${productTitle}`
-                      : productTitle}
+                    {productTitle}
                   </Typography>
                   <Box sx={{ height: 2, width: 48, bgcolor: '#4ade80', borderRadius: 1, mt: 1 }} />
                 </>
@@ -509,6 +474,15 @@ function Product() {
                     '& p': { my: 1 },
                     '& a': { color: '#1a3d2b', textDecoration: 'underline' },
                     '& strong, & b': { color: 'text.primary' },
+                    // Belt-and-suspenders against the "Airlume" boxed-underline
+                    // look — kill default decorations on abbreviation / mark
+                    // / underline tags even if the sanitizer misses one.
+                    '& abbr, & dfn, & acronym, & u, & mark': {
+                      textDecoration: 'none',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'inherit',
+                    },
                   }}
                   dangerouslySetInnerHTML={{ __html: sanitizeHTML(productDescription) }}
                 />
