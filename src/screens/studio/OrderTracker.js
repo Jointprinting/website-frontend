@@ -1332,6 +1332,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
                   No mockups for this client yet — save one in jpstudio with title "{(project.companyName || project.clientName || '').trim() || 'Company'} Merch" and it'll auto-appear here.
+                  <Box sx={{ mt: 1 }}>
+                    <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => window.open(`/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer')}
+                      sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                      Open Mockup Studio for this project
+                    </Button>
+                  </Box>
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
