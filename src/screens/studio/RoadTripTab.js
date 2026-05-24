@@ -29,6 +29,11 @@ import Alert from '@mui/material/Alert';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import config from '../../config.json';
+import {
+  haversineMiles, formatMiles, formatMinutes,
+} from './_roadTripGeo';
+import { buildPitchPlan, bucketByProgress } from './_roadTripPlan';
+import { buildSleepMarkerEl, buildSleepPopup } from './_roadTripSleep';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Terminal palette (mirrored from phase 2a)
@@ -593,6 +598,35 @@ export default function RoadTripTab({ token }) {
   const [editingStop, setEditingStop] = React.useState(null);
   const [movingStopId, setMovingStopId] = React.useState(null);
 
+  // ── Sleep / pitch / exec state ────────────────────────────────────────────
+  // Sleep pin DOM markers (parallel to customMarkersRef). Keyed by lead._id.
+  const sleepMarkersRef = React.useRef(new Map());
+
+  // PITCH ROUTE planner — open per-day, picks corridor candidates.
+  const [planning, setPlanning] = React.useState({
+    open: false, day: null, origin: null, sleep: null,
+    candidates: [], selectedIds: new Set(), loading: false, route: null,
+  });
+
+  // VALIDATE AREA modal — density count + denser nearby alternatives.
+  const [validation, setValidation] = React.useState({
+    open: false, center: null, data: null, loading: false, label: '',
+  });
+
+  // GO / live execution mode — only true while actively driving the route.
+  const [execMode, setExecMode] = React.useState(false);
+  const [execDay, setExecDay]   = React.useState(null);
+  const watchIdRef = React.useRef(null);
+  const liveLocRef = React.useRef(null);
+  const liveLocMarkerRef = React.useRef(null);
+  const [nextStop, setNextStop] = React.useState(null);
+
+  // Sleep editor (per-day) modal state.
+  const [sleepEditor, setSleepEditor] = React.useState({
+    open: false, day: null, role: null, // 'primary' | 'backup'
+    query: '', results: [], kind: 'campground', searching: false,
+  });
+
   // Distinct route colors per day so multi-day overlays don't blur together.
   const DAY_ROUTE_COLORS = ['#4ade80', '#06b6d4', '#fbbf24', '#ef4444', '#a855f7', '#f472b6', '#84cc16', '#f97316'];
   const colorForDay = React.useCallback((label) => {
@@ -700,6 +734,23 @@ export default function RoadTripTab({ token }) {
 
   const stopCount = savedItems.length;
 
+  // ── Sleep slot helpers ───────────────────────────────────────────────────
+  // Each day has at most one primary sleep, one backup sleep, and one of them
+  // is the "active" sleep (TONIGHT). Derive from savedItems; no separate
+  // state needed.
+  const primarySleepFor = React.useCallback((day) =>
+    savedItems.find(s => (s.dayLabel || 'Unassigned') === day && s.sleepRole === 'primary'),
+    [savedItems]);
+  const backupSleepFor = React.useCallback((day) =>
+    savedItems.find(s => (s.dayLabel || 'Unassigned') === day && s.sleepRole === 'backup'),
+    [savedItems]);
+  const activeSleepFor = React.useCallback((day) => {
+    const a = savedItems.find(s => (s.dayLabel || 'Unassigned') === day && s.isActiveSleep);
+    if (a) return a;
+    // Fall back to primary if nothing is explicitly active.
+    return primarySleepFor(day) || backupSleepFor(day) || null;
+  }, [savedItems, primarySleepFor, backupSleepFor]);
+
   // Has the map moved since the last search? Used to show the "refresh"
   // badge. Reset whenever we kick a new search off.
   const [mapMoved, setMapMoved] = React.useState(false);
@@ -735,6 +786,11 @@ export default function RoadTripTab({ token }) {
           const dy = c.lat - lastSearchCenterRef.current.lat;
           if (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) setMapMoved(true);
         }
+      });
+      // Right-click anywhere → VALIDATE that area for dispensary density.
+      map.on('contextmenu', (e) => {
+        e.preventDefault?.();
+        openValidator({ lat: e.lngLat.lat, lng: e.lngLat.lng, label: '' });
       });
       mapRef.current = map;
     } catch (err) {
@@ -1281,6 +1337,475 @@ export default function RoadTripTab({ token }) {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Sleep slot management — flip active, edit pin, assign new sleep lead.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const flipActiveSleep = async (day) => {
+    const primary = primarySleepFor(day);
+    const backup  = backupSleepFor(day);
+    if (!primary && !backup) {
+      showToast('Set a primary or backup sleep first.', 'error');
+      return;
+    }
+    const current = activeSleepFor(day);
+    let target;
+    if (!current) target = primary || backup;
+    else if (current.sleepRole === 'primary' && backup) target = backup;
+    else if (current.sleepRole === 'backup'  && primary) target = primary;
+    else { showToast('Only one sleep set for this day.', 'info'); return; }
+
+    try {
+      const updates = [];
+      if (current && current._id !== target._id) {
+        updates.push(axios.put(`${config.backendUrl}/api/roadtrip/leads/${current._id}`,
+          { isActiveSleep: false }, { headers: { Authorization: `Bearer ${token}` } }));
+      }
+      updates.push(axios.put(`${config.backendUrl}/api/roadtrip/leads/${target._id}`,
+        { isActiveSleep: true }, { headers: { Authorization: `Bearer ${token}` } }));
+      await Promise.all(updates);
+      setSavedItems(prev => prev.map(s => {
+        const sameDay = (s.dayLabel || 'Unassigned') === day;
+        if (sameDay && s._id === target._id) return { ...s, isActiveSleep: true };
+        if (sameDay && s.isActiveSleep) return { ...s, isActiveSleep: false };
+        return s;
+      }));
+      showToast(`TONIGHT: ${target.name}`, 'success');
+    } catch (e) {
+      showToast('Failed to switch active sleep.', 'error');
+    }
+  };
+
+  const assignSleep = async ({ feature, day, role, kind }) => {
+    // `feature` is a Mapbox geocoder result; create a lead and mark it.
+    const [lng, lat] = feature.center;
+    const body = {
+      source: 'manual',
+      name: feature.text || feature.place_name?.split(',')[0] || 'Sleep',
+      address: feature.place_name || '',
+      lat, lng,
+      type: kind === 'campground' ? 'campground' : 'other',
+      kind: 'stop',
+      customType: kind === 'park_and_ride' ? 'other' : '',
+      dayLabel: day,
+      sleepRole: role,
+      sleepKind: kind,
+      isActiveSleep: role === 'primary' && !activeSleepFor(day),
+    };
+    try {
+      const r = await axios.post(`${config.backendUrl}/api/roadtrip/leads`, body,
+        { headers: { Authorization: `Bearer ${token}` } });
+      // Refresh full list so demoted prior holders show their new state.
+      const list = await axios.get(`${config.backendUrl}/api/roadtrip/leads`,
+        { headers: { Authorization: `Bearer ${token}` } });
+      setSavedItems(list.data);
+      showToast(`${role === 'primary' ? 'PRIMARY' : 'BACKUP'} sleep set: ${body.name}`, 'success');
+      return r.data;
+    } catch (e) {
+      showToast('Failed to set sleep pin.', 'error');
+      return null;
+    }
+  };
+
+  const openSleepEditor = (day, role = 'primary') => {
+    setSleepEditor({
+      open: true, day, role,
+      query: '', results: [],
+      kind: role === 'primary' ? 'campground' : 'park_and_ride',
+      searching: false,
+    });
+  };
+
+  const sleepEditorSearch = async (q) => {
+    setSleepEditor(s => ({ ...s, query: q, searching: true }));
+    try {
+      const encoded = encodeURIComponent(q.trim());
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`
+        + `?access_token=${config.mapboxToken}&limit=5&country=US`;
+      const r = await fetch(url);
+      const data = await r.json();
+      setSleepEditor(s => ({ ...s, results: data.features || [], searching: false }));
+    } catch {
+      setSleepEditor(s => ({ ...s, results: [], searching: false }));
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PITCH ROUTE planner — corridor candidates → user picks → draw live route.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const LIVE_ROUTE_SOURCE = 'jp-live-route-src';
+  const LIVE_ROUTE_LAYER  = 'jp-live-route-layer';
+
+  const removeLiveRoute = React.useCallback(() => {
+    const map = mapRef.current; if (!map) return;
+    try { if (map.getLayer(LIVE_ROUTE_LAYER))   map.removeLayer(LIVE_ROUTE_LAYER); } catch {}
+    try { if (map.getSource(LIVE_ROUTE_SOURCE)) map.removeSource(LIVE_ROUTE_SOURCE); } catch {}
+  }, []);
+
+  const drawLiveRoute = async (geometry) => {
+    const map = mapRef.current; if (!map || !geometry) return;
+    const geojson = { type: 'Feature', properties: {}, geometry };
+    if (map.getSource(LIVE_ROUTE_SOURCE)) {
+      map.getSource(LIVE_ROUTE_SOURCE).setData(geojson);
+    } else {
+      map.addSource(LIVE_ROUTE_SOURCE, { type: 'geojson', data: geojson });
+      map.addLayer({
+        id: LIVE_ROUTE_LAYER, type: 'line', source: LIVE_ROUTE_SOURCE,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': TERM.amber,
+          'line-width': 5,
+          'line-opacity': 0.92,
+          'line-dasharray': [2, 1.2],
+        },
+      });
+    }
+    const coords = geometry.coordinates || [];
+    if (coords.length) {
+      const bounds = coords.reduce(
+        (b, c) => b.extend(c),
+        new mapboxgl.LngLatBounds(coords[0], coords[0])
+      );
+      map.fitBounds(bounds, { padding: 80, duration: 1200 });
+    }
+  };
+
+  const resolveOrigin = async () => {
+    // 1) If we have a recent live GPS fix from execMode, use it.
+    if (liveLocRef.current && Date.now() - liveLocRef.current.t < 60_000) {
+      return { lat: liveLocRef.current.lat, lng: liveLocRef.current.lng, label: 'Current location' };
+    }
+    // 2) Otherwise prompt browser geolocation.
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location' }),
+        ()    => resolve(null),
+        { timeout: 15000, maximumAge: 120000, enableHighAccuracy: false }
+      );
+    });
+  };
+
+  const openPitchPlanner = async (day) => {
+    const sleep = activeSleepFor(day);
+    if (!sleep) {
+      showToast('Set a TONIGHT sleep pin for this day first.', 'error');
+      return;
+    }
+    setPlanning(p => ({ ...p, open: true, day, sleep, loading: true, candidates: [], route: null }));
+    let origin = await resolveOrigin();
+    if (!origin) {
+      // Final fallback: first stop of the day, otherwise sleep itself (will
+      // produce a tiny corridor — user can override).
+      const firstStop = stopsForDay(day)[0];
+      origin = firstStop
+        ? { lat: firstStop.lat, lng: firstStop.lng, label: firstStop.name }
+        : { lat: sleep.lat, lng: sleep.lng, label: sleep.name };
+      showToast('Using ' + origin.label + ' as start (geolocation unavailable).', 'info');
+    }
+    try {
+      const r = await axios.post(
+        `${config.backendUrl}/api/roadtrip/corridor/leads`,
+        { from: { lat: origin.lat, lng: origin.lng },
+          to:   { lat: sleep.lat,  lng: sleep.lng  },
+          corridorMi: 8, types: ['dispensary'] },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Pre-check candidates already on this day.
+      const todays = new Set(stopsForDay(day)
+        .filter(s => s.type === 'dispensary')
+        .map(s => s._id));
+      const selected = new Set(r.data.leads
+        .filter(c => todays.has(c._id))
+        .map(c => c._id));
+      setPlanning(p => ({
+        ...p, origin, candidates: r.data.leads,
+        selectedIds: selected, loading: false,
+      }));
+    } catch (e) {
+      console.error('[planner] corridor fetch failed:', e);
+      showToast('Failed to load corridor leads.', 'error');
+      setPlanning(p => ({ ...p, loading: false }));
+    }
+  };
+
+  const togglePlannerCandidate = (id) => {
+    setPlanning(p => {
+      const next = new Set(p.selectedIds);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return { ...p, selectedIds: next };
+    });
+  };
+
+  const buildPitchRoute = async () => {
+    const { origin, sleep, candidates, selectedIds, day } = planning;
+    if (!origin || !sleep) return;
+    if (selectedIds.size + 2 > 25) {
+      showToast('Too many stops (Mapbox limit 25). Uncheck a few.', 'error');
+      return;
+    }
+    const plan = buildPitchPlan({ origin, sleep, candidates, selectedIds });
+    // Persist day + sortOrder for each selected stop.
+    try {
+      await Promise.all(plan.stops.map((stop, idx) =>
+        axios.put(`${config.backendUrl}/api/roadtrip/leads/${stop._id}`,
+          { dayLabel: day, sortOrder: idx + 1 },
+          { headers: { Authorization: `Bearer ${token}` } })
+      ));
+      setSavedItems(prev => prev.map(s => {
+        const stop = plan.stops.find(p => p._id === s._id);
+        return stop ? { ...s, dayLabel: day, sortOrder: plan.stops.indexOf(stop) + 1 } : s;
+      }));
+    } catch (e) {
+      console.warn('[planner] persist failed', e);
+    }
+    // Hit Mapbox Directions and draw the dashed amber line.
+    try {
+      const route = await fetchRoute(plan.coords);
+      if (route) {
+        await drawLiveRoute(route.geometry);
+        setPlanning(p => ({ ...p, route, open: false }));
+        showToast(`Route built · ${(route.distance / 1609.34).toFixed(1)}mi · ${Math.round(route.duration/60)}min`, 'success');
+        // On mobile, jump to map view so the user sees the line.
+        setMobileTab('map');
+      }
+    } catch (e) {
+      showToast(e.message || 'Mapbox route failed.', 'error');
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VALIDATE AREA — density count + denser nearby alternatives.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const openValidator = async ({ lat, lng, label = '' }, { fresh = false } = {}) => {
+    setValidation({ open: true, center: { lat, lng }, label, data: null, loading: true });
+    try {
+      const r = await axios.post(
+        `${config.backendUrl}/api/roadtrip/density/area`,
+        { lat, lng, fresh },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setValidation(v => ({ ...v, data: r.data, loading: false }));
+    } catch (e) {
+      console.error('[validator] failed:', e);
+      showToast('Validation failed.', 'error');
+      setValidation(v => ({ ...v, loading: false, open: false }));
+    }
+  };
+
+  const refreshValidator = () => {
+    if (validation.center) openValidator(validation.center, { fresh: true });
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GO / live execution — watchPosition, NEXT STOP, VISITED / SKIP.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const updateNextStop = React.useCallback((day) => {
+    if (!day) return;
+    const stops = stopsForDay(day);
+    const next = stops.find(s => {
+      if (s.status === 'visited' || s.status === 'dead') return false;
+      if (s.sleepRole === 'primary' || s.sleepRole === 'backup') return false;
+      return true;
+    }) || activeSleepFor(day);
+    if (!next) { setNextStop(null); return; }
+    const loc = liveLocRef.current;
+    const distMi = loc
+      ? haversineMiles(loc.lat, loc.lng, next.lat, next.lng)
+      : null;
+    const etaMin = distMi != null ? (distMi / 45) * 60 : null;
+    setNextStop({ ...next, _distanceMi: distMi, _etaMin: etaMin });
+  }, [stopsForDay, activeSleepFor]);
+
+  const startExec = (day) => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported.', 'error');
+      return;
+    }
+    setExecMode(true);
+    setExecDay(day);
+    setMobileTab('map');
+    if (watchIdRef.current != null) {
+      try { navigator.geolocation.clearWatch(watchIdRef.current); } catch {}
+    }
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        liveLocRef.current = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          speed: pos.coords.speed || 0,
+          heading: pos.coords.heading,
+          t: Date.now(),
+        };
+        // Render a small "you are here" marker.
+        if (mapRef.current) {
+          if (!liveLocMarkerRef.current) {
+            const el = document.createElement('div');
+            el.style.cssText = `
+              width: 16px; height: 16px; border-radius: 50%;
+              background: ${TERM.green}; border: 2px solid #fff;
+              box-shadow: 0 0 8px ${TERM.green}, 0 0 2px #fff;
+            `;
+            liveLocMarkerRef.current = new mapboxgl.Marker({ element: el })
+              .setLngLat([pos.coords.longitude, pos.coords.latitude])
+              .addTo(mapRef.current);
+          } else {
+            liveLocMarkerRef.current.setLngLat([pos.coords.longitude, pos.coords.latitude]);
+          }
+        }
+        updateNextStop(day);
+      },
+      (err) => {
+        console.warn('[exec] watchPosition err:', err);
+        showToast('Location error — GPS off?', 'error');
+      },
+      { enableHighAccuracy: false, maximumAge: 5000, timeout: 20000 }
+    );
+    updateNextStop(day);
+    showToast('GO mode on — driving the route.', 'success');
+  };
+
+  const stopExec = () => {
+    if (watchIdRef.current != null) {
+      try { navigator.geolocation.clearWatch(watchIdRef.current); } catch {}
+      watchIdRef.current = null;
+    }
+    if (liveLocMarkerRef.current) {
+      try { liveLocMarkerRef.current.remove(); } catch {}
+      liveLocMarkerRef.current = null;
+    }
+    setExecMode(false);
+    setExecDay(null);
+    setNextStop(null);
+    removeLiveRoute();
+  };
+
+  React.useEffect(() => {
+    // Cleanup geolocation watcher on unmount.
+    return () => {
+      if (watchIdRef.current != null) {
+        try { navigator.geolocation.clearWatch(watchIdRef.current); } catch {}
+      }
+    };
+  }, []);
+
+  const markNextStopVisited = async () => {
+    if (!nextStop) return;
+    try {
+      await axios.put(`${config.backendUrl}/api/roadtrip/leads/${nextStop._id}`,
+        { status: 'visited', visitedAt: new Date().toISOString() },
+        { headers: { Authorization: `Bearer ${token}` } });
+      setSavedItems(prev => prev.map(s => s._id === nextStop._id
+        ? { ...s, status: 'visited', visitedAt: new Date().toISOString() }
+        : s));
+      showToast(`✓ Visited ${nextStop.name}`, 'success');
+      // Re-flow the route through remaining stops.
+      if (execDay) {
+        const stops = stopsForDay(execDay).filter(s => s._id !== nextStop._id);
+        const remaining = stops.filter(s => s.status !== 'visited' && s.status !== 'dead');
+        const sleep = activeSleepFor(execDay);
+        if (sleep && remaining.length) {
+          const loc = liveLocRef.current;
+          const coords = [
+            ...(loc ? [[loc.lng, loc.lat]] : []),
+            ...remaining.filter(s => s.sleepRole !== 'primary' && s.sleepRole !== 'backup')
+                        .map(s => [s.lng, s.lat]),
+            [sleep.lng, sleep.lat],
+          ];
+          try { const r = await fetchRoute(coords); if (r) await drawLiveRoute(r.geometry); } catch {}
+        }
+        updateNextStop(execDay);
+      }
+    } catch {
+      showToast('Failed to mark visited.', 'error');
+    }
+  };
+
+  const skipNextStop = async () => {
+    if (!nextStop || !execDay) return;
+    const allStops = stopsForDay(execDay);
+    const maxOrder = Math.max(0, ...allStops.map(s => s.sortOrder ?? 0));
+    try {
+      await axios.put(`${config.backendUrl}/api/roadtrip/leads/${nextStop._id}`,
+        { sortOrder: maxOrder + 1, status: 'follow_up' },
+        { headers: { Authorization: `Bearer ${token}` } });
+      setSavedItems(prev => prev.map(s => s._id === nextStop._id
+        ? { ...s, sortOrder: maxOrder + 1, status: 'follow_up' }
+        : s));
+      showToast(`Skipped ${nextStop.name} (will return)`, 'info');
+      updateNextStop(execDay);
+    } catch {
+      showToast('Failed to skip.', 'error');
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Sleep markers on the map — moon glyph with role-tinted ring.
+  // ─────────────────────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const existing = sleepMarkersRef.current;
+    const wanted = new Map();
+    for (const item of savedItems) {
+      if (!item.sleepRole) continue;
+      if (!isFinite(item.lat) || !isFinite(item.lng)) continue;
+      wanted.set(String(item._id), item);
+    }
+    // Drop / refresh.
+    for (const [id, marker] of existing) {
+      if (!wanted.has(id)) { try { marker.remove(); } catch {} existing.delete(id); }
+    }
+    for (const [id, item] of wanted) {
+      const prev = existing.get(id);
+      const el = buildSleepMarkerEl({
+        role: item.sleepRole, sleepKind: item.sleepKind,
+        active: !!item.isActiveSleep,
+      });
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const popup = new mapboxgl.Popup({ offset: 22, closeButton: true, closeOnClick: true });
+        const content = buildSleepPopup({
+          lead: item,
+          onMakeActive: async (lead) => {
+            try {
+              if (!lead.isActiveSleep) {
+                await axios.put(`${config.backendUrl}/api/roadtrip/leads/${lead._id}`,
+                  { isActiveSleep: true },
+                  { headers: { Authorization: `Bearer ${token}` } });
+                setSavedItems(p => p.map(s => {
+                  const sameDay = (s.dayLabel || 'Unassigned') === (lead.dayLabel || 'Unassigned');
+                  if (sameDay && s._id === lead._id) return { ...s, isActiveSleep: true };
+                  if (sameDay && s.isActiveSleep) return { ...s, isActiveSleep: false };
+                  return s;
+                }));
+                showToast(`TONIGHT: ${lead.name}`, 'success');
+              }
+              popup.remove();
+            } catch { showToast('Failed.', 'error'); }
+          },
+          onReplace: (lead) => {
+            popup.remove();
+            openSleepEditor(lead.dayLabel || 'Unassigned', lead.sleepRole);
+          },
+          onEdit: (lead) => {
+            popup.remove();
+            setEditingStop(lead._id);
+            setMobileTab('stops');
+          },
+        });
+        popup.setLngLat([item.lng, item.lat]).setDOMContent(content).addTo(mapRef.current);
+      });
+      if (prev) { try { prev.remove(); } catch {} }
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([item.lng, item.lat]).addTo(mapRef.current);
+      existing.set(id, marker);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedItems, mapReady, token]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
   const anyActive = LAYERS.some((l) => layerState[l.id].active);
@@ -1564,10 +2089,15 @@ export default function RoadTripTab({ token }) {
                 itinerary.map(([day, stops]) => {
                   const isVisible = !!routesShown[day];
                   const dayColor = colorForDay(day);
+                  const sleepPri = primarySleepFor(day);
+                  const sleepBak = backupSleepFor(day);
+                  const sleepActive = activeSleepFor(day);
+                  const sleepActiveColor =
+                    sleepActive?.sleepRole === 'backup' ? TERM.amber : TERM.green;
                   return (
                     <Box key={day} sx={{ mb: 2 }}>
                       <Stack direction="row" alignItems="center" spacing={1}
-                        sx={{ mb: 0.5, pb: 0.5, borderBottom: `1px solid ${TERM.borderDim}` }}>
+                        sx={{ mb: 0.5, pb: 0.5, borderBottom: `1px solid ${TERM.borderDim}`, flexWrap: 'wrap' }}>
                         <Box sx={{
                           width: 8, height: 8, borderRadius: '50%',
                           bgcolor: dayColor, boxShadow: `0 0 6px ${dayColor}`,
@@ -1593,6 +2123,17 @@ export default function RoadTripTab({ token }) {
                             {isVisible ? '◼ HIDE' : '▶ ROUTE'}
                           </Box>
                         )}
+                        <Box role="button" tabIndex={0}
+                          onClick={() => openPitchPlanner(day)}
+                          sx={{
+                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                            color: sleepActive ? TERM.amber : TERM.muted,
+                            border: `1px dashed ${sleepActive ? TERM.amber : TERM.borderDim}`,
+                            '&:hover': { bgcolor: 'rgba(251,191,36,0.08)' },
+                          }}>
+                          🛣 PITCH
+                        </Box>
                         {stops.length >= 1 && (
                           <Box role="button" tabIndex={0}
                             onClick={() => {
@@ -1609,6 +2150,77 @@ export default function RoadTripTab({ token }) {
                           </Box>
                         )}
                       </Stack>
+                      {/* TONIGHT row — primary + backup with active toggle */}
+                      <Box sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.75,
+                        py: 0.5, px: 0.5, mb: 0.5,
+                        bgcolor: 'rgba(74,222,128,0.025)', borderRadius: 0.5,
+                        border: `1px solid ${sleepActive ? sleepActiveColor + '40' : TERM.borderDim}`,
+                      }}>
+                        <Box sx={{ fontSize: 12, color: sleepActiveColor, lineHeight: 1 }}>🌙</Box>
+                        <Typography sx={{
+                          fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                          color: TERM.muted, flexShrink: 0,
+                        }}>TONIGHT:</Typography>
+                        {sleepActive ? (
+                          <Box role="button"
+                            onClick={() => flyToSaved(sleepActive)}
+                            sx={{
+                              fontFamily: MONO, fontSize: 10, fontWeight: 700,
+                              color: sleepActiveColor, flexGrow: 1, minWidth: 0,
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                              overflow: 'hidden', textOverflow: 'ellipsis',
+                              '&:hover': { textDecoration: 'underline' },
+                            }}>{sleepActive.name}</Box>
+                        ) : (
+                          <Box sx={{
+                            fontFamily: MONO, fontSize: 9, color: TERM.muted,
+                            flexGrow: 1, fontStyle: 'italic',
+                          }}>not set</Box>
+                        )}
+                        {/* Segmented toggle: PRI | BAK */}
+                        <Box sx={{
+                          display: 'flex', border: `1px solid ${TERM.borderDim}`,
+                          borderRadius: 0.5, overflow: 'hidden', flexShrink: 0,
+                        }}>
+                          <Box role="button"
+                            onClick={() => {
+                              if (sleepPri) {
+                                if (sleepActive?._id !== sleepPri._id) flipActiveSleep(day);
+                              } else { openSleepEditor(day, 'primary'); }
+                            }}
+                            sx={{
+                              fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
+                              px: 0.75, py: 0.25, cursor: 'pointer',
+                              color: sleepActive?.sleepRole === 'primary'
+                                ? TERM.greenDk : (sleepPri ? TERM.green : TERM.muted),
+                              bgcolor: sleepActive?.sleepRole === 'primary' ? TERM.green : 'transparent',
+                            }}>⛺ PRI</Box>
+                          <Box role="button"
+                            onClick={() => {
+                              if (sleepBak) {
+                                if (sleepActive?._id !== sleepBak._id) flipActiveSleep(day);
+                              } else { openSleepEditor(day, 'backup'); }
+                            }}
+                            sx={{
+                              fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
+                              px: 0.75, py: 0.25, cursor: 'pointer',
+                              borderLeft: `1px solid ${TERM.borderDim}`,
+                              color: sleepActive?.sleepRole === 'backup'
+                                ? '#000' : (sleepBak ? TERM.amber : TERM.muted),
+                              bgcolor: sleepActive?.sleepRole === 'backup' ? TERM.amber : 'transparent',
+                            }}>🅿 BAK</Box>
+                        </Box>
+                        <Box role="button"
+                          onClick={() => openSleepEditor(day, sleepPri ? 'backup' : 'primary')}
+                          sx={{
+                            fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
+                            px: 0.5, py: 0.25, cursor: 'pointer',
+                            color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+                            borderRadius: 0.25, flexShrink: 0,
+                            '&:hover': { color: TERM.text },
+                          }}>EDIT</Box>
+                      </Box>
                       {stops.map((item, i) => {
                         const layerForItem =
                              item.type === 'dispensary'    ? LAYERS[0]
@@ -2160,34 +2772,62 @@ export default function RoadTripTab({ token }) {
                         '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
                       }}>⤴ GOOGLE MAPS</Box>
                   </Stack>
-                  {/* Camp Tonight — fly to last stop and load campgrounds */}
+                  {/* GO TONIGHT — build / drive the pitch route to today's active sleep */}
                   {(() => {
-                    const lastStop = todayStops[todayStops.length - 1];
-                    if (!lastStop) return null;
-                    const campingActive = layerState.campgrounds?.active;
+                    const todayLabel = todayStops[0]?.dayLabel || currentDayLabel;
+                    const sleepActive = activeSleepFor(todayLabel);
+                    const noSleep = !sleepActive;
                     return (
-                      <Box role="button" tabIndex={0}
-                        onClick={() => {
-                          if (lastStop && isFinite(lastStop.lat) && isFinite(lastStop.lng)) {
-                            mapRef.current?.flyTo({ center: [lastStop.lng, lastStop.lat], zoom: 11, essential: true, duration: 1400 });
-                          }
-                          const campLayer = LAYERS.find(l => l.id === 'campgrounds');
-                          if (campLayer && !layerState.campgrounds?.active) dropLayerPins(campLayer);
-                          setMobileTab('map');
-                          showToast('Searching campgrounds near your last stop…', 'info');
-                        }}
-                        sx={{
-                          fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                          px: 1.25, py: 0.75, mb: 1.5, cursor: 'pointer', borderRadius: 0.5,
-                          color: campingActive ? TERM.greenDk : TERM.amber,
-                          bgcolor: campingActive ? TERM.green : 'rgba(251,191,36,0.08)',
-                          border: `1px solid ${campingActive ? TERM.green : TERM.amber}`,
-                          display: 'flex', alignItems: 'center', gap: 0.75,
-                          '&:hover': { bgcolor: campingActive ? TERM.green : 'rgba(251,191,36,0.15)' },
-                        }}>
-                        <Box component="span" sx={{ fontSize: 13 }}>⛺</Box>
-                        {campingActive ? 'CAMP LOADED' : 'CAMP TONIGHT'}
-                      </Box>
+                      <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+                        <Box role="button" tabIndex={0}
+                          onClick={() => {
+                            if (execMode) { stopExec(); return; }
+                            if (noSleep) {
+                              showToast('Set a TONIGHT sleep pin for today first.', 'error');
+                              return;
+                            }
+                            // If a planner-built route exists, jump into exec.
+                            // Otherwise open the planner so user can pick stops first.
+                            if (planning.route) startExec(todayLabel);
+                            else openPitchPlanner(todayLabel);
+                          }}
+                          sx={{
+                            flex: 1,
+                            fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: 1.5,
+                            px: 1.5, py: 1, cursor: 'pointer', borderRadius: 0.5,
+                            color: execMode ? '#000' : (noSleep ? TERM.muted : TERM.greenDk),
+                            bgcolor: execMode ? TERM.red : (noSleep ? 'transparent' : TERM.green),
+                            border: `1px solid ${execMode ? TERM.red : (noSleep ? TERM.borderDim : TERM.green)}`,
+                            textAlign: 'center',
+                            '&:hover': { opacity: 0.9 },
+                          }}>
+                          {execMode ? '■ STOP TRIP' : (planning.route ? '▶ GO TONIGHT' : '🛣 BUILD ROUTE')}
+                        </Box>
+                        {/* Legacy CAMP TONIGHT — fly to last stop + show campgrounds (kept as fallback). */}
+                        {(() => {
+                          const lastStop = todayStops[todayStops.length - 1];
+                          if (!lastStop) return null;
+                          return (
+                            <Box role="button" tabIndex={0}
+                              title="Find campgrounds near your last stop"
+                              onClick={() => {
+                                if (isFinite(lastStop.lat) && isFinite(lastStop.lng)) {
+                                  mapRef.current?.flyTo({ center: [lastStop.lng, lastStop.lat], zoom: 11, essential: true, duration: 1400 });
+                                }
+                                const campLayer = LAYERS.find(l => l.id === 'campgrounds');
+                                if (campLayer && !layerState.campgrounds?.active) dropLayerPins(campLayer);
+                                setMobileTab('map');
+                              }}
+                              sx={{
+                                fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                                px: 1, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
+                                color: TERM.amber,
+                                bgcolor: 'rgba(251,191,36,0.08)',
+                                border: `1px solid ${TERM.amber}`,
+                              }}>⛺</Box>
+                          );
+                        })()}
+                      </Stack>
                     );
                   })()}
 
@@ -2400,6 +3040,376 @@ export default function RoadTripTab({ token }) {
                   border: `1px solid ${TERM.borderDim}`, color: TERM.muted,
                   '&:hover': { color: TERM.text },
                 }}>CANCEL</Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── NEXT STOP card (mobile, only while execMode) ───────────────── */}
+      {execMode && nextStop && (
+        <Box sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed', left: 8, right: 8, bottom: 64, zIndex: 25,
+          flexDirection: 'column', gap: 0.5,
+          bgcolor: TERM.panel, border: `1px solid ${TERM.green}`,
+          borderRadius: 0.5, p: 1.25,
+          boxShadow: `0 -4px 16px rgba(74,222,128,0.18)`,
+        }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography sx={{
+              fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1, color: TERM.green,
+            }}>
+              ▶ NEXT STOP {execDay && stopsForDay(execDay).filter(s => s.status !== 'visited' && s.status !== 'dead' && !s.sleepRole).length > 0
+                ? `· ${stopsForDay(execDay).filter(s => s.status !== 'visited' && s.status !== 'dead' && !s.sleepRole).findIndex(s => s._id === nextStop._id) + 1} of ${stopsForDay(execDay).filter(s => !s.sleepRole).length}`
+                : ''}
+            </Typography>
+            <Box role="button" onClick={stopExec}
+              sx={{
+                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                color: TERM.muted, cursor: 'pointer',
+                '&:hover': { color: TERM.red },
+              }}>■ STOP</Box>
+          </Stack>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TERM.text,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{nextStop.name}</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted }}>
+            {nextStop._distanceMi != null ? `${formatMiles(nextStop._distanceMi)} · ETA ${formatMinutes(nextStop._etaMin)}` : 'Locating…'}
+            {execDay && activeSleepFor(execDay) && nextStop._id !== activeSleepFor(execDay)._id
+              ? ` · then 🌙 ${activeSleepFor(execDay).name}` : ''}
+          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ mt: 0.5 }}>
+            <Box role="button" onClick={markNextStopVisited}
+              sx={{
+                flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                py: 0.75, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                bgcolor: TERM.green, color: TERM.greenDk,
+              }}>✓ VISITED</Box>
+            <Box role="button" onClick={skipNextStop}
+              sx={{
+                flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                py: 0.75, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                color: TERM.amber, border: `1px solid ${TERM.amber}`,
+              }}>⤳ SKIP</Box>
+            {nextStop.phone && (
+              <Box role="button"
+                onClick={() => window.open(`tel:${nextStop.phone}`)}
+                sx={{
+                  fontFamily: MONO, fontSize: 12, fontWeight: 800,
+                  px: 1.2, py: 0.75, borderRadius: 0.5, cursor: 'pointer',
+                  color: '#06b6d4', border: '1px solid #06b6d4',
+                }}>📞</Box>
+            )}
+            {execDay && primarySleepFor(execDay) && backupSleepFor(execDay) && (
+              <Box role="button"
+                onClick={() => flipActiveSleep(execDay)}
+                title="Swap to backup sleep"
+                sx={{
+                  fontFamily: MONO, fontSize: 12, fontWeight: 800,
+                  px: 1.2, py: 0.75, borderRadius: 0.5, cursor: 'pointer',
+                  color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+                }}>🌙</Box>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      {/* ── PITCH ROUTE planner modal ───────────────────────────────────── */}
+      {planning.open && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          p: { xs: 1, sm: 2 },
+        }} onClick={() => setPlanning(p => ({ ...p, open: false }))}>
+          <Box sx={{
+            bgcolor: TERM.panel, border: `1px solid ${TERM.amber}`,
+            borderRadius: 0.5, p: 2,
+            width: { xs: '100%', sm: 520 },
+            maxHeight: '90vh', overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
+            fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.amber, letterSpacing: 1, flexGrow: 1 }}>
+                🛣 PITCH ROUTE · {planning.day && formatDayLabel(planning.day).toUpperCase()}
+              </Typography>
+              <Box role="button" onClick={() => setPlanning(p => ({ ...p, open: false }))}
+                sx={{ color: TERM.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, px: 0.5 }}>×</Box>
+            </Stack>
+            <Box sx={{ fontSize: 10, color: TERM.muted, mb: 1 }}>
+              FROM: <Box component="span" sx={{ color: TERM.text }}>{planning.origin?.label || '—'}</Box><br/>
+              TO: <Box component="span" sx={{ color: planning.sleep?.sleepRole === 'backup' ? TERM.amber : TERM.green }}>
+                🌙 {planning.sleep?.name || '—'}
+              </Box>
+            </Box>
+
+            {planning.loading ? (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2 }}>
+                Loading corridor candidates…
+              </Typography>
+            ) : planning.candidates.length === 0 ? (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2, fontStyle: 'italic' }}>
+                No saved dispensary leads inside the 8mi corridor. Drop more pins on the map first
+                (DISPENSARIES layer), then come back.
+              </Typography>
+            ) : (
+              <>
+                <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>
+                  CORRIDOR · {planning.candidates.length} CANDIDATES · {planning.selectedIds.size} PICKED
+                </Typography>
+                <Box sx={{ flexGrow: 1, overflowY: 'auto', borderTop: `1px solid ${TERM.borderDim}`, mb: 1 }}>
+                  {bucketByProgress(planning.candidates).map(({ bucket, items }) => (
+                    <Box key={bucket} sx={{ mb: 0.5 }}>
+                      <Typography sx={{ fontSize: 8, color: TERM.faint, letterSpacing: 1, mt: 0.5, mb: 0.25 }}>
+                        {bucket * 10}% – {(bucket + 1) * 10}%
+                      </Typography>
+                      {items.map((c) => {
+                        const picked = planning.selectedIds.has(c._id);
+                        const lowDetour = c.detourMi != null && c.detourMi < 0.5;
+                        return (
+                          <Box key={c._id} role="button"
+                            onClick={() => togglePlannerCandidate(c._id)}
+                            sx={{
+                              display: 'flex', alignItems: 'center', gap: 1,
+                              px: 0.75, py: 0.5, borderRadius: 0.25, cursor: 'pointer',
+                              bgcolor: picked ? 'rgba(74,222,128,0.06)' : 'transparent',
+                              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' },
+                            }}>
+                            <Box sx={{
+                              width: 12, height: 12, border: `1px solid ${picked ? TERM.green : TERM.borderDim}`,
+                              bgcolor: picked ? TERM.green : 'transparent',
+                              borderRadius: 0.25, flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: TERM.greenDk, fontSize: 9, fontWeight: 900,
+                            }}>{picked ? '✓' : ''}</Box>
+                            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.text, flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {c.name}
+                              {c.chainName && <Box component="span" sx={{ color: TERM.amber, ml: 0.5, fontSize: 8 }}>CHAIN</Box>}
+                            </Typography>
+                            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: lowDetour ? TERM.green : TERM.muted, flexShrink: 0 }}>
+                              {c.detourMi != null ? `+${c.detourMi.toFixed(1)}mi` : ''}
+                            </Typography>
+                            <Typography sx={{ fontFamily: MONO, fontSize: 8, color: scoreMeta(c.score).color, flexShrink: 0, minWidth: 12, textAlign: 'right' }}>
+                              {scoreMeta(c.score).label}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            )}
+
+            <Stack direction="row" spacing={1} sx={{ mt: 'auto' }}>
+              <Box role="button" onClick={buildPitchRoute}
+                sx={{
+                  flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 1,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  bgcolor: planning.selectedIds.size === 0 ? 'transparent' : TERM.amber,
+                  color: planning.selectedIds.size === 0 ? TERM.muted : '#000',
+                  border: `1px solid ${TERM.amber}`,
+                  opacity: planning.selectedIds.size === 0 ? 0.5 : 1,
+                  pointerEvents: planning.selectedIds.size === 0 ? 'none' : 'auto',
+                }}>🛣 BUILD ROUTE ({planning.selectedIds.size})</Box>
+              <Box role="button" onClick={() => setPlanning(p => ({ ...p, open: false }))}
+                sx={{
+                  fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  px: 2, py: 1, borderRadius: 0.5, cursor: 'pointer',
+                  border: `1px solid ${TERM.borderDim}`, color: TERM.muted,
+                }}>CANCEL</Box>
+            </Stack>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── VALIDATE AREA modal ─────────────────────────────────────────── */}
+      {validation.open && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          p: { xs: 1, sm: 2 },
+        }} onClick={() => setValidation(v => ({ ...v, open: false }))}>
+          <Box sx={{
+            bgcolor: TERM.panel, border: `1px solid ${TERM.green}`,
+            borderRadius: 0.5, p: 2,
+            width: { xs: '100%', sm: 420 },
+            fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.green, letterSpacing: 1, flexGrow: 1 }}>
+                ⓘ AREA SCAN {validation.label && '· ' + validation.label.toUpperCase()}
+              </Typography>
+              <Box role="button" onClick={refreshValidator} title="Bypass cache"
+                sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, cursor: 'pointer',
+                      border: `1px solid ${TERM.borderDim}`, px: 0.75, py: 0.25, borderRadius: 0.25, mr: 0.75,
+                      '&:hover': { color: TERM.green } }}>↻ REFRESH</Box>
+              <Box role="button" onClick={() => setValidation(v => ({ ...v, open: false }))}
+                sx={{ color: TERM.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, px: 0.5 }}>×</Box>
+            </Stack>
+
+            {validation.loading && (
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2 }}>
+                Scanning…
+              </Typography>
+            )}
+            {!validation.loading && validation.data && (
+              <>
+                <Typography sx={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: TERM.green, lineHeight: 1 }}>
+                  {validation.data.density.count}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, mt: 0.5, mb: 1 }}>
+                  dispensaries within 5mi · {validation.data.cached ? `cached ${new Date(validation.data.fetchedAt).toLocaleString()}` : 'fresh from Google'}
+                </Typography>
+                {(validation.data.alternatives?.length || 0) > 0 ? (
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, color: TERM.amber, letterSpacing: 1, mb: 0.5 }}>
+                      DENSER NEARBY:
+                    </Typography>
+                    {validation.data.alternatives.map((a, i) => (
+                      <Box key={i} sx={{
+                        display: 'flex', alignItems: 'center', gap: 1,
+                        py: 0.5, px: 0.5, mb: 0.25,
+                        borderLeft: `2px solid ${TERM.amber}`,
+                      }}>
+                        <Typography sx={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: TERM.amber, minWidth: 32 }}>
+                          {a.countWithin5mi}
+                        </Typography>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: TERM.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {a.label || 'denser spot'}
+                          </Typography>
+                          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>
+                            {a.distanceMi.toFixed(1)}mi away · {a.countWithin5mi} in 5mi
+                          </Typography>
+                        </Box>
+                        <Box role="button"
+                          onClick={() => {
+                            mapRef.current?.flyTo({ center: [a.lng, a.lat], zoom: 11, duration: 1200 });
+                            setValidation(v => ({ ...v, open: false }));
+                          }}
+                          sx={{
+                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                            color: TERM.amber, border: `1px solid ${TERM.amber}`,
+                          }}>JUMP</Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic', mt: 1 }}>
+                    No denser spots within 20mi. This is the densest area nearby.
+                  </Typography>
+                )}
+                {(validation.data.density.sample?.length || 0) > 0 && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, letterSpacing: 1, mb: 0.25 }}>
+                      SAMPLE (within 5mi):
+                    </Typography>
+                    {validation.data.density.sample.slice(0, 5).map((s, i) => (
+                      <Typography key={i} sx={{ fontFamily: MONO, fontSize: 10, color: TERM.text, lineHeight: 1.5 }}>
+                        · {s.name}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Sleep Editor modal ─────────────────────────────────────────── */}
+      {sleepEditor.open && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          p: { xs: 1, sm: 2 },
+        }} onClick={() => setSleepEditor(s => ({ ...s, open: false }))}>
+          <Box sx={{
+            bgcolor: TERM.panel,
+            border: `1px solid ${sleepEditor.role === 'backup' ? TERM.amber : TERM.green}`,
+            borderRadius: 0.5, p: 2,
+            width: { xs: '100%', sm: 420 },
+            fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: 1, flexGrow: 1,
+                color: sleepEditor.role === 'backup' ? TERM.amber : TERM.green,
+              }}>
+                {sleepEditor.role === 'backup' ? '🅿 BACKUP SLEEP' : '⛺ PRIMARY SLEEP'}
+                {' · '}{sleepEditor.day && formatDayLabel(sleepEditor.day).toUpperCase()}
+              </Typography>
+              <Box role="button" onClick={() => setSleepEditor(s => ({ ...s, open: false }))}
+                sx={{ color: TERM.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, px: 0.5 }}>×</Box>
+            </Stack>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>KIND</Typography>
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5, flexWrap: 'wrap' }}>
+              {[
+                { v: 'campground',    l: '⛺ CAMP' },
+                { v: 'park_and_ride', l: '🅿 P&R' },
+                { v: 'hotel',         l: '🏨 HOTEL' },
+                { v: 'friend',        l: '🏠 FRIEND' },
+                { v: 'other',         l: '· OTHER' },
+              ].map((opt) => (
+                <Box key={opt.v} role="button"
+                  onClick={() => setSleepEditor(s => ({ ...s, kind: opt.v }))}
+                  sx={{
+                    fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    px: 0.75, py: 0.5, cursor: 'pointer', borderRadius: 0.25,
+                    color: sleepEditor.kind === opt.v ? TERM.greenDk : TERM.muted,
+                    bgcolor: sleepEditor.kind === opt.v ? TERM.green : 'transparent',
+                    border: `1px solid ${sleepEditor.kind === opt.v ? TERM.green : TERM.borderDim}`,
+                  }}>{opt.l}</Box>
+              ))}
+            </Box>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SEARCH ADDRESS OR PLACE NAME</Typography>
+            <input
+              autoFocus
+              value={sleepEditor.query}
+              onChange={(e) => sleepEditorSearch(e.target.value)}
+              placeholder="e.g. High Point State Park, NJ"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
+                padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
+                outline: 'none', marginBottom: 8,
+              }}
+            />
+
+            <Box sx={{ maxHeight: 220, overflowY: 'auto', mb: 1 }}>
+              {sleepEditor.searching && (
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic' }}>Searching…</Typography>
+              )}
+              {!sleepEditor.searching && sleepEditor.results.map((f) => (
+                <Box key={f.id} role="button"
+                  onClick={async () => {
+                    const lead = await assignSleep({
+                      feature: f, day: sleepEditor.day,
+                      role: sleepEditor.role, kind: sleepEditor.kind,
+                    });
+                    if (lead) {
+                      mapRef.current?.flyTo({ center: f.center, zoom: 11, duration: 1200 });
+                      setSleepEditor(s => ({ ...s, open: false }));
+                    }
+                  }}
+                  sx={{
+                    py: 0.75, px: 1, mb: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                    border: `1px solid ${TERM.borderDim}`,
+                    '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' },
+                  }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text }}>{f.text}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>{f.place_name}</Typography>
+                </Box>
+              ))}
             </Box>
           </Box>
         </Box>
