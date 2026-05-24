@@ -11,6 +11,8 @@ import Product from './screens/Product';
 import Products from './screens/Products';
 import Footer from './common/Footer';
 import FAQ from './screens/FAQ';
+import Terms from './screens/Terms';
+import Privacy from './screens/Privacy';
 import Customize from './screens/Customize';
 import Studio from './screens/Studio';
 import Catalogs from './screens/Catalogs';
@@ -46,6 +48,8 @@ function AppShell() {
         <Route exact path="/admin" element={<Studio />} />
         <Route exact path="/catalogs" element={<Catalogs />} />
         <Route exact path="/demos" element={<Demos />} />
+        <Route exact path="/terms" element={<Terms />} />
+        <Route exact path="/privacy" element={<Privacy />} />
         <Route exact path="/approve/:projectId" element={<ApprovalView />} />
       </Routes>
       {!isStudio && <Footer />}
