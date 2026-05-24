@@ -39,6 +39,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Snackbar,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -373,11 +374,12 @@ function MockupLauncherTab({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Submissions tab (mini-CRM)
 // ─────────────────────────────────────────────────────────────────────────────
-function SubmissionsTab({ token }) {
+function SubmissionsTab({ token, onOpenClients }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [selected, setSelected] = React.useState(null);
+  const [projectCreated, setProjectCreated] = React.useState(null); // { projectNumber } for the success toast
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [startingProject, setStartingProject] = React.useState(false);
 
@@ -659,7 +661,7 @@ function SubmissionsTab({ token }) {
                     it._id === selected._id ? { ...it, orderId, status: 'quoted' } : it,
                   ));
                   setSelected((s) => s ? { ...s, orderId, status: 'quoted' } : s);
-                  alert(`Project created from inquiry. Open Order Tracker to find it (project #${res.data?.order?.projectNumber || '?'}).`);
+                  setProjectCreated({ projectNumber: res.data?.order?.projectNumber || '?' });
                 } catch (e) {
                   alert('Could not start project: ' + (e?.response?.data?.message || e.message));
                 } finally {
@@ -677,6 +679,32 @@ function SubmissionsTab({ token }) {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Post-create success: cleaner replacement for the old alert() — gives
+          the user a one-click jump to the Order Tracker instead of asking
+          them to navigate manually. */}
+      <Snackbar
+        open={!!projectCreated}
+        autoHideDuration={8000}
+        onClose={() => setProjectCreated(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setProjectCreated(null)}
+          action={onOpenClients ? (
+            <Button color="inherit" size="small"
+              onClick={() => { onOpenClients(); setProjectCreated(null); }}
+              sx={{ fontWeight: 700 }}>
+              Open Order Tracker →
+            </Button>
+          ) : null}
+          sx={{ alignItems: 'center' }}
+        >
+          Project #{projectCreated?.projectNumber} created from this inquiry.
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
@@ -2174,7 +2202,7 @@ function StudioBody({ token, onLogout }) {
 
               <Fade in key={view} timeout={300}>
                 <Box>
-                  {view === 'submissions' && <SubmissionsTab token={token} />}
+                  {view === 'submissions' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab token={token} />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
