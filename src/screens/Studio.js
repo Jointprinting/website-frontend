@@ -1903,19 +1903,19 @@ const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
     tools: [
-      { id: 'clients',     label: 'Order Tracker',  sub: 'Projects · quotes · confirmations · payments', Icon: PeopleOutlineIcon },
-      { id: 'mockup',      label: 'Mockup Studio',  sub: 'Build mockups · export PDFs · client lookbook', Icon: DesignServicesIcon },
-      { id: 'submissions', label: 'Inquiries',      sub: 'Inbox from the public site contact form',       Icon: InboxIcon },
-      { id: 'catalogs',    label: 'Catalogs',       sub: 'S&S / SanMar reference + style lookup',         Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Field Map',      sub: 'Door-to-door pin map for cold visits',          Icon: ExploreOutlinedIcon },
-      { id: 'backup',      label: 'Backup & restore', sub: 'Snapshot the whole studio to download',       Icon: BackupIcon },
+      { id: 'clients',     label: 'Order Tracker', Icon: PeopleOutlineIcon },
+      { id: 'mockup',      label: 'Mockup Studio', Icon: DesignServicesIcon },
+      { id: 'submissions', label: 'Inquiries',     Icon: InboxIcon },
+      { id: 'catalogs',    label: 'Catalogs',      Icon: MenuBookOutlinedIcon },
+      { id: 'roadtrip',    label: 'Field Map',     Icon: ExploreOutlinedIcon },
+      { id: 'backup',      label: 'Backup',        Icon: BackupIcon },
     ],
   },
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall',  label: 'Cold Call Tree', sub: 'Branching script for live cold calls',  Icon: PhoneInTalkIcon },
-      { id: 'jpwrecon',  label: 'Lead Recon',     sub: 'Daily lead sweep + qualification queue', Icon: TrackChangesOutlinedIcon },
+      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
+      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
     ],
   },
 ];
@@ -1924,7 +1924,7 @@ const HUB_GROUPS = [
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
 function HubCard({ tool, onClick, delay, notice, badge }) {
-  const { label, sub, Icon } = tool;
+  const { label, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
     <Grow in timeout={400 + delay}>
@@ -1935,83 +1935,66 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
           cursor: 'pointer',
           bgcolor: BRAND.panel,
           border: `1px solid ${BRAND.border}`,
-          borderRadius: 2,
-          p: { xs: 2, sm: 2.5 },
-          minHeight: 88,
-          transition: 'all 0.18s ease',
+          borderRadius: 2.5,
+          aspectRatio: '1.4 / 1',
+          minHeight: 132,
+          transition: 'border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease',
           position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1.4,
+          background: 'linear-gradient(160deg, rgba(74,222,128,0.04) 0%, rgba(255,255,255,0.01) 60%, transparent 100%)',
           '&:hover': {
             borderColor: BRAND.green,
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 24px -12px rgba(74,222,128,0.35)',
-            '& .hub-icon': { bgcolor: BRAND.green, color: BRAND.greenDk },
-            '& .hub-arrow': { opacity: 1, transform: 'translateX(0)' },
+            transform: 'translateY(-3px)',
+            boxShadow: '0 12px 32px -16px rgba(74,222,128,0.45)',
+            '& .hub-icon': { color: BRAND.greenDk, bgcolor: BRAND.green },
+            '& .hub-label': { color: BRAND.green },
           },
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={2}>
-          <Box
-            className="hub-icon"
-            sx={{
-              flexShrink: 0,
-              width: 46, height: 46, borderRadius: 1.5,
-              bgcolor: BRAND.greenDk, color: BRAND.green,
+        <Box
+          className="hub-icon"
+          sx={{
+            width: 56, height: 56, borderRadius: 2,
+            bgcolor: BRAND.greenDk, color: BRAND.green,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.18s ease',
+            position: 'relative',
+          }}
+        >
+          <Icon sx={{ fontSize: 28 }} />
+          {notice && !badge && (
+            <Box sx={{
+              position: 'absolute', top: -3, right: -3,
+              width: 10, height: 10, borderRadius: '50%',
+              bgcolor: BRAND.green,
+              boxShadow: '0 0 6px rgba(74,222,128,0.6)',
+            }} />
+          )}
+          {badge > 0 && (
+            <Box sx={{
+              position: 'absolute', top: -8, right: -8,
+              minWidth: 20, height: 20, px: '6px',
+              borderRadius: '10px',
+              bgcolor: '#ff3b30', color: '#fff',
+              fontSize: 11, fontWeight: 800,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.18s ease',
-              position: 'relative',
-            }}
-          >
-            <Icon sx={{ fontSize: 24 }} />
-            {notice && !badge && (
-              <Box sx={{
-                position: 'absolute', top: -3, right: -3,
-                width: 10, height: 10, borderRadius: '50%',
-                bgcolor: BRAND.green,
-                boxShadow: '0 0 6px rgba(74,222,128,0.6)',
-              }} />
-            )}
-            {badge > 0 && (
-              <Box sx={{
-                position: 'absolute', top: -6, right: -6,
-                minWidth: 18, height: 18, px: '5px',
-                borderRadius: '9px',
-                bgcolor: '#ff3b30',
-                color: '#fff',
-                fontSize: 11, fontWeight: 800,
-                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                lineHeight: 1,
-                boxShadow: '0 0 0 2px ' + BRAND.panel + ', 0 2px 6px rgba(255,59,48,0.45)',
-              }}>
-                {badgeText}
-              </Box>
-            )}
-          </Box>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <MuiTypography fontWeight={700} sx={{
-              color: BRAND.white, fontSize: 15.5, lineHeight: 1.2,
+              lineHeight: 1,
+              boxShadow: '0 0 0 2px ' + BRAND.panel + ', 0 2px 6px rgba(255,59,48,0.45)',
             }}>
-              {label}
-            </MuiTypography>
-            {sub && (
-              <MuiTypography sx={{
-                color: BRAND.muted, fontSize: 11.5, mt: 0.4, lineHeight: 1.35,
-                overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {sub}
-              </MuiTypography>
-            )}
-          </Box>
-          <ChevronRightIcon
-            className="hub-arrow"
-            sx={{
-              color: BRAND.green, fontSize: 20,
-              opacity: 0,
-              transform: 'translateX(-4px)',
-              transition: 'all 0.18s ease',
-            }}
-          />
-        </Stack>
+              {badgeText}
+            </Box>
+          )}
+        </Box>
+        <MuiTypography className="hub-label" sx={{
+          color: BRAND.white, fontWeight: 700, fontSize: 14, letterSpacing: 0.2,
+          transition: 'color 0.18s ease',
+        }}>
+          {label}
+        </MuiTypography>
       </Paper>
     </Grow>
   );
@@ -2020,26 +2003,25 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
 function Hub({ onPick, sweepNeeded, unseenInquiries }) {
   let cardIdx = 0;
   return (
-    <Stack spacing={3}>
+    <Stack spacing={4}>
       {HUB_GROUPS.map((group) => (
         <Box key={group.brand}>
           <MuiTypography
             variant="overline"
             sx={{
               color: BRAND.green, fontWeight: 800, letterSpacing: 2.5,
-              fontSize: 10, display: 'block', mb: 1,
+              fontSize: 10, display: 'block', mb: 1.5,
             }}
           >
             {group.brand}
           </MuiTypography>
           <Box sx={{
             display: 'grid',
-            gap: 1.25,
-            // Tighter column count for small groups so the row doesn't
-            // leave a yawning empty column on wider screens.
+            gap: 1.5,
+            // Square tiles read like a launcher, not a kanban row.
             gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
+              xs: 'repeat(2, 1fr)',
+              sm: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
               md: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
             },
           }}>
@@ -2050,7 +2032,7 @@ function Hub({ onPick, sweepNeeded, unseenInquiries }) {
                 <HubCard
                   key={t.id}
                   tool={t}
-                  delay={cardIdx * 60}
+                  delay={cardIdx * 50}
                   onClick={() => onPick(t.id)}
                   notice={showNotice ? "Today's sweep not run yet" : null}
                   badge={badge}
