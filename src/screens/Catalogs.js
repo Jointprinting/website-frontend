@@ -44,6 +44,26 @@ const LOCAL_CATALOG_FILES = new Set([
   'dispo-promos.pdf',
 ]);
 
+// Defensive second-pass match: if a backend catalog has a title we recognize
+// as a default, route it to the matching static PDF even when its
+// pdfFileName was changed (e.g. the admin re-uploaded with a custom name).
+// Keys are normalized titles (lowercase, ASCII letters + digits only).
+function normalizeTitle(t) {
+  return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+const TITLE_TO_LOCAL_FILE = new Map([
+  ['prototypeproduction',         'prototype-to-production.pdf'],
+  ['prototypetoproduction',       'prototype-to-production.pdf'],
+  ['usas250thanniversarypromocollection', 'usa-250-promos.pdf'],
+  ['usa250promos',                'usa-250-promos.pdf'],
+  ['jpdispensary',                'dispensary-catalog.pdf'],
+  ['jptimesdispensary',           'dispensary-catalog.pdf'],
+  ['jpxdispensary',               'dispensary-catalog.pdf'],
+  ['dispensarycatalog',           'dispensary-catalog.pdf'],
+  ['dispensarypromos',            'dispo-promos.pdf'],
+  ['dispopromos',                 'dispo-promos.pdf'],
+]);
+
 // Rendered when the backend is unreachable or returns an empty list. Mirrors
 // the seed catalogs in scripts/seedCatalogs.js — the four catalogs we want
 // available at all times. _id values are fake strings so React keys stay
@@ -92,10 +112,19 @@ const FALLBACK_CATALOGS = [
 ];
 
 // Builds the view/download URLs for a catalog, preferring a static asset
-// when its pdfFileName matches a known local file.
+// when (a) its pdfFileName matches a known local file or (b) its title
+// normalizes to one we recognize as a default. The title path covers
+// backend catalogs whose PDFs were re-uploaded with custom filenames.
 function resolveCatalogUrls(cat) {
+  let staticFile = null;
   if (cat.pdfFileName && LOCAL_CATALOG_FILES.has(cat.pdfFileName)) {
-    const staticUrl = `/catalogs/${cat.pdfFileName}`;
+    staticFile = cat.pdfFileName;
+  } else {
+    const titleHit = TITLE_TO_LOCAL_FILE.get(normalizeTitle(cat.title));
+    if (titleHit) staticFile = titleHit;
+  }
+  if (staticFile) {
+    const staticUrl = `/catalogs/${staticFile}`;
     return { pdfUrl: staticUrl, downloadUrl: staticUrl, isStatic: true };
   }
   const apiUrl = `${config.backendUrl}/api/catalogs/${cat._id}/pdf`;
