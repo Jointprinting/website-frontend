@@ -1306,6 +1306,22 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     </Typography>
                   )}
                 </Typography>
+                {(autoTiles.length > 0 || missing > 0) && (
+                  <Tooltip title="Drop any stale mockup #s that aren't in your studio, and turn the auto-matched ones into permanent links on this project.">
+                    <Button size="small"
+                      onClick={async () => {
+                        const keep = explicitTiles.filter(t => t.item).map(t => t.num);
+                        const toAdd = autoTiles
+                          .map(t => t.item?.pageState?.mockupNum)
+                          .filter(Boolean);
+                        const next = [...keep, ...toAdd];
+                        await onSave(project._id, { mockupNumbers: next });
+                      }}
+                      sx={{ color: B.green, fontSize: 11, textTransform: 'none', mr: 1, fontWeight: 700 }}>
+                      Tidy
+                    </Button>
+                  </Tooltip>
+                )}
                 <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                   onClick={onOpenPicker}
                   sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
