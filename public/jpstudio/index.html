@@ -448,6 +448,9 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   50%      { box-shadow: 0 0 0 8px transparent; }
 }
 
+/* Collapse toggle on lib section headers */
+.lib-toggle { font-size: 9px; color: var(--tx2); margin-right: 2px; display: inline-block; width: 10px; }
+
 /* Mockup # pill on saved-mockup-cards */
 .num-pill {
   display: inline-block; background: var(--s2); color: var(--tx);
@@ -1016,11 +1019,19 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       </div>
     </div>
     <div class="lib-section">
-      <div class="lib-sec-hdr"><div class="lib-sec-title">Blank Garments</div><div class="lib-count" id="blank-count">0</div></div>
+      <div class="lib-sec-hdr" style="cursor:pointer" onclick="toggleLibSection('library-blanks', this)">
+        <span class="lib-toggle">▼</span>
+        <div class="lib-sec-title">Blank Garments</div>
+        <div class="lib-count" id="blank-count">0</div>
+      </div>
       <div class="asset-grid" id="library-blanks"><div class="empty-state" style="grid-column:1/-1">No blanks saved yet.</div></div>
     </div>
     <div class="lib-section">
-      <div class="lib-sec-hdr"><div class="lib-sec-title">Logos</div><div class="lib-count" id="logo-count">0</div></div>
+      <div class="lib-sec-hdr" style="cursor:pointer" onclick="toggleLibSection('library-logos', this)">
+        <span class="lib-toggle">▼</span>
+        <div class="lib-sec-title">Logos</div>
+        <div class="lib-count" id="logo-count">0</div>
+      </div>
       <div class="asset-grid" id="library-logos"><div class="empty-state" style="grid-column:1/-1">No logos saved yet.</div></div>
     </div>
     <div class="lib-section">
@@ -1568,6 +1579,25 @@ let db = null;
 function getStudioToken(){ try{ return sessionStorage.getItem('jpStudioToken'); }catch(_){ return null; } }
 function generateUUID(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); }
 
+// Strip the heavy embedded image base64 strings from pageState before sending
+// over the wire — a single mockup with full-res front/back blanks + logos can
+// easily exceed 20MB and either 413 the request or break Mongo's 16MB per-doc
+// limit. The OrderTracker only needs name + thumbnail + client + mockupNum to
+// auto-attach mockups to projects, so the trimmed shape is plenty.
+function _trimPageStateForSync(pageState) {
+  if (!pageState || typeof pageState !== 'object') return pageState;
+  const HEAVY = [
+    'frontBlankBase64', 'backBlankBase64',
+    'frontLogoBase64',  'backLogoBase64',
+    'frontCompositeBase64', 'backCompositeBase64',
+    // Image objects (DOM Image) don't serialize anyway, but be explicit.
+    'frontBlankImg', 'backBlankImg', 'frontLogoImg', 'backLogoImg',
+  ];
+  const out = { ...pageState };
+  HEAVY.forEach(k => { if (k in out) out[k] = null; });
+  return out;
+}
+
 // Returns { ok: true } on a real 2xx, otherwise { ok: false, status, message }.
 // Old version swallowed everything as "best effort" — that's how 145 mockups
 // ended up local-only with the backend at zero.
@@ -1578,7 +1608,15 @@ async function apiSyncSave(store, item) {
     const res = await fetch(`${BACKEND}/api/studio/library/${store}`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body: JSON.stringify({ name:item.name||'', data:item.data||'', thumbnail:item.thumbnail||'', client:item.client||'', pageState:item.pageState||null, savedAt:item.savedAt||Date.now(), remoteId:item.remoteId }),
+      body: JSON.stringify({
+        name:      item.name || '',
+        data:      item.data || '',
+        thumbnail: item.thumbnail || '',
+        client:    item.client || '',
+        pageState: _trimPageStateForSync(item.pageState),
+        savedAt:   item.savedAt || Date.now(),
+        remoteId:  item.remoteId,
+      }),
     });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
@@ -2701,6 +2739,41 @@ async function refreshClientSuggestions() {
   } catch (e) { console.error('refreshClientSuggestions failed', e); }
 }
 
+// Collapsible blanks/logos sections so mockups (the long list) don't get
+// buried below a wall of assets. Default-collapsed for blanks + logos on first
+// load — user can expand if they need them.
+function toggleLibSection(bodyId, headerEl) {
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+  const collapsed = body.style.display !== 'none' && body.style.display !== '';
+  // First click = collapse (display:none); next = expand (clear).
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    if (headerEl) { const t = headerEl.querySelector('.lib-toggle'); if (t) t.textContent = '▼'; }
+    try { localStorage.setItem(`jpstudio-libsec-${bodyId}`, 'open'); } catch(_){}
+  } else {
+    body.style.display = 'none';
+    if (headerEl) { const t = headerEl.querySelector('.lib-toggle'); if (t) t.textContent = '▶'; }
+    try { localStorage.setItem(`jpstudio-libsec-${bodyId}`, 'closed'); } catch(_){}
+  }
+}
+function _restoreLibSectionState() {
+  ['library-blanks', 'library-logos'].forEach(id => {
+    const body = document.getElementById(id);
+    if (!body) return;
+    // Default = closed for blanks/logos; saved override wins.
+    let saved;
+    try { saved = localStorage.getItem(`jpstudio-libsec-${id}`); } catch(_){}
+    const open = saved === 'open';
+    body.style.display = open ? '' : 'none';
+    const hdr = body.previousElementSibling;
+    if (hdr) {
+      const t = hdr.querySelector('.lib-toggle');
+      if (t) t.textContent = open ? '▼' : '▶';
+    }
+  });
+}
+
 // ── Library ───────────────────────────────────────────────────────
 async function refreshLibrary() {
   if (!db) return;
@@ -2753,6 +2826,7 @@ async function refreshLibrary() {
   renderAssetGrid('library-blanks',blanks,'blank');
   renderAssetGrid('library-logos',logos,'logo');
   renderMockupList('library-mockups', filtered, { groupByClient, isSynced, mockupNum });
+  _restoreLibSectionState();
 }
 function renderAssetGrid(containerId,items,type) {
   const c=document.getElementById(containerId);

@@ -96,6 +96,7 @@ export default function OrderTracker({ token, onBack }) {
   const [qbLoading,   setQbLoading]   = useState(false);
   const [qbBusy,      setQbBusy]      = useState(false);
   const [moreAnchor,  setMoreAnchor]  = useState(null);
+  const [shareDialog, setShareDialog] = useState({ open: false, projectId: null, ttl: 7, url: '', expiresAt: null, busy: false, err: '' });
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -180,22 +181,33 @@ export default function OrderTracker({ token, onBack }) {
     return map;
   }, [mockups]);
 
+  // Match a project to mockups. First by exact slug, then a fuzzy fallback
+  // where either slug starts-with or contains the other — covers "Cannapi
+  // LLC" project vs "Cannapi Merch" mockup, "Highway 90" vs "Highway90 Co".
   const autoMockupsFor = (project) => {
     if (!project) return [];
-    const tried = new Set();
+    const projSlugs = [project.companyName, project.clientName]
+      .map(_slug).filter(Boolean);
+    if (!projSlugs.length) return [];
     const out = [];
     const seenIds = new Set();
-    [project.companyName, project.clientName].forEach(raw => {
-      const k = _slug(raw);
-      if (!k || tried.has(k)) return;
-      tried.add(k);
-      (mockupsByClientSlug[k] || []).forEach(m => {
-        const id = m._id || m.remoteId || m.name;
-        if (seenIds.has(id)) return;
-        seenIds.add(id);
-        out.push(m);
+    const push = (m) => {
+      const id = m._id || m.remoteId || m.name;
+      if (!seenIds.has(id)) { seenIds.add(id); out.push(m); }
+    };
+    // Exact slug match first
+    projSlugs.forEach(k => (mockupsByClientSlug[k] || []).forEach(push));
+    // Fuzzy: any mockup-slug that's a prefix/substring of a project-slug
+    // (or vice versa) within reason (min 4 chars to avoid false positives).
+    if (out.length === 0) {
+      Object.keys(mockupsByClientSlug).forEach(mk => {
+        if (mk.length < 4) return;
+        const hit = projSlugs.some(pk =>
+          pk.length >= 4 && (pk.startsWith(mk) || mk.startsWith(pk) || pk.includes(mk) || mk.includes(pk))
+        );
+        if (hit) mockupsByClientSlug[mk].forEach(push);
       });
-    });
+    }
     return out;
   };
 
@@ -442,31 +454,13 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
-  // Mint an approval-link token + copy to clipboard. Shared between the
-  // project drawer's "Share for approval" button and the confirmation
-  // builder's header button. Prompts for an expiry (default 7d) so the
-  // client feels appropriate urgency and stale prices can't be approved.
-  const shareApprovalFor = async (projectId) => {
+  // Shared between the drawer "Share for approval" button and the confirmation
+  // builder's header button. Opens a real dialog (browser prompt was ugly)
+  // where the user picks TTL, generates the link, and copies it from a field
+  // they can verify before sending.
+  const shareApprovalFor = (projectId) => {
     if (!projectId) return;
-    const raw = window.prompt('How many days should this approval link stay live?\n\nDefault 7. Type a number, or Cancel to abort.', '7');
-    if (raw === null) return;
-    const ttlDays = Math.max(1, Math.min(365, Math.round(Number(raw) || 7)));
-    try {
-      const r = await axios.post(`${base}/orders/${projectId}/approval-link`,
-        { ttlDays, rotate: true }, authHdr);
-      const url = `${window.location.origin}/approve/${projectId}?token=${r.data.token}`;
-      const expiry = r.data.expiresAt
-        ? `\n\nExpires: ${new Date(r.data.expiresAt).toLocaleString()} (${ttlDays} day${ttlDays !== 1 ? 's' : ''})`
-        : '';
-      try {
-        await navigator.clipboard.writeText(url);
-        alert(`Approval link copied to clipboard:\n\n${url}${expiry}\n\nSend it to your client.`);
-      } catch (_) {
-        window.prompt('Copy this approval link and send it to your client:', url);
-      }
-    } catch (e) {
-      alert(`Couldn't generate link: ${e.response?.data?.message || e.message}`);
-    }
+    setShareDialog({ open: true, projectId, ttl: 7, url: '', expiresAt: null, busy: false, err: '' });
   };
 
   const loadQbStatus = async () => {
@@ -822,6 +816,24 @@ export default function OrderTracker({ token, onBack }) {
         applying={autoLinkApplying}
         onClose={() => setAutoLinkOpen(false)}
         onApply={handleApplyAutoLink}
+      />
+
+      <ShareApprovalDialog
+        state={shareDialog}
+        setTtl={(v) => setShareDialog(s => ({ ...s, ttl: v }))}
+        onClose={() => setShareDialog(s => ({ ...s, open: false }))}
+        onGenerate={async () => {
+          setShareDialog(s => ({ ...s, busy: true, err: '' }));
+          try {
+            const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
+            const r = await axios.post(`${base}/orders/${shareDialog.projectId}/approval-link`,
+              { ttlDays, rotate: true }, authHdr);
+            const url = `${window.location.origin}/approve/${shareDialog.projectId}?token=${r.data.token}`;
+            setShareDialog(s => ({ ...s, busy: false, url, expiresAt: r.data.expiresAt, ttl: ttlDays }));
+          } catch (e) {
+            setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
+          }
+        }}
       />
 
       <QuickBooksDialog
@@ -1990,6 +2002,89 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
             : `Apply${summary && summary.proposed ? ` · ${summary.proposed}` : ''}`}
         </Button>
       </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── ShareApprovalDialog ──────────────────────────────────────────────────────
+// MUI replacement for the old window.prompt + alert flow. Two-step: pick the
+// TTL, click Generate, then the URL renders in a read-only field with a Copy
+// button so the user can verify what they're sending before they paste it.
+function ShareApprovalDialog({ state, setTtl, onClose, onGenerate }) {
+  const { open, ttl, url, expiresAt, busy, err } = state;
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => { if (open) setCopied(false); }, [open, url]);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); }
+    catch (_) { /* clipboard blocked — user can still select+copy */ }
+  };
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
+        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <LinkIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Share approval link</Typography>
+        <IconButton size="small" onClick={onClose} disabled={busy}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        {!url ? (
+          <>
+            <Typography sx={{ color: B.muted, fontSize: 12, mb: 2 }}>
+              Generating a new link rotates the token — any previous link for this project stops working,
+              so the client can't approve against stale prices later.
+            </Typography>
+            <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 1 }}>
+              <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 600 }}>Stays live for</Typography>
+              <TextField
+                type="number" size="small" value={ttl}
+                onChange={e => setTtl(e.target.value)}
+                inputProps={{ min: 1, max: 365 }}
+                sx={{ width: 80, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 14, py: 0.6, textAlign: 'right' } }}
+              />
+              <Typography sx={{ color: B.muted, fontSize: 13 }}>days</Typography>
+            </Stack>
+            <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
+              Default is 7 days. Max 365.
+            </Typography>
+            {err && <Typography sx={{ color: '#f87171', fontSize: 12, mb: 1.5 }}>{err}</Typography>}
+            <Button variant="contained" disabled={busy} onClick={onGenerate} fullWidth
+              startIcon={busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <LinkIcon />}
+              sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
+              {busy ? 'Generating…' : 'Generate link'}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Typography sx={{ color: B.green, fontSize: 13, fontWeight: 700, mb: 1 }}>Link ready ✓</Typography>
+            <TextField
+              fullWidth value={url} multiline minRows={2} maxRows={3}
+              onFocus={e => e.target.select()}
+              sx={{ ...darkInput,
+                '& .MuiInputBase-input': { color: B.white, fontSize: 12, fontFamily: 'monospace' },
+              }}
+              InputProps={{ readOnly: true }}
+            />
+            {expiresAt && (
+              <Typography sx={{ color: B.muted, fontSize: 11, mt: 1 }}>
+                Expires {new Date(expiresAt).toLocaleString()}.
+                You can send this link to one client or several — anyone who has it can approve until expiry.
+              </Typography>
+            )}
+            <Stack direction="row" gap={1} mt={2}>
+              <Button variant="contained" onClick={copy}
+                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', flex: 1 }}>
+                {copied ? 'Copied ✓' : 'Copy link'}
+              </Button>
+              <Button onClick={() => onClose()}
+                sx={{ color: B.muted, textTransform: 'none', fontSize: 12 }}>
+                Done
+              </Button>
+            </Stack>
+          </>
+        )}
+      </DialogContent>
     </Dialog>
   );
 }
