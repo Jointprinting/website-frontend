@@ -190,9 +190,10 @@ function KpiTile({ label, value, sub, accent }) {
   );
 }
 
-// Checklist of audit signals. ✓ = present, ✗ = missing, "?" = not audited.
-// Grouped into Conversion / SEO / Trust so the user can read at a glance
-// which bucket is weak.
+// Checklist of audit signals. ✓ = present, ✗ = missing, "—" = not audited.
+// Grouped so the user can read at a glance which bucket is weak. Some
+// rows have a `derived` function that returns the value to display — this
+// lets us combine raw audit fields (e.g. viewport tag exists AND is valid).
 const AUDIT_GROUPS = [
   ['Conversion', [
     ['has_click_to_call',    'Click-to-call link'],
@@ -200,20 +201,34 @@ const AUDIT_GROUPS = [
     ['has_quote_cta',        'Quote / "free estimate" CTA'],
     ['has_contact_form',     'Contact form'],
     ['has_cta_above_fold',   'CTA above the fold'],
+    ['has_online_booking',   'Online booking installed'],
+    ['has_live_chat',        'Live chat widget'],
   ]],
   ['SEO & local', [
     ['has_title',                'Title tag'],
     ['has_meta_description',     'Meta description'],
     ['has_h1',                   'H1 heading'],
-    ['has_mobile_viewport',      'Mobile viewport'],
-    ['has_localbusiness_schema', 'LocalBusiness schema'],
+    [null, 'Mobile viewport (valid)', (a) =>
+      a.has_mobile_viewport == null ? null
+      : (a.has_mobile_viewport && a.viewport_valid !== false)],
+    [null, 'LocalBusiness schema (with phone/address)', (a) =>
+      a.has_localbusiness_schema == null ? null
+      : (a.has_localbusiness_schema && a.localbusiness_schema_valid !== false)],
     ['has_service_area_terms',   'Service-area towns listed'],
     ['has_google_map_embed',     'Google map embed'],
+    ['has_sitemap',              'sitemap.xml present'],
+    ['has_robots_txt',           'robots.txt present'],
   ]],
-  ['Trust & proof', [
+  ['Trust & polish', [
     ['has_reviews_on_site',  'Reviews / testimonials on site'],
     ['has_gallery',          'Gallery / before-after'],
     ['ssl_valid',            'SSL (https)'],
+    ['has_favicon',          'Favicon'],
+    ['has_og_tags',          'Open Graph tags (social share)'],
+    ['has_twitter_card',     'Twitter card'],
+    [null, 'No mixed content', (a) =>
+      a.mixed_content_count == null ? null : (a.mixed_content_count || 0) === 0],
+    [null, 'Forms post over HTTPS', (a) => a.forms_post_https],
   ]],
   ['Marketing tells', [
     ['has_tracking_pixels',         'Tracking pixels installed'],
@@ -229,20 +244,43 @@ function CheckMark({ value }) {
 
 function AuditChecklist({ audit }) {
   if (!audit) return null;
+  const techStack = Array.isArray(audit.tech_stack) ? audit.tech_stack : [];
+  const socials   = Array.isArray(audit.social_links) ? audit.social_links : [];
   return (
     <Box>
-      {/* Header line: status, CMS, copyright */}
-      <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+      {/* Header line: status, CMS, copyright, multi-page, fetch time */}
+      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
         <Chip size="small" label={`HTTP ${audit.status_code || '—'}`} sx={{
           fontFamily: MONO, fontSize: 10, height: 20,
           bgcolor: audit.loads_successfully ? `${TERM.green}20` : `${TERM.red}20`,
           color: audit.loads_successfully ? TERM.green : TERM.red,
           border: `1px solid ${audit.loads_successfully ? TERM.green : TERM.red}40`,
         }} />
-        {audit.cms_detected && (
-          <Chip size="small" label={audit.cms_detected} sx={{
+        {audit.fetch_duration_ms != null && (
+          <Chip size="small" label={`${audit.fetch_duration_ms}ms`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: audit.fetch_duration_ms > 3000 ? `${TERM.amber}20` : TERM.greenSoft,
+            color: audit.fetch_duration_ms > 3000 ? TERM.amber : TERM.text,
+            border: `1px solid ${audit.fetch_duration_ms > 3000 ? TERM.amber : TERM.borderDim}40`,
+          }} />
+        )}
+        {audit.pages_audited > 1 && (
+          <Chip size="small" label={`${audit.pages_audited} pages`} sx={{
             fontFamily: MONO, fontSize: 10, height: 20,
             bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.cms_detected && (
+          <Chip size="small" label={audit.wp_version
+            ? `${audit.cms_detected} ${audit.wp_version}` : audit.cms_detected} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.is_default_template && (
+          <Chip size="small" label={audit.is_default_template} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: `${TERM.amber}20`, color: TERM.amber, border: `1px solid ${TERM.amber}40`,
           }} />
         )}
         {audit.copyright_year && (
@@ -259,6 +297,30 @@ function AuditChecklist({ audit }) {
             bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
           }} />
         )}
+        {audit.sitemap_url_count > 0 && (
+          <Chip size="small" label={`sitemap: ${audit.sitemap_url_count} urls`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.chat_widget && (
+          <Chip size="small" label={`chat: ${audit.chat_widget}`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
+          }} />
+        )}
+        {audit.appointment_tool && (
+          <Chip size="small" label={`booking: ${audit.appointment_tool}`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
+          }} />
+        )}
+        {audit.lead_phone_matches_site === false && (audit.phones_found || []).length > 0 && (
+          <Chip size="small" label="lead phone not on site" sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: `${TERM.amber}20`, color: TERM.amber, border: `1px solid ${TERM.amber}40`,
+          }} />
+        )}
       </Stack>
       {audit.notes && (
         <Alert severity="info" sx={{ mb: 1, fontFamily: MONO, fontSize: 11, py: 0.4 }}>
@@ -271,17 +333,58 @@ function AuditChecklist({ audit }) {
             fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
             fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
           }}>{group}</Typography>
-          {items.map(([key, label]) => (
-            <Stack key={key} direction="row" alignItems="center" spacing={0.8} sx={{ mb: 0.15 }}>
-              <Box sx={{ width: 12, textAlign: 'center' }}><CheckMark value={audit[key]} /></Box>
-              <Typography sx={{
-                fontFamily: MONO, fontSize: 11.5,
-                color: audit[key] === false ? TERM.amber : TERM.text,
-              }}>{label}</Typography>
-            </Stack>
-          ))}
+          {items.map(([key, label, derived], i) => {
+            const value = derived ? derived(audit) : audit[key];
+            return (
+              <Stack key={key || `${group}-${i}`} direction="row" alignItems="center" spacing={0.8} sx={{ mb: 0.15 }}>
+                <Box sx={{ width: 12, textAlign: 'center' }}><CheckMark value={value} /></Box>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 11.5,
+                  color: value === false ? TERM.amber : TERM.text,
+                }}>{label}</Typography>
+              </Stack>
+            );
+          })}
         </Box>
       ))}
+      {(techStack.length > 0 || socials.length > 0) && (
+        <Box sx={{ mt: 1 }}>
+          {techStack.length > 0 && (
+            <Box sx={{ mb: 0.6 }}>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
+                fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
+              }}>Tech stack</Typography>
+              <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                {techStack.map((t) => (
+                  <Chip key={t} size="small" label={t} sx={{
+                    fontFamily: MONO, fontSize: 10, height: 20,
+                    bgcolor: /^jQuery 1\./.test(t) ? `${TERM.amber}20` : TERM.greenSoft,
+                    color: /^jQuery 1\./.test(t) ? TERM.amber : TERM.text,
+                    border: `1px solid ${TERM.borderDim}`,
+                  }} />
+                ))}
+              </Stack>
+            </Box>
+          )}
+          {socials.length > 0 && (
+            <Box>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
+                fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
+              }}>Social presence</Typography>
+              <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                {socials.map((s) => (
+                  <Chip key={s} size="small" label={s} sx={{
+                    fontFamily: MONO, fontSize: 10, height: 20,
+                    bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+                  }} />
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }
