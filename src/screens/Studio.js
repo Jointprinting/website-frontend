@@ -631,7 +631,15 @@ function SubmissionsTab({ token, onOpenClients }) {
                   }}
                   value={selected.notesAdmin || ''}
                   onChange={(e) => setSelected({ ...selected, notesAdmin: e.target.value })}
-                  onBlur={() => updateStatus(selected._id, undefined, selected.notesAdmin || '')}
+                  onBlur={() => {
+                    // Only fire if the note actually changed since the last
+                    // server load — blur on focus without typing was firing
+                    // a redundant PUT every time.
+                    const original = items.find((x) => x._id === selected._id);
+                    if ((original?.notesAdmin || '') !== (selected.notesAdmin || '')) {
+                      updateStatus(selected._id, undefined, selected.notesAdmin || '');
+                    }
+                  }}
                   placeholder="Track your conversation, quoted price, follow-up date..."
                 />
               </Box>
