@@ -586,7 +586,10 @@ const [loading,    setLoading]    = useState(true);
                     const el = marqueeRef.current;
                     if (!isDraggingRef.current || !el) return;
                     const dx = e.clientX - dragStartXRef.current;
-                    if (Math.abs(dx) > 4) dragMovedRef.current = true;
+                    // 8px threshold (was 4px) — trackpad clicks routinely
+                    // wiggle 2–5px between down and up, which would flip
+                    // dragMovedRef and swallow the click handler below.
+                    if (Math.abs(dx) > 8) dragMovedRef.current = true;
                     el.scrollLeft = dragStartScrollRef.current - dx;
                   }}
                   onPointerUp={(e) => {
@@ -594,9 +597,19 @@ const [loading,    setLoading]    = useState(true);
                     isDraggingRef.current = false;
                     const el = marqueeRef.current;
                     if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = 'grab'; }
+                    // The synthetic click fires immediately after pointerup;
+                    // the click handler checks dragMovedRef to decide whether
+                    // to navigate. Clear the flag on the next tick so the
+                    // check sees the current interaction's value, but the
+                    // flag doesn't survive into the next click — without
+                    // this, the very next click after any drag (even one
+                    // that already navigated correctly) could still see a
+                    // stale true if pointerdown didn't fire for some reason.
+                    setTimeout(() => { dragMovedRef.current = false; }, 0);
                   }}
                   onPointerCancel={() => {
                     isDraggingRef.current = false;
+                    dragMovedRef.current = false;
                     if (marqueeRef.current) marqueeRef.current.style.cursor = 'grab';
                   }}
                   onMouseEnter={() => { isPausedRef.current = true; }}
