@@ -23,6 +23,7 @@ import ChecklistIcon      from '@mui/icons-material/Checklist';
 import CheckIcon          from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MoreVertIcon       from '@mui/icons-material/MoreVert';
+import SendIcon           from '@mui/icons-material/Send';
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline';
 import AttachFileIcon      from '@mui/icons-material/AttachFile';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -96,7 +97,7 @@ export default function OrderTracker({ token, onBack }) {
   const [qbLoading,   setQbLoading]   = useState(false);
   const [qbBusy,      setQbBusy]      = useState(false);
   const [moreAnchor,  setMoreAnchor]  = useState(null);
-  const [shareDialog, setShareDialog] = useState({ open: false, projectId: null, ttl: 7, url: '', expiresAt: null, busy: false, err: '' });
+  const [shareDialog, setShareDialog] = useState({ open: false, projectId: null, ttl: 7, email: '', sentTo: '', url: '', expiresAt: null, busy: false, err: '' });
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -460,7 +461,7 @@ export default function OrderTracker({ token, onBack }) {
   // they can verify before sending.
   const shareApprovalFor = (projectId) => {
     if (!projectId) return;
-    setShareDialog({ open: true, projectId, ttl: 7, url: '', expiresAt: null, busy: false, err: '' });
+    setShareDialog({ open: true, projectId, ttl: 7, email: '', sentTo: '', url: '', expiresAt: null, busy: false, err: '' });
   };
 
   const loadQbStatus = async () => {
@@ -821,6 +822,7 @@ export default function OrderTracker({ token, onBack }) {
       <ShareApprovalDialog
         state={shareDialog}
         setTtl={(v) => setShareDialog(s => ({ ...s, ttl: v }))}
+        setEmail={(v) => setShareDialog(s => ({ ...s, email: v }))}
         onClose={() => setShareDialog(s => ({ ...s, open: false }))}
         onGenerate={async () => {
           setShareDialog(s => ({ ...s, busy: true, err: '' }));
@@ -830,6 +832,24 @@ export default function OrderTracker({ token, onBack }) {
               { ttlDays, rotate: true }, authHdr);
             const url = `${window.location.origin}/approve/${shareDialog.projectId}?token=${r.data.token}`;
             setShareDialog(s => ({ ...s, busy: false, url, expiresAt: r.data.expiresAt, ttl: ttlDays }));
+          } catch (e) {
+            setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
+          }
+        }}
+        onSendEmail={async () => {
+          if (!shareDialog.email) { setShareDialog(s => ({ ...s, err: 'Enter an email address first.' })); return; }
+          setShareDialog(s => ({ ...s, busy: true, err: '' }));
+          try {
+            const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
+            const r = await axios.post(`${base}/orders/${shareDialog.projectId}/approval-link/send`, {
+              email: shareDialog.email,
+              ttlDays,
+              rotate: true,
+              frontendOrigin: window.location.origin,
+            }, authHdr);
+            setShareDialog(s => ({
+              ...s, busy: false, url: r.data.url, expiresAt: r.data.expiresAt, sentTo: r.data.sentTo, ttl: ttlDays,
+            }));
           } catch (e) {
             setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
           }
@@ -2033,8 +2053,8 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
 // MUI replacement for the old window.prompt + alert flow. Two-step: pick the
 // TTL, click Generate, then the URL renders in a read-only field with a Copy
 // button so the user can verify what they're sending before they paste it.
-function ShareApprovalDialog({ state, setTtl, onClose, onGenerate }) {
-  const { open, ttl, url, expiresAt, busy, err } = state;
+function ShareApprovalDialog({ state, setTtl, setEmail, onClose, onGenerate, onSendEmail }) {
+  const { open, ttl, email, sentTo, url, expiresAt, busy, err } = state;
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => { if (open) setCopied(false); }, [open, url]);
   const copy = async () => {
@@ -2066,21 +2086,41 @@ function ShareApprovalDialog({ state, setTtl, onClose, onGenerate }) {
                 inputProps={{ min: 1, max: 365 }}
                 sx={{ width: 80, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 14, py: 0.6, textAlign: 'right' } }}
               />
-              <Typography sx={{ color: B.muted, fontSize: 13 }}>days</Typography>
+              <Typography sx={{ color: B.muted, fontSize: 13 }}>days · default 7, max 365</Typography>
             </Stack>
-            <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
-              Default is 7 days. Max 365.
+
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 2, mb: 0.5 }}>
+              Send to client by email (recommended)
+            </Typography>
+            <Stack direction="row" gap={1} sx={{ mb: 1.5 }}>
+              <TextField
+                type="email" size="small" value={email || ''} placeholder="client@company.com"
+                onChange={e => setEmail(e.target.value)}
+                sx={{ flex: 1, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.7 } }}
+              />
+              <Button variant="contained" disabled={busy || !email} onClick={onSendEmail}
+                startIcon={busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <SendIcon sx={{ fontSize: 16 }} />}
+                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
+                Send
+              </Button>
+            </Stack>
+
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 1, mb: 0.5 }}>
+              Or just generate the link
             </Typography>
             {err && <Typography sx={{ color: '#f87171', fontSize: 12, mb: 1.5 }}>{err}</Typography>}
-            <Button variant="contained" disabled={busy} onClick={onGenerate} fullWidth
-              startIcon={busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <LinkIcon />}
-              sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
-              {busy ? 'Generating…' : 'Generate link'}
+            <Button variant="outlined" disabled={busy} onClick={onGenerate} fullWidth
+              startIcon={busy ? <CircularProgress size={14} sx={{ color: B.green }} /> : <LinkIcon />}
+              sx={{ color: B.green, borderColor: B.green, fontWeight: 700, textTransform: 'none',
+                '&:hover': { borderColor: '#3bd070', bgcolor: 'rgba(74,222,128,0.06)' } }}>
+              {busy ? 'Generating…' : 'Copy / paste link instead'}
             </Button>
           </>
         ) : (
           <>
-            <Typography sx={{ color: B.green, fontSize: 13, fontWeight: 700, mb: 1 }}>Link ready ✓</Typography>
+            <Typography sx={{ color: B.green, fontSize: 13, fontWeight: 700, mb: 1 }}>
+              {sentTo ? `Sent to ${sentTo} ✓` : 'Link ready ✓'}
+            </Typography>
             <TextField
               fullWidth value={url} multiline minRows={2} maxRows={3}
               onFocus={e => e.target.select()}
@@ -2092,7 +2132,7 @@ function ShareApprovalDialog({ state, setTtl, onClose, onGenerate }) {
             {expiresAt && (
               <Typography sx={{ color: B.muted, fontSize: 11, mt: 1 }}>
                 Expires {new Date(expiresAt).toLocaleString()}.
-                You can send this link to one client or several — anyone who has it can approve until expiry.
+                {sentTo ? '' : ' You can send this link to one client or several — anyone with the link can approve until expiry.'}
               </Typography>
             )}
             <Stack direction="row" gap={1} mt={2}>
