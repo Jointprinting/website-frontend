@@ -52,6 +52,7 @@ function Product() {
   const preloadedItem = location.state?.item || null;
 
   const [productVendor, setProductVendor]               = useState(preloadedItem?.vendor || '');
+  const [productBrandImage, setProductBrandImage]       = useState(preloadedItem?.brandImage || '');
   const [productStyle, setProductStyle]                 = useState(preloadedItem?.style || id || '');
   const [productTitle, setProductTitle]                 = useState(preloadedItem?.name || '');
   const [productPriceFrom, setProductPriceFrom]         = useState(startingPrice(preloadedItem) || '');
@@ -98,6 +99,7 @@ function Product() {
 
     const applyProductData = (data) => {
       setProductVendor(data.vendor || '');
+      setProductBrandImage(data.brandImage || preloadedItem?.brandImage || '');
       setProductStyle(data.style || id);
       setProductTitle(data.name || '');
       setProductPriceFrom(startingPrice(data) || '');
@@ -309,9 +311,20 @@ function Product() {
 
             {/* DETAILS */}
             <Stack spacing={2.5} sx={{ flex: { md: 1 }, width: '100%', minWidth: 0 }}>
-              <Stack spacing={1} direction={{ xs: 'column', sm: 'row' }}
+              <Stack spacing={1.25} direction={{ xs: 'column', sm: 'row' }}
                 alignItems={{ xs: 'flex-start', sm: 'center' }} flexWrap="wrap" useFlexGap>
-                {productVendor && <Typography color="black">{productVendor}</Typography>}
+                {productBrandImage ? (
+                  <Box sx={{
+                    display: 'inline-flex', alignItems: 'center',
+                    bgcolor: '#fff', borderRadius: 1, px: 1, py: 0.5,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                  }}>
+                    <Box component="img" src={productBrandImage} alt={productVendor || 'Brand'}
+                      sx={{ height: { xs: 22, sm: 26 }, width: 'auto', maxWidth: { xs: 120, sm: 150 }, objectFit: 'contain', display: 'block' }} />
+                  </Box>
+                ) : (
+                  productVendor && <Typography color="black">{productVendor}</Typography>
+                )}
                 {productStyle && <Typography color="gray">Style #{productStyle}</Typography>}
                 {productTag && <Chip label={productTag} color={productTagColor} variant="outlined" size="small" />}
               </Stack>
