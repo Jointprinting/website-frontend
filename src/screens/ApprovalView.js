@@ -36,6 +36,7 @@ export default function ApprovalView() {
 
   const [data, setData]   = useState(null);
   const [err, setErr]     = useState('');
+  const [errReason, setErrReason] = useState('');   // '' | 'expired' | 'invalid'
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
@@ -58,6 +59,7 @@ export default function ApprovalView() {
       } catch (e) {
         if (cancelled) return;
         setErr(e.response?.data?.message || 'This link is invalid or expired.');
+        setErrReason(e.response?.data?.reason || (e.response?.status === 410 ? 'expired' : 'invalid'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -109,14 +111,17 @@ export default function ApprovalView() {
     );
   }
   if (err || !data) {
+    const isExpired = errReason === 'expired';
     return (
       <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
         <Box sx={{ bgcolor: COLORS.panel, p: 4, borderRadius: 2, maxWidth: 480, textAlign: 'center', boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          <Typography sx={{ color: COLORS.text, fontWeight: 800, fontSize: 18, mb: 1 }}>
-            Link unavailable
+          <Typography sx={{ color: isExpired ? '#b45309' : COLORS.text, fontWeight: 800, fontSize: 20, mb: 1 }}>
+            {isExpired ? 'This approval link has expired' : 'Link unavailable'}
           </Typography>
-          <Typography sx={{ color: COLORS.muted, fontSize: 13 }}>
-            {err || 'This approval link couldn\'t be loaded.'}
+          <Typography sx={{ color: COLORS.muted, fontSize: 13, lineHeight: 1.55 }}>
+            {isExpired
+              ? "Reach out and we'll send you a fresh one — prices and details may need a quick refresh."
+              : (err || "This approval link couldn't be loaded.")}
           </Typography>
         </Box>
       </Box>

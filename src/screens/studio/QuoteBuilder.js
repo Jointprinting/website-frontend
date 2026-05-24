@@ -62,22 +62,27 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   }, [open, project]);
 
   const totals = useMemo(() => {
-    let qty = 0, cogs = 0, lineRevenue = 0;
+    let qty = 0, blanksAndPrint = 0, lineRevenue = 0;
     lines.forEach(l => {
       const q = num(l.qty);
-      const lineCogs = num(l.blankCost) + num(l.printCost);
-      const u = num(l.unitPrice) || lineCogs * (num(l.markup) || 1);
-      qty         += q;
-      cogs        += q * lineCogs;
-      lineRevenue += q * u;
+      const lineUnitCogs = num(l.blankCost) + num(l.printCost);
+      const u = num(l.unitPrice) || lineUnitCogs * (num(l.markup) || 1);
+      qty            += q;
+      blanksAndPrint += q * lineUnitCogs;
+      lineRevenue    += q * u;
     });
     const extras = num(setupCost) + num(shippingCost);
     const clientTotal = lineRevenue + extras;
-    const totalCogs   = cogs + extras;
+    const totalCogs   = blanksAndPrint + extras;
     const profit      = clientTotal - totalCogs;
+    // Per-unit allocation of the one-time setup + shipping across every unit
+    // in the quote — so each line's COGS column reads honestly.
+    const setupPerUnit = qty > 0 ? num(setupCost) / qty : 0;
+    const shipPerUnit  = qty > 0 ? num(shippingCost) / qty : 0;
     return {
       qty, cogs: totalCogs, lineRevenue, extras,
       clientTotal, profit,
+      setupPerUnit, shipPerUnit,
       marginPct: clientTotal > 0 ? (profit / clientTotal) * 100 : 0,
     };
   }, [lines, setupCost, shippingCost]);
@@ -90,7 +95,10 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   };
   const selectTier = (i, pct) => {
     const l = lines[i];
-    const c = num(l.blankCost) + num(l.printCost);
+    // Honest "cost" the markup applies to includes the line's blank + print
+    // PLUS the allocated setup/shipping per unit, so the locked unit price
+    // is the markup over true COGS — matches the COGS column.
+    const c = num(l.blankCost) + num(l.printCost) + totals.setupPerUnit + totals.shipPerUnit;
     setLine(i, {
       unitPrice: +(c * (1 + pct / 100)).toFixed(2),
       markup:    +(1 + pct / 100).toFixed(4),
@@ -188,6 +196,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <Stack gap={2}>
             {lines.map((line, i) => (
               <QuoteLineCard key={i} line={line}
+                setupPerUnit={totals.setupPerUnit}
+                shipPerUnit={totals.shipPerUnit}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
                 onRemove={() => removeLine(i)} />
@@ -248,7 +258,7 @@ function FooterStat({ label, value, accent, dim }) {
   );
 }
 
-function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSelectTier, onRemove }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -256,59 +266,82 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
   };
   const tf = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
 
-  const cost      = num(line.blankCost) + num(line.printCost);
-  const qty       = num(line.qty);
-  const unitPrice = num(line.unitPrice) || cost * (num(line.markup) || 1);
+  const blankAndPrint = num(line.blankCost) + num(line.printCost);
+  const cogsPerUnit   = blankAndPrint + setupPerUnit + shipPerUnit;       // honest unit-cost
+  const qty           = num(line.qty);
+  const unitPrice = num(line.unitPrice) || cogsPerUnit * (num(line.markup) || 1);
   const lineTotal = qty * unitPrice;
-  const profit    = unitPrice - cost;
+  const profit    = unitPrice - cogsPerUnit;
   const marginPct = unitPrice > 0 ? (profit / unitPrice) * 100 : 0;
   const marginCol = marginColor(marginPct);
-  const selectedPct = cost > 0 && num(line.unitPrice) > 0
-    ? Math.round((num(line.unitPrice) / cost - 1) * 100)
+  const selectedPct = cogsPerUnit > 0 && num(line.unitPrice) > 0
+    ? Math.round((num(line.unitPrice) / cogsPerUnit - 1) * 100)
     : null;
 
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
-      {/* Inputs — color + supplier dropped (printer is project-level now) */}
+      {/* Inputs ordered left-to-right: product · style · qty · print · blank
+          · print$ · setup (allocated) · ship (allocated) · COGS / unit. */}
       <Box sx={{ p: 1.5, display: 'grid', gap: 1, alignItems: 'end',
         gridTemplateColumns: {
           xs: 'repeat(2, 1fr)',
-          sm: 'repeat(4, 1fr)',
-          lg: '68px 104px 1.6fr 100px 140px 1.6fr 100px 36px',
+          sm: 'repeat(3, 1fr)',
+          lg: '1.6fr 100px 64px 1.6fr 88px 88px 76px 76px 84px 36px',
         } }}>
-        <QF label="Qty">
-          <TextField size="small" type="number" value={line.qty ?? ''}
-            onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
+        <QF label="Product">
+          <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
+            onChange={e => onPatch({ description: e.target.value })} sx={tf} />
         </QF>
         <QF label="Style">
           <TextField size="small" value={line.styleCode || ''} placeholder="SS4500"
             onChange={e => onPatch({ styleCode: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Description">
-          <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
-            onChange={e => onPatch({ description: e.target.value })} sx={tf} />
+        <QF label="Qty">
+          <TextField size="small" type="number" value={line.qty ?? ''}
+            onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Blank $ ea">
+        <QF label="Print (type + details)">
+          <Stack direction="row" gap={0.5}>
+            <FormControl size="small" sx={{ ...darkInput, minWidth: 100 }}>
+              <Select value={line.printType || ''} displayEmpty
+                onChange={e => onPatch({ printType: e.target.value })}
+                sx={{ color: B.white, fontSize: 13 }}>
+                <MenuItem value=""><em>—</em></MenuItem>
+                {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField size="small" value={line.printDetails || ''} placeholder="1c front + 2c back"
+              onChange={e => onPatch({ printDetails: e.target.value })} sx={{ ...tf, flex: 1 }} />
+          </Stack>
+        </QF>
+        <QF label="Blank $">
           <TextField size="small" type="number" value={line.blankCost ?? ''}
             onChange={e => onPatch({ blankCost: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Print type">
-          <FormControl size="small" fullWidth sx={darkInput}>
-            <Select value={line.printType || ''} displayEmpty
-              onChange={e => onPatch({ printType: e.target.value })}
-              sx={{ color: B.white, fontSize: 13 }}>
-              <MenuItem value=""><em>—</em></MenuItem>
-              {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </QF>
-        <QF label="Print details">
-          <TextField size="small" value={line.printDetails || ''} placeholder="1c front + 2c back"
-            onChange={e => onPatch({ printDetails: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Print $ ea">
+        <QF label="Print $">
           <TextField size="small" type="number" value={line.printCost ?? ''}
             onChange={e => onPatch({ printCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Setup $ ea">
+          <Box sx={{ color: B.muted, fontSize: 13, fontFamily: 'monospace', height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
+            border: `1px solid ${B.faint}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
+            {setupPerUnit > 0 ? fmt(setupPerUnit) : '—'}
+          </Box>
+        </QF>
+        <QF label="Ship $ ea">
+          <Box sx={{ color: B.muted, fontSize: 13, fontFamily: 'monospace', height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
+            border: `1px solid ${B.faint}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
+            {shipPerUnit > 0 ? fmt(shipPerUnit) : '—'}
+          </Box>
+        </QF>
+        <QF label="COGS / unit">
+          <Box sx={{ color: B.white, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
+            border: `1px solid ${B.border}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.04)' }}>
+            {cogsPerUnit > 0 ? fmt(cogsPerUnit) : '—'}
+          </Box>
         </QF>
         <IconButton size="small" onClick={onRemove}
           sx={{ color: B.muted, mb: 0.2, '&:hover': { color: '#f87171' } }}>
@@ -323,10 +356,10 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
             Markup tiers
           </Typography>
           <Typography sx={{ color: B.muted, fontSize: 10 }}>
-            cost {fmt(cost)}/unit — click a tier to lock that price
+            COGS {fmt(cogsPerUnit)}/unit — click a tier to lock that price
           </Typography>
         </Stack>
-        {cost <= 0 ? (
+        {cogsPerUnit <= 0 ? (
           <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, py: 1, textAlign: 'center',
             color: B.muted, fontSize: 11 }}>
             Enter a blank or print cost to see pricing tiers.
@@ -336,7 +369,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
             <Box sx={{ display: 'grid', gap: 0.5,
               gridTemplateColumns: `repeat(${TIERS.length}, minmax(60px, 1fr))` }}>
               {TIERS.map(pct => {
-                const price = +(cost * (1 + pct / 100)).toFixed(2);
+                const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
                 const sel = selectedPct === pct;
                 return (
                   <Box key={pct} onClick={() => onSelectTier(pct)} sx={{

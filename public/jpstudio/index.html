@@ -1779,13 +1779,37 @@ async function loadProjects() {
     // straight into "save a mockup for this project". Otherwise keep whatever
     // the user had selected.
     const initialProject = new URLSearchParams(window.location.search).get('project');
-    if (initialProject && window.PROJECTS_CACHE.find(p => p._id === initialProject)) {
+    const proj = initialProject && window.PROJECTS_CACHE.find(p => p._id === initialProject);
+    if (proj) {
       sel.value = initialProject;
+      // Mirror the projectId into the current page state immediately, so a
+      // user who clicks Save without touching anything else still lands the
+      // mockup linked to the right project.
+      if (state.pages && state.pages[state.currentPage]) {
+        state.pages[state.currentPage].projectId = initialProject;
+        state.pages[state.currentPage].projectNumber = proj.projectNumber || '';
+      }
       try { onProjectChange(); } catch (_) {}
+      try { renderProjectBanner(proj); } catch (_) {}
     } else {
       sel.value = current;
     }
   } catch(e) { /* best-effort */ }
+}
+
+// Show a sticky strip at the top of the canvas reminding the user which
+// project they're saving for when they came in via a deep-link from the
+// OrderTracker. Click ✕ to clear and go back to a normal "unlinked" session.
+function renderProjectBanner(proj) {
+  const old = document.getElementById('deep-link-banner');
+  if (old) old.remove();
+  if (!proj) return;
+  const b = document.createElement('div');
+  b.id = 'deep-link-banner';
+  b.style.cssText = 'position:sticky;top:0;z-index:50;background:rgba(74,222,128,0.12);border-bottom:1px solid #1a3d2b;color:#4ade80;padding:6px 14px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px';
+  const label = `Saving to Project #${proj.projectNumber || '?'} · ${(proj.companyName || proj.clientName || 'Untitled').replace(/</g,'&lt;')}`;
+  b.innerHTML = `<span>📎</span><span>${label}</span><button onclick="(function(){const u=new URL(window.location.href);u.searchParams.delete('project');window.history.replaceState({},'',u);document.getElementById('deep-link-banner').remove();document.getElementById('f-project').value='';onProjectChange();})()" style="margin-left:auto;background:transparent;border:1px solid rgba(74,222,128,0.5);color:#4ade80;font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer">Clear</button>`;
+  document.body.insertBefore(b, document.body.firstChild);
 }
 
 function _firstName(s) { return (s || '').trim().split(/\s+/)[0] || ''; }

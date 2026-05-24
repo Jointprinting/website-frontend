@@ -137,6 +137,19 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [dirty]);
 
+  // Autosave on every edit, debounced ~800ms. No Save button — the user
+  // shouldn't have to remember to press anything to keep their work.
+  useEffect(() => {
+    if (!dirty || !local) return undefined;
+    const t = setTimeout(() => {
+      // Defined below; persist() lives on this component. Wrap in try/catch
+      // so a transient save failure doesn't crash the dialog.
+      persist().catch(() => { /* keep dirty so we'll retry on next edit */ });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, local]);
+
   if (!project || !local) return null;
 
   const update = (patch) => { setLocal(prev => ({ ...prev, ...patch })); setDirty(true); };
@@ -214,14 +227,9 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Confirmation page
           <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
-            Project #{project.projectNumber || '—'}{dirty ? ' · unsaved' : ''}
+            Project #{project.projectNumber || '—'}{saving ? ' · saving…' : (dirty ? ' · saving soon' : ' · saved ✓')}
           </Typography>
         </Typography>
-        <Button size="small" disabled={saving}
-          onClick={persist}
-          sx={{ color: saving ? B.muted : (dirty ? B.green : B.muted), fontSize: 12, textTransform: 'none', fontWeight: 700 }}>
-          {saving ? <CircularProgress size={12} sx={{ color: B.green }} /> : (dirty ? 'Save *' : 'Save')}
-        </Button>
         {onShareApproval && (
           <Button size="small" disabled={shareBusy}
             startIcon={shareBusy

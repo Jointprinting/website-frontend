@@ -1185,6 +1185,37 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 
   useEffect(() => { if (project) setLocal({ ...project }); }, [project]);
 
+  // Auto-link: silently promote auto-matched mockups + drop stale references
+  // when the drawer opens, so the project's mockupNumbers always matches what
+  // the user sees. No Tidy button, no manual step.
+  const lastAutoLinkedRef = React.useRef(null);
+  useEffect(() => {
+    if (!project || !project._id) return;
+    if (lastAutoLinkedRef.current === project._id) return;     // once per session/project
+    const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+    const current = project.mockupNumbers || [];
+    // Studio items keyed by normalized mockup # — used to drop missing refs.
+    const studioByNorm = {};
+    (mockups || []).forEach(m => {
+      const k = norm(m.pageState && m.pageState.mockupNum);
+      if (k) studioByNorm[k] = m;
+    });
+    const cleaned = current.filter(n => studioByNorm[norm(n)]);
+    const cleanedKeys = new Set(cleaned.map(norm));
+    const toAdd = (autoMatched || [])
+      .map(m => m.pageState && m.pageState.mockupNum)
+      .filter(n => n && !cleanedKeys.has(norm(n)));
+    const next = [...cleaned, ...toAdd];
+    const changed = next.length !== current.length || next.some((v, i) => v !== current[i]);
+    if (changed) {
+      lastAutoLinkedRef.current = project._id;
+      onSave(project._id, { mockupNumbers: next }).catch(() => { /* keep silent — drawer still works */ });
+    } else {
+      lastAutoLinkedRef.current = project._id;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?._id, mockups, autoMatched]);
+
   // Load (or auto-create) the client profile for this project's company.
   useEffect(() => {
     if (!project) { setClient(null); return; }
@@ -1319,44 +1350,20 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           const explicitTiles = explicitNums.map(n => ({
             num: n, item: mockupMap[n] || mockupMap[_normKey(n)] || null, source: 'linked',
           }));
-          const tiles = [...explicitTiles, ...autoTiles];
-          const missing = explicitTiles.length - explicitTiles.filter(t => t.item).length;
+          // Drop tiles that don't resolve to a studio item — the silent
+          // auto-link effect prunes them from mockupNumbers shortly after, so
+          // showing an orange "NOT IN STUDIO" placeholder just confuses.
+          const tiles = [...explicitTiles.filter(t => t.item), ...autoTiles];
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
                 <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                   Mockups · {tiles.length}
-                  {autoTiles.length > 0 && (
-                    <Typography component="span" sx={{ color: B.green, fontSize: 10, fontWeight: 700, ml: 1, textTransform: 'none', letterSpacing: 0 }}>
-                      ({autoTiles.length} auto-matched)
-                    </Typography>
-                  )}
-                  {missing > 0 && (
-                    <Typography component="span" sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, ml: 1, textTransform: 'none', letterSpacing: 0 }}>
-                      ({missing} not in studio)
-                    </Typography>
-                  )}
                 </Typography>
-                {(autoTiles.length > 0 || missing > 0) && (
-                  <Tooltip title="Drop any stale mockup #s that aren't in your studio, and turn the auto-matched ones into permanent links on this project.">
-                    <Button size="small"
-                      onClick={async () => {
-                        const keep = explicitTiles.filter(t => t.item).map(t => t.num);
-                        const toAdd = autoTiles
-                          .map(t => t.item?.pageState?.mockupNum)
-                          .filter(Boolean);
-                        const next = [...keep, ...toAdd];
-                        await onSave(project._id, { mockupNumbers: next });
-                      }}
-                      sx={{ color: B.green, fontSize: 11, textTransform: 'none', mr: 1, fontWeight: 700 }}>
-                      Tidy
-                    </Button>
-                  </Tooltip>
-                )}
                 <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                   onClick={onOpenPicker}
                   sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-                  {explicitNums.length === 0 ? 'Link mockups' : 'Edit mockups'}
+                  {tiles.length === 0 ? 'Link mockups' : 'Edit mockups'}
                 </Button>
               </Stack>
               {tiles.length === 0 ? (
@@ -1427,13 +1434,6 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     </Box>
                   ))}
                 </Box>
-              )}
-              {missing > 0 && (
-                <Typography sx={{ mt: 1, color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
-                  Missing mockups are on this project in records but aren&apos;t in your jpstudio library.
-                  Open jpstudio → pick this project → save a mockup with the matching #, use Edit mockups to attach
-                  an existing one, or hover a tile and click ✕ to drop a wrong #.
-                </Typography>
               )}
             </>
           );
