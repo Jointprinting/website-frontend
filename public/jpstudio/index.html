@@ -369,6 +369,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .field{margin-bottom:8px}
 .field:last-child{margin-bottom:0}
 .field label{display:block;font-family:var(--fm);font-size:9px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3);margin-bottom:4px}
+.field label .auto-hint{font-size:8px;color:var(--ac);letter-spacing:.08em;text-transform:none;font-weight:600;opacity:.85}
 .field input,.field textarea{
   width:100%;background:var(--s1);border:1px solid var(--bd2);border-radius:var(--r);
   color:var(--tx);font-family:var(--f);font-size:12px;padding:6px 9px;outline:none;
@@ -782,8 +783,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     <button class="nav-tab" onclick="switchTab('library',this)">Library</button>
   </nav>
   <div class="hdr-right">
-    <button class="btn btn-ghost btn-sm" id="sync-all-btn" onclick="syncAll()" title="Push local items to the cloud and pull anything new from other devices">☁ Sync</button>
-    <span id="sync-badge" style="display:none;background:#f59e0b;color:#1a1a1a;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:-6px"></span>
+    <span id="sync-status" title="Library auto-syncs to the cloud — open on any device and refresh to pull." style="font-size:11px;color:var(--tx3);display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18)"><span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block"></span><span id="sync-label">All synced</span></span>
     <button class="btn btn-secondary btn-sm" onclick="openSsModal()">⬡ S&amp;S Finder</button>
     <button class="btn btn-ghost btn-sm" id="borders-btn" onclick="togglePrintPreview()">Borders: OFF</button>
     <button class="btn btn-ac btn-sm" onclick="exportPdf()">↓ Export PDF</button>
@@ -899,17 +899,27 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <div class="psec">
         <div class="psec-hdr"><span class="psec-lbl">Mockup Info</span></div>
         <div class="field">
-          <label>Project</label>
+          <label>Project <span style="color:var(--ac)">*</span></label>
           <select id="f-project" onchange="onProjectChange()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:var(--f);cursor:pointer;width:100%">
-            <option value="">— Unlinked —</option>
+            <option value="">— Pick a project —</option>
           </select>
+          <div id="f-project-error" style="display:none;color:#f87171;font-size:10px;margin-top:4px">Pick a project to save this mockup.</div>
         </div>
-        <div class="field"><label>Client</label><input type="text" id="f-client" list="client-suggestions" placeholder="e.g. Acme Co" oninput="liveUpdate()"/><datalist id="client-suggestions"></datalist></div>
-        <div class="field"><label>Title</label><input type="text" id="f-title" placeholder="e.g. JP Hoodie – Army" oninput="liveUpdate()"/></div>
+        <div class="field"><label>Client</label><input type="text" id="f-client" list="client-suggestions" placeholder="Auto-filled from project" oninput="liveUpdate()"/><datalist id="client-suggestions"></datalist></div>
+        <div class="field">
+          <label>Title <span class="auto-hint">· auto from project</span></label>
+          <input type="text" id="f-title" placeholder="Auto-filled from project" oninput="liveUpdate()" readonly style="opacity:0.7"/>
+        </div>
         <div class="field"><label>Subtitle</label><input type="text" id="f-subtitle" placeholder="SS4500 · Screen Print" oninput="liveUpdate()"/></div>
         <div class="row2">
-          <div class="field"><label>Mockup #</label><input type="text" id="f-mockupnum" placeholder="#0001" oninput="liveUpdate()"/></div>
-          <div class="field"><label>PDF Filename</label><input type="text" id="f-pdfname" placeholder="mockup-001.pdf"/></div>
+          <div class="field">
+            <label>Mockup # <span class="auto-hint">· auto</span></label>
+            <input type="text" id="f-mockupnum" placeholder="Auto-filled" oninput="liveUpdate()" readonly style="opacity:0.7"/>
+          </div>
+          <div class="field">
+            <label>PDF Filename <span class="auto-hint">· auto</span></label>
+            <input type="text" id="f-pdfname" placeholder="Auto-filled" readonly style="opacity:0.7"/>
+          </div>
         </div>
         <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Internal notes…" oninput="liveUpdate()"></textarea></div>
       </div>
@@ -955,7 +965,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <div class="psec">
         <div class="psec-hdr"><span class="psec-lbl">Save</span></div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-primary" onclick="saveMockupToLibrary()" style="flex:1">↑ Save to Library</button>
+          <button class="btn btn-primary" id="save-mockup-btn" onclick="saveMockupToLibrary()" style="flex:1">↑ Save to Library</button>
           <button class="btn btn-ghost btn-icon" onclick="resetCurrentPage()" title="Reset page">↺</button>
         </div>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1015,7 +1025,6 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
         <button class="btn btn-secondary btn-sm" onclick="promptSaveBlank()">+ Blank</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveLogo()">+ Logo</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveMockupImage()">+ Mockup Image</button>
-        <button class="btn btn-ghost btn-sm" title="Push local items to the cloud + pull anything new" onclick="syncAll()">☁ Sync All</button>
       </div>
     </div>
     <div class="lib-section">
@@ -1701,18 +1710,26 @@ async function syncAll() {
   }
 }
 
+// Passive sync indicator. The library auto-pushes on every save and auto-pulls
+// on load, so there's no clickable Sync button — this is just a status dot so
+// the user knows whether the cloud is current. If anything's pending we also
+// quietly kick another push so it doesn't sit forever.
 async function refreshSyncBadge() {
-  const badge = document.getElementById('sync-badge');
-  const btn = document.getElementById('sync-all-btn');
-  if (!badge || !btn) return;
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if (!dot || !label) return;
   const n = await countUnsynced().catch(()=>0);
   if (n > 0) {
-    badge.textContent = n;
-    badge.style.display = 'inline-block';
-    btn.textContent = `☁ Sync (${n} pending)`;
+    dot.style.background = '#f59e0b';
+    label.textContent = `Syncing ${n}…`;
+    // Auto-retry — best-effort, swallow errors (the dot stays amber until clear).
+    try { await syncToCloud(); } catch (_) {}
+    const after = await countUnsynced().catch(()=>0);
+    if (after === 0) { dot.style.background = '#4ade80'; label.textContent = 'All synced'; }
+    else             { label.textContent = `${after} pending`; }
   } else {
-    badge.style.display = 'none';
-    btn.textContent = '☁ Synced';
+    dot.style.background = '#4ade80';
+    label.textContent = 'All synced';
   }
 }
 async function apiSyncDelete(remoteId) {
@@ -1753,7 +1770,19 @@ function initDB() {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id',autoIncrement:true});
       });
     };
-    req.onsuccess = e => { db = e.target.result; res(db); setTimeout(()=>{ syncFromBackend().catch(()=>{}); loadProjects().catch(()=>{}); refreshSyncBadge().catch(()=>{}); }, 800); };
+    req.onsuccess = e => {
+      db = e.target.result; res(db);
+      setTimeout(async () => {
+        // Auto-pull from cloud, then auto-push anything still pending. No
+        // manual Sync button required — the user just hits Refresh on
+        // another device and everything is there.
+        try { await syncFromBackend(); } catch (_) {}
+        try { await loadProjects(); } catch (_) {}
+        try { await syncToCloud(); } catch (_) {}
+        try { refreshSyncBadge(); } catch (_) {}
+        try { _refreshSaveGate(); } catch (_) {}
+      }, 800);
+    };
     req.onerror = ()=>rej(req.error);
   });
 }
@@ -1830,6 +1859,8 @@ function _nextMockupNum(project) {
 function onProjectChange() {
   const sel = document.getElementById('f-project');
   const pid = sel.value;
+  // Toggle "save disabled" affordance based on project presence.
+  _refreshSaveGate();
   if (!pid) {
     saveFormToState();
     liveUpdate();
@@ -1837,22 +1868,24 @@ function onProjectChange() {
   }
   const proj = window.PROJECTS_CACHE.find(p => p._id === pid);
   if (!proj) return;
-  // Auto-fill client (only if empty so we don't overwrite a manual entry)
+  // Overwrite every project-derived field, every time. The user asked for
+  // these to be automatic — no manual entry, and switching projects should
+  // re-derive without the user clearing the old values first.
   const clientEl = document.getElementById('f-client');
-  if (clientEl && !clientEl.value.trim()) {
-    clientEl.value = proj.clientName || proj.companyName || '';
-  }
-  // Auto-fill title: "<First> <Company> Merch"
+  if (clientEl) clientEl.value = proj.clientName || proj.companyName || '';
   const titleEl = document.getElementById('f-title');
-  if (titleEl && !titleEl.value.trim()) {
+  if (titleEl) {
     const first = _firstName(proj.clientName);
     const co    = (proj.companyName || '').trim();
     titleEl.value = [first, co, 'Merch'].filter(Boolean).join(' ');
   }
-  // Auto-fill mockup #: next free letter for that project (only if empty)
   const numEl = document.getElementById('f-mockupnum');
-  if (numEl && !numEl.value.trim()) {
-    numEl.value = _nextMockupNum(proj);
+  if (numEl) numEl.value = _nextMockupNum(proj);
+  const pdfEl = document.getElementById('f-pdfname');
+  if (pdfEl) {
+    const slug = (titleEl?.value || 'mockup').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    const num = (numEl?.value || '').replace(/^#/,'');
+    pdfEl.value = num ? `${slug}-${num}.pdf` : `${slug}.pdf`;
   }
   saveFormToState();
   liveUpdate();
@@ -2702,10 +2735,29 @@ async function exportPdf() {
 }
 
 // ── Save Mockup ───────────────────────────────────────────────────
+// Toggle the project-required error + save button state. Anchor for save
+// gating + the post-onProjectChange UI sync.
+function _refreshSaveGate() {
+  const sel = document.getElementById('f-project');
+  const err = document.getElementById('f-project-error');
+  const btn = document.getElementById('save-mockup-btn');
+  const hasProject = !!(sel && sel.value);
+  if (err) err.style.display = hasProject ? 'none' : 'block';
+  if (btn) { btn.disabled = !hasProject; btn.style.opacity = hasProject ? '1' : '0.5'; btn.style.cursor = hasProject ? 'pointer' : 'not-allowed'; }
+}
+
 async function saveMockupToLibrary() {
   if (!db){toast('Database not ready','error');return;}
   saveFormToState();
   const pg=state.pages[state.currentPage];
+  // Foolproof gate — won't save unlinked. Auto-derived fields only make sense
+  // when a project is selected, so refuse politely if it's missing.
+  if (!pg.projectId) {
+    toast('Pick a project first — every mockup is saved against one.', 'error');
+    _refreshSaveGate();
+    document.getElementById('f-project')?.focus();
+    return;
+  }
   // Auto-generate mockup number — prefer the project-aware next letter,
   // fall back to a sequential number for unlinked mockups.
   if (!pg.mockupNum) {
