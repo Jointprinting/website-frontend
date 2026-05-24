@@ -1439,19 +1439,13 @@ function EditableScript({
   );
 }
 
-// Bounded localStorage write so we don't silently fail on quota or stale
-// schemas. Returns true on success, false otherwise; callers can show toast.
-const CC_SCHEMA_VERSION = 2;
 const CC_HISTORY_MAX = 50;
-function _lsSet(key, value) {
-  try { localStorage.setItem(key, value); return true; }
-  catch (e) { console.warn(`[ColdCall] localStorage write failed for ${key}:`, e.message); return false; }
-}
-function _lsGet(key, fallback) {
-  try { const v = localStorage.getItem(key); return v == null ? fallback : v; }
-  catch (e) { return fallback; }
-}
+const CC_API = `${config.backendUrl}/api/jpw/cold-call-state`;
 
+// Backend-persisted Cold Call state. localStorage is now only used as a
+// migration source (one-shot push to backend on first load when the backend
+// is empty but local has something) and as an offline draft for notes/overrides
+// so a stuck network can't wipe an in-flight edit.
 function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
   const [svc, setSvc] = React.useState('');
@@ -1460,71 +1454,112 @@ function ColdCallTab({ token }) {
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
   const [storageWarning, setStorageWarning] = React.useState('');
-
-  // Overrides keyed by `${nodeId}::${field}` -> string (the edited text).
-  // Persisted to localStorage with a schema version so older shapes can be
-  // migrated or discarded cleanly.
   const [overrides, setOverrides] = React.useState({});
+  const hydrated = React.useRef(false);    // suppresses the save effects on the initial load
 
-  // Load persisted setup, notes, and overrides
+  const _lsGet = (key, fallback) => {
+    try { const v = localStorage.getItem(key); return v == null ? fallback : v; }
+    catch (e) { return fallback; }
+  };
+
+  // Load from backend. If backend is empty but localStorage has something,
+  // push the local state up so the existing edits/notes aren't lost on
+  // first deploy.
   React.useEffect(() => {
-    setBiz(_lsGet('jpw_cc_biz', ''));
-    setSvc(_lsGet('jpw_cc_svc', ''));
-    setName(_lsGet('jpw_cc_name', ''));
-    setNotes(_lsGet('jpw_cc_notes', ''));
-    try {
-      const raw = _lsGet('jpw_cc_overrides', '{}');
-      const saved = JSON.parse(raw);
-      if (saved && typeof saved === 'object') {
-        // v1 = flat { 'nodeId::field': text }. v2 = { _v:2, data: {…} }.
-        // Accept either shape; drop anything malformed.
-        const data = saved._v ? (saved.data || {}) : saved;
-        const clean = {};
-        Object.keys(data).forEach(k => {
-          if (typeof k === 'string' && k.includes('::') && typeof data[k] === 'string') clean[k] = data[k];
-        });
-        setOverrides(clean);
+    let cancelled = false;
+    (async () => {
+      const authHdr = { headers: { Authorization: `Bearer ${token}` } };
+      let server = null;
+      try {
+        const r = await axios.get(CC_API, authHdr);
+        server = r.data || {};
+      } catch (e) {
+        setStorageWarning('Could not reach the server — working from local cache.');
       }
-    } catch (e) { console.warn('[ColdCall] overrides parse failed; resetting:', e.message); }
+      if (cancelled) return;
 
-    // One-shot handoff from the JPW Lead Recon tab.
-    try {
-      const handoff = sessionStorage.getItem('jpwColdCallContext');
-      if (handoff) {
-        const ctx = JSON.parse(handoff);
-        if (ctx && typeof ctx === 'object') {
-          if (typeof ctx.biz  === 'string') setBiz(ctx.biz);
-          if (typeof ctx.svc  === 'string') setSvc(ctx.svc);
-          if (typeof ctx.name === 'string') setName(ctx.name);
+      const localBiz   = _lsGet('jpw_cc_biz', '');
+      const localSvc   = _lsGet('jpw_cc_svc', '');
+      const localName  = _lsGet('jpw_cc_name', '');
+      const localNotes = _lsGet('jpw_cc_notes', '');
+      let localOverrides = {};
+      try {
+        const raw = _lsGet('jpw_cc_overrides', '{}');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          const data = parsed._v ? (parsed.data || {}) : parsed;
+          Object.keys(data).forEach(k => {
+            if (typeof k === 'string' && k.includes('::') && typeof data[k] === 'string') localOverrides[k] = data[k];
+          });
         }
-        sessionStorage.removeItem('jpwColdCallContext');
+      } catch (_) {}
+
+      // Pick whichever side has data. If backend is empty and local has
+      // anything, migrate local → backend in one PUT.
+      const serverEmpty = !server || (!server.biz && !server.svc && !server.name && !server.notes &&
+        (!server.overrides || Object.keys(server.overrides).length === 0));
+      const hasLocal = !!(localBiz || localSvc || localName || localNotes || Object.keys(localOverrides).length);
+
+      if (serverEmpty && hasLocal) {
+        try {
+          await axios.put(CC_API, {
+            biz: localBiz, svc: localSvc, name: localName,
+            notes: localNotes, overrides: localOverrides,
+          }, authHdr);
+          server = { biz: localBiz, svc: localSvc, name: localName, notes: localNotes, overrides: localOverrides };
+        } catch (e) {
+          setStorageWarning('Migration to cloud failed — keeping local edits for now.');
+        }
       }
-    } catch (e) { console.warn('[ColdCall] handoff parse failed:', e.message); }
-  }, []);
 
-  React.useEffect(() => { _lsSet('jpw_cc_biz', biz); }, [biz]);
-  React.useEffect(() => { _lsSet('jpw_cc_svc', svc); }, [svc]);
-  React.useEffect(() => { _lsSet('jpw_cc_name', name); }, [name]);
+      setBiz(server?.biz || '');
+      setSvc(server?.svc || '');
+      setName(server?.name || '');
+      setNotes(server?.notes || '');
+      setOverrides((server && server.overrides) || {});
 
-  // Debounced overrides save — every keystroke shouldn't punish localStorage.
-  React.useEffect(() => {
-    const t = setTimeout(() => {
-      const payload = JSON.stringify({ _v: CC_SCHEMA_VERSION, data: overrides });
-      const ok = _lsSet('jpw_cc_overrides', payload);
-      setStorageWarning(ok ? '' : 'Edits not saved — browser storage is full or blocked.');
-    }, 300);
-    return () => clearTimeout(t);
-  }, [overrides]);
+      // One-shot handoff from the JPW Lead Recon tab — overrides what the
+      // server gave us for the three setup fields.
+      try {
+        const handoff = sessionStorage.getItem('jpwColdCallContext');
+        if (handoff) {
+          const ctx = JSON.parse(handoff);
+          if (ctx && typeof ctx === 'object') {
+            if (typeof ctx.biz  === 'string') setBiz(ctx.biz);
+            if (typeof ctx.svc  === 'string') setSvc(ctx.svc);
+            if (typeof ctx.name === 'string') setName(ctx.name);
+          }
+          sessionStorage.removeItem('jpwColdCallContext');
+        }
+      } catch (e) { /* malformed handoff — skip */ }
 
-  // Debounced notes save
-  React.useEffect(() => {
-    const t = setTimeout(() => {
-      const ok = _lsSet('jpw_cc_notes', notes);
-      if (ok) setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      else setStorageWarning('Notes not saved — browser storage is full or blocked.');
+      hydrated.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  // Debounced save helper — single PATCH-like PUT with the changed bag of fields.
+  const _saveDebounced = React.useCallback((patch) => {
+    if (!hydrated.current) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        await axios.put(CC_API, patch, { headers: { Authorization: `Bearer ${token}` } });
+        setStorageWarning('');
+        setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      } catch (e) {
+        setStorageWarning(`Save failed — ${e.response?.data?.message || e.message}`);
+      }
     }, 400);
     return () => clearTimeout(t);
-  }, [notes]);
+  }, [token]);
+
+  React.useEffect(() => _saveDebounced({ biz }),       [biz, _saveDebounced]);
+  React.useEffect(() => _saveDebounced({ svc }),       [svc, _saveDebounced]);
+  React.useEffect(() => _saveDebounced({ name }),      [name, _saveDebounced]);
+  React.useEffect(() => _saveDebounced({ overrides }), [overrides, _saveDebounced]);
+
+  // Notes save through the same debounced PUT path as the other fields.
+  React.useEffect(() => _saveDebounced({ notes }), [notes, _saveDebounced]);
 
   const fill = React.useCallback((text) => {
     return text
