@@ -1106,8 +1106,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         }}>
           {meta.label}
         </Box>
-        {/* Paid badge */}
-        {project.paid && (
+        {/* Payment badge: PAID > PROCESSING > nothing.
+            Set by the QuickBooks sync — open balance → PROCESSING,
+            Balance 0 → PAID. Manual checkbox in the drawer still works. */}
+        {project.paid ? (
           <Box sx={{
             position: 'absolute', bottom: 8, right: 8,
             bgcolor: 'rgba(74,222,128,0.18)', color: B.green,
@@ -1116,7 +1118,16 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
           }}>
             PAID
           </Box>
-        )}
+        ) : project.paymentInProgress ? (
+          <Box sx={{
+            position: 'absolute', bottom: 8, right: 8,
+            bgcolor: 'rgba(251,191,36,0.18)', color: '#fbbf24',
+            px: 1, py: 0.3, borderRadius: 1,
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+          }}>
+            PROCESSING
+          </Box>
+        ) : null}
         {/* Client logo (corner) */}
         {logo && (
           <Box sx={{
