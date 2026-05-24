@@ -564,7 +564,10 @@ export default function RoadTripTab({ token }) {
   const leadsByExtIdRef  = React.useRef(new Map());
   const heatmapPointsRef = React.useRef([]); // dispensary lat/lngs for heatmap
   const [heatmapOn, setHeatmapOn] = React.useState(false);
-  const customMarkersRef = React.useRef([]);
+  // Map<item._id, mapboxgl.Marker> — keyed so we can diff additions / removals
+  // without wiping every marker on each savedItems change (cause of the visual
+  // flicker the audit caught).
+  const customMarkersRef = React.useRef(new Map());
   const [layerTilesOpen, setLayerTilesOpen] = React.useState(true);
   const [savedItems, setSavedItems] = React.useState([]);
   const [toast, setToast] = React.useState(null);
@@ -609,26 +612,41 @@ export default function RoadTripTab({ token }) {
     leadsByExtIdRef.current = m;
   }, [savedItems]);
 
-  // Sync custom-stop diamond markers on the map.
+  // Sync custom-stop diamond markers on the map. Keyed diff (not wipe + add)
+  // so editing one stop doesn't recreate every marker.
   React.useEffect(() => {
     if (!mapReady || !mapRef.current) return;
-    for (const m of customMarkersRef.current) { try { m.remove(); } catch {} }
-    customMarkersRef.current = [];
+    const existing = customMarkersRef.current;          // Map<id, marker>
+    const wanted = new Map();
     for (const item of savedItems) {
       if (item.source !== 'manual') continue;
       if (!isFinite(item.lat) || !isFinite(item.lng)) continue;
-      const el = buildCustomMarkerEl(item);
-      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
-        .setLngLat([item.lng, item.lat])
-        .addTo(mapRef.current);
-      const popup = new mapboxgl.Popup({ offset: 16, closeButton: true, closeOnClick: true });
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        popup.setLngLat([item.lng, item.lat])
-             .setDOMContent(buildCustomStopPopup(item))
-             .addTo(mapRef.current);
-      });
-      customMarkersRef.current.push(marker);
+      wanted.set(String(item._id), item);
+    }
+    // Drop markers whose source items are gone.
+    for (const [id, marker] of existing) {
+      if (!wanted.has(id)) { try { marker.remove(); } catch {} existing.delete(id); }
+    }
+    // Add new + reposition moved.
+    for (const [id, item] of wanted) {
+      const m = existing.get(id);
+      if (!m) {
+        const el = buildCustomMarkerEl(item);
+        const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([item.lng, item.lat])
+          .addTo(mapRef.current);
+        const popup = new mapboxgl.Popup({ offset: 16, closeButton: true, closeOnClick: true });
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          popup.setLngLat([item.lng, item.lat])
+               .setDOMContent(buildCustomStopPopup(item))
+               .addTo(mapRef.current);
+        });
+        existing.set(id, marker);
+      } else {
+        const cur = m.getLngLat();
+        if (cur.lng !== item.lng || cur.lat !== item.lat) m.setLngLat([item.lng, item.lat]);
+      }
     }
   }, [savedItems, mapReady]);
 
@@ -725,6 +743,12 @@ export default function RoadTripTab({ token }) {
     return () => {
       try { mapRef.current?.remove(); } catch {}
       mapRef.current = null;
+      // Don't leave the hold-to-confirm delete timer firing after unmount —
+      // it would call setPendingDeleteId on an unmounted component.
+      if (pendingDeleteTimerRef.current) {
+        clearTimeout(pendingDeleteTimerRef.current);
+        pendingDeleteTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
