@@ -95,15 +95,24 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
       if (raw) { seed = JSON.parse(raw); restored = true; }
     } catch (_) {}
     if (!seed) {
-      seed = project.confirmation && Object.keys(project.confirmation).length > 0
-        ? project.confirmation
-        : {
+      if (project.confirmation && Object.keys(project.confirmation).length > 0) {
+        seed = project.confirmation;
+      } else {
+        // Fresh seed. Distribute the project's auto-matched mockups across
+        // the seeded items in order — so a 3-line quote with 3 mockups in
+        // jpstudio comes up with each item pre-attached to its mockup.
+        const matchedNums = inferMockupNumsFor(project, mockups);
+        const items = (project.quoteLines || []).map((line, i) =>
+          ({ ...seedItemFromQuote(line), mockupNum: matchedNums[i] || '' }),
+        );
+        seed = {
           orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
           orderDate:   project.orderDate || new Date().toISOString(),
           shipping:    { name: project.companyName || '', attention: project.clientName || '', streetAddress: '', cityStateZip: '' },
-          items:       (project.quoteLines || []).map(seedItemFromQuote),
+          items,
           customLines: [],
         };
+      }
     }
     setLocal(JSON.parse(JSON.stringify(seed)));
     setDirty(false);
@@ -883,6 +892,48 @@ function SpecRow({ label, value }) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// For a fresh confirmation seed: figure out which jpstudio mockups belong to
+// this project (by explicit mockupNumbers, falling back to client-name slug)
+// and return their #s in a sensible order so we can distribute them across
+// the seeded items. Mirrors OrderTracker.autoMockupsFor.
+function inferMockupNumsFor(project, mockups) {
+  const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+  const byNorm = {};
+  (mockups || []).forEach(m => {
+    const k = norm(m.pageState && m.pageState.mockupNum);
+    if (k) byNorm[k] = m;
+  });
+  const out = [];
+  const seen = new Set();
+  // 1) Explicit mockupNumbers come first, in the order saved on the project.
+  (project.mockupNumbers || []).forEach(n => {
+    const k = norm(n);
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push(n);
+  });
+  // 2) Auto-matched by client/title slug.
+  const projSlugs = [project.companyName, project.clientName].map(slug).filter(Boolean);
+  (mockups || []).forEach(m => {
+    const k = norm(m.pageState && m.pageState.mockupNum);
+    if (!k || seen.has(k)) return;
+    const mClient = slug((m.pageState && m.pageState.client) || m.client || '');
+    const mTitle  = slug(String(m.name || '').replace(/\s+merch\s*$/i, ''));
+    const exact = projSlugs.some(ps => ps && (ps === mClient || ps === mTitle));
+    const fuzzy = !exact && projSlugs.some(ps => {
+      if (!ps || ps.length < 4) return false;
+      const cand = [mClient, mTitle].filter(c => c && c.length >= 4);
+      return cand.some(c => ps.startsWith(c) || c.startsWith(ps) || ps.includes(c) || c.includes(ps));
+    });
+    if (exact || fuzzy) {
+      seen.add(k);
+      out.push(m.pageState.mockupNum);
+    }
+  });
+  return out;
+}
 
 function seedItemFromQuote(line) {
   // Sensible default: pull style / brand / color / print from quote, leave
