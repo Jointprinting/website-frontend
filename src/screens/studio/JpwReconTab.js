@@ -25,7 +25,7 @@ import {
   Box, Stack, Typography, Chip, Button, IconButton, TextField, MenuItem,
   Paper, Drawer, Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   CircularProgress, Tooltip, LinearProgress, InputAdornment,
-  ToggleButton, ToggleButtonGroup,
+  ToggleButton, ToggleButtonGroup, Checkbox, ListItemText,
 } from '@mui/material';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -190,9 +190,10 @@ function KpiTile({ label, value, sub, accent }) {
   );
 }
 
-// Checklist of audit signals. ✓ = present, ✗ = missing, "?" = not audited.
-// Grouped into Conversion / SEO / Trust so the user can read at a glance
-// which bucket is weak.
+// Checklist of audit signals. ✓ = present, ✗ = missing, "—" = not audited.
+// Grouped so the user can read at a glance which bucket is weak. Some
+// rows have a `derived` function that returns the value to display — this
+// lets us combine raw audit fields (e.g. viewport tag exists AND is valid).
 const AUDIT_GROUPS = [
   ['Conversion', [
     ['has_click_to_call',    'Click-to-call link'],
@@ -200,20 +201,34 @@ const AUDIT_GROUPS = [
     ['has_quote_cta',        'Quote / "free estimate" CTA'],
     ['has_contact_form',     'Contact form'],
     ['has_cta_above_fold',   'CTA above the fold'],
+    ['has_online_booking',   'Online booking installed'],
+    ['has_live_chat',        'Live chat widget'],
   ]],
   ['SEO & local', [
     ['has_title',                'Title tag'],
     ['has_meta_description',     'Meta description'],
     ['has_h1',                   'H1 heading'],
-    ['has_mobile_viewport',      'Mobile viewport'],
-    ['has_localbusiness_schema', 'LocalBusiness schema'],
+    [null, 'Mobile viewport (valid)', (a) =>
+      a.has_mobile_viewport == null ? null
+      : (a.has_mobile_viewport && a.viewport_valid !== false)],
+    [null, 'LocalBusiness schema (with phone/address)', (a) =>
+      a.has_localbusiness_schema == null ? null
+      : (a.has_localbusiness_schema && a.localbusiness_schema_valid !== false)],
     ['has_service_area_terms',   'Service-area towns listed'],
     ['has_google_map_embed',     'Google map embed'],
+    ['has_sitemap',              'sitemap.xml present'],
+    ['has_robots_txt',           'robots.txt present'],
   ]],
-  ['Trust & proof', [
+  ['Trust & polish', [
     ['has_reviews_on_site',  'Reviews / testimonials on site'],
     ['has_gallery',          'Gallery / before-after'],
     ['ssl_valid',            'SSL (https)'],
+    ['has_favicon',          'Favicon'],
+    ['has_og_tags',          'Open Graph tags (social share)'],
+    ['has_twitter_card',     'Twitter card'],
+    [null, 'No mixed content', (a) =>
+      a.mixed_content_count == null ? null : (a.mixed_content_count || 0) === 0],
+    [null, 'Forms post over HTTPS', (a) => a.forms_post_https],
   ]],
   ['Marketing tells', [
     ['has_tracking_pixels',         'Tracking pixels installed'],
@@ -229,20 +244,43 @@ function CheckMark({ value }) {
 
 function AuditChecklist({ audit }) {
   if (!audit) return null;
+  const techStack = Array.isArray(audit.tech_stack) ? audit.tech_stack : [];
+  const socials   = Array.isArray(audit.social_links) ? audit.social_links : [];
   return (
     <Box>
-      {/* Header line: status, CMS, copyright */}
-      <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+      {/* Header line: status, CMS, copyright, multi-page, fetch time */}
+      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
         <Chip size="small" label={`HTTP ${audit.status_code || '—'}`} sx={{
           fontFamily: MONO, fontSize: 10, height: 20,
           bgcolor: audit.loads_successfully ? `${TERM.green}20` : `${TERM.red}20`,
           color: audit.loads_successfully ? TERM.green : TERM.red,
           border: `1px solid ${audit.loads_successfully ? TERM.green : TERM.red}40`,
         }} />
-        {audit.cms_detected && (
-          <Chip size="small" label={audit.cms_detected} sx={{
+        {audit.fetch_duration_ms != null && (
+          <Chip size="small" label={`${audit.fetch_duration_ms}ms`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: audit.fetch_duration_ms > 3000 ? `${TERM.amber}20` : TERM.greenSoft,
+            color: audit.fetch_duration_ms > 3000 ? TERM.amber : TERM.text,
+            border: `1px solid ${audit.fetch_duration_ms > 3000 ? TERM.amber : TERM.borderDim}40`,
+          }} />
+        )}
+        {audit.pages_audited > 1 && (
+          <Chip size="small" label={`${audit.pages_audited} pages`} sx={{
             fontFamily: MONO, fontSize: 10, height: 20,
             bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.cms_detected && (
+          <Chip size="small" label={audit.wp_version
+            ? `${audit.cms_detected} ${audit.wp_version}` : audit.cms_detected} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.is_default_template && (
+          <Chip size="small" label={audit.is_default_template} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: `${TERM.amber}20`, color: TERM.amber, border: `1px solid ${TERM.amber}40`,
           }} />
         )}
         {audit.copyright_year && (
@@ -259,6 +297,30 @@ function AuditChecklist({ audit }) {
             bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
           }} />
         )}
+        {audit.sitemap_url_count > 0 && (
+          <Chip size="small" label={`sitemap: ${audit.sitemap_url_count} urls`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+          }} />
+        )}
+        {audit.chat_widget && (
+          <Chip size="small" label={`chat: ${audit.chat_widget}`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
+          }} />
+        )}
+        {audit.appointment_tool && (
+          <Chip size="small" label={`booking: ${audit.appointment_tool}`} sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: TERM.greenSoft, color: TERM.green, border: `1px solid ${TERM.green}40`,
+          }} />
+        )}
+        {audit.lead_phone_matches_site === false && (audit.phones_found || []).length > 0 && (
+          <Chip size="small" label="lead phone not on site" sx={{
+            fontFamily: MONO, fontSize: 10, height: 20,
+            bgcolor: `${TERM.amber}20`, color: TERM.amber, border: `1px solid ${TERM.amber}40`,
+          }} />
+        )}
       </Stack>
       {audit.notes && (
         <Alert severity="info" sx={{ mb: 1, fontFamily: MONO, fontSize: 11, py: 0.4 }}>
@@ -271,17 +333,58 @@ function AuditChecklist({ audit }) {
             fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
             fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
           }}>{group}</Typography>
-          {items.map(([key, label]) => (
-            <Stack key={key} direction="row" alignItems="center" spacing={0.8} sx={{ mb: 0.15 }}>
-              <Box sx={{ width: 12, textAlign: 'center' }}><CheckMark value={audit[key]} /></Box>
-              <Typography sx={{
-                fontFamily: MONO, fontSize: 11.5,
-                color: audit[key] === false ? TERM.amber : TERM.text,
-              }}>{label}</Typography>
-            </Stack>
-          ))}
+          {items.map(([key, label, derived], i) => {
+            const value = derived ? derived(audit) : audit[key];
+            return (
+              <Stack key={key || `${group}-${i}`} direction="row" alignItems="center" spacing={0.8} sx={{ mb: 0.15 }}>
+                <Box sx={{ width: 12, textAlign: 'center' }}><CheckMark value={value} /></Box>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 11.5,
+                  color: value === false ? TERM.amber : TERM.text,
+                }}>{label}</Typography>
+              </Stack>
+            );
+          })}
         </Box>
       ))}
+      {(techStack.length > 0 || socials.length > 0) && (
+        <Box sx={{ mt: 1 }}>
+          {techStack.length > 0 && (
+            <Box sx={{ mb: 0.6 }}>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
+                fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
+              }}>Tech stack</Typography>
+              <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                {techStack.map((t) => (
+                  <Chip key={t} size="small" label={t} sx={{
+                    fontFamily: MONO, fontSize: 10, height: 20,
+                    bgcolor: /^jQuery 1\./.test(t) ? `${TERM.amber}20` : TERM.greenSoft,
+                    color: /^jQuery 1\./.test(t) ? TERM.amber : TERM.text,
+                    border: `1px solid ${TERM.borderDim}`,
+                  }} />
+                ))}
+              </Stack>
+            </Box>
+          )}
+          {socials.length > 0 && (
+            <Box>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: TERM.muted,
+                fontWeight: 700, textTransform: 'uppercase', mb: 0.4,
+              }}>Social presence</Typography>
+              <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                {socials.map((s) => (
+                  <Chip key={s} size="small" label={s} sx={{
+                    fontFamily: MONO, fontSize: 10, height: 20,
+                    bgcolor: TERM.greenSoft, color: TERM.text, border: `1px solid ${TERM.borderDim}`,
+                  }} />
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -903,6 +1006,9 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
   const [usage, setUsage] = React.useState(null);
   const [status, setStatus] = React.useState(null);
   const [justStarted, setJustStarted] = React.useState(false);
+  // Optional overrides — empty arrays = smart queue (today's default).
+  const [pickedCats, setPickedCats]   = React.useState([]);
+  const [pickedTowns, setPickedTowns] = React.useState([]);
 
   // Reset transient UI state when dialog opens.
   React.useEffect(() => {
@@ -915,7 +1021,10 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
 
   // Poll status while the dialog is open. 2s is responsive but not abusive.
   // We also tell the parent (`onDone`) every time the sweep transitions to a
-  // terminal state so it can refresh the leads list.
+  // terminal state so it can refresh the leads list — and refresh OUR
+  // own `usage` so the budget banner reflects the calls the sweep just
+  // burned (otherwise the dialog would still say "0 / 200" after a
+  // 200-call run and let the user re-press the button).
   const lastStatusRef = React.useRef(null);
   React.useEffect(() => {
     if (!open) return;
@@ -926,9 +1035,7 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
         const prev = lastStatusRef.current?.status;
         const cur = next?.status;
         if (prev === 'running' && (cur === 'completed' || cur === 'stopped' || cur === 'failed')) {
-          // Sweep just finished — refresh the parent's leads + stats so the
-          // new audits + grades show up immediately when the user closes the
-          // dialog.
+          api.usage().then(setUsage).catch(() => {});
           if (typeof onDone === 'function') onDone();
         }
         lastStatusRef.current = next;
@@ -941,28 +1048,39 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
 
   const isRunning = status?.status === 'running';
   const isFinished = status && ['completed', 'stopped', 'failed'].includes(status.status);
+  const bgAudit = status?.bg_audit;
+  const auditing = bgAudit && bgAudit.status === 'running' && bgAudit.total > 0;
+  const auditPct = (bgAudit && bgAudit.total)
+    ? Math.min(100, Math.round(100 * (bgAudit.audited || 0) / bgAudit.total))
+    : 0;
 
-  // Only block when the daily Places API budget is actually exhausted.
-  // The previous "ranToday" gate (block after one completed sweep) caused
-  // problems: if a sweep completed early due to a bug or partial halt
-  // (e.g., the parseInt-fallback that ran 30 pairs instead of ~100), the
-  // user lost access to the rest of their daily budget. Budget-only is
-  // simpler and naturally enforces "one sweep a day" — when full budget
-  // is used in one sweep, there's nothing left and the button blocks.
+  // Block when the daily Places API budget is exhausted. Two signals:
+  //   1) The usage snapshot says we're at/near the cap.
+  //   2) The most recent sweep halted explicitly because of the cap.
+  // (2) catches the stale-usage window: between the moment the sweep
+  // halts and the moment /api/jpw/usage reports the updated counter.
+  // Without it the "Run daily sweep" button briefly comes back after a
+  // budget-halted sweep.
   const remainingBudget = usage ? Math.max(0, (usage.daily_cap || 200) - (usage.places_calls_today || 0)) : null;
   const budgetExhausted = remainingBudget !== null && remainingBudget < 10;
-  const blocked = budgetExhausted;
+  const statusSaysBudget = !isRunning
+    && /cap reached|budget|daily places api/i.test(status?.halted_reason || '');
+  const blocked = budgetExhausted || statusSaysBudget;
   const blockReason = "Daily Google Places budget is used up. Resets at midnight.";
 
   const submit = async () => {
     setBusy(true); setErr('');
     setJustStarted(false);
     try {
-      // Smart queue defaults — no inputs, no decisions. Backend computes
-      // pair count from remaining daily API budget when max is omitted.
-      const r = await api.sweepPlaces({});
+      const body = {};
+      if (pickedCats.length)  body.categories = pickedCats;
+      if (pickedTowns.length) body.towns      = pickedTowns;
+      const r = await api.sweepPlaces(body);
       if (!r.ok) {
         setErr(r.message || 'Could not start sweep.');
+        // The backend's own budget check fired — refresh usage so the
+        // banner + button gating matches reality immediately.
+        if (r.budget_exhausted) api.usage().then(setUsage).catch(() => {});
       } else {
         setJustStarted(true);
         const next = await api.sweepStatus();
@@ -1046,6 +1164,116 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
           </Alert>
         )}
 
+        {/* Targeting — pick specific categories / towns, or leave blank
+            for the smart queue. Hidden while a sweep is mid-run (the
+            queue is already locked in) and when the daily budget is
+            blocked (nothing to start). */}
+        {!isRunning && !blocked && reference && (
+          <Paper elevation={0} sx={{
+            bgcolor: TERM.panel, border: `1px solid ${TERM.borderDim}`,
+            borderRadius: 1.5, p: 1.5, mb: 2,
+          }}>
+            <Typography sx={{
+              fontFamily: MONO, fontSize: 10, letterSpacing: 1.2, color: TERM.muted,
+              fontWeight: 600, textTransform: 'uppercase', mb: 1,
+            }}>Targeting (optional)</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+              <TextField
+                select
+                size="small"
+                label={pickedCats.length ? `Categories (${pickedCats.length})` : 'Categories — all high-tier'}
+                value={pickedCats}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPickedCats(typeof v === 'string' ? v.split(',') : v);
+                }}
+                SelectProps={{
+                  multiple: true,
+                  renderValue: (sel) => sel.length === 0
+                    ? <Box component="span" sx={{ color: TERM.muted }}>All high-tier</Box>
+                    : sel.join(', '),
+                  MenuProps: {
+                    PaperProps: { sx: { bgcolor: TERM.panel, maxHeight: 320, border: `1px solid ${TERM.borderDim}` } },
+                  },
+                }}
+                sx={{ ...darkInputSx, flex: 1 }}
+              >
+                {(reference.categories || [])
+                  .filter((c) => c.tier !== 'disqualify')
+                  .map((c) => (
+                    <MenuItem key={c.name} value={c.name} sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text }}>
+                      <Checkbox
+                        checked={pickedCats.includes(c.name)}
+                        size="small"
+                        sx={{ color: TERM.muted, '&.Mui-checked': { color: TERM.green }, p: 0.5, mr: 1 }}
+                      />
+                      <ListItemText
+                        primary={c.name}
+                        secondary={c.tier}
+                        primaryTypographyProps={{ sx: { fontFamily: MONO, fontSize: 12 } }}
+                        secondaryTypographyProps={{ sx: { fontFamily: MONO, fontSize: 10, color: TERM.muted } }}
+                      />
+                    </MenuItem>
+                  ))}
+              </TextField>
+              <TextField
+                select
+                size="small"
+                label={pickedTowns.length ? `Towns (${pickedTowns.length})` : 'Towns — all SJ'}
+                value={pickedTowns}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPickedTowns(typeof v === 'string' ? v.split(',') : v);
+                }}
+                SelectProps={{
+                  multiple: true,
+                  renderValue: (sel) => sel.length === 0
+                    ? <Box component="span" sx={{ color: TERM.muted }}>All SJ towns</Box>
+                    : sel.join(', '),
+                  MenuProps: {
+                    PaperProps: { sx: { bgcolor: TERM.panel, maxHeight: 320, border: `1px solid ${TERM.borderDim}` } },
+                  },
+                }}
+                sx={{ ...darkInputSx, flex: 1 }}
+              >
+                {(reference.towns || []).map((t) => (
+                  <MenuItem key={t} value={t} sx={{ fontFamily: MONO, fontSize: 12, color: TERM.text }}>
+                    <Checkbox
+                      checked={pickedTowns.includes(t)}
+                      size="small"
+                      sx={{ color: TERM.muted, '&.Mui-checked': { color: TERM.green }, p: 0.5, mr: 1 }}
+                    />
+                    <ListItemText
+                      primary={t}
+                      primaryTypographyProps={{ sx: { fontFamily: MONO, fontSize: 12 } }}
+                    />
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+            {(pickedCats.length > 0 || pickedTowns.length > 0) && (
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
+                  Will run {(pickedCats.length || (reference.categories || []).filter((c) => c.tier === 'high').length) *
+                            (pickedTowns.length || (reference.towns || []).length)} pair
+                  {((pickedCats.length || 1) * (pickedTowns.length || 1)) === 1 ? '' : 's'}, capped at remaining API budget.
+                </Typography>
+                <Box sx={{ flex: 1 }} />
+                <Button
+                  size="small"
+                  onClick={() => { setPickedCats([]); setPickedTowns([]); }}
+                  sx={{ color: TERM.muted, fontFamily: MONO, fontSize: 10.5, minWidth: 0 }}
+                >Clear</Button>
+              </Stack>
+            )}
+            {(pickedCats.length === 0 && pickedTowns.length === 0) && (
+              <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, mt: 1 }}>
+                Leave blank to use the smart queue (least-recently-run pairs across all of SJ).
+              </Typography>
+            )}
+          </Paper>
+        )}
+
         {/* Progress card — hide entirely when blocked. If today's budget
             is used up and the last sweep state is a no-op "0/1 STOPPED"
             (the user clicked when nothing could run), showing that as a
@@ -1114,6 +1342,45 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
             )}
           </Paper>
         )}
+
+        {/* Background audit indicator — runs after sweep creates new leads.
+            Tells the user "leads are showing up but their Pain score is
+            still pending" so they know to come back in a minute instead
+            of treating the grades as final. */}
+        {(auditing || (bgAudit && bgAudit.status === 'completed' && (justStarted || isFinished))) && (
+          <Paper elevation={0} sx={{
+            bgcolor: TERM.panel, border: `1px solid ${auditing ? TERM.amber + '60' : TERM.borderDim}`,
+            borderRadius: 1.5, p: 1.5, mb: 1,
+          }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 0.5 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: TERM.text }}>
+                {auditing ? (
+                  <>Auditing websites <Box component="span" sx={{ color: TERM.muted, fontWeight: 400 }}>
+                    · {bgAudit.audited || 0} / {bgAudit.total || 0}</Box></>
+                ) : (
+                  <>✓ Audited {bgAudit?.audited || 0} site{(bgAudit?.audited || 0) === 1 ? '' : 's'}</>
+                )}
+              </Typography>
+              {auditing && (
+                <CircularProgress size={12} sx={{ color: TERM.amber }} />
+              )}
+            </Stack>
+            <LinearProgress
+              variant="determinate"
+              value={auditing ? auditPct : 100}
+              sx={{
+                height: 4, borderRadius: 2,
+                bgcolor: 'rgba(255,255,255,0.05)',
+                '& .MuiLinearProgress-bar': { bgcolor: auditing ? TERM.amber : TERM.green },
+              }}
+            />
+            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, mt: 0.5 }}>
+              {auditing
+                ? 'New leads are already in the queue. Grades update as each audit finishes.'
+                : 'Grades and Pain scores reflect the latest audits.'}
+            </Typography>
+          </Paper>
+        )}
       </DialogContent>
       <DialogActions sx={{ borderTop: `1px solid ${TERM.borderDim}`, px: 3, py: 1.5 }}>
         <Button onClick={onClose} sx={{ color: TERM.muted, fontFamily: MONO }}>
@@ -1126,9 +1393,13 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
             as a fallback in case the auto-start from the toolbar didn't
             fire for some reason. */}
         {!isRunning && !blocked && (
-          <Button onClick={submit} disabled={busy} variant="contained"
-            sx={{ bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700, '&:hover': { bgcolor: '#3ecb6f' }}}>
-            {busy ? <CircularProgress size={18} /> : 'Run daily sweep'}
+          <Button onClick={submit} disabled={busy || justStarted} variant="contained"
+            sx={{
+              bgcolor: TERM.green, color: TERM.greenDk, fontFamily: MONO, fontWeight: 700,
+              '&:hover': { bgcolor: '#3ecb6f' },
+              '&.Mui-disabled': { bgcolor: TERM.green + '60', color: TERM.greenDk },
+            }}>
+            {(busy || justStarted) ? <CircularProgress size={18} sx={{ color: TERM.greenDk }} /> : 'Run daily sweep'}
           </Button>
         )}
       </DialogActions>
@@ -1292,13 +1563,24 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
 
         <Box sx={{ flex: 1 }} />
 
-        <TextField size="small" placeholder="Search name / phone / city" sx={{ ...darkInputSx, width: { xs: '100%', sm: 240 }, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
+        <TextField size="small" placeholder="Search name / phone / city / category" sx={{ ...darkInputSx, width: { xs: '100%', sm: 280 }, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
           value={search} onChange={(e) => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: TERM.muted }} /></InputAdornment> }}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: TERM.muted }} /></InputAdornment>,
+            endAdornment: search ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearch('')} sx={{ color: TERM.muted, p: 0.25 }}>
+                  <CloseIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          }}
         />
-        <IconButton onClick={loadAll} sx={{ color: TERM.muted, border: `1px solid ${TERM.borderDim}`, borderRadius: 1 }}>
-          <RefreshIcon sx={{ fontSize: 18 }} />
-        </IconButton>
+        <Tooltip title="Refresh">
+          <IconButton onClick={loadAll} sx={{ color: TERM.muted, border: `1px solid ${TERM.borderDim}`, borderRadius: 1 }}>
+            <RefreshIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
         {selectedIds.size > 0 && (
           <>
             <Button size="small" startIcon={<SendIcon sx={{ fontSize: 14 }} />}
@@ -1428,6 +1710,94 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
             </Paper>
           ) : (
             <Stack spacing={0.75}>
+              {/* Select-all bar — click the box to toggle every visible lead,
+                  or use the chip buttons for the common cases (all
+                  unpushed, A+/A only). Keeps the user in control without
+                  forcing 100 row-clicks. */}
+              <Paper elevation={0} sx={{
+                bgcolor: TERM.panelLite, border: `1px solid ${TERM.borderDim}`,
+                borderRadius: 1.25, px: 1.2, py: 0.8,
+              }}>
+                <Stack direction="row" spacing={1.2} alignItems="center" flexWrap="wrap" useFlexGap>
+                  {(() => {
+                    const visibleIds = filteredLeads.map((l) => l._id);
+                    const allSel = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+                    const someSel = !allSel && visibleIds.some((id) => selectedIds.has(id));
+                    return (
+                      <Box
+                        onClick={() => {
+                          setSelectedIds((cur) => {
+                            const next = new Set(cur);
+                            if (allSel) visibleIds.forEach((id) => next.delete(id));
+                            else        visibleIds.forEach((id) => next.add(id));
+                            return next;
+                          });
+                        }}
+                        sx={{
+                          flexShrink: 0, width: 18, height: 18, borderRadius: 0.5,
+                          border: `1.5px solid ${(allSel || someSel) ? TERM.green : TERM.borderDim}`,
+                          bgcolor: allSel ? TERM.green : (someSel ? `${TERM.green}40` : 'transparent'),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: TERM.greenDk, fontFamily: MONO, fontSize: 12, fontWeight: 700,
+                          cursor: 'pointer',
+                          '&:hover': { borderColor: TERM.green },
+                        }}
+                      >{allSel ? '✓' : (someSel ? '−' : '')}</Box>
+                    );
+                  })()}
+                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text, fontWeight: 700 }}>
+                    {selectedIds.size > 0
+                      ? `${selectedIds.size} selected`
+                      : `${filteredLeads.length} lead${filteredLeads.length === 1 ? '' : 's'}`}
+                  </Typography>
+                  <Box sx={{ height: 14, width: '1px', bgcolor: TERM.borderDim }} />
+                  <Chip
+                    size="small"
+                    label="Select all unpushed"
+                    onClick={() => {
+                      const ids = filteredLeads.filter((l) => !l.pushed_to_spider_at).map((l) => l._id);
+                      setSelectedIds(new Set(ids));
+                    }}
+                    sx={{
+                      bgcolor: 'transparent', color: TERM.green, border: `1px solid ${TERM.green}40`,
+                      fontFamily: MONO, fontSize: 10.5, height: 22,
+                      '&:hover': { bgcolor: TERM.greenSoft },
+                    }}
+                  />
+                  <Chip
+                    size="small"
+                    label="Select A+/A"
+                    onClick={() => {
+                      const ids = filteredLeads
+                        .filter((l) => ['A+', 'A'].includes(l.lead_score?.grade))
+                        .map((l) => l._id);
+                      setSelectedIds(new Set(ids));
+                    }}
+                    sx={{
+                      bgcolor: 'transparent', color: TERM.green, border: `1px solid ${TERM.green}40`,
+                      fontFamily: MONO, fontSize: 10.5, height: 22,
+                      '&:hover': { bgcolor: TERM.greenSoft },
+                    }}
+                  />
+                  {selectedIds.size > 0 && (
+                    <Chip
+                      size="small"
+                      label="Clear"
+                      onClick={() => setSelectedIds(new Set())}
+                      sx={{
+                        bgcolor: 'transparent', color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+                        fontFamily: MONO, fontSize: 10.5, height: 22,
+                      }}
+                    />
+                  )}
+                  <Box sx={{ flex: 1 }} />
+                  {search && (
+                    <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted }}>
+                      filtered by "{search}"
+                    </Typography>
+                  )}
+                </Stack>
+              </Paper>
               {filteredLeads.map((l) => (
                 <LeadRow key={l._id} lead={l} onOpen={setSelected}
                   selected={selectedIds.has(l._id)}

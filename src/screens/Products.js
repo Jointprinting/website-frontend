@@ -572,13 +572,22 @@ const [loading,    setLoading]    = useState(true);
                   onPointerDown={(e) => {
                     // Touch uses native horizontal scroll — only intercept mouse.
                     if (e.pointerType !== 'mouse') return;
+                    // Left button only — right-click / middle-click shouldn't
+                    // start a drag.
+                    if (e.button !== 0) return;
                     const el = marqueeRef.current;
                     if (!el) return;
                     isDraggingRef.current = true;
                     dragMovedRef.current = false;
                     dragStartXRef.current = e.clientX;
                     dragStartScrollRef.current = el.scrollLeft;
-                    el.setPointerCapture?.(e.pointerId);
+                    // NOTE: we deliberately do NOT call setPointerCapture
+                    // here — in some browsers, capturing the pointer on the
+                    // marquee suppresses the synthetic `click` event that
+                    // would otherwise fire on the child Paper card. Without
+                    // capture, dragging out of the marquee just stops the
+                    // scroll, which is acceptable. Clicks on cards work
+                    // reliably.
                     el.style.cursor = 'grabbing';
                   }}
                   onPointerMove={(e) => {
@@ -586,17 +595,30 @@ const [loading,    setLoading]    = useState(true);
                     const el = marqueeRef.current;
                     if (!isDraggingRef.current || !el) return;
                     const dx = e.clientX - dragStartXRef.current;
-                    if (Math.abs(dx) > 4) dragMovedRef.current = true;
-                    el.scrollLeft = dragStartScrollRef.current - dx;
+                    // 8px threshold — trackpad clicks routinely wiggle 2–5px
+                    // between down and up, which would flip dragMovedRef
+                    // and swallow the card's click handler.
+                    if (Math.abs(dx) > 8) dragMovedRef.current = true;
+                    // Only actually scroll once we've crossed the threshold,
+                    // so a stationary "press" doesn't visibly jitter.
+                    if (dragMovedRef.current) {
+                      el.scrollLeft = dragStartScrollRef.current - dx;
+                    }
                   }}
                   onPointerUp={(e) => {
                     if (e.pointerType !== 'mouse') return;
                     isDraggingRef.current = false;
                     const el = marqueeRef.current;
-                    if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = 'grab'; }
+                    if (el) el.style.cursor = 'grab';
+                    // Clear the drag flag on the next tick so the synthetic
+                    // click event (which fires right after pointerup) still
+                    // sees the correct value, but the flag doesn't survive
+                    // into the next interaction.
+                    setTimeout(() => { dragMovedRef.current = false; }, 0);
                   }}
                   onPointerCancel={() => {
                     isDraggingRef.current = false;
+                    dragMovedRef.current = false;
                     if (marqueeRef.current) marqueeRef.current.style.cursor = 'grab';
                   }}
                   onMouseEnter={() => { isPausedRef.current = true; }}
