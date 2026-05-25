@@ -830,8 +830,7 @@ export default function RoadTripTab({ token }) {
     if (!map) return;
     // Source = live DISPENSARIES layer if loaded, otherwise the user's saved
     // dispensary leads. This lets the heatmap work on mobile without first
-    // having to load the DISPENSARIES layer (which was the user's complaint
-    // that "density doesn't work on mobile").
+    // having to load the DISPENSARIES layer.
     const live = heatmapPointsRef.current;
     const fallback = savedItems
       .filter(s => s.type === 'dispensary' && isFinite(s.lat) && isFinite(s.lng))
@@ -853,27 +852,26 @@ export default function RoadTripTab({ token }) {
       map.addLayer({
         id: HEATMAP_LAYER, type: 'heatmap', source: HEATMAP_SOURCE,
         paint: {
-          // Per-point weight 0.25 so it takes ~4 dispensaries clustered close
-          // to saturate the gradient. Isolated 1-2 pin areas stay yellow/green
-          // instead of turning red.
-          'heatmap-weight': 0.25,
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.35, 12, 1.1],
-          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 18, 10, 32],
-          'heatmap-opacity': 0.7,
+          // Per-point weight 0.4 → 3 dispensaries clustered close to one
+          // another saturate the gradient (≈1.2 density). 1 isolated pin
+          // stays green; 2 nearby = yellow; 3+ = red.
+          'heatmap-weight': 0.4,
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.4, 12, 1.0],
+          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 18, 10, 34],
+          'heatmap-opacity': 0.72,
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
             0,    'rgba(0,0,0,0)',
-            0.1,  'rgba(74,222,128,0.18)',
-            0.35, 'rgba(74,222,128,0.45)',
-            0.6,  'rgba(251,191,36,0.6)',
-            0.85, 'rgba(248,113,113,0.85)',
+            0.15, 'rgba(74,222,128,0.25)',
+            0.45, 'rgba(74,222,128,0.55)',
+            0.7,  'rgba(251,191,36,0.7)',
+            0.9,  'rgba(248,113,113,0.9)',
             1,    'rgba(248,113,113,1)',
           ],
         },
       }, 'waterway-label'); // insert below labels so city names stay readable
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [savedItems]);
 
   const removeHeatmapLayer = React.useCallback(() => {
     const map = mapRef.current;
@@ -2350,19 +2348,13 @@ export default function RoadTripTab({ token }) {
                         </Stack>
                       </Box>
                       {stops.map((item, i) => {
-                        const layerForItem =
-                             item.type === 'dispensary'    ? LAYERS[0]
-                           : item.type === 'coffee'        ? LAYERS[1]
-                           : item.type === 'park_national' || item.type === 'park_state' ? LAYERS[2]
-                           : item.type === 'campground'   ? LAYERS[3]
-                           : LAYERS[0];
                         const isFirst = i === 0;
                         const isLast  = i === stops.length - 1;
                         return (
                           <Box key={item._id}
                             sx={{
                               position: 'relative',
-                              display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 0.75,
+                              display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 0.75,
                               py: 0.6, px: 0.75, mb: 0.25,
                               borderRadius: 0.5,
                               transition: 'all 0.15s ease',
@@ -2378,9 +2370,10 @@ export default function RoadTripTab({ token }) {
                               flyToSaved(item);
                               setEditingStop(prev => prev === item._id ? null : item._id);
                             }}>
-                            <Box sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, color: TERM.muted, minWidth: 16, textAlign: 'right' }}>{i + 1}.</Box>
-                            {/* Score badge for dispensary leads */}
-                            {item.kind === 'lead' && (
+                            <Box sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, color: TERM.muted, minWidth: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}.</Box>
+                            {/* Score badge for dispensary leads — hidden when unset
+                                so unscored rows aren't cluttered with "?". */}
+                            {item.kind === 'lead' && item.score && (
                               <Box sx={{
                                 fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
                                 width: 14, height: 14, borderRadius: '2px', flexShrink: 0,
@@ -2390,12 +2383,14 @@ export default function RoadTripTab({ token }) {
                                 border: `1px solid ${scoreMeta(item.score).color}66`,
                               }}>{scoreMeta(item.score).label}</Box>
                             )}
-                            {/* Indicator: sleep emoji for sleep pins, status bubble for
-                                everything else. Visited = green ✓, called = yellow 📞,
-                                neither = neutral dot in the layer color (no red). */}
+                            {/* Indicator rules:
+                                  sleep pin     → kind-driven emoji
+                                  visited       → green ✓ pill
+                                  called ahead  → amber 📞 pill (only if not yet visited)
+                                  default       → red dot (haven't done anything yet) */}
                             {item.sleepRole ? (
                               <Box sx={{
-                                fontSize: 13, flexShrink: 0, mt: 0.15, lineHeight: 1,
+                                fontSize: 14, flexShrink: 0, lineHeight: 1,
                               }} title={item.sleepRole === 'primary' ? 'Primary sleep' : 'Backup sleep'}>
                                 {item.sleepRole === 'backup' ? '🅿'
                                   : item.sleepKind === 'campground' ? '⛺'
@@ -2406,26 +2401,26 @@ export default function RoadTripTab({ token }) {
                               </Box>
                             ) : item.status === 'visited' ? (
                               <Box sx={{
-                                fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
-                                px: 0.5, height: 14, borderRadius: '7px', flexShrink: 0, mt: 0.25,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25,
+                                fontFamily: MONO, fontSize: 9, fontWeight: 900,
+                                width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 bgcolor: TERM.green, color: TERM.greenDk,
                               }} title="Visited">✓</Box>
                             ) : item.status === 'pre_called' ? (
                               <Box sx={{
-                                fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
-                                px: 0.5, height: 14, borderRadius: '7px', flexShrink: 0, mt: 0.25,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25,
+                                fontSize: 10, flexShrink: 0,
+                                width: 16, height: 16, borderRadius: '50%',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 bgcolor: TERM.amber, color: '#000',
                               }} title="Called ahead">📞</Box>
                             ) : (
                               <Box sx={{
-                                width: 7, height: 7, borderRadius: '50%', flexShrink: 0, mt: 0.45,
-                                bgcolor: layerForItem.color, opacity: 0.6,
-                              }} />
+                                width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                                bgcolor: TERM.red, boxShadow: `0 0 5px ${TERM.red}66`,
+                              }} title="Not visited yet" />
                             )}
                             <Typography sx={{
-                              flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
+                              flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 11, fontWeight: 600,
                               color: item.sleepRole
                                 ? (item.sleepRole === 'backup' ? TERM.amber : TERM.green)
                                 : TERM.text,
@@ -2970,9 +2965,8 @@ export default function RoadTripTab({ token }) {
                         }}
                         onClick={() => { flyToSaved(item); setEditingStop(prev => prev === item._id ? null : item._id); setMobileTab('map'); }}>
                         <Box sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, minWidth: 18, textAlign: 'right' }}>{i + 1}.</Box>
-                        {/* Mobile STOPS row indicator — same rules as desktop list:
-                            sleep pin → emoji; visited → green ✓; called → yellow 📞;
-                            neither → muted layer-color dot. */}
+                        {/* Mobile STOPS row indicator — sleep emoji | green ✓ |
+                            amber 📞 | red dot (default = not done yet). */}
                         {item.sleepRole ? (
                           <Box sx={{ fontSize: 16, flexShrink: 0 }}>
                             {item.sleepRole === 'backup' ? '🅿'
@@ -2984,22 +2978,22 @@ export default function RoadTripTab({ token }) {
                           </Box>
                         ) : item.status === 'visited' ? (
                           <Box sx={{
-                            fontFamily: MONO, fontSize: 10, fontWeight: 900,
-                            px: 0.75, height: 18, borderRadius: '9px', flexShrink: 0,
+                            fontFamily: MONO, fontSize: 11, fontWeight: 900,
+                            width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             bgcolor: TERM.green, color: TERM.greenDk,
                           }}>✓</Box>
                         ) : item.status === 'pre_called' ? (
                           <Box sx={{
-                            fontFamily: MONO, fontSize: 10, fontWeight: 900,
-                            px: 0.75, height: 18, borderRadius: '9px', flexShrink: 0,
+                            fontSize: 11, flexShrink: 0,
+                            width: 20, height: 20, borderRadius: '50%',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             bgcolor: TERM.amber, color: '#000',
                           }}>📞</Box>
                         ) : (
                           <Box sx={{
-                            width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                            bgcolor: TERM.faint,
+                            width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+                            bgcolor: TERM.red, boxShadow: `0 0 6px ${TERM.red}66`,
                           }} />
                         )}
                         <Typography sx={{
