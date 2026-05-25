@@ -2274,6 +2274,20 @@ async function syncFromBackend() {
       for (const ri of remoteItems) {
         if (ri.remoteId && localIds.has(ri.remoteId)) continue;
         const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Date.now() };
+        // Mockups: the cloud copy of pageState has its base64s stripped (see
+        // _trimPageStateForSync). Hydrate the front + back composites from
+        // the top-level `thumbnail` and `data` slots so the canvas has the
+        // garment images to render when the mockup is opened on this device.
+        if (store === 'mockups' && local.pageState && typeof local.pageState === 'object') {
+          if (!local.pageState.frontCompositeBase64 && local.thumbnail) {
+            local.pageState.frontCompositeBase64 = local.thumbnail;
+            if (!local.pageState.frontBlankBase64) local.pageState.frontBlankBase64 = local.thumbnail;
+          }
+          if (!local.pageState.backCompositeBase64 && local.data) {
+            local.pageState.backCompositeBase64 = local.data;
+            if (!local.pageState.backBlankBase64) local.pageState.backBlankBase64 = local.data;
+          }
+        }
         try { await dbSaveRaw(store, local); synced++; } catch(e) {}
       }
     }
@@ -3449,10 +3463,16 @@ async function saveMockupToLibrary() {
     document.getElementById('f-pdfname').value = pg.pdfName;
   }
   const name=pg.title||pg.pdfName||`Mockup ${new Date().toLocaleDateString()}`;
+  // Sync uses these two slots for the front/back composites. `pageState` has
+  // its base64s stripped before being shipped to the server (it'd blow past
+  // Mongo's 16MB doc limit), so without copying the composites into top-level
+  // fields the back side would be lost when the mockup is pulled on another
+  // device — which is exactly the "partial load" bug on mobile.
   const snapshot={
     name,savedAt:Date.now(),
     client: pg.client || '',
-    thumbnail:pg.frontCompositeBase64||pg.frontBlankBase64||null,
+    thumbnail: pg.frontCompositeBase64 || pg.frontBlankBase64 || null,
+    data:      pg.backCompositeBase64  || pg.backBlankBase64  || null,
     pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null})),
   };
   try{
@@ -3654,7 +3674,20 @@ async function loadMockup(id,e) {
   const item=await dbGet('mockups',id);
   if (!item) return;
   saveFormToState();
-  state.pages[state.currentPage]=item.pageState;
+  const ps = item.pageState || {};
+  // Belt-and-suspenders hydration for mockups that came down from the cloud
+  // before front/back composites were both being synced. The top-level
+  // `thumbnail` (front) and `data` (back) are still on the item — pull them
+  // back into pageState so the canvas isn't missing the garment images.
+  if (!ps.frontCompositeBase64 && item.thumbnail) {
+    ps.frontCompositeBase64 = item.thumbnail;
+    if (!ps.frontBlankBase64) ps.frontBlankBase64 = item.thumbnail;
+  }
+  if (!ps.backCompositeBase64 && item.data) {
+    ps.backCompositeBase64 = item.data;
+    if (!ps.backBlankBase64) ps.backBlankBase64 = item.data;
+  }
+  state.pages[state.currentPage]=ps;
   loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
 }
 
