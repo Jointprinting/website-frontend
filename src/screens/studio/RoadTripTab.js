@@ -107,19 +107,10 @@ const MAP_STYLES = [
   { id: 'streets',   label: 'STR',  url: 'mapbox://styles/mapbox/streets-v12' },
 ];
 
-const SALES_STATUSES = [
-  { value: 'planned',          label: 'PLANNED',       color: 'rgba(212,244,221,0.5)' },
-  { value: 'pre_called',       label: 'PRE-CALLED',    color: '#84cc16' },
-  { value: 'visited',          label: 'VISITED',       color: '#fbbf24' },
-  { value: 'buyer_identified', label: 'BUYER ID',      color: '#06b6d4' },
-  { value: 'pitched',          label: 'PITCHED',       color: '#a78bfa' },
-  { value: 'catalog_sent',     label: 'CATALOG SENT',  color: '#a855f7' },
-  { value: 'mockup_needed',    label: 'MOCKUP NEEDED', color: '#f97316' },
-  { value: 'quote_needed',     label: 'QUOTE NEEDED',  color: '#fbbf24' },
-  { value: 'follow_up',        label: 'FOLLOW-UP',     color: '#4ade80' },
-  { value: 'won',              label: 'WON ✓',         color: '#4ade80' },
-  { value: 'dead',             label: 'DEAD',          color: '#6b7280' },
-];
+// Status values still flow through the backend (the GO mode card uses
+// 'visited' / 'pre_called' / 'follow_up' / 'dead'), but the inline editor
+// in the sidebar only ever toggles between 'planned' ↔ 'visited' /
+// 'pre_called' per user request — everything else is tracked in the CRM.
 const SCORE_OPTIONS = [
   { value: 'A', label: 'A', color: '#4ade80' },
   { value: 'B', label: 'B', color: '#fbbf24' },
@@ -338,9 +329,6 @@ function nextAvailDateISO(existingDays) {
   const last = new Date(dates[dates.length - 1] + 'T12:00:00');
   last.setDate(last.getDate() + 1);
   return last.toISOString().slice(0, 10);
-}
-function statusMeta(value) {
-  return SALES_STATUSES.find(s => s.value === value) || SALES_STATUSES[0];
 }
 function scoreMeta(value) {
   return SCORE_OPTIONS.find(s => s.value === value) || SCORE_OPTIONS[3];
@@ -2402,27 +2390,40 @@ export default function RoadTripTab({ token }) {
                                 border: `1px solid ${scoreMeta(item.score).color}66`,
                               }}>{scoreMeta(item.score).label}</Box>
                             )}
-                            <Box role="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (item.kind === 'lead') {
-                                  const idx = SALES_STATUSES.findIndex(s => s.value === item.status);
-                                  const next = SALES_STATUSES[(idx + 1) % SALES_STATUSES.length];
-                                  updateStopField(item, { status: next.value });
-                                } else if (item.customType === 'printer') {
-                                  const PRINTER_S = ['planned','pre_called','visited','won'];
-                                  const idx = PRINTER_S.indexOf(item.status);
-                                  updateStopField(item, { status: PRINTER_S[(idx + 1) % PRINTER_S.length] });
-                                } else {
-                                  updateStopField(item, { status: item.status === 'visited' ? 'planned' : 'visited' });
-                                }
-                              }}
-                              sx={{
-                                width: 7, height: 7, borderRadius: '50%', flexShrink: 0, mt: 0.35,
-                                bgcolor: item.status && item.status !== 'planned' ? statusMeta(item.status).color : layerForItem.color,
-                                cursor: 'pointer', transition: 'transform 0.12s',
-                                '&:hover': { transform: 'scale(1.6)' },
+                            {/* Indicator: sleep emoji for sleep pins, status bubble for
+                                everything else. Visited = green ✓, called = yellow 📞,
+                                neither = neutral dot in the layer color (no red). */}
+                            {item.sleepRole ? (
+                              <Box sx={{
+                                fontSize: 13, flexShrink: 0, mt: 0.15, lineHeight: 1,
+                              }} title={item.sleepRole === 'primary' ? 'Primary sleep' : 'Backup sleep'}>
+                                {item.sleepRole === 'backup' ? '🅿'
+                                  : item.sleepKind === 'campground' ? '⛺'
+                                  : item.sleepKind === 'park_and_ride' ? '🅿'
+                                  : item.sleepKind === 'hotel' ? '🏨'
+                                  : item.sleepKind === 'friend' ? '🏠'
+                                  : '🌙'}
+                              </Box>
+                            ) : item.status === 'visited' ? (
+                              <Box sx={{
+                                fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
+                                px: 0.5, height: 14, borderRadius: '7px', flexShrink: 0, mt: 0.25,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25,
+                                bgcolor: TERM.green, color: TERM.greenDk,
+                              }} title="Visited">✓</Box>
+                            ) : item.status === 'pre_called' ? (
+                              <Box sx={{
+                                fontFamily: MONO, fontSize: 8, fontWeight: 900, letterSpacing: 0.5,
+                                px: 0.5, height: 14, borderRadius: '7px', flexShrink: 0, mt: 0.25,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25,
+                                bgcolor: TERM.amber, color: '#000',
+                              }} title="Called ahead">📞</Box>
+                            ) : (
+                              <Box sx={{
+                                width: 7, height: 7, borderRadius: '50%', flexShrink: 0, mt: 0.45,
+                                bgcolor: layerForItem.color, opacity: 0.6,
                               }} />
+                            )}
                             <Typography sx={{
                               flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
                               color: item.sleepRole
@@ -2430,14 +2431,7 @@ export default function RoadTripTab({ token }) {
                                 : TERM.text,
                               letterSpacing: 0.2,
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                            }}>
-                              {item.sleepRole && (
-                                <Box component="span" sx={{ mr: 0.5 }}>
-                                  {item.sleepRole === 'backup' ? '🅿' : '⛺'}
-                                </Box>
-                              )}
-                              {item.name}
-                            </Typography>
+                            }}>{item.name}</Typography>
                             <Box className="jp-stop-actions"
                               sx={{ opacity: 0, display: 'flex', gap: 0.25, transition: 'opacity 0.15s' }}>
                               {!isFirst && (
@@ -2507,6 +2501,11 @@ export default function RoadTripTab({ token }) {
                                           }}>{sc.label}</Box>
                                       ))}
                                     </Box>
+                                    {/* VISITED + CALLED toggles. No red. The "off" state is
+                                        neutral (transparent). The "on" state fills green / amber.
+                                        Status bubbles above the dispo name (see the list-row
+                                        markup higher up) mirror these so you can see what's
+                                        marked at a glance without expanding the editor. */}
                                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
                                       {(() => {
                                         const visited = item.status === 'visited';
@@ -2519,11 +2518,11 @@ export default function RoadTripTab({ token }) {
                                             sx={{
                                               flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
                                               px: 1, py: 0.6, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
-                                              color: visited ? TERM.greenDk : TERM.red,
-                                              bgcolor: visited ? TERM.green : 'rgba(248,113,113,0.08)',
-                                              border: `1px solid ${visited ? TERM.green : TERM.red}`,
-                                              '&:hover': { opacity: 0.9 },
-                                            }}>{visited ? '✓ VISITED' : '✗ NOT VISITED'}</Box>
+                                              color: visited ? TERM.greenDk : TERM.muted,
+                                              bgcolor: visited ? TERM.green : 'transparent',
+                                              border: `1px solid ${visited ? TERM.green : TERM.borderDim}`,
+                                              '&:hover': { borderColor: TERM.green, color: visited ? TERM.greenDk : TERM.green },
+                                            }}>{visited ? '✓ VISITED' : 'MARK VISITED'}</Box>
                                         );
                                       })()}
                                       {(() => {
@@ -2536,11 +2535,11 @@ export default function RoadTripTab({ token }) {
                                             sx={{
                                               flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
                                               px: 1, py: 0.6, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
-                                              color: called ? '#000' : TERM.red,
-                                              bgcolor: called ? TERM.amber : 'rgba(248,113,113,0.08)',
-                                              border: `1px solid ${called ? TERM.amber : TERM.red}`,
-                                              '&:hover': { opacity: 0.9 },
-                                            }}>{called ? '✓ CALLED' : '✗ NOT CALLED'}</Box>
+                                              color: called ? '#000' : TERM.muted,
+                                              bgcolor: called ? TERM.amber : 'transparent',
+                                              border: `1px solid ${called ? TERM.amber : TERM.borderDim}`,
+                                              '&:hover': { borderColor: TERM.amber, color: called ? '#000' : TERM.amber },
+                                            }}>{called ? '✓ CALLED' : 'MARK CALLED'}</Box>
                                         );
                                       })()}
                                     </Box>
@@ -2649,7 +2648,7 @@ export default function RoadTripTab({ token }) {
             role="button" tabIndex={0}
             onClick={() => setHeatmapOn((v) => !v)}
             sx={{
-              position: 'absolute', top: 12, left: 12, zIndex: 2,
+              position: 'absolute', top: 60, left: 12, zIndex: 2,
               cursor: 'pointer',
               bgcolor: heatmapOn ? 'rgba(248,113,113,0.18)' : 'rgba(5,8,10,0.82)',
               border: `1px solid ${heatmapOn ? '#f87171' : TERM.borderDim}`,
@@ -2960,7 +2959,6 @@ export default function RoadTripTab({ token }) {
                   })()}
 
                   {todayStops.map((item, i) => {
-                    const sm = statusMeta(item.status);
                     return (
                       <Box key={item._id}
                         sx={{
@@ -2972,32 +2970,45 @@ export default function RoadTripTab({ token }) {
                         }}
                         onClick={() => { flyToSaved(item); setEditingStop(prev => prev === item._id ? null : item._id); setMobileTab('map'); }}>
                         <Box sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, minWidth: 18, textAlign: 'right' }}>{i + 1}.</Box>
-                        <Box role="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (item.kind === 'lead') {
-                              const idx = SALES_STATUSES.findIndex(s => s.value === item.status);
-                              updateStopField(item, { status: SALES_STATUSES[(idx + 1) % SALES_STATUSES.length].value });
-                            } else if (item.customType === 'printer') {
-                              const PS = ['planned','pre_called','visited','won'];
-                              updateStopField(item, { status: PS[(PS.indexOf(item.status) + 1) % PS.length] });
-                            } else {
-                              updateStopField(item, { status: item.status === 'visited' ? 'planned' : 'visited' });
-                            }
-                          }}
-                          sx={{
+                        {/* Mobile STOPS row indicator — same rules as desktop list:
+                            sleep pin → emoji; visited → green ✓; called → yellow 📞;
+                            neither → muted layer-color dot. */}
+                        {item.sleepRole ? (
+                          <Box sx={{ fontSize: 16, flexShrink: 0 }}>
+                            {item.sleepRole === 'backup' ? '🅿'
+                              : item.sleepKind === 'campground' ? '⛺'
+                              : item.sleepKind === 'park_and_ride' ? '🅿'
+                              : item.sleepKind === 'hotel' ? '🏨'
+                              : item.sleepKind === 'friend' ? '🏠'
+                              : '🌙'}
+                          </Box>
+                        ) : item.status === 'visited' ? (
+                          <Box sx={{
+                            fontFamily: MONO, fontSize: 10, fontWeight: 900,
+                            px: 0.75, height: 18, borderRadius: '9px', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            bgcolor: TERM.green, color: TERM.greenDk,
+                          }}>✓</Box>
+                        ) : item.status === 'pre_called' ? (
+                          <Box sx={{
+                            fontFamily: MONO, fontSize: 10, fontWeight: 900,
+                            px: 0.75, height: 18, borderRadius: '9px', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            bgcolor: TERM.amber, color: '#000',
+                          }}>📞</Box>
+                        ) : (
+                          <Box sx={{
                             width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                            bgcolor: sm.color,
-                            cursor: 'pointer',
-                            '&:hover': { transform: 'scale(1.5)' },
+                            bgcolor: TERM.faint,
                           }} />
+                        )}
                         <Typography sx={{
                           flexGrow: 1, fontFamily: MONO, fontSize: 12, fontWeight: 600,
-                          color: TERM.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          color: item.sleepRole
+                            ? (item.sleepRole === 'backup' ? TERM.amber : TERM.green)
+                            : TERM.text,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         }}>{item.name}</Typography>
-                        <Box sx={{ fontFamily: MONO, fontSize: 9, color: sm.color, letterSpacing: 0.5, flexShrink: 0 }}>
-                          {sm.label}
-                        </Box>
                         <Box role="button"
                           onClick={(e) => { e.stopPropagation(); deleteSavedItem(item); }}
                           sx={{
