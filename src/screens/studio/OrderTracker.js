@@ -992,10 +992,13 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   // Tiles for this project: one slot per mockup#, with the library item
   // attached if we can find a match. Slots without a match render as
   // amber-bordered placeholders so the card honestly reflects the project's
-  // intended mockup count, not just what happens to be in the studio.
-  const ownTiles = (project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
-  // Only use the "Client's work" fallback when the project has truly no
-  // mockup #s assigned. Don't replace partial state with someone else's mockups.
+  // Only render tiles that actually resolve to a studio item. Skipping the
+  // unresolved ones means we never show the amber "NOT IN STUDIO" placeholder
+  // boxes on a card — the grid sizes to the count of REAL mockups instead.
+  const ownTiles = (project.mockupNumbers || [])
+    .map(n => ({ num: n, item: lookupMockup(n) }))
+    .filter(t => t.item)
+    .slice(0, 4);
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
