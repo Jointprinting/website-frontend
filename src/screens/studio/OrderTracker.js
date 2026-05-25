@@ -1048,9 +1048,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         {mockupTiles.length > 0 ? (
           <Box sx={{
             display: 'grid',
-            gridTemplateColumns: mockupTiles.length === 1 ? '1fr' :
-                                 mockupTiles.length === 2 ? '1fr 1fr' :
-                                 '2fr 1fr',
+            // 1: single tile. 2: side-by-side. 3 or 4: clean 2×2 grid
+            // (3 leaves one empty cell, which is cleaner than the old
+            // big-tile-spans-two-rows look).
+            gridTemplateColumns: mockupTiles.length === 1 ? '1fr' : '1fr 1fr',
             gridTemplateRows:    mockupTiles.length <= 2 ? '1fr' : '1fr 1fr',
             height: '100%',
             gap: '2px',
@@ -1058,8 +1059,6 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
             {mockupTiles.map((t, i) => (
               <Box key={i} sx={{
                 bgcolor: B.bg, position: 'relative',
-                gridColumn: mockupTiles.length === 3 && i === 0 ? '1' : undefined,
-                gridRow:    mockupTiles.length === 3 && i === 0 ? '1 / 3' : undefined,
               }}>
                 {t.item && t.item.thumbnail ? (
                   <Box component="img" src={t.item.thumbnail} alt=""
