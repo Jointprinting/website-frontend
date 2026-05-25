@@ -5,8 +5,9 @@
 // consistent (CSS-styled HTML markers, not native Mapbox circles).
 //
 // A "sleep pin" is the night's bed — a campground (primary) or a Park &
-// Ride (backup). They render as a moon glyph with role-tinted ring. The
-// active sleep for the day has a filled center; the inactive one is hollow.
+// Ride (backup). They render as a moon/tent/parking glyph with role-tinted
+// ring. The active sleep for the day has a filled center; the inactive one
+// is hollow.
 //
 // IMPORTANT: Mapbox writes `transform: translate(...)` to the marker root
 // element to position it. If we put our own `transform` on the same node
@@ -30,23 +31,19 @@ export function buildSleepMarkerEl({ role, sleepKind, active }) {
   const fill  = active ? color : 'transparent';
   const icon  = SLEEP_KIND_ICON[sleepKind] || '🌙';
 
-  // OUTER: Mapbox writes `transform: translate(...)` here. We must NOT
-  // overwrite it. Keep this element layout-only.
   const wrap = document.createElement('div');
   wrap.className = `jp-sleep-wrap jp-sleep-${role}${active ? ' active' : ''}`;
   wrap.style.cssText = 'cursor: pointer; pointer-events: auto;';
 
-  // INNER: visual styling + hover scaling lives here so it doesn't fight
-  // Mapbox's positioning transform on the outer element.
   const inner = document.createElement('div');
   inner.style.cssText = `
-    width: 28px; height: 28px;
+    width: 30px; height: 30px;
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%;
     border: 2px solid ${color};
-    background: ${fill === 'transparent' ? 'rgba(5,8,10,0.85)' : fill};
-    box-shadow: 0 0 ${active ? 12 : 6}px ${color}66;
-    font-size: 14px;
+    background: ${fill === 'transparent' ? 'rgba(5,8,10,0.9)' : fill};
+    box-shadow: 0 0 ${active ? 14 : 6}px ${color}66, 0 0 1px rgba(0,0,0,0.8);
+    font-size: 15px;
     transition: transform 0.18s ease;
     transform-origin: center center;
   `;
@@ -59,10 +56,30 @@ export function buildSleepMarkerEl({ role, sleepKind, active }) {
   return wrap;
 }
 
+// Tight base style for every button in the popup so Mapbox / browser
+// defaults can't bleed through (which was rendering buttons white).
+function popupBtnBase() {
+  return `
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    font-family: ${MONO} !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
+    letter-spacing: 1px !important;
+    padding: 6px 10px !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    line-height: 1.2 !important;
+    outline: none !important;
+    text-transform: none !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+  `;
+}
+
 /**
  * Popup DOM for a sleep pin. Buttons: MAKE ACTIVE / SWAP TO BACKUP /
- * REPLACE / CLEAR. Caller wires onMakeActive / onReplace / onClear /
- * onEdit handlers.
+ * REPLACE / CLEAR.
  */
 export function buildSleepPopup({ lead, hasBackup, onMakeActive, onReplace, onClear, onEdit }) {
   const el = document.createElement('div');
@@ -78,36 +95,45 @@ export function buildSleepPopup({ lead, hasBackup, onMakeActive, onReplace, onCl
     hotel: 'HOTEL', friend: 'FRIEND', other: 'OTHER',
   }[lead.sleepKind] || 'SLEEP';
 
-  el.innerHTML = `
+  // Build header section
+  const header = document.createElement('div');
+  header.innerHTML = `
     <div style="font-size:11px; letter-spacing:1px; color:${roleColor}; margin-bottom:4px;">
       ${lead.sleepRole === 'primary' ? '⛺ PRIMARY SLEEP' : '🅿 BACKUP SLEEP'}
       ${lead.isActiveSleep ? ' · ACTIVE' : ''}
     </div>
-    <div style="font-size:13px; font-weight:700; margin-bottom:6px; line-height:1.3;">${escapeHtml(lead.name)}</div>
+    <div style="font-size:13px; font-weight:700; margin-bottom:6px; line-height:1.3; color:${TERM.text};">${escapeHtml(lead.name)}</div>
     <div style="font-size:10px; color:${TERM.muted}; margin-bottom:4px;">${kindLabel}</div>
     <div style="font-size:10px; color:${TERM.muted}; margin-bottom:10px;">${escapeHtml(lead.address || '')}</div>
-    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-      ${lead.isActiveSleep ? '' : `
-        <button data-action="activate" style="
-          font-family:${MONO}; font-size:9px; letter-spacing:1px;
-          padding:5px 8px; cursor:pointer; border-radius:2px;
-          background:${roleColor}; color:${TERM.greenDk}; border:1px solid ${roleColor};
-          font-weight:700;">MAKE ACTIVE</button>`}
-      ${hasBackup && lead.isActiveSleep ? `
-        <button data-action="activate" style="
-          font-family:${MONO}; font-size:9px; letter-spacing:1px;
-          padding:5px 8px; cursor:pointer; border-radius:2px;
-          background:transparent; color:${TERM.amber}; border:1px solid ${TERM.amber};">⇄ SWAP</button>` : ''}
-      <button data-action="replace" style="
-        font-family:${MONO}; font-size:9px; letter-spacing:1px;
-        padding:5px 8px; cursor:pointer; border-radius:2px;
-        background:transparent; color:${TERM.text}; border:1px solid ${TERM.border};">REPLACE</button>
-      <button data-action="clear" style="
-        font-family:${MONO}; font-size:9px; letter-spacing:1px;
-        padding:5px 8px; cursor:pointer; border-radius:2px;
-        background:transparent; color:${TERM.red}; border:1px solid ${TERM.red}66;">CLEAR</button>
-    </div>
   `;
+  el.appendChild(header);
+
+  // Build button row programmatically so each button gets explicit styling
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
+
+  const mkBtn = (label, action, fillColor, textColor, borderColor, alwaysShow = false) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.dataset.action = action;
+    b.style.cssText = popupBtnBase()
+      + `background: ${fillColor} !important;`
+      + `color: ${textColor} !important;`
+      + `border: 1px solid ${borderColor} !important;`;
+    row.appendChild(b);
+    return b;
+  };
+
+  if (!lead.isActiveSleep) {
+    mkBtn('MAKE ACTIVE', 'activate', roleColor, TERM.greenDk, roleColor);
+  } else if (hasBackup) {
+    mkBtn('⇄ SWAP', 'activate', 'transparent', TERM.amber, TERM.amber);
+  }
+  mkBtn('REPLACE', 'replace', 'transparent', TERM.text, TERM.border);
+  mkBtn('CLEAR',   'clear',   'transparent', TERM.red, 'rgba(248,113,113,0.4)');
+
+  el.appendChild(row);
 
   const handlers = { activate: onMakeActive, replace: onReplace, clear: onClear, edit: onEdit };
   el.querySelectorAll('button[data-action]').forEach((btn) => {
