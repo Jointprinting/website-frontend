@@ -10,10 +10,12 @@ import {
   DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import axios from 'axios';
 import config from '../config.json';
 import jpLogoColored from '../modules/images/logo_colored.webp';
+import JpLoader from '../common/JpLoader';
 
 const COLORS = {
   bg:     '#f6f6f4',
@@ -76,6 +78,28 @@ export default function ApprovalView() {
     } catch (_) { /* keep existing data */ }
   };
 
+  // Once approved, poll every 60s so the client sees the timeline update in
+  // near-real-time when the admin ticks off a step — they don't have to
+  // refresh the tab to see "Blanks shipping" turn green. Pauses when the tab
+  // is hidden to avoid hammering the server while nobody's looking.
+  useEffect(() => {
+    if (approvalStatus !== 'approved') return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled || document.hidden) return;
+      refresh();
+    };
+    const id = setInterval(tick, 60000);
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvalStatus, projectId, token]);
+
   const handleApprove = async () => {
     setActionBusy(true);
     try {
@@ -106,7 +130,7 @@ export default function ApprovalView() {
   if (loading) {
     return (
       <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress sx={{ color: COLORS.brand }} />
+        <JpLoader size={72} label="Loading…" tone="light" />
       </Box>
     );
   }
@@ -274,17 +298,15 @@ export default function ApprovalView() {
               )}
             </Box>
           ) : approvalStatus === 'approved' ? (
-            <Box sx={{ textAlign: 'center', py: 1 }}>
-              <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
-              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                We&apos;ll get production rolling and follow up over email with timing.
-              </Typography>
-              {p.approvalAt && (
-                <Typography sx={{ color: COLORS.muted, fontSize: 11, mt: 1.5 }}>
-                  Approved {new Date(p.approvalAt).toLocaleString()}
+            <Box sx={{ py: 1 }}>
+              <Box sx={{ textAlign: 'center', mb: 3 }}>
+                <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
+                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
+                <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
+                  We&apos;ll move through the steps below and update this page as each one happens.
                 </Typography>
-              )}
+              </Box>
+              <TrackingTimeline steps={p.tracking?.steps || []} colors={COLORS} />
             </Box>
           ) : (
             <>
@@ -334,6 +356,88 @@ export default function ApprovalView() {
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TrackingTimeline — the post-approval client view of where the project is.
+// Each step is either complete (filled icon + timestamp) or pending (open
+// circle). The vertical connector between dots shows green up to the last
+// completed step so the progress is readable at a glance even on a phone.
+// ─────────────────────────────────────────────────────────────────────────────
+function TrackingTimeline({ steps, colors }) {
+  if (!Array.isArray(steps) || steps.length === 0) return null;
+
+  // Find the index of the last completed step so the connector colors up to it.
+  let lastDoneIdx = -1;
+  steps.forEach((s, i) => { if (s.completedAt) lastDoneIdx = i; });
+
+  const fmtWhen = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+  };
+
+  return (
+    <Box sx={{ position: 'relative', maxWidth: 420, mx: 'auto', pl: 1 }}>
+      {steps.map((s, i) => {
+        const done = !!s.completedAt;
+        const isLast = i === steps.length - 1;
+        const connectorActive = i < lastDoneIdx;   // colored only if a LATER step is also done
+        return (
+          <Box key={s.id || i} sx={{ display: 'flex', alignItems: 'flex-start', position: 'relative', pb: isLast ? 0 : 2.5 }}>
+            {/* Vertical connector behind the dot */}
+            {!isLast && (
+              <Box sx={{
+                position: 'absolute', left: 11, top: 22, bottom: -2, width: 2,
+                bgcolor: connectorActive ? colors.brandH : colors.border,
+                transition: 'background 0.4s ease',
+              }} />
+            )}
+            {/* Dot / check */}
+            <Box sx={{
+              width: 24, height: 24, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, zIndex: 1,
+              bgcolor: done ? colors.brandH : colors.panel,
+              border: done ? `2px solid ${colors.brandH}` : `2px solid ${colors.border}`,
+              color: done ? '#fff' : colors.muted,
+              transition: 'all 0.3s ease',
+            }}>
+              {done
+                ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
+                : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
+            </Box>
+            {/* Label + timestamp */}
+            <Box sx={{ ml: 1.75, flex: 1, pt: 0.15 }}>
+              <Typography sx={{
+                fontSize: 14, fontWeight: done ? 700 : 600,
+                color: done ? colors.text : colors.muted,
+                lineHeight: 1.3,
+              }}>
+                {s.label}
+              </Typography>
+              <Typography sx={{
+                fontSize: 11, mt: 0.25,
+                color: done ? colors.brand : colors.muted,
+                fontWeight: done ? 600 : 400,
+              }}>
+                {done ? fmtWhen(s.completedAt) : 'Pending'}
+              </Typography>
+              {done && s.note && (
+                <Typography sx={{ fontSize: 11.5, color: colors.muted, mt: 0.3, lineHeight: 1.4 }}>
+                  {s.note}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

@@ -368,6 +368,25 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 /* ─── Loading ─────────────────────────────────────────────────── */
 #loading-overlay{position:absolute;inset:0;background:rgba(9,10,16,.82);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(2px);border-radius:var(--r)}
 #loading-overlay.active{display:flex}
+/* JP-logo loader (matches common/JpLoader.js in the React app): the logo
+   silhouette is a CSS mask, painted by a green gradient that sweeps
+   across underneath. */
+.jp-loader{width:64px;height:64px;
+  -webkit-mask-image:url(/logo_white.webp);mask-image:url(/logo_white.webp);
+  -webkit-mask-size:contain;mask-size:contain;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:linear-gradient(110deg,#1a3d2b 0%,#1a3d2b 35%,#4ade80 50%,#1a3d2b 65%,#1a3d2b 100%);
+  background-size:250% 100%;
+  animation:jpLoaderSweep 1.4s linear infinite, jpLoaderPulse 2.4s ease-in-out infinite;
+}
+@keyframes jpLoaderSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
+@keyframes jpLoaderPulse{0%,100%{opacity:.85}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .jp-loader{animation:jpLoaderPulse 1.8s ease-in-out infinite;background:#4ade80}
+}
+/* Tiny inline spinner — kept for buttons / search-while-typing where the
+   mask logo doesn't read at that size. */
 .spinner{width:22px;height:22px;border-radius:50%;border:2px solid var(--s4);border-top-color:var(--ac);animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -891,7 +910,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     </div>
     <div id="pdf-canvas-wrapper">
       <canvas id="pdf-canvas"></canvas>
-      <div id="loading-overlay"><div class="spinner"></div></div>
+      <div id="loading-overlay"><div class="jp-loader" role="img" aria-label="Loading"></div></div>
     </div>
   </div>
 
@@ -2544,11 +2563,33 @@ function closeLogoEditor() {
 }
 
 // ── PDF Helpers ───────────────────────────────────────────────────
-function scheduleUpdate(){ markPreviewDirty(); }
-function liveUpdate(){ markPreviewDirty(); }
+// Two flavors of "things changed, redraw the preview":
+//   liveUpdate     — triggered by text-field oninput (typing). Long debounce
+//                    so we don't render every keystroke.
+//   scheduleUpdate — triggered by structural edits (added a color, moved an
+//                    image, swapped a template). Short debounce so the
+//                    preview catches up fast after a deliberate action.
+// Both set the dirty marker so the Refresh button still pulses while the
+// debounce window is open. manualRefresh() short-circuits the debounce and
+// renders immediately.
+const LIVE_DEBOUNCE_MS = 900;
+const SCHEDULE_DEBOUNCE_MS = 250;
+
+function scheduleUpdate(){ markPreviewDirty(); _queueAutoRefresh(SCHEDULE_DEBOUNCE_MS); }
+function liveUpdate(){ markPreviewDirty(); _queueAutoRefresh(LIVE_DEBOUNCE_MS); }
 function markPreviewDirty(){  const b=document.getElementById('refresh-btn'); if(b){b.classList.add('dirty');b.title='Changes pending — click to refresh';}}
 function clearPreviewDirty(){ const b=document.getElementById('refresh-btn'); if(b){b.classList.remove('dirty');b.title='Refresh preview';}}
-function manualRefresh(){ clearTimeout(updateTimer); saveFormToState(); renderPdfPreview(); clearPreviewDirty(); }
+
+function _queueAutoRefresh(ms){
+  clearTimeout(updateTimer);
+  updateTimer = setTimeout(() => { saveFormToState(); renderPdfPreview(); }, ms);
+}
+
+function manualRefresh(){
+  clearTimeout(updateTimer);
+  saveFormToState();
+  renderPdfPreview();
+}
 function togglePrintPreview(){
   state.showPrintPreview=!state.showPrintPreview;
   const btn=document.getElementById('borders-btn');
@@ -2831,20 +2872,66 @@ function drawColorCircles(page,startX,startY,colors,radius,font,maxX) {
 // ── PDF Preview ───────────────────────────────────────────────────
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let pdfJsDoc=null;
+
+// Render serialization. The previous implementation let multiple
+// renderPdfPreview() calls run concurrently — two clicks on Refresh in quick
+// succession (or auto-refresh firing on top of a manual refresh) would race
+// and paint over each other on the same <canvas>. Two-slot queue: at most
+// one render in flight, at most one pending. Newer pending requests replace
+// older ones, so the latest state always wins.
+let _renderInFlight = null;     // promise for the currently running render, or null
+let _renderPending = false;     // a follow-up render was requested while one was in flight
+let _activeRenderTask = null;   // current pdfjs renderTask (so we can cancel)
+
 async function renderPdfPreview() {
-  setLoading(true);
+  if (_renderInFlight) {
+    _renderPending = true;
+    return _renderInFlight;
+  }
+  _renderInFlight = (async () => {
+    setLoading(true);
+    try {
+      do {
+        _renderPending = false;
+        // Cancel any partially-finished render task from a previous pass so
+        // the canvas isn't fighting two concurrent paints.
+        if (_activeRenderTask) {
+          try { _activeRenderTask.cancel(); } catch (_) {}
+          _activeRenderTask = null;
+        }
+        try {
+          const pdfBytes=await buildPdf();
+          pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
+          const pdfPage=await pdfJsDoc.getPage(state.currentPage+1);
+          const container=document.getElementById('canvas-area');
+          const scale=Math.min((container.clientWidth-50)/PAGE_WIDTH,(container.clientHeight-70)/PAGE_HEIGHT);
+          const vp=pdfPage.getViewport({scale:Math.max(scale,.4)});
+          const canvas=document.getElementById('pdf-canvas');
+          canvas.width=vp.width; canvas.height=vp.height;
+          _activeRenderTask = pdfPage.render({canvasContext:canvas.getContext('2d'),viewport:vp});
+          await _activeRenderTask.promise;
+          _activeRenderTask = null;
+        } catch (e) {
+          // pdfjs reports cancellations as "RenderingCancelledException" —
+          // those are expected when a new render supersedes us, don't toast.
+          if (e && e.name === 'RenderingCancelledException') {
+            // swallow
+          } else {
+            console.error(e);
+            toast('Preview error: '+e.message,'error');
+          }
+        }
+      } while (_renderPending);  // pick up any change that arrived mid-render
+    } finally {
+      setLoading(false);
+      clearPreviewDirty();
+    }
+  })();
   try {
-    const pdfBytes=await buildPdf();
-    pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
-    const pdfPage=await pdfJsDoc.getPage(state.currentPage+1);
-    const container=document.getElementById('canvas-area');
-    const scale=Math.min((container.clientWidth-50)/PAGE_WIDTH,(container.clientHeight-70)/PAGE_HEIGHT);
-    const vp=pdfPage.getViewport({scale:Math.max(scale,.4)});
-    const canvas=document.getElementById('pdf-canvas');
-    canvas.width=vp.width; canvas.height=vp.height;
-    await pdfPage.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-  } catch(e){console.error(e);toast('Preview error: '+e.message,'error');}
-  finally{setLoading(false);}
+    await _renderInFlight;
+  } finally {
+    _renderInFlight = null;
+  }
 }
 
 // ── Export PDF ────────────────────────────────────────────────────

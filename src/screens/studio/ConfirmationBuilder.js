@@ -31,23 +31,31 @@ const BRAND_LOGO = `${window.location.origin}${jpLogoColored}`;
 // the confirmation document. Without this the doc inflates with multi-MB
 // base64 blobs and the PUT /orders/:id either 413s or breaks Mongo's 16MB
 // per-doc limit — the source of the "save failed: 500" the user hit.
+//
+// Post-compression cap: if the result is still over ~1.8MB (base64-encoded),
+// recompress at progressively lower quality / smaller dimension. Hard fail
+// at the floor instead of silently saving a doc that will 500 on the next
+// PUT — a confirmation has multiple mockups + custom lines, and the
+// per-doc Mongo limit is 16MB total.
+const MAX_DATAURL_BYTES = 1.8 * 1024 * 1024;
+
 async function compressImageToDataUrl(file, maxDim = 1400, quality = 0.82) {
-  return new Promise((resolve, reject) => {
+  const renderAt = (dim, q) => new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onerror = () => reject(new Error('Could not read file.'));
     fr.onload = () => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
+        if (width > dim || height > dim) {
           const r = width / height;
-          if (r >= 1) { width = maxDim; height = Math.round(maxDim / r); }
-          else        { height = maxDim; width = Math.round(maxDim * r); }
+          if (r >= 1) { width = dim; height = Math.round(dim / r); }
+          else        { height = dim; width = Math.round(dim * r); }
         }
         const c = document.createElement('canvas');
         c.width = width; c.height = height;
         c.getContext('2d').drawImage(img, 0, 0, width, height);
-        try { resolve(c.toDataURL('image/jpeg', quality)); }
+        try { resolve(c.toDataURL('image/jpeg', q)); }
         catch (e) { reject(e); }
       };
       img.onerror = () => reject(new Error('Could not decode image.'));
@@ -55,6 +63,26 @@ async function compressImageToDataUrl(file, maxDim = 1400, quality = 0.82) {
     };
     fr.readAsDataURL(file);
   });
+
+  // Try the requested settings first, then back off if the result is still
+  // too big. Each retry drops quality first (cheap), then dimension (costly
+  // for quality). 5 attempts gives plenty of room before bailing.
+  const tries = [
+    { d: maxDim,                q: quality },
+    { d: maxDim,                q: 0.7 },
+    { d: Math.round(maxDim*0.85), q: 0.7 },
+    { d: Math.round(maxDim*0.7),  q: 0.65 },
+    { d: 800,                   q: 0.6 },
+  ];
+  let dataUrl;
+  for (const t of tries) {
+    dataUrl = await renderAt(t.d, t.q);
+    if (dataUrl.length <= MAX_DATAURL_BYTES) return dataUrl;
+  }
+  throw new Error(
+    'This image is too detailed to compress under the per-document limit. ' +
+    'Try cropping it tighter or starting from a smaller export.'
+  );
 }
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
@@ -120,13 +148,30 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id]);
 
+  // Track whether the most recent localStorage write succeeded so we can warn
+  // the user if their draft isn't actually being saved (quota exceeded after
+  // a few big mockups will silently lose every edit otherwise).
+  const [draftSaveError, setDraftSaveError] = useState('');
+
   // Persist every edit to localStorage so an accidental backdrop click,
   // tab close, or browser crash can't kill the user's work.
   useEffect(() => {
     if (!project || !local) return;
     try {
       window.localStorage.setItem(`confirmation-draft:${project._id}`, JSON.stringify(local));
-    } catch (_) { /* quota exceeded? give up silently */ }
+      if (draftSaveError) setDraftSaveError('');
+    } catch (e) {
+      // Quota exceeded is the common case — usually triggered by a big
+      // mockup snapshot push. Surface the failure so the user knows the
+      // auto-recovery safety net isn't there for this session and saves
+      // explicitly. We don't repeatedly setState if the error message is
+      // unchanged, since this useEffect runs on every edit.
+      const msg = e && e.name === 'QuotaExceededError'
+        ? 'Local draft cache is full — clear browser storage or hit Save soon. Edits since the warning won\'t survive a tab close.'
+        : `Local draft save failed (${e.message || 'unknown'}). Hit Save before closing.`;
+      if (msg !== draftSaveError) setDraftSaveError(msg);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, local]);
 
   // Warn if the user closes the tab with unsaved changes.
@@ -261,6 +306,14 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           borderBottom: `1px solid rgba(251,191,36,0.25)`,
           color: '#fbbf24', fontSize: 11, fontWeight: 600 }}>
           Restored from a local draft you didn't save last time. Hit Save when you're done to commit it.
+        </Box>
+      )}
+
+      {draftSaveError && (
+        <Box sx={{ px: 2.5, py: 0.6, bgcolor: 'rgba(248,113,113,0.12)',
+          borderBottom: `1px solid rgba(248,113,113,0.25)`,
+          color: '#f87171', fontSize: 11, fontWeight: 600 }}>
+          ⚠ {draftSaveError}
         </Box>
       )}
 

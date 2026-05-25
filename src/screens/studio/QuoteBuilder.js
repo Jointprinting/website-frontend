@@ -71,14 +71,17 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       blanksAndPrint += q * lineUnitCogs;
       lineRevenue    += q * u;
     });
-    const extras = num(setupCost) + num(shippingCost);
+    // Costs are clamped non-negative so a typo'd "-100" in the shipping
+    // field can't fake a higher margin in the live preview. Negative
+    // discounts belong on the confirmation builder, not the quote.
+    const extras = Math.max(0, num(setupCost)) + Math.max(0, num(shippingCost));
     const clientTotal = lineRevenue + extras;
     const totalCogs   = blanksAndPrint + extras;
     const profit      = clientTotal - totalCogs;
     // Per-unit allocation of the one-time setup + shipping across every unit
     // in the quote — so each line's COGS column reads honestly.
-    const setupPerUnit = qty > 0 ? num(setupCost) / qty : 0;
-    const shipPerUnit  = qty > 0 ? num(shippingCost) / qty : 0;
+    const setupPerUnit = qty > 0 ? Math.max(0, num(setupCost)) / qty : 0;
+    const shipPerUnit  = qty > 0 ? Math.max(0, num(shippingCost)) / qty : 0;
     return {
       qty, cogs: totalCogs, lineRevenue, extras,
       clientTotal, profit,

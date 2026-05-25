@@ -38,6 +38,7 @@ import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import config from '../../config.json';
+import JpLoader from '../../common/JpLoader';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme (mirrors RoadTripTab so they look like siblings)
@@ -1680,7 +1681,11 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
       {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
 
       {view === 'dashboard' ? (
-        loading ? <CircularProgress sx={{ color: TERM.green, my: 4 }} /> : (
+        loading ? (
+          <Stack alignItems="center" sx={{ my: 4 }}>
+            <JpLoader size={56} label="Loading dashboard…" />
+          </Stack>
+        ) : (
           <Dashboard
             stats={stats}
             usage={usage}
@@ -1692,7 +1697,9 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
       ) : (
         <Box>
           {loading ? (
-            <CircularProgress sx={{ color: TERM.green, my: 4 }} />
+            <Stack alignItems="center" sx={{ my: 4 }}>
+              <JpLoader size={56} label="Loading leads…" />
+            </Stack>
           ) : filteredLeads.length === 0 ? (
             <Paper elevation={0} sx={{
               bgcolor: TERM.panel, border: `1px dashed ${TERM.borderDim}`,

@@ -2,13 +2,14 @@
 import { React, useEffect, useState } from 'react';
 import {
   Box, Stack, Typography, Chip, Button, Tooltip,
-  CircularProgress, Container, Avatar, useMediaQuery, Divider, Alert,
+  Container, Avatar, useMediaQuery, Divider, Alert,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import QuoteDialog from '../common/QuoteDialog';
+import JpLoader from '../common/JpLoader';
 import config from '../config.json';
 
 const getTagCode = (tag) => {
@@ -228,12 +229,8 @@ function Product() {
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 7 }, px: { xs: 2, md: 4 } }}>
         {loading ? (
           <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="60vh" gap={2}>
-            <CircularProgress size={64} thickness={3.5} />
-            {loadingMessage && (
-              <Typography color="text.secondary" textAlign="center" sx={{ maxWidth: 320, fontSize: 14 }}>
-                {loadingMessage}
-              </Typography>
-            )}
+            <JpLoader size={80} label={loadingMessage} tone="light" />
+            {/* Loading message renders inside JpLoader via its `label` prop. */}
           </Box>
         ) : (
           <>

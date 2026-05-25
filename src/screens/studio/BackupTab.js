@@ -13,6 +13,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon    from '@mui/icons-material/ErrorOutline';
 import { B, fmtDate, fmtRelative } from './_shared';
 import config from '../../config.json';
+import JpLoader from '../../common/JpLoader';
 
 const base = `${config.backendUrl}/api`;
 
@@ -118,7 +119,7 @@ export default function BackupTab({ token, onBack }) {
 
       {loading ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
-          <CircularProgress sx={{ color: B.green }} />
+          <JpLoader size={56} label="Loading backups…" />
         </Box>
       ) : (
         <Box sx={{ maxWidth: 720 }}>
