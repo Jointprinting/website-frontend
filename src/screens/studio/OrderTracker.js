@@ -529,10 +529,19 @@ export default function OrderTracker({ token, onBack }) {
         bgcolor: 'rgba(12,20,16,0.92)', backdropFilter: 'blur(10px)',
         borderBottom: `1px solid ${B.border}`, px: { xs: 1.5, md: 3 }, py: 1.5,
       }}>
-        <Stack direction="row" alignItems="center" gap={{ xs: 1, md: 2 }} flexWrap="wrap">
+        <Stack direction="row" alignItems="center" gap={{ xs: 1, md: 1.5 }} flexWrap="wrap">
           <IconButton onClick={onBack} sx={{ color: B.muted, '&:hover': { color: B.white } }}>
             <ArrowBackIcon />
           </IconButton>
+          <Box component="img" src={jpLogoWhite} alt="Joint Printing"
+            sx={{
+              height: { xs: 22, md: 26 }, width: 'auto', opacity: 0.95,
+              display: { xs: 'none', sm: 'block' },
+            }} />
+          <Box sx={{
+            width: '1px', height: 20, bgcolor: B.border,
+            display: { xs: 'none', sm: 'block' },
+          }} />
           <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 18, letterSpacing: -0.3 }}>
             Order Tracker
           </Typography>
@@ -633,9 +642,6 @@ export default function OrderTracker({ token, onBack }) {
                 secondary="Empty projects + duplicates">Cleanup</ListItemText>
             </MenuItem>
           </Menu>
-
-          <Box component="img" src={jpLogoWhite} alt="Joint Printing"
-            sx={{ height: 22, width: 'auto', ml: 0.5, opacity: 0.92 }} />
         </Stack>
 
         {/* Stat strip */}
