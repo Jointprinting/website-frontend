@@ -1064,7 +1064,23 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
   // budget-halted sweep.
   const remainingBudget = usage ? Math.max(0, (usage.daily_cap || 200) - (usage.places_calls_today || 0)) : null;
   const budgetExhausted = remainingBudget !== null && remainingBudget < 10;
+  // The persisted JpwSchedulerState doc keeps its halted_reason across the
+  // midnight reset. Without this date check the "budget used up" banner
+  // sticks around for the rest of the day after yesterday's budget-halted
+  // sweep — even though places_calls_today has reset to 0 and 200 calls
+  // are free again. Only count statusSaysBudget if the sweep finished
+  // TODAY (or is still running with that reason).
+  const haltedToday = (() => {
+    const fin = status && status.finished_at;
+    if (!fin) return false;
+    const f = new Date(fin);
+    const now = new Date();
+    return f.getFullYear() === now.getFullYear()
+        && f.getMonth() === now.getMonth()
+        && f.getDate() === now.getDate();
+  })();
   const statusSaysBudget = !isRunning
+    && haltedToday
     && /cap reached|budget|daily places api/i.test(status?.halted_reason || '');
   const blocked = budgetExhausted || statusSaysBudget;
   const blockReason = "Daily Google Places budget is used up. Resets at midnight.";
