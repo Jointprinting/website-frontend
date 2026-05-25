@@ -992,13 +992,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   // Tiles for this project: one slot per mockup#, with the library item
   // attached if we can find a match. Slots without a match render as
   // amber-bordered placeholders so the card honestly reflects the project's
-  // Only render tiles that actually resolve to a studio item. Skipping the
-  // unresolved ones means we never show the amber "NOT IN STUDIO" placeholder
-  // boxes on a card — the grid sizes to the count of REAL mockups instead.
-  const ownTiles = (project.mockupNumbers || [])
-    .map(n => ({ num: n, item: lookupMockup(n) }))
-    .filter(t => t.item)
-    .slice(0, 4);
+  // Keep unresolved tiles in — they render as "NOT IN STUDIO" amber boxes
+  // and the user uses that as a flag for "this is a legacy mockup from my
+  // old GDrive system, not in jpstudio yet".
+  const ownTiles = (project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
