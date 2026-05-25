@@ -109,7 +109,11 @@ export default function OrderTracker({ token, onBack }) {
         axios.get(`${base}/client-logos`, authHdr).catch(() => ({ data: { logos: [] } })),
       ]);
       setProjects(pr.data.projects || []);
-      setMockups(mk.data.items || []);
+      // /studio/library/mockups returns a bare array, NOT { items: [...] }.
+      // The .items lookup was always undefined, so mockups stayed [] even
+      // when the cloud had 59 items — that's why cards showed "No mockups
+      // yet" and the Link picker came up empty.
+      setMockups(Array.isArray(mk.data) ? mk.data : (mk.data.items || []));
       setStats(ds.data || {});
       setLogos(lg.data.logos || []);
     } catch (e) {
