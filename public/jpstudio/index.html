@@ -355,14 +355,21 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   max-width:100%;overflow:auto;
 }
 #pdf-canvas{display:block;max-width:100%}
-#refresh-btn{
+/* Auto-render status pill — replaces the old manual refresh button.
+   .dirty = changes pending, will render imminently (pulses green).
+   .rendering = a render is actively in flight (solid green). */
+.preview-status{
   margin-left:auto;font-family:var(--fm);font-size:10px;
-  display:flex;align-items:center;gap:4px;padding:4px 10px;
+  letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
   border:1px solid var(--bd2);color:var(--tx3);border-radius:var(--r);
-  cursor:pointer;background:var(--s1);transition:all .15s;
+  background:var(--s1);transition:color .15s,border-color .15s,background .15s;
 }
-#refresh-btn:hover{color:var(--tx);border-color:var(--tx3);background:var(--s2)}
-#refresh-btn.dirty{color:var(--ac)!important;border-color:var(--ac)!important;animation:pulse 1.5s ease-in-out infinite}
+.preview-status::before{
+  content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;
+}
+.preview-status.dirty{color:var(--ac);border-color:var(--ac);animation:pulse 1.5s ease-in-out infinite}
+.preview-status.rendering{color:var(--ac);border-color:var(--ac);animation:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
 
 /* ─── Loading ─────────────────────────────────────────────────── */
@@ -906,7 +913,11 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
         <button class="btn btn-danger btn-sm" onclick="deletePage()">Del</button>
       </div>
       <div class="page-dots" id="page-dots"></div>
-      <button id="refresh-btn" onclick="manualRefresh()">↻ Refresh</button>
+      <!-- Manual refresh button removed — edits auto-render ~900ms after the
+           last keystroke, structural changes ~250ms. A small status pill
+           lives here instead; it pulses while the auto-render runs and reads
+           "Up to date" when idle. -->
+      <span id="preview-status" class="preview-status" title="Preview auto-updates as you edit">Up to date</span>
     </div>
     <div id="pdf-canvas-wrapper">
       <canvas id="pdf-canvas"></canvas>
@@ -2569,22 +2580,35 @@ function closeLogoEditor() {
 //   scheduleUpdate — triggered by structural edits (added a color, moved an
 //                    image, swapped a template). Short debounce so the
 //                    preview catches up fast after a deliberate action.
-// Both set the dirty marker so the Refresh button still pulses while the
-// debounce window is open. manualRefresh() short-circuits the debounce and
-// renders immediately.
+// The manual Refresh button is gone — auto-render covers both cases. The
+// #preview-status pill above the canvas pulses while a render is pending
+// and shows "Up to date" when idle, so the user still has visible feedback.
 const LIVE_DEBOUNCE_MS = 900;
 const SCHEDULE_DEBOUNCE_MS = 250;
 
 function scheduleUpdate(){ markPreviewDirty(); _queueAutoRefresh(SCHEDULE_DEBOUNCE_MS); }
 function liveUpdate(){ markPreviewDirty(); _queueAutoRefresh(LIVE_DEBOUNCE_MS); }
-function markPreviewDirty(){  const b=document.getElementById('refresh-btn'); if(b){b.classList.add('dirty');b.title='Changes pending — click to refresh';}}
-function clearPreviewDirty(){ const b=document.getElementById('refresh-btn'); if(b){b.classList.remove('dirty');b.title='Refresh preview';}}
+function markPreviewDirty(){
+  const p=document.getElementById('preview-status');
+  if(p){ p.classList.add('dirty'); p.classList.remove('rendering'); p.textContent='Updating…'; }
+}
+function markPreviewRendering(){
+  const p=document.getElementById('preview-status');
+  if(p){ p.classList.remove('dirty'); p.classList.add('rendering'); p.textContent='Rendering…'; }
+}
+function clearPreviewDirty(){
+  const p=document.getElementById('preview-status');
+  if(p){ p.classList.remove('dirty','rendering'); p.textContent='Up to date'; }
+}
 
 function _queueAutoRefresh(ms){
   clearTimeout(updateTimer);
   updateTimer = setTimeout(() => { saveFormToState(); renderPdfPreview(); }, ms);
 }
 
+// Kept for keyboard shortcuts / programmatic callers. The on-page button is
+// gone but anything still referencing manualRefresh() will short-circuit the
+// debounce and render immediately.
 function manualRefresh(){
   clearTimeout(updateTimer);
   saveFormToState();
@@ -2890,6 +2914,7 @@ async function renderPdfPreview() {
   }
   _renderInFlight = (async () => {
     setLoading(true);
+    markPreviewRendering();
     try {
       do {
         _renderPending = false;
