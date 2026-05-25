@@ -24,6 +24,12 @@
 
   // Backend URL — must match parent app. Keep in sync with config.json there.
   const BACKEND = 'https://jointprinting-backend.onrender.com';
+  // Expose on window so the OTHER (later) <script> blocks — apiSyncSave,
+  // syncFromBackend, loadProjects, etc. — can reference it. They live in a
+  // different scope and were silently fetching undefined/api/... → no HTTP
+  // call ever fired. That's the "BACKEND is not defined" cause of the 182
+  // failed pushes the user saw.
+  window.BACKEND = BACKEND;
 
   function showLockScreen(msg) {
     document.documentElement.style.visibility = 'visible';
@@ -1526,6 +1532,10 @@ window.addEventListener('load', initWorkerSetup);
 <script>
 
 // ─── Constants & Core JS ─────────────────────────────────────────
+// Pull BACKEND from the auth-gate IIFE that runs first — without this,
+// every fetch in this script was hitting "ReferenceError: BACKEND is not
+// defined" and silently failing, which is why 182 mockups never synced.
+const BACKEND = window.BACKEND;
 const PAGE_WIDTH  = 720;
 const PAGE_HEIGHT = 1080;
 
