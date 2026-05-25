@@ -36,9 +36,6 @@ import {
   Fade,
   Grow,
   Slide,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Snackbar,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
@@ -54,7 +51,7 @@ import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -1296,22 +1293,6 @@ const COLD_CALL_NODES = {
   },
 };
 
-const QUICK_REBUTTALS = [
-  { q: '"I\'m driving / in a meeting / busy right now"', a: "No problem — sounds like I caught you mid-something. What's a better window — tomorrow morning or afternoon?" },
-  { q: '"How did you get my number?"', a: "Your Google business listing — we were going through {{svc}} companies in South Jersey for our shortlist. Public info." },
-  { q: '"Take me off your list"', a: "Won't call again — appreciate the time. Take care." },
-  { q: '"I\'m not the decision maker"', a: "Got it — who handles the website and the Google stuff for you? Best way to reach them?" },
-  { q: '"We tried marketing before, didn\'t work"', a: "Most of it doesn't — most agencies oversell and ghost. That's why we work with one company per area, so we actually have skin in the game. What specifically didn't work last time — were the leads not showing up, the leads were junk, or the company just stopped communicating? Helps me know if we're a different flavor or the same problem." },
-  { q: '"I just got a website built last year"', a: "Good — you took it seriously. Quick question — is it actually pulling jobs for you, or is it just sitting there looking nice? Big difference. Worth 15 minutes either way to confirm." },
-  { q: '"Are you AI / a robot?"', a: "Ha — no, Nate, real person. Calling out of Marlton, I'm probably 10 minutes from you." },
-  { q: '"How long does the website take to build?"', a: "Usually 1–2 weeks from kickoff. Live by week three. We handle updates after that." },
-  { q: '"Can I see examples of your work?"', a: "Absolutely — I'll text you a couple links along with my Calendly. What's the best cell?" },
-  { q: '"Why should I trust you over the other 50 guys calling me?"', a: "Fair question. Honestly most of them are selling cookie-cutter packages they push to anyone who'll listen — that's why I only work with one {{svc}} company per area. The work proves itself before you spend a dollar. I'm local out of Marlton, you can drive to my office, and the website's $749 setup not the $5K agencies quote. Worst case you get 15 minutes of free intel on {{biz}}." },
-  { q: '"What\'s the catch?"', a: "Honest answer — the only catch is that if you say yes, I stop talking to other {{svc}} companies in your zip. So this slot's open right now and after that it's not. That's it." },
-  { q: '"I need to think about it"', a: "Totally fair. What specifically are you turning over — the timing, the price, or you're just not sure it'll work? Whichever it is, easier to give you the actual answer than have you guess." },
-  { q: '"Call me back in a few months"', a: "Sure — but real quick, is there something specific changing in a few months, or is now just not the time? Helps me know if it's a real timing thing or a polite no, no judgment either way." },
-];
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  EditableScript — renders a list of script lines for one node+field, with
 //  inline editing. One override per field, persisted in localStorage. No
@@ -1479,130 +1460,30 @@ const CC_API = `${config.backendUrl}/api/jpw/cold-call-state`;
 // migration source (one-shot push to backend on first load when the backend
 // is empty but local has something) and as an offline draft for notes/overrides
 // so a stuck network can't wipe an in-flight edit.
-// Cold-call sections — flat playbook layout. The script content is the same
-// as before; what changed is that the user scans + scrolls instead of
-// clicking through a decision tree per call. Sticky chips above scroll-jump
-// between sections.
-const COLD_CALL_SECTIONS = [
-  { id: 'opener',     label: 'Opener',     nodeIds: ['start', 'gatekeeper', 'opener'] },
-  { id: 'discovery',  label: 'Discovery',  nodeIds: ['pain_dig', 'pain_few_calls', 'pain_wrong_leads', 'pain_both', 'no_pain_pivot', 'referral_pivot'] },
-  { id: 'objections', label: 'Objections', nodeIds: ['slammed', 'seasonal_pain', 'higher_ticket_pivot', 'curiosity_hook', 'one_specific', 'have_a_guy', 'gap_uncovered', 'have_a_guy_firm', 'price_early', 'payback_math', 'price_general', 'too_expensive', 'what_do_you_do', 'dont_need', 'what_is_audit', 'send_something', 'send_close', 'send_generic'] },
-  { id: 'close',      label: 'Close',      nodeIds: ['book_ask', 'book_flexible', 'book_time_close', 'book_meeting'] },
-  { id: 'exits',      label: 'Exits',      nodeIds: ['voicemail', 'callback', 'not_interested', 'polite_exit'] },
-];
-
-// One script card in the flat playbook — stage label header, the script
-// itself (editable), plus optional voicemail / direction / follow-up blocks
-// when the node defines them. "End" nodes (voicemail, callback, win, exits)
-// get a colored tint so they read distinct from mid-call scripts.
-function ColdCallScriptCard({ nodeId, node, fill, overrideFor, onSaveOverride, onResetOverride }) {
-  const isEnd = !!node.end;
-  const endColor = node.end === 'success' ? '#4ade80'
-    : node.end === 'warning' ? '#fbbf24'
-    : 'rgba(255,255,255,0.85)';
-  const endBg = node.end === 'success' ? 'rgba(74,222,128,0.06)'
-    : node.end === 'warning' ? 'rgba(251,191,36,0.06)'
-    : 'rgba(255,255,255,0.03)';
-  const endBorder = node.end === 'success' ? 'rgba(74,222,128,0.3)'
-    : node.end === 'warning' ? 'rgba(251,191,36,0.3)'
-    : BRAND.faint;
-  const ov = (field) => overrideFor(nodeId, field);
-
-  return (
-    <Paper elevation={0} sx={{
-      bgcolor: isEnd ? endBg : 'rgba(255,255,255,0.025)',
-      border: `1px solid ${isEnd ? endBorder : BRAND.faint}`,
-      borderRadius: 2, p: { xs: 2, sm: 2.5 },
-    }}>
-      <Stack direction="row" alignItems="center" gap={1} mb={1.25}>
-        <MuiTypography sx={{
-          color: isEnd ? endColor : BRAND.green,
-          fontWeight: 800, fontSize: 11.5,
-          textTransform: 'uppercase', letterSpacing: 1.2,
-        }}>
-          {node.stage}
-        </MuiTypography>
-        {isEnd && node.badge && (
-          <Chip label={node.badge} size="small" sx={{
-            bgcolor: endColor, color: '#0c1410', fontWeight: 800,
-            borderRadius: 999, height: 18, fontSize: 10,
-          }} />
-        )}
-      </Stack>
-
-      <EditableScript
-        nodeId={nodeId} field="script" defaultLines={node.script}
-        fill={fill}
-        sx={{ color: isEnd ? endColor : BRAND.white }}
-        override={ov('script')}
-        onSaveOverride={(t) => onSaveOverride(nodeId, 'script', t)}
-        onResetOverride={() => onResetOverride(nodeId, 'script')}
-      />
-
-      {node.voicemail && (
-        <Box sx={{
-          mt: 1.5, p: 1.5, borderRadius: 1.5,
-          bgcolor: 'rgba(96,165,250,0.07)',
-          border: '1px solid rgba(96,165,250,0.22)',
-        }}>
-          <MuiTypography variant="overline" sx={{
-            color: '#60a5fa', fontWeight: 700, letterSpacing: 1.1, display: 'block', mb: 0.4, fontSize: 10,
-          }}>
-            Voicemail
-          </MuiTypography>
-          <EditableScript
-            nodeId={nodeId} field="voicemail" defaultLines={node.voicemail}
-            fill={fill}
-            sx={{ color: 'rgba(255,255,255,0.85)' }}
-            override={ov('voicemail')}
-            onSaveOverride={(t) => onSaveOverride(nodeId, 'voicemail', t)}
-            onResetOverride={() => onResetOverride(nodeId, 'voicemail')}
-          />
-        </Box>
-      )}
-
-      {node.direction && (
-        <Box sx={{
-          mt: 1.25, p: 1.1, borderRadius: 1.25,
-          bgcolor: 'rgba(255,255,255,0.025)',
-          borderLeft: `2px solid ${BRAND.green}`,
-          fontStyle: 'italic',
-        }}>
-          <EditableScript
-            nodeId={nodeId} field="direction" defaultLines={node.direction}
-            sx={{ color: BRAND.muted }}
-            override={ov('direction')}
-            onSaveOverride={(t) => onSaveOverride(nodeId, 'direction', t)}
-            onResetOverride={() => onResetOverride(nodeId, 'direction')}
-          />
-        </Box>
-      )}
-
-      {node.followUp && (
-        <Box sx={{ mt: 1.25 }}>
-          <MuiTypography variant="overline" sx={{
-            color: BRAND.muted, fontWeight: 700, letterSpacing: 1, display: 'block', fontSize: 10, mb: 0.3,
-          }}>
-            Follow-up
-          </MuiTypography>
-          <EditableScript
-            nodeId={nodeId} field="followUp" defaultLines={node.followUp}
-            fill={fill}
-            sx={{ color: BRAND.white }}
-            override={ov('followUp')}
-            onSaveOverride={(t) => onSaveOverride(nodeId, 'followUp', t)}
-            onResetOverride={() => onResetOverride(nodeId, 'followUp')}
-          />
-        </Box>
-      )}
-    </Paper>
-  );
-}
+// Cold-call tree navigation. The previous flat-playbook revision was
+// rejected as "absolutely terrible" — too much surface, hard to find the
+// right response mid-call. Back to the tree, with three deliberate
+// improvements over the original:
+//
+//   1. Sticky breadcrumb at the top showing the full path so far (Open the
+//      line → Opener → Pain dig). Always visible, click any crumb to jump
+//      back. Tells the user where they are AND where they've been without
+//      re-reading the call.
+//   2. Back / Restart pinned right next to the breadcrumb, not buried at
+//      the bottom of the card. Reachable mid-call without scrolling.
+//   3. Script text rendered larger and tighter line-height so the line
+//      you're reading aloud is the unmistakable focal point of the page.
+//
+// Quick rebuttals are removed entirely per user feedback (hard to scan
+// mid-call). They still live in the data file at the bottom of this file
+// if we want to bring them back as a toggleable side panel later.
+const CC_HISTORY_MAX = 50;
 
 function ColdCallTab({ token }) {
   const [biz, setBiz] = React.useState('');
   const [svc, setSvc] = React.useState('');
   const [name, setName] = React.useState('');
+  const [history, setHistory] = React.useState(['start']);
   const [notes, setNotes] = React.useState('');
   const [savedAt, setSavedAt] = React.useState('');
   const [storageWarning, setStorageWarning] = React.useState('');
@@ -1733,23 +1614,48 @@ function ColdCallTab({ token }) {
 
   const overrideFor = (nodeId, field) => overrides[`${nodeId}::${field}`];
 
-  // Smooth-scroll to a section by its id. Section anchors live on the
-  // section <Box> components below. Account for the sticky chip row's
-  // height so the section heading lands just below the chips.
-  const scrollToSection = (id) => {
-    const el = document.getElementById(`cc-section-${id}`);
-    if (el) {
-      const y = el.getBoundingClientRect().top + window.scrollY - 96;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    }
+  const currentId = history[history.length - 1];
+  const node = COLD_CALL_NODES[currentId] || COLD_CALL_NODES.start;
+
+  // Cap history at CC_HISTORY_MAX so a marathon call session can't grow the
+  // array unbounded; oldest crumbs roll off the front.
+  const goTo = (id) => {
+    if (!COLD_CALL_NODES[id]) { console.warn(`[ColdCall] unknown node id: ${id}`); return; }
+    setHistory((h) => {
+      const next = [...h, id];
+      return next.length > CC_HISTORY_MAX ? next.slice(-CC_HISTORY_MAX) : next;
+    });
   };
+  // Jump directly to a node already in our path — used by breadcrumb clicks.
+  // Truncates history so the future re-routes from there if the user picks a
+  // different fork the second time through.
+  const jumpToIndex = (idx) => {
+    if (idx < 0 || idx >= history.length - 1) return;
+    setHistory((h) => h.slice(0, idx + 1));
+  };
+  const goBack = () => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
+  const restart = () => setHistory(['start']);
+
+  const isEnd = !!node.end;
+  const endColor = node.end === 'success' ? '#4ade80'
+    : node.end === 'warning' ? '#fbbf24'
+    : 'rgba(255,255,255,0.85)';
+  const endBg = node.end === 'success' ? 'rgba(74,222,128,0.06)'
+    : node.end === 'warning' ? 'rgba(251,191,36,0.06)'
+    : 'rgba(255,255,255,0.025)';
+  const endBorder = node.end === 'success' ? 'rgba(74,222,128,0.3)'
+    : node.end === 'warning' ? 'rgba(251,191,36,0.3)'
+    : BRAND.faint;
+  const ov = (field) => overrideFor(currentId, field);
 
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 2.5 }}>
-        Flat call playbook — every script's visible at once, organized by call moment.
-        Fill the three setup fields and every line autofills the owner's name, business, and service.
-        Click "Edit" on any script to rewrite it; edits save to the cloud and follow you to any device.
+        Decision-tree call script. Fill the owner's first name, business name,
+        and service at the top — every line autofills as you go. Click any
+        crumb in the breadcrumb to jump back, or "Restart" to start the call
+        over. Edits to any script save to the cloud and follow you across
+        devices.
       </MuiTypography>
 
       {storageWarning && (
@@ -1757,7 +1663,7 @@ function ColdCallTab({ token }) {
       )}
 
       {/* Setup inputs */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2.5 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
         <TextField label="Owner first name" placeholder="Mike"
           value={name} onChange={(e) => setName(e.target.value)}
           fullWidth size="small" sx={darkInputSx} />
@@ -1769,122 +1675,228 @@ function ColdCallTab({ token }) {
           fullWidth size="small" sx={darkInputSx} />
       </Stack>
 
-      {/* Sticky section nav — jump to any call moment with one tap. Sits just
-          under the studio header on scroll so it stays reachable mid-call. */}
+      {/* STICKY nav bar — breadcrumb + back + restart. Pinned at the top of
+          the scroll so mid-call you can jump back without losing the screen.
+          Breadcrumb chips are clickable; clicking the 3rd of 5 truncates the
+          path so re-routing from there forward is honest. */}
       <Box sx={{
         position: 'sticky', top: 0, zIndex: 4,
         bgcolor: BRAND.bg,
-        py: 1.25, mb: 2, mx: { xs: -2.5, sm: -4 }, px: { xs: 2.5, sm: 4 },
+        py: 1.25, mb: 2.5, mx: { xs: -2.5, sm: -4 }, px: { xs: 2.5, sm: 4 },
         borderBottom: `1px solid ${BRAND.faint}`,
       }}>
-        <Stack direction="row" spacing={0.75} sx={{ overflowX: 'auto', flexWrap: { sm: 'wrap' } }}>
-          {COLD_CALL_SECTIONS.map((sec) => (
-            <Chip key={sec.id} label={sec.label} clickable
-              onClick={() => scrollToSection(sec.id)}
-              sx={{
-                bgcolor: 'rgba(74,222,128,0.06)',
-                color: BRAND.green,
-                fontWeight: 700, fontSize: 11.5, height: 26,
-                border: `1px solid ${BRAND.faint}`,
-                '&:hover': { bgcolor: 'rgba(74,222,128,0.14)', borderColor: BRAND.green },
-              }} />
-          ))}
-          <Box sx={{ flex: 1 }} />
-          <Chip label="Rebuttals" clickable
-            onClick={() => scrollToSection('rebuttals')}
+        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+          <Button
+            onClick={goBack}
+            disabled={history.length <= 1}
+            startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />}
+            size="small"
             sx={{
-              bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.muted,
-              fontWeight: 700, fontSize: 11.5, height: 26,
-              border: `1px solid ${BRAND.faint}`,
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)', color: BRAND.white },
-            }} />
-          <Chip label="Notes" clickable
-            onClick={() => scrollToSection('notes')}
+              textTransform: 'none', color: BRAND.muted, fontWeight: 600, fontSize: 12,
+              minWidth: 'auto', px: 1,
+              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+              '&:disabled': { color: 'rgba(255,255,255,0.2)' },
+            }}
+          >Back</Button>
+          <Button
+            onClick={restart}
+            disabled={history.length === 1}
+            startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />}
+            size="small"
             sx={{
-              bgcolor: 'rgba(255,255,255,0.04)', color: BRAND.muted,
-              fontWeight: 700, fontSize: 11.5, height: 26,
-              border: `1px solid ${BRAND.faint}`,
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)', color: BRAND.white },
-            }} />
-        </Stack>
-      </Box>
-
-      {/* Sections — every script visible at once. No tree navigation. */}
-      {COLD_CALL_SECTIONS.map((sec) => (
-        <Box key={sec.id} id={`cc-section-${sec.id}`} sx={{ mb: 4, scrollMarginTop: 96 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
-            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: BRAND.green }} />
-            <MuiTypography variant="overline" sx={{
-              color: BRAND.green, fontWeight: 800, letterSpacing: 2, fontSize: 11,
-            }}>
-              {sec.label}
-            </MuiTypography>
-            <Box sx={{ flex: 1, height: '1px', bgcolor: BRAND.faint }} />
-          </Stack>
-          <Stack spacing={1.5}>
-            {sec.nodeIds.map((nodeId) => {
-              const node = COLD_CALL_NODES[nodeId];
-              if (!node) return null;
+              textTransform: 'none', color: BRAND.muted, fontWeight: 600, fontSize: 12,
+              minWidth: 'auto', px: 1,
+              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+              '&:disabled': { color: 'rgba(255,255,255,0.2)' },
+            }}
+          >Restart</Button>
+          <Box sx={{ width: 1, height: 18, bgcolor: BRAND.faint, mx: 0.5 }} />
+          {/* Breadcrumb — full path so far. Each crumb clickable. */}
+          <Stack direction="row" alignItems="center" gap={0.5} sx={{ flexWrap: 'wrap', flex: 1 }}>
+            {history.map((id, i) => {
+              const n = COLD_CALL_NODES[id];
+              const isCurrent = i === history.length - 1;
               return (
-                <ColdCallScriptCard
-                  key={nodeId}
-                  nodeId={nodeId}
-                  node={node}
-                  fill={fill}
-                  overrideFor={overrideFor}
-                  onSaveOverride={handleSaveOverride}
-                  onResetOverride={handleResetOverride}
-                />
+                <React.Fragment key={`${id}-${i}`}>
+                  <Box
+                    onClick={isCurrent ? undefined : () => jumpToIndex(i)}
+                    sx={{
+                      fontSize: 11.5, fontWeight: isCurrent ? 800 : 600,
+                      color: isCurrent ? BRAND.green : BRAND.muted,
+                      cursor: isCurrent ? 'default' : 'pointer',
+                      px: 0.75, py: 0.3, borderRadius: 1,
+                      bgcolor: isCurrent ? 'rgba(74,222,128,0.10)' : 'transparent',
+                      transition: 'color 0.15s ease, background 0.15s ease',
+                      '&:hover': isCurrent ? {} : { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
+                    }}
+                  >
+                    {(n && n.stage) || id}
+                  </Box>
+                  {!isCurrent && (
+                    <Box component="span" sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, lineHeight: 1 }}>›</Box>
+                  )}
+                </React.Fragment>
               );
             })}
           </Stack>
-        </Box>
-      ))}
-
-      {/* Quick rebuttals */}
-      <Box id="cc-section-rebuttals" sx={{ mb: 4, scrollMarginTop: 96 }}>
-        <MuiTypography variant="overline" sx={{
-          color: BRAND.muted, letterSpacing: 1.5, fontWeight: 700, display: 'block', mb: 1.5,
-        }}>
-          Quick rebuttals
-        </MuiTypography>
-        {QUICK_REBUTTALS.map((r, i) => (
-          <Accordion
-            key={i}
-            disableGutters
-            elevation={0}
-            sx={{
-              bgcolor: 'rgba(255,255,255,0.02)',
-              border: `1px solid ${BRAND.faint}`,
-              borderRadius: '8px !important',
-              mb: 0.6,
-              '&:before': { display: 'none' },
-              '&.Mui-expanded': { margin: '0 0 4.8px 0' },
-            }}
-          >
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon sx={{ color: BRAND.muted }} />}
-              sx={{
-                px: 1.75,
-                '& .MuiAccordionSummary-content': { my: 1.2 },
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
-              }}
-            >
-              <MuiTypography variant="body2" sx={{ color: BRAND.white, fontWeight: 500 }}>
-                {r.q}
-              </MuiTypography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.75 }}>
-              <MuiTypography variant="body2" sx={{ color: 'rgba(255,255,255,0.75)', lineHeight: 1.55 }}>
-                {r.a}
-              </MuiTypography>
-            </AccordionDetails>
-          </Accordion>
-        ))}
+        </Stack>
       </Box>
 
-      {/* Notes */}
-      <Box id="cc-section-notes" sx={{ scrollMarginTop: 96 }}>
+      {/* Script card — the focal point of the call. Bigger script text + a
+          quieter "direction" coach block beneath. End-state nodes (voicemail,
+          callback, win) get a colored tint so they read distinct from
+          mid-call scripts. */}
+      <Fade in key={currentId} timeout={220}>
+        <Box>
+          <Paper elevation={0} sx={{
+            bgcolor: endBg,
+            border: `1px solid ${endBorder}`,
+            borderRadius: 3,
+            p: { xs: 2.5, sm: 3.5 },
+            mb: 2.5,
+          }}>
+            <Stack direction="row" alignItems="center" gap={1} mb={1.5}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: isEnd ? endColor : BRAND.green }} />
+              <MuiTypography sx={{
+                color: isEnd ? endColor : BRAND.green,
+                fontWeight: 800, fontSize: 11.5,
+                textTransform: 'uppercase', letterSpacing: 1.4,
+              }}>
+                {node.stage}
+              </MuiTypography>
+              {isEnd && node.badge && (
+                <Chip label={node.badge} size="small" sx={{
+                  bgcolor: endColor, color: '#0c1410', fontWeight: 800,
+                  borderRadius: 999, ml: 0.5, height: 20, fontSize: 10,
+                }} />
+              )}
+            </Stack>
+
+            {/* Script — the thing you read out loud. Bigger + tighter
+                line-height for readability mid-call. */}
+            <Box sx={{
+              '& .MuiTypography-body1': { fontSize: { xs: 15.5, sm: 16.5 }, lineHeight: 1.55 },
+            }}>
+              <EditableScript
+                nodeId={currentId} field="script" defaultLines={node.script}
+                fill={fill}
+                sx={{ color: isEnd ? endColor : BRAND.white }}
+                override={ov('script')}
+                onSaveOverride={(t) => handleSaveOverride(currentId, 'script', t)}
+                onResetOverride={() => handleResetOverride(currentId, 'script')}
+              />
+            </Box>
+
+            {node.followUp && (
+              <Box sx={{ mt: 1.75 }}>
+                <MuiTypography variant="overline" sx={{
+                  color: BRAND.muted, fontWeight: 700, letterSpacing: 1, display: 'block', fontSize: 10, mb: 0.4,
+                }}>
+                  Follow-up question
+                </MuiTypography>
+                <Box sx={{ '& .MuiTypography-body1': { fontSize: { xs: 14.5, sm: 15.5 }, lineHeight: 1.55 } }}>
+                  <EditableScript
+                    nodeId={currentId} field="followUp" defaultLines={node.followUp}
+                    fill={fill}
+                    sx={{ color: BRAND.white }}
+                    override={ov('followUp')}
+                    onSaveOverride={(t) => handleSaveOverride(currentId, 'followUp', t)}
+                    onResetOverride={() => handleResetOverride(currentId, 'followUp')}
+                  />
+                </Box>
+              </Box>
+            )}
+
+            {node.voicemail && (
+              <Box sx={{
+                mt: 2, p: 1.75, borderRadius: 1.75,
+                bgcolor: 'rgba(96,165,250,0.08)',
+                border: '1px solid rgba(96,165,250,0.25)',
+              }}>
+                <MuiTypography variant="overline" sx={{
+                  color: '#60a5fa', fontWeight: 700, letterSpacing: 1.1, display: 'block', mb: 0.5, fontSize: 10,
+                }}>
+                  Voicemail script
+                </MuiTypography>
+                <EditableScript
+                  nodeId={currentId} field="voicemail" defaultLines={node.voicemail}
+                  fill={fill}
+                  sx={{ color: 'rgba(255,255,255,0.85)' }}
+                  override={ov('voicemail')}
+                  onSaveOverride={(t) => handleSaveOverride(currentId, 'voicemail', t)}
+                  onResetOverride={() => handleResetOverride(currentId, 'voicemail')}
+                />
+              </Box>
+            )}
+
+            {node.direction && (
+              <Box sx={{
+                mt: 1.75, p: 1.5, borderRadius: 1.5,
+                bgcolor: 'rgba(255,255,255,0.03)',
+                borderLeft: `2px solid ${BRAND.green}`,
+                fontStyle: 'italic',
+              }}>
+                <MuiTypography variant="overline" sx={{
+                  color: BRAND.muted, fontWeight: 700, letterSpacing: 1, display: 'block', fontSize: 10, mb: 0.3,
+                  fontStyle: 'normal',
+                }}>
+                  Coach
+                </MuiTypography>
+                <EditableScript
+                  nodeId={currentId} field="direction" defaultLines={node.direction}
+                  sx={{ color: BRAND.muted }}
+                  override={ov('direction')}
+                  onSaveOverride={(t) => handleSaveOverride(currentId, 'direction', t)}
+                  onResetOverride={() => handleResetOverride(currentId, 'direction')}
+                />
+              </Box>
+            )}
+          </Paper>
+
+          {/* Response buttons — what they said next */}
+          {node.next && node.next.length > 0 && (
+            <>
+              <MuiTypography variant="caption" sx={{
+                color: BRAND.muted, textTransform: 'uppercase', letterSpacing: 1.3,
+                fontWeight: 700, display: 'block', mb: 1, fontSize: 10.5,
+              }}>
+                They said:
+              </MuiTypography>
+              <Stack spacing={0.9} sx={{ mb: 4 }}>
+                {node.next.map((opt, i) => (
+                  <Button
+                    key={`${currentId}-${i}`}
+                    onClick={() => goTo(opt.to)}
+                    variant="outlined"
+                    sx={{
+                      justifyContent: 'space-between',
+                      textTransform: 'none', fontWeight: 600, fontSize: 14.5,
+                      color: BRAND.white,
+                      borderColor: 'rgba(255,255,255,0.14)',
+                      bgcolor: 'rgba(255,255,255,0.025)',
+                      borderRadius: 2,
+                      py: 1.2, px: 1.85,
+                      transition: 'all 0.13s',
+                      '&:hover': {
+                        borderColor: BRAND.green,
+                        bgcolor: 'rgba(74,222,128,0.07)',
+                        transform: 'translateX(2px)',
+                      },
+                    }}
+                    endIcon={<ChevronRightIcon fontSize="small" sx={{ color: BRAND.muted }} />}
+                  >
+                    <Box sx={{ flexGrow: 1, textAlign: 'left' }}>{opt.label}</Box>
+                  </Button>
+                ))}
+              </Stack>
+            </>
+          )}
+        </Box>
+      </Fade>
+
+      {/* Notes — running scratchpad. Persists to the cloud through the same
+          CC_API save path as setup + overrides. */}
+      <Box sx={{ mt: 2 }}>
         <MuiTypography variant="overline" sx={{
           color: BRAND.muted, letterSpacing: 1.5, fontWeight: 700, display: 'block', mb: 1.5,
         }}>
@@ -1918,9 +1930,9 @@ const HUB_GROUPS = [
     tools: [
       { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
+      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
