@@ -193,7 +193,7 @@ function buildMarkerEl(layer, place) {
 }
 
 // Popup HTML/DOM
-function buildPopupContent({ place, layer, onSave, onHide, onError, onSetAsSleep, onValidate, savedAsLeadId, hideAvailable }) {
+function buildPopupContent({ place, layer, onSave, onHide, onError, onSetAsSleep, savedAsLeadId, hideAvailable }) {
   const div = document.createElement('div');
   div.style.cssText = `
     font-family: ${MONO};
@@ -279,16 +279,6 @@ function buildPopupContent({ place, layer, onSave, onHide, onError, onSetAsSleep
       }
     });
     btnRow.appendChild(hideBtn);
-  }
-
-  // Dispensaries get a VALIDATE entry point so the user has a visible way
-  // to trigger the density tool from any pin on the map.
-  if (onValidate && layer.id === 'dispensaries') {
-    const valBtn = document.createElement('button');
-    valBtn.textContent = '🔍 SCAN AREA';
-    valBtn.style.cssText = btnStyle('neutral');
-    valBtn.addEventListener('click', () => onValidate(place));
-    btnRow.appendChild(valBtn);
   }
 
   // Campgrounds (and any kind of "stop") get a one-tap "set as sleep"
@@ -620,11 +610,6 @@ export default function RoadTripTab({ token }) {
     candidates: [], selectedIds: new Set(), loading: false, route: null,
   });
 
-  // VALIDATE AREA modal — density count + denser nearby alternatives.
-  const [validation, setValidation] = React.useState({
-    open: false, center: null, data: null, loading: false, label: '',
-  });
-
   // GO / live execution mode — only true while actively driving the route.
   const [execMode, setExecMode] = React.useState(false);
   const [execDay, setExecDay]   = React.useState(null);
@@ -799,11 +784,6 @@ export default function RoadTripTab({ token }) {
           if (Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) setMapMoved(true);
         }
       });
-      // Right-click anywhere → VALIDATE that area for dispensary density.
-      map.on('contextmenu', (e) => {
-        e.preventDefault?.();
-        openValidator({ lat: e.lngLat.lat, lng: e.lngLat.lng, label: '' });
-      });
       mapRef.current = map;
     } catch (err) {
       setMapError(err.message || 'Failed to initialize map.');
@@ -860,7 +840,15 @@ export default function RoadTripTab({ token }) {
   const addHeatmapLayer = React.useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const pts = heatmapPointsRef.current;
+    // Source = live DISPENSARIES layer if loaded, otherwise the user's saved
+    // dispensary leads. This lets the heatmap work on mobile without first
+    // having to load the DISPENSARIES layer (which was the user's complaint
+    // that "density doesn't work on mobile").
+    const live = heatmapPointsRef.current;
+    const fallback = savedItems
+      .filter(s => s.type === 'dispensary' && isFinite(s.lat) && isFinite(s.lng))
+      .map(s => ({ lat: s.lat, lng: s.lng }));
+    const pts = live.length ? live : fallback;
     if (!pts.length) return;
     const geojson = {
       type: 'FeatureCollection',
@@ -910,7 +898,7 @@ export default function RoadTripTab({ token }) {
     if (!mapReady) return;
     if (heatmapOn) addHeatmapLayer();
     else removeHeatmapLayer();
-  }, [heatmapOn, mapReady, addHeatmapLayer, removeHeatmapLayer]);
+  }, [heatmapOn, mapReady, addHeatmapLayer, removeHeatmapLayer, savedItems]);
 
   const onSaveLead = async (place, layer) => {
     // Compute next sortOrder for current day so item lands at the end of the list
@@ -1102,10 +1090,6 @@ export default function RoadTripTab({ token }) {
     });
   }, []);
 
-  const toggleRouteForDay = (dayLabel) => {
-    if (routesShown[dayLabel]) hideRouteForDay(dayLabel);
-    else refreshRouteForDay(dayLabel);
-  };
 
   /**
    * Adds a new day at the end (Day N+1). Sets it as current so subsequent
@@ -1301,7 +1285,6 @@ export default function RoadTripTab({ token }) {
                  onHide: onHideDispensary,
                  onError: (msg) => showToast(msg, 'error'),
                  onSetAsSleep: (p) => { popup.remove(); promptSetAsSleep(p); },
-                 onValidate:   (p) => { popup.remove(); openValidator({ lat: p.lat, lng: p.lng, label: p.name }); },
                  savedAsLeadId: leadsByExtIdRef.current.get(place.externalId),
                  hideAvailable: layer.id === 'dispensaries',
                }))
@@ -1393,12 +1376,12 @@ export default function RoadTripTab({ token }) {
     }
   };
 
-  const assignSleep = async ({ feature, day, role, kind }) => {
+  const assignSleep = async ({ feature, day, role, kind, customName }) => {
     // `feature` is a Mapbox geocoder result; create a lead and mark it.
     const [lng, lat] = feature.center;
     const body = {
       source: 'manual',
-      name: feature.text || feature.place_name?.split(',')[0] || 'Sleep',
+      name: customName?.trim() || feature.text || feature.place_name?.split(',')[0] || 'Sleep',
       address: feature.place_name || '',
       lat, lng,
       type: kind === 'campground' ? 'campground' : 'other',
@@ -1407,7 +1390,9 @@ export default function RoadTripTab({ token }) {
       dayLabel: day,
       sleepRole: role,
       sleepKind: kind,
-      isActiveSleep: role === 'primary' && !activeSleepFor(day),
+      // Always default a newly-set sleep pin to active. The controller
+      // demotes any prior active on the same day so this is safe.
+      isActiveSleep: true,
     };
     try {
       const r = await axios.post(`${config.backendUrl}/api/roadtrip/leads`, body,
@@ -1459,55 +1444,28 @@ export default function RoadTripTab({ token }) {
       place,
       day: currentDayLabel,
       role: 'primary',
-      kind: 'campground',
+      kind: place.type === 'campground' ? 'campground'
+          : place.type?.startsWith('park') ? 'campground'
+          : 'other',
+      nameOverride: place.name || '',
     });
   };
 
   const confirmSetAsSleep = async () => {
     if (!setAsSleepPicker) return;
-    const { place, day, role, kind } = setAsSleepPicker;
+    const { place, day, role, kind, nameOverride } = setAsSleepPicker;
     await assignSleep({
       feature: {
         center: [place.lng, place.lat],
-        text: place.name,
+        text: nameOverride || place.name,
         place_name: place.address || place.name,
       },
       day, role, kind,
+      customName: nameOverride,
     });
     setSetAsSleepPicker(null);
   };
 
-  const autoSuggestPrimarySleep = async (day) => {
-    const stops = stopsForDay(day).filter(s => !s.sleepRole);
-    const anchor = stops[stops.length - 1] || stops[0];
-    if (!anchor) { showToast('Add at least one stop to this day first.', 'error'); return; }
-    showToast('Finding the closest campground…', 'info');
-    try {
-      const r = await axios.get(
-        `${config.backendUrl}/api/roadtrip/search/campgrounds?lat=${anchor.lat}&lng=${anchor.lng}&radius=50000`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const candidates = (r.data?.results || [])
-        .filter(p => isFinite(p.lat) && isFinite(p.lng))
-        .map(p => ({ ...p, _dist: haversineMiles(anchor.lat, anchor.lng, p.lat, p.lng) }))
-        .sort((a, b) => a._dist - b._dist);
-      if (!candidates.length) {
-        showToast('No campgrounds nearby. Try EDIT to set manually.', 'error');
-        return;
-      }
-      const pick = candidates[0];
-      await assignSleep({
-        feature: {
-          center: [pick.lng, pick.lat],
-          text: pick.name,
-          place_name: pick.address || pick.name,
-        },
-        day, role: 'primary', kind: 'campground',
-      });
-    } catch (e) {
-      showToast('Campground search failed.', 'error');
-    }
-  };
 
   const sleepEditorSearch = async (q) => {
     setSleepEditor(s => ({ ...s, query: q, searching: true }));
@@ -1583,12 +1541,8 @@ export default function RoadTripTab({ token }) {
   const openPitchPlanner = async (day) => {
     const sleep = activeSleepFor(day);
     if (!sleep) {
-      // Intelligence: no sleep set — offer auto-pick instead of bailing.
-      showToast('No TONIGHT pin — auto-picking closest campground…', 'info');
-      await autoSuggestPrimarySleep(day);
-      const fresh = activeSleepFor(day);
-      if (!fresh) return;
-      return openPitchPlanner(day);
+      showToast('Set a TONIGHT sleep pin for this day first (tap + PRI or + BAK).', 'error');
+      return;
     }
     setPlanning(p => ({ ...p, open: true, day, sleep, loading: true, candidates: [], route: null,
                        googleScan: null, scanMessage: '' }));
@@ -1763,40 +1717,10 @@ export default function RoadTripTab({ token }) {
   // VALIDATE AREA — density count + denser nearby alternatives.
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Free-by-default: open the modal with a local count of the user's
-  // SAVED leads within 5mi. No API call. From the modal the user can opt
-  // into a deeper Google scan ($0.03 first time, free for 7d after).
-  const openValidator = ({ lat, lng, label = '' }) => {
-    const savedLeads = savedItems.filter(s => s.type === 'dispensary' && isFinite(s.lat) && isFinite(s.lng));
-    const within5 = savedLeads.filter(s => haversineMiles(lat, lng, s.lat, s.lng) <= 5);
-    setValidation({
-      open: true, center: { lat, lng }, label,
-      data: null, loading: false,
-      savedCount: within5.length,
-      savedSample: within5.slice(0, 5),
-      googleScanned: false,
-    });
-  };
-
-  // Optional deeper scan via Google (cached 7d). Triggers backend density/area.
-  const deeperScan = async ({ fresh = false } = {}) => {
-    if (!validation.center) return;
-    setValidation(v => ({ ...v, loading: true }));
-    try {
-      const r = await axios.post(
-        `${config.backendUrl}/api/roadtrip/density/area`,
-        { lat: validation.center.lat, lng: validation.center.lng, fresh },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setValidation(v => ({ ...v, data: r.data, loading: false, googleScanned: true }));
-    } catch (e) {
-      console.error('[validator] deeper scan failed:', e);
-      showToast('Deeper scan failed.', 'error');
-      setValidation(v => ({ ...v, loading: false }));
-    }
-  };
-
-  const refreshValidator = () => deeperScan({ fresh: true });
+  // Validator removed from UI per user feedback. Backend endpoints remain
+  // available for future use; the right-click + popup entry points were
+  // confusing and redundant with the manual "toggle DISPENSARIES, save
+  // what's relevant" workflow the user prefers.
 
   // ─────────────────────────────────────────────────────────────────────────
   // GO / live execution — watchPosition, NEXT STOP, VISITED / SKIP.
@@ -1966,8 +1890,13 @@ export default function RoadTripTab({ token }) {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const popup = new mapboxgl.Popup({ offset: 22, closeButton: true, closeOnClick: true });
+        const dayKey = item.dayLabel || 'Unassigned';
+        const otherRole = item.sleepRole === 'primary' ? 'backup' : 'primary';
+        const hasOther = !!savedItems.find(s =>
+          (s.dayLabel || 'Unassigned') === dayKey && s.sleepRole === otherRole);
         const content = buildSleepPopup({
           lead: item,
+          hasBackup: hasOther,
           onMakeActive: async (lead) => {
             try {
               if (!lead.isActiveSleep) {
@@ -1981,6 +1910,9 @@ export default function RoadTripTab({ token }) {
                   return s;
                 }));
                 showToast(`TONIGHT: ${lead.name}`, 'success');
+              } else if (hasOther) {
+                // Already active and there's a backup — flip to the other role.
+                await flipActiveSleep(dayKey);
               }
               popup.remove();
             } catch { showToast('Failed.', 'error'); }
@@ -1988,6 +1920,10 @@ export default function RoadTripTab({ token }) {
           onReplace: (lead) => {
             popup.remove();
             openSleepEditor(lead.dayLabel || 'Unassigned', lead.sleepRole);
+          },
+          onClear: async (lead) => {
+            popup.remove();
+            await clearSleep(lead);
           },
           onEdit: (lead) => {
             popup.remove();
@@ -2272,7 +2208,6 @@ export default function RoadTripTab({ token }) {
                 </Typography>
               ) : (
                 itinerary.map(([day, stops]) => {
-                  const isVisible = !!routesShown[day];
                   const dayColor = colorForDay(day);
                   const sleepPri = primarySleepFor(day);
                   const sleepBak = backupSleepFor(day);
@@ -2294,25 +2229,11 @@ export default function RoadTripTab({ token }) {
                         }}>
                           {formatDayLabel(day).toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 600 }}>· {stops.length}</Box>
                         </Typography>
-                        {stops.length >= 2 && (
-                          <Box role="button" tabIndex={0}
-                            onClick={() => toggleRouteForDay(day)}
-                            sx={{
-                              fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                              px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
-                              color: isVisible ? TERM.greenDk : dayColor,
-                              bgcolor: isVisible ? dayColor : 'transparent',
-                              border: `1px solid ${dayColor}`,
-                              '&:hover': { opacity: 0.85 },
-                            }}>
-                            {isVisible ? '◼ HIDE' : '▶ ROUTE'}
-                          </Box>
-                        )}
                         <Box role="button" tabIndex={0}
                           onClick={() => openPitchPlanner(day)}
                           sx={{
-                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
+                            fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                            px: 1, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
                             color: sleepActive ? TERM.amber : TERM.muted,
                             border: `1px dashed ${sleepActive ? TERM.amber : TERM.borderDim}`,
                             '&:hover': { bgcolor: 'rgba(251,191,36,0.08)' },
@@ -2364,8 +2285,8 @@ export default function RoadTripTab({ token }) {
                             }}>not set</Box>
                           )}
                         </Stack>
-                        <Stack direction="row" alignItems="center" spacing={0.5}>
-                          {/* Segmented toggle: PRI | BAK */}
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+                          {/* Segmented toggle: PRI | BAK — bigger tap targets for mobile */}
                           <Box sx={{
                             display: 'flex', border: `1px solid ${TERM.borderDim}`,
                             borderRadius: 0.5, overflow: 'hidden', flexShrink: 0,
@@ -2377,8 +2298,9 @@ export default function RoadTripTab({ token }) {
                                 } else { openSleepEditor(day, 'primary'); }
                               }}
                               sx={{
-                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                                px: 1, py: 0.4, cursor: 'pointer',
+                                fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                                px: 1.25, py: 0.75, cursor: 'pointer', minHeight: 32, minWidth: 56,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 color: sleepActive?.sleepRole === 'primary'
                                   ? TERM.greenDk : (sleepPri ? TERM.green : TERM.muted),
                                 bgcolor: sleepActive?.sleepRole === 'primary' ? TERM.green : 'transparent',
@@ -2390,8 +2312,9 @@ export default function RoadTripTab({ token }) {
                                 } else { openSleepEditor(day, 'backup'); }
                               }}
                               sx={{
-                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                                px: 1, py: 0.4, cursor: 'pointer',
+                                fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                                px: 1.25, py: 0.75, cursor: 'pointer', minHeight: 32, minWidth: 56,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 borderLeft: `1px solid ${TERM.borderDim}`,
                                 color: sleepActive?.sleepRole === 'backup'
                                   ? '#000' : (sleepBak ? TERM.amber : TERM.muted),
@@ -2403,8 +2326,9 @@ export default function RoadTripTab({ token }) {
                               onClick={() => openSleepEditor(day, 'primary')}
                               title="Edit primary sleep"
                               sx={{
-                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                fontFamily: MONO, fontSize: 10, fontWeight: 800,
+                                px: 1, py: 0.75, cursor: 'pointer', borderRadius: 0.25,
+                                minHeight: 32, display: 'flex', alignItems: 'center',
                                 color: TERM.green, border: `1px solid ${TERM.borderDim}`,
                                 '&:hover': { borderColor: TERM.green },
                               }}>✎ ⛺</Box>
@@ -2414,8 +2338,9 @@ export default function RoadTripTab({ token }) {
                               onClick={() => openSleepEditor(day, 'backup')}
                               title="Edit backup sleep"
                               sx={{
-                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                fontFamily: MONO, fontSize: 10, fontWeight: 800,
+                                px: 1, py: 0.75, cursor: 'pointer', borderRadius: 0.25,
+                                minHeight: 32, display: 'flex', alignItems: 'center',
                                 color: TERM.amber, border: `1px solid ${TERM.borderDim}`,
                                 '&:hover': { borderColor: TERM.amber },
                               }}>✎ 🅿</Box>
@@ -2425,9 +2350,11 @@ export default function RoadTripTab({ token }) {
                               onClick={() => clearSleep(sleepActive)}
                               title="Clear active sleep pin"
                               sx={{
-                                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                                fontFamily: MONO, fontSize: 11, fontWeight: 800,
                                 ml: 'auto',
-                                px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                                px: 1, py: 0.75, cursor: 'pointer', borderRadius: 0.25,
+                                minHeight: 32, minWidth: 32, display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
                                 color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
                                 '&:hover': { color: TERM.red, borderColor: TERM.red + '66' },
                               }}>×</Box>
@@ -2498,9 +2425,19 @@ export default function RoadTripTab({ token }) {
                               }} />
                             <Typography sx={{
                               flexGrow: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
-                              color: TERM.text, letterSpacing: 0.2,
+                              color: item.sleepRole
+                                ? (item.sleepRole === 'backup' ? TERM.amber : TERM.green)
+                                : TERM.text,
+                              letterSpacing: 0.2,
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                            }}>{item.name}</Typography>
+                            }}>
+                              {item.sleepRole && (
+                                <Box component="span" sx={{ mr: 0.5 }}>
+                                  {item.sleepRole === 'backup' ? '🅿' : '⛺'}
+                                </Box>
+                              )}
+                              {item.name}
+                            </Typography>
                             <Box className="jp-stop-actions"
                               sx={{ opacity: 0, display: 'flex', gap: 0.25, transition: 'opacity 0.15s' }}>
                               {!isFirst && (
@@ -2571,31 +2508,41 @@ export default function RoadTripTab({ token }) {
                                       ))}
                                     </Box>
                                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
-                                      <Box role="button"
-                                        onClick={() => updateStopField(item, {
-                                          status: item.status === 'visited' ? 'planned' : 'visited',
-                                          visitedAt: item.status === 'visited' ? null : new Date().toISOString(),
-                                        })}
-                                        sx={{
-                                          flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                                          px: 1, py: 0.5, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
-                                          color: item.status === 'visited' ? '#000' : TERM.amber,
-                                          bgcolor: item.status === 'visited' ? TERM.amber : 'transparent',
-                                          border: `1px solid ${TERM.amber}`,
-                                          '&:hover': { bgcolor: 'rgba(251,191,36,0.2)' },
-                                        }}>{item.status === 'visited' ? '✓ VISITED' : 'VISITED?'}</Box>
-                                      <Box role="button"
-                                        onClick={() => updateStopField(item, {
-                                          status: item.status === 'pre_called' ? 'planned' : 'pre_called',
-                                        })}
-                                        sx={{
-                                          flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                                          px: 1, py: 0.5, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
-                                          color: item.status === 'pre_called' ? '#000' : '#84cc16',
-                                          bgcolor: item.status === 'pre_called' ? '#84cc16' : 'transparent',
-                                          border: `1px solid #84cc16`,
-                                          '&:hover': { bgcolor: 'rgba(132,204,22,0.18)' },
-                                        }}>{item.status === 'pre_called' ? '✓ CALLED' : 'CALLED?'}</Box>
+                                      {(() => {
+                                        const visited = item.status === 'visited';
+                                        return (
+                                          <Box role="button"
+                                            onClick={() => updateStopField(item, {
+                                              status: visited ? 'planned' : 'visited',
+                                              visitedAt: visited ? null : new Date().toISOString(),
+                                            })}
+                                            sx={{
+                                              flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                                              px: 1, py: 0.6, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
+                                              color: visited ? TERM.greenDk : TERM.red,
+                                              bgcolor: visited ? TERM.green : 'rgba(248,113,113,0.08)',
+                                              border: `1px solid ${visited ? TERM.green : TERM.red}`,
+                                              '&:hover': { opacity: 0.9 },
+                                            }}>{visited ? '✓ VISITED' : '✗ NOT VISITED'}</Box>
+                                        );
+                                      })()}
+                                      {(() => {
+                                        const called = item.status === 'pre_called';
+                                        return (
+                                          <Box role="button"
+                                            onClick={() => updateStopField(item, {
+                                              status: called ? 'planned' : 'pre_called',
+                                            })}
+                                            sx={{
+                                              flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                                              px: 1, py: 0.6, textAlign: 'center', borderRadius: 0.25, cursor: 'pointer',
+                                              color: called ? '#000' : TERM.red,
+                                              bgcolor: called ? TERM.amber : 'rgba(248,113,113,0.08)',
+                                              border: `1px solid ${called ? TERM.amber : TERM.red}`,
+                                              '&:hover': { opacity: 0.9 },
+                                            }}>{called ? '✓ CALLED' : '✗ NOT CALLED'}</Box>
+                                        );
+                                      })()}
                                     </Box>
                                   </>
                                 ) : item.customType === 'printer' ? (
@@ -2695,57 +2642,32 @@ export default function RoadTripTab({ token }) {
 
           <MapStyleSwitcher current={styleId} onChange={onStyleChange} />
 
-          {/* Always-visible AREA SCAN button — counts your saved leads
-              within 5mi of map center (free), with an optional Google
-              "deeper scan" inside the modal. */}
+          {/* Heatmap toggle — always visible. Sources from live DISPENSARIES
+              if loaded, else from saved dispensary leads, so it works on
+              mobile without requiring the layer to be toggled first. */}
           <Box
             role="button" tabIndex={0}
-            onClick={() => {
-              const c = mapRef.current?.getCenter();
-              if (!c) return;
-              openValidator({ lat: c.lat, lng: c.lng, label: '' });
-            }}
+            onClick={() => setHeatmapOn((v) => !v)}
             sx={{
               position: 'absolute', top: 12, left: 12, zIndex: 2,
               cursor: 'pointer',
-              bgcolor: 'rgba(5,8,10,0.82)',
-              border: `1px solid ${TERM.borderDim}`,
-              color: TERM.green,
-              px: 1, py: 0.4, borderRadius: 0.5,
-              fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2,
+              bgcolor: heatmapOn ? 'rgba(248,113,113,0.18)' : 'rgba(5,8,10,0.82)',
+              border: `1px solid ${heatmapOn ? '#f87171' : TERM.borderDim}`,
+              color: heatmapOn ? '#f87171' : TERM.muted,
+              px: 1.25, py: 0.6, borderRadius: 0.5,
+              fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1.2,
               display: 'flex', alignItems: 'center', gap: 0.6,
               transition: 'all 0.15s ease',
-              '&:hover': { borderColor: TERM.green, bgcolor: 'rgba(74,222,128,0.12)' },
+              '&:hover': { borderColor: '#f87171', color: '#f87171', bgcolor: 'rgba(248,113,113,0.12)' },
             }}>
-            🔍 SCAN AREA
+            <Box sx={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: heatmapOn
+                ? 'radial-gradient(circle, #f87171 0%, #fbbf24 50%, #4ade80 100%)'
+                : TERM.muted,
+            }} />
+            DENSITY
           </Box>
-
-          {/* Heatmap toggle — only visible when dispensaries are loaded */}
-          {layerState.dispensaries.active && (
-            <Box
-              role="button" tabIndex={0}
-              onClick={() => setHeatmapOn((v) => !v)}
-              sx={{
-                position: 'absolute', top: 48, left: 12, zIndex: 2,
-                cursor: 'pointer',
-                bgcolor: heatmapOn ? 'rgba(248,113,113,0.18)' : 'rgba(5,8,10,0.82)',
-                border: `1px solid ${heatmapOn ? '#f87171' : TERM.borderDim}`,
-                color: heatmapOn ? '#f87171' : TERM.muted,
-                px: 1, py: 0.4, borderRadius: 0.5,
-                fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2,
-                display: 'flex', alignItems: 'center', gap: 0.6,
-                transition: 'all 0.15s ease',
-                '&:hover': { borderColor: '#f87171', color: '#f87171', bgcolor: 'rgba(248,113,113,0.12)' },
-              }}>
-              <Box sx={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: heatmapOn
-                  ? 'radial-gradient(circle, #f87171 0%, #fbbf24 50%, #4ade80 100%)'
-                  : TERM.muted,
-              }} />
-              DENSITY
-            </Box>
-          )}
 
           {/* "Refresh this area" badge */}
           {anyActive && mapMoved && (
@@ -2966,20 +2888,6 @@ export default function RoadTripTab({ token }) {
               return (
                 <>
                   <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
-                    {todayStops.length >= 2 && (
-                      <Box role="button" tabIndex={0}
-                        onClick={() => { toggleRouteForDay(todayISO()); setMobileTab('map'); }}
-                        sx={{
-                          fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                          px: 1.25, py: 0.75, cursor: 'pointer', borderRadius: 0.5,
-                          color: routesShown[todayISO()] ? TERM.greenDk : TERM.green,
-                          bgcolor: routesShown[todayISO()] ? TERM.green : 'transparent',
-                          border: `1px solid ${TERM.green}`,
-                          '&:hover': { opacity: 0.85 },
-                        }}>
-                        {routesShown[todayISO()] ? '◼ HIDE ROUTE' : '▶ SHOW ROUTE'}
-                      </Box>
-                    )}
                     <Box role="button" tabIndex={0}
                       onClick={() => {
                         const coords = todayStops.map(s => `${s.lat},${s.lng}`).join('/');
@@ -3121,17 +3029,6 @@ export default function RoadTripTab({ token }) {
                         <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, color: TERM.text, flexGrow: 1 }}>
                           {formatDayLabel(day).toUpperCase()} <Box component="span" sx={{ color: TERM.muted, fontWeight: 500 }}>· {stops.length}</Box>
                         </Typography>
-                        <Box role="button"
-                          onClick={() => { toggleRouteForDay(day); setMobileTab('map'); }}
-                          sx={{
-                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
-                            color: routesShown[day] ? TERM.greenDk : dayColor,
-                            bgcolor: routesShown[day] ? dayColor : 'transparent',
-                            border: `1px solid ${dayColor}`,
-                          }}>
-                          {routesShown[day] ? '◼' : '▶'}
-                        </Box>
                       </Stack>
                     </Box>
                   );
@@ -3460,131 +3357,6 @@ export default function RoadTripTab({ token }) {
       )}
 
       {/* ── VALIDATE AREA modal ─────────────────────────────────────────── */}
-      {validation.open && (
-        <Box sx={{
-          position: 'fixed', inset: 0, zIndex: 1100,
-          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          p: { xs: 1, sm: 2 },
-        }} onClick={() => setValidation(v => ({ ...v, open: false }))}>
-          <Box sx={{
-            bgcolor: TERM.panel, border: `1px solid ${TERM.green}`,
-            borderRadius: 0.5, p: 2,
-            width: { xs: '100%', sm: 420 },
-            fontFamily: MONO,
-          }} onClick={(e) => e.stopPropagation()}>
-            <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.green, letterSpacing: 1, flexGrow: 1 }}>
-                ⓘ AREA SCAN {validation.label && '· ' + validation.label.toUpperCase()}
-              </Typography>
-              {validation.googleScanned && (
-                <Box role="button" onClick={refreshValidator} title="Re-scan Google (paid if not cached)"
-                  sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, cursor: 'pointer',
-                        border: `1px solid ${TERM.borderDim}`, px: 0.75, py: 0.25, borderRadius: 0.25, mr: 0.75,
-                        '&:hover': { color: TERM.green } }}>↻ RE-SCAN</Box>
-              )}
-              <Box role="button" onClick={() => setValidation(v => ({ ...v, open: false }))}
-                sx={{ color: TERM.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, px: 0.5 }}>×</Box>
-            </Stack>
-
-            {/* Default view: instant local count of user's saved leads (free). */}
-            {!validation.googleScanned && !validation.loading && (
-              <>
-                <Typography sx={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: TERM.green, lineHeight: 1 }}>
-                  {validation.savedCount || 0}
-                </Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, mt: 0.5, mb: 1 }}>
-                  of your saved dispensary leads within 5mi
-                </Typography>
-                {(validation.savedSample?.length || 0) > 0 && (
-                  <Box sx={{ mt: 1 }}>
-                    <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.muted, letterSpacing: 1, mb: 0.25 }}>
-                      YOUR LEADS HERE:
-                    </Typography>
-                    {validation.savedSample.map((s, i) => (
-                      <Typography key={i} sx={{ fontFamily: MONO, fontSize: 10, color: TERM.text, lineHeight: 1.5 }}>
-                        · {s.name}
-                      </Typography>
-                    ))}
-                  </Box>
-                )}
-                <Box sx={{ mt: 1.5, p: 1, border: `1px dashed ${TERM.amber}`, borderRadius: 0.5 }}>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.text, mb: 0.75, lineHeight: 1.45 }}>
-                    Want more? A deeper Google scan finds dispensaries you haven't saved + suggests denser nearby areas. Free if cached (last 7 days), otherwise ~$0.03 per fresh scan.
-                  </Typography>
-                  <Box role="button" onClick={() => deeperScan({})}
-                    sx={{
-                      fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                      px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25, textAlign: 'center',
-                      bgcolor: TERM.amber, color: '#000',
-                      '&:hover': { opacity: 0.9 },
-                    }}>🔍 DEEPER SCAN (GOOGLE)</Box>
-                </Box>
-              </>
-            )}
-
-            {validation.loading && (
-              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.muted, py: 2 }}>
-                Scanning…
-              </Typography>
-            )}
-
-            {!validation.loading && validation.data && validation.googleScanned && (
-              <>
-                <Typography sx={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: TERM.green, lineHeight: 1 }}>
-                  {validation.data.density.count}
-                </Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, mt: 0.5, mb: 1 }}>
-                  dispensaries within 5mi · {validation.data.cached ? 'cached (free)' : 'fresh from Google'}
-                </Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.green, mb: 1 }}>
-                  You have {validation.savedCount} saved here · {Math.max(0, validation.data.density.count - validation.savedCount)} more you haven't pinned
-                </Typography>
-                {(validation.data.alternatives?.length || 0) > 0 ? (
-                  <Box sx={{ mt: 1.5 }}>
-                    <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, color: TERM.amber, letterSpacing: 1, mb: 0.5 }}>
-                      DENSER NEARBY:
-                    </Typography>
-                    {validation.data.alternatives.map((a, i) => (
-                      <Box key={i} sx={{
-                        display: 'flex', alignItems: 'center', gap: 1,
-                        py: 0.5, px: 0.5, mb: 0.25,
-                        borderLeft: `2px solid ${TERM.amber}`,
-                      }}>
-                        <Typography sx={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: TERM.amber, minWidth: 32 }}>
-                          {a.countWithin5mi}
-                        </Typography>
-                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: TERM.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {a.label || 'denser spot'}
-                          </Typography>
-                          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>
-                            {a.distanceMi.toFixed(1)}mi away · {a.countWithin5mi} in 5mi
-                          </Typography>
-                        </Box>
-                        <Box role="button"
-                          onClick={() => {
-                            mapRef.current?.flyTo({ center: [a.lng, a.lat], zoom: 11, duration: 1200 });
-                            setValidation(v => ({ ...v, open: false }));
-                          }}
-                          sx={{
-                            fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                            px: 0.75, py: 0.25, cursor: 'pointer', borderRadius: 0.25,
-                            color: TERM.amber, border: `1px solid ${TERM.amber}`,
-                          }}>JUMP</Box>
-                      </Box>
-                    ))}
-                  </Box>
-                ) : (
-                  <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic', mt: 1 }}>
-                    No denser spots within 20mi. This is the densest area nearby.
-                  </Typography>
-                )}
-              </>
-            )}
-          </Box>
-        </Box>
-      )}
 
       {/* ── Set-as-Sleep quick picker ───────────────────────────────────── */}
       {setAsSleepPicker && (
@@ -3603,11 +3375,21 @@ export default function RoadTripTab({ token }) {
           }} onClick={(e) => e.stopPropagation()}>
             <Typography sx={{
               fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: 1,
-              color: setAsSleepPicker.role === 'backup' ? TERM.amber : TERM.green, mb: 0.5,
+              color: setAsSleepPicker.role === 'backup' ? TERM.amber : TERM.green, mb: 1,
             }}>🌙 SET AS TONIGHT'S SLEEP</Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text, mb: 1.25 }}>
-              {setAsSleepPicker.place.name}
-            </Typography>
+
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>NAME (rename if Google got it wrong)</Typography>
+            <input
+              value={setAsSleepPicker.nameOverride}
+              onChange={(e) => setSetAsSleepPicker(p => ({ ...p, nameOverride: e.target.value }))}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${TERM.borderDim}`, borderRadius: 3,
+                padding: '8px 10px', fontFamily: MONO, fontSize: 11, color: TERM.text,
+                outline: 'none', marginBottom: 12,
+              }}
+            />
 
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>DAY</Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
@@ -3727,23 +3509,6 @@ export default function RoadTripTab({ token }) {
               ))}
             </Box>
 
-            {/* Intelligent auto-pick: closest campground to the day's last stop. */}
-            {sleepEditor.role === 'primary' && (
-              <Box role="button"
-                onClick={async () => {
-                  setSleepEditor(s => ({ ...s, open: false }));
-                  await autoSuggestPrimarySleep(sleepEditor.day);
-                }}
-                sx={{
-                  fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                  px: 1, py: 0.5, mb: 1.5, cursor: 'pointer', borderRadius: 0.25,
-                  textAlign: 'center',
-                  bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green,
-                  border: `1px dashed ${TERM.green}`,
-                  '&:hover': { bgcolor: 'rgba(74,222,128,0.16)' },
-                }}>✨ AUTO-PICK CLOSEST CAMPGROUND</Box>
-            )}
-
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.5 }}>SEARCH ADDRESS OR PLACE NAME</Typography>
             <input
               autoFocus
@@ -3764,24 +3529,52 @@ export default function RoadTripTab({ token }) {
                 <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic' }}>Searching…</Typography>
               )}
               {!sleepEditor.searching && sleepEditor.results.map((f) => (
-                <Box key={f.id} role="button"
-                  onClick={async () => {
-                    const lead = await assignSleep({
-                      feature: f, day: sleepEditor.day,
-                      role: sleepEditor.role, kind: sleepEditor.kind,
-                    });
-                    if (lead) {
-                      mapRef.current?.flyTo({ center: f.center, zoom: 11, duration: 1200 });
-                      setSleepEditor(s => ({ ...s, open: false }));
-                    }
-                  }}
+                <Box key={f.id}
                   sx={{
-                    py: 0.75, px: 1, mb: 0.25, borderRadius: 0.25, cursor: 'pointer',
+                    py: 0.75, px: 1, mb: 0.5, borderRadius: 0.25,
                     border: `1px solid ${TERM.borderDim}`,
-                    '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' },
+                    '&:hover': { borderColor: TERM.green },
                   }}>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text }}>{f.text}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>{f.place_name}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 11, color: TERM.text, mb: 0.25 }}>{f.text}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, mb: 0.5 }}>{f.place_name}</Typography>
+                  <Stack direction="row" spacing={0.5}>
+                    <Box role="button"
+                      onClick={async () => {
+                        const lead = await assignSleep({
+                          feature: f, day: sleepEditor.day,
+                          role: sleepEditor.role, kind: sleepEditor.kind,
+                        });
+                        if (lead) {
+                          mapRef.current?.flyTo({ center: f.center, zoom: 11, duration: 1200 });
+                          setSleepEditor(s => ({ ...s, open: false }));
+                        }
+                      }}
+                      sx={{
+                        fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                        px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                        bgcolor: TERM.green, color: TERM.greenDk,
+                      }}>USE THIS NAME</Box>
+                    <Box role="button"
+                      onClick={() => {
+                        const renamed = window.prompt('Rename this place:', f.text);
+                        if (!renamed) return;
+                        assignSleep({
+                          feature: f, day: sleepEditor.day,
+                          role: sleepEditor.role, kind: sleepEditor.kind,
+                          customName: renamed,
+                        }).then(lead => {
+                          if (lead) {
+                            mapRef.current?.flyTo({ center: f.center, zoom: 11, duration: 1200 });
+                            setSleepEditor(s => ({ ...s, open: false }));
+                          }
+                        });
+                      }}
+                      sx={{
+                        fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                        px: 0.75, py: 0.4, cursor: 'pointer', borderRadius: 0.25,
+                        color: TERM.amber, border: `1px solid ${TERM.amber}`,
+                      }}>✎ RENAME + USE</Box>
+                  </Stack>
                 </Box>
               ))}
             </Box>
