@@ -191,11 +191,17 @@ export default function ApprovalView() {
             <Box>
               <Box component="img" src={jpLogoColored} alt="Joint Printing"
                 sx={{ maxHeight: 56, maxWidth: 260, display: 'block', mb: 0.5 }} />
-              <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
-                Project #{p.projectNumber || '—'}
-                {p.orderNumber ? ` · Invoice #${p.orderNumber}` : ''}
-                {p.orderDate ? ` · ${new Date(p.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-              </Typography>
+              {/* Project # hidden from the client — it's an internal handle.
+                  Invoice # and order date stay since they're things the client
+                  actually references when they have questions. */}
+              {(p.orderNumber || p.orderDate) && (
+                <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
+                  {[
+                    p.orderNumber ? `Invoice #${p.orderNumber}` : null,
+                    p.orderDate ? new Date(p.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+                  ].filter(Boolean).join(' · ')}
+                </Typography>
+              )}
             </Box>
           </Stack>
 

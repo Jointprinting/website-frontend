@@ -1918,9 +1918,9 @@ const HUB_GROUPS = [
     tools: [
       { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
+      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
