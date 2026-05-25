@@ -906,7 +906,16 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
         <div class="psec-hdr"><span class="psec-lbl">Mockup Info</span></div>
         <div class="field">
           <label>Project <span style="color:var(--ac)">*</span></label>
-          <select id="f-project" onchange="onProjectChange()" style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:var(--f);cursor:pointer;width:100%">
+          <!-- Typeahead picker: input + datalist beats a 70-item dropdown.
+               Hidden select keeps every other code path (saveFormToState,
+               onProjectChange, onProjectChange's autofill) working as-is. -->
+          <input type="text" id="f-project-search" list="f-project-options"
+            placeholder="Type a project — #133 Dredo, Bleu Leaf, …"
+            oninput="_onProjectSearch(this.value)"
+            onfocus="this.select()"
+            style="background:var(--s2);color:var(--tx);border:1px solid var(--bd2);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:var(--f);width:100%" />
+          <datalist id="f-project-options"></datalist>
+          <select id="f-project" onchange="onProjectChange()" style="display:none">
             <option value="">— Pick a project —</option>
           </select>
           <div id="f-project-error" style="display:none;color:#f87171;font-size:10px;margin-top:4px">Pick a project to save this mockup.</div>
@@ -1832,11 +1841,22 @@ async function loadProjects() {
     const sel = document.getElementById('f-project');
     if (!sel) return;
     const current = sel.value;
+    // Hidden <select> stays the source of truth for the rest of the codebase.
     sel.innerHTML = '<option value="">— Unlinked —</option>' +
       window.PROJECTS_CACHE.map(p => {
         const label = `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`;
         return `<option value="${p._id}">${label.replace(/</g,'&lt;')}</option>`;
       }).join('');
+    // Also populate the visible typeahead's datalist with the same labels —
+    // the value the user picks IS the label, then _onProjectSearch finds
+    // the project id behind the label.
+    const dl = document.getElementById('f-project-options');
+    if (dl) {
+      dl.innerHTML = window.PROJECTS_CACHE.map(p => {
+        const label = `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`;
+        return `<option value="${label.replace(/"/g,'&quot;')}"></option>`;
+      }).join('');
+    }
     // Honor ?project=<id> from the launch URL so the OrderTracker can deep-link
     // straight into "save a mockup for this project". Otherwise keep whatever
     // the user had selected.
@@ -1889,9 +1909,44 @@ function _nextMockupNum(project) {
   return `${base}${String.fromCharCode(maxLetter.charCodeAt(0) + 1)}`;
 }
 
+// Typeahead -> hidden <select>. User types/picks a label like "#132 · Bleu
+// Leaf Dispensary"; we look up the matching project, mirror the id into
+// the hidden select, and run the normal onProjectChange autofill chain.
+function _onProjectSearch(typed) {
+  const list = window.PROJECTS_CACHE || [];
+  const t = String(typed || '').trim().toLowerCase();
+  if (!t) {
+    document.getElementById('f-project').value = '';
+    onProjectChange();
+    return;
+  }
+  // Exact label match first (datalist pick), then prefix/substring.
+  const labelOf = (p) => `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`.toLowerCase();
+  let hit = list.find(p => labelOf(p) === t);
+  if (!hit) hit = list.find(p => labelOf(p).startsWith(t));
+  if (!hit) hit = list.find(p => labelOf(p).includes(t));
+  if (!hit) return;     // free-typing in progress; don't clobber selection
+  document.getElementById('f-project').value = hit._id;
+  // Sync the visible input to the canonical label so the user sees the full picked item.
+  const inp = document.getElementById('f-project-search');
+  if (inp) inp.value = `#${hit.projectNumber || '?'} · ${hit.companyName || hit.clientName || 'Untitled'}`;
+  onProjectChange();
+}
+
+// Mirror project changes from any code path back into the visible input.
+function _syncProjectSearchInput() {
+  const inp = document.getElementById('f-project-search');
+  const sel = document.getElementById('f-project');
+  if (!inp || !sel) return;
+  const pid = sel.value;
+  const p = pid && (window.PROJECTS_CACHE || []).find(x => x._id === pid);
+  inp.value = p ? `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}` : '';
+}
+
 function onProjectChange() {
   const sel = document.getElementById('f-project');
   const pid = sel.value;
+  try { _syncProjectSearchInput(); } catch (_) {}
   // Toggle "save disabled" affordance based on project presence.
   _refreshSaveGate();
   if (!pid) {
@@ -1916,9 +1971,10 @@ function onProjectChange() {
   if (numEl) numEl.value = _nextMockupNum(proj);
   const pdfEl = document.getElementById('f-pdfname');
   if (pdfEl) {
-    const slug = (titleEl?.value || 'mockup').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    // Filename is just the mockup # (per user preference) — easy to grep on
+    // disk, lines up 1:1 with what's shown in the Library and OrderTracker.
     const num = (numEl?.value || '').replace(/^#/,'');
-    pdfEl.value = num ? `${slug}-${num}.pdf` : `${slug}.pdf`;
+    pdfEl.value = num ? `${num}.pdf` : '';
   }
   saveFormToState();
   liveUpdate();
@@ -2121,10 +2177,10 @@ function loadPageIntoForm() {
 }
 function autoFillFilename() {
   const pg = state.pages[state.currentPage];
-  const title = document.getElementById('f-title').value.trim();
-  if (title && !pg.pdfName) {
-    const slug = title.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-    document.getElementById('f-pdfname').value = slug+'-mockup.pdf';
+  // Filename = just the mockup # (no slug). Falls back to a stub if no #.
+  if (!pg.pdfName) {
+    const num = String(pg.mockupNum || '').replace(/^#/,'');
+    document.getElementById('f-pdfname').value = num ? `${num}.pdf` : 'mockup.pdf';
   }
 }
 
@@ -2807,10 +2863,10 @@ async function saveMockupToLibrary() {
     }
     document.getElementById('f-mockupnum').value = pg.mockupNum;
   }
-  // Auto-generate PDF filename from title + number if not set
-  if (!pg.pdfName && (pg.title || pg.mockupNum)) {
-    const slug=(pg.title||'mockup').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-    pg.pdfName = `${slug}-${pg.mockupNum}.pdf`;
+  // Auto-generate PDF filename from mockup # if not set — just the # (no slug).
+  if (!pg.pdfName && pg.mockupNum) {
+    const num = String(pg.mockupNum).replace(/^#/,'');
+    pg.pdfName = `${num}.pdf`;
     document.getElementById('f-pdfname').value = pg.pdfName;
   }
   const name=pg.title||pg.pdfName||`Mockup ${new Date().toLocaleDateString()}`;
