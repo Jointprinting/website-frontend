@@ -992,10 +992,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   // Tiles for this project: one slot per mockup#, with the library item
   // attached if we can find a match. Slots without a match render as
   // amber-bordered placeholders so the card honestly reflects the project's
-  // intended mockup count, not just what happens to be in the studio.
+  // Keep unresolved tiles in — they render as "NOT IN STUDIO" amber boxes
+  // and the user uses that as a flag for "this is a legacy mockup from my
+  // old GDrive system, not in jpstudio yet".
   const ownTiles = (project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
-  // Only use the "Client's work" fallback when the project has truly no
-  // mockup #s assigned. Don't replace partial state with someone else's mockups.
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
