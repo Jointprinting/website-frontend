@@ -563,6 +563,12 @@ export default function RoadTripTab({ token }) {
   // without wiping every marker on each savedItems change (cause of the visual
   // flicker the audit caught).
   const customMarkersRef = React.useRef(new Map());
+  // Saved-lead markers for items pinned off the live layers (source !=
+  // 'manual'). Renders only when the corresponding live layer is OFF, so
+  // there's no double-marker noise when the layer is on (the live marker
+  // already shows "✓ IN ITINERARY" in its popup). Lets the user keep
+  // layers off and still see their pinned places.
+  const savedLeadMarkersRef = React.useRef(new Map());
   const [layerTilesOpen, setLayerTilesOpen] = React.useState(true);
   const [savedItems, setSavedItems] = React.useState([]);
   const [toast, setToast] = React.useState(null);
@@ -1854,6 +1860,90 @@ export default function RoadTripTab({ token }) {
       showToast('Failed to skip.', 'error');
     }
   };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Saved-lead markers — small dots for every saved item whose live layer
+  // is OFF. So when the user toggles DISPENSARIES off (to drop visual
+  // noise / save quota), their pinned leads stay on the map. When the
+  // live layer is ON, we hide these so the bigger live markers (which
+  // include the saved ones) take over.
+  // ─────────────────────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    const existing = savedLeadMarkersRef.current;
+    const typeToLayerId = {
+      dispensary:    'dispensaries',
+      coffee:        'coffee',
+      park_national: 'parks',
+      park_state:    'parks',
+      campground:    'campgrounds',
+    };
+    const wanted = new Map();
+    for (const item of savedItems) {
+      if (item.source === 'manual') continue;     // covered by customMarkersRef
+      if (item.sleepRole) continue;                // covered by sleepMarkersRef
+      if (!isFinite(item.lat) || !isFinite(item.lng)) continue;
+      const layerId = typeToLayerId[item.type];
+      if (layerId && layerState[layerId]?.active) continue; // live marker covers this
+      wanted.set(String(item._id), item);
+    }
+
+    // Drop markers whose source items are gone or whose live layer turned on.
+    for (const [id, marker] of existing) {
+      if (!wanted.has(id)) { try { marker.remove(); } catch {} existing.delete(id); }
+    }
+
+    // Add markers for newly-saved items.
+    for (const [id, item] of wanted) {
+      if (existing.has(id)) continue;
+      const layerKey = typeToLayerId[item.type] || 'dispensaries';
+      const layer = LAYERS.find(l => l.id === layerKey);
+      const color = layer?.color || TERM.green;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'cursor: pointer; pointer-events: auto;';
+      const inner = document.createElement('div');
+      // Visited gets a green checkmark indicator, otherwise a small filled
+      // dot in the layer color. Sized smaller than live-layer markers so
+      // it reads as "this is yours".
+      const visited = item.status === 'visited';
+      inner.style.cssText = `
+        width: 14px; height: 14px; border-radius: 50%;
+        background: ${visited ? TERM.green : color};
+        border: 2px solid ${visited ? TERM.green : '#05080a'};
+        box-shadow: 0 0 0 1px ${color}, 0 0 8px ${color}aa;
+        transition: transform 0.18s ease;
+        display: flex; align-items: center; justify-content: center;
+        font-family: ${MONO}; font-size: 9px; font-weight: 900;
+        color: ${visited ? TERM.greenDk : 'transparent'};
+      `;
+      inner.textContent = visited ? '✓' : '';
+      wrap.appendChild(inner);
+      wrap.addEventListener('mouseenter', () => { inner.style.transform = 'scale(1.3)'; });
+      wrap.addEventListener('mouseleave', () => { inner.style.transform = 'scale(1)'; });
+      const popup = new mapboxgl.Popup({ offset: 14, closeButton: true, closeOnClick: true });
+      wrap.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const body = document.createElement('div');
+        body.style.cssText = `
+          font-family: ${MONO}; color: ${TERM.text};
+          background: ${TERM.panel}; padding: 10px 12px; min-width: 200px;
+          border: 1px solid ${TERM.border}; border-radius: 4px;
+        `;
+        body.innerHTML = `
+          <div style="font-size:11px; color:${color}; letter-spacing:1px; margin-bottom:4px;">${(layer?.label || 'LEAD')} · SAVED</div>
+          <div style="font-size:13px; font-weight:700; line-height:1.3;">${(item.name || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}</div>
+          ${item.address ? `<div style="font-size:10px; color:${TERM.muted}; margin-top:4px;">${(item.address).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}</div>` : ''}
+          <div style="font-size:10px; color:${visited ? TERM.green : TERM.red}; margin-top:6px;">${visited ? '✓ Visited' : '○ Not visited yet'}</div>
+        `;
+        popup.setLngLat([item.lng, item.lat]).setDOMContent(body).addTo(map);
+      });
+      const marker = new mapboxgl.Marker({ element: wrap, anchor: 'center' })
+        .setLngLat([item.lng, item.lat]).addTo(map);
+      existing.set(id, marker);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedItems, mapReady, layerState]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Sleep markers on the map — moon glyph with role-tinted ring.
