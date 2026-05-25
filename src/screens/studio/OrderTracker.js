@@ -107,26 +107,30 @@ export default function OrderTracker({ token, onBack }) {
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
-    try {
-      const [pr, mk, ds, lg] = await Promise.all([
-        axios.get(`${base}/orders/projects`, authHdr),
-        axios.get(`${base}/studio/library/mockups`, authHdr),
-        axios.get(`${base}/orders/dashboard`, authHdr),
-        axios.get(`${base}/client-logos`, authHdr).catch(() => ({ data: { logos: [] } })),
-      ]);
-      setProjects(pr.data.projects || []);
+    // allSettled so one slow/broken endpoint doesn't blank the whole tab.
+    // We commit each settled response independently — if /dashboard 500s
+    // the project list still renders, just with stale stats.
+    const [pr, mk, ds, lg] = await Promise.allSettled([
+      axios.get(`${base}/orders/projects`, authHdr),
+      axios.get(`${base}/studio/library/mockups`, authHdr),
+      axios.get(`${base}/orders/dashboard`, authHdr),
+      axios.get(`${base}/client-logos`, authHdr),
+    ]);
+    if (pr.status === 'fulfilled') setProjects(pr.value.data.projects || []);
+    else console.error('loadProjects /orders/projects failed:', pr.reason?.message || pr.reason);
+    if (mk.status === 'fulfilled') {
       // /studio/library/mockups returns a bare array, NOT { items: [...] }.
       // The .items lookup was always undefined, so mockups stayed [] even
       // when the cloud had 59 items — that's why cards showed "No mockups
       // yet" and the Link picker came up empty.
-      setMockups(Array.isArray(mk.data) ? mk.data : (mk.data.items || []));
-      setStats(ds.data || {});
-      setLogos(lg.data.logos || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+      const d = mk.value.data;
+      setMockups(Array.isArray(d) ? d : (d.items || []));
+    } else console.error('loadProjects /studio/library/mockups failed:', mk.reason?.message || mk.reason);
+    if (ds.status === 'fulfilled') setStats(ds.value.data || {});
+    else console.error('loadProjects /orders/dashboard failed:', ds.reason?.message || ds.reason);
+    if (lg.status === 'fulfilled') setLogos(lg.value.data?.logos || []);
+    else setLogos([]);  // client logos are aesthetic only; silently fall back
+    setLoading(false);
   }, [authHdr]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
