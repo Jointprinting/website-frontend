@@ -367,17 +367,20 @@ export default function ApprovalView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TrackingTimeline — the post-approval client view of where the project is.
-// Each step is either complete (filled icon + timestamp) or pending (open
-// circle). The vertical connector between dots shows green up to the last
-// completed step so the progress is readable at a glance even on a phone.
+// TrackingTimeline — post-approval client view of where the project is.
+// Renders inside a styled card with the JP brand mark at the top so the
+// post-approval page doesn't read as empty. Includes a top progress meter
+// (X of Y steps complete) and a per-step optional carrier link the admin can
+// attach from the Order Tracker (rendered as a "Track shipment →" button).
 // ─────────────────────────────────────────────────────────────────────────────
-function TrackingTimeline({ steps, colors }) {
+function TrackingTimeline({ steps, colors, logo }) {
   if (!Array.isArray(steps) || steps.length === 0) return null;
 
   // Find the index of the last completed step so the connector colors up to it.
   let lastDoneIdx = -1;
   steps.forEach((s, i) => { if (s.completedAt) lastDoneIdx = i; });
+  const doneCount = steps.filter(s => s.completedAt).length;
+  const progressPct = Math.round((doneCount / steps.length) * 100);
 
   const fmtWhen = (iso) => {
     if (!iso) return '';
@@ -390,60 +393,145 @@ function TrackingTimeline({ steps, colors }) {
   };
 
   return (
-    <Box sx={{ position: 'relative', maxWidth: 420, mx: 'auto', pl: 1 }}>
-      {steps.map((s, i) => {
-        const done = !!s.completedAt;
-        const isLast = i === steps.length - 1;
-        const connectorActive = i < lastDoneIdx;   // colored only if a LATER step is also done
-        return (
-          <Box key={s.id || i} sx={{ display: 'flex', alignItems: 'flex-start', position: 'relative', pb: isLast ? 0 : 2.5 }}>
-            {/* Vertical connector behind the dot */}
-            {!isLast && (
-              <Box sx={{
-                position: 'absolute', left: 11, top: 22, bottom: -2, width: 2,
-                bgcolor: connectorActive ? colors.brandH : colors.border,
-                transition: 'background 0.4s ease',
-              }} />
-            )}
-            {/* Dot / check */}
-            <Box sx={{
-              width: 24, height: 24, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, zIndex: 1,
-              bgcolor: done ? colors.brandH : colors.panel,
-              border: done ? `2px solid ${colors.brandH}` : `2px solid ${colors.border}`,
-              color: done ? '#fff' : colors.muted,
-              transition: 'all 0.3s ease',
-            }}>
-              {done
-                ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
-                : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
-            </Box>
-            {/* Label + timestamp */}
-            <Box sx={{ ml: 1.75, flex: 1, pt: 0.15 }}>
-              <Typography sx={{
-                fontSize: 14, fontWeight: done ? 700 : 600,
-                color: done ? colors.text : colors.muted,
-                lineHeight: 1.3,
-              }}>
-                {s.label}
-              </Typography>
-              <Typography sx={{
-                fontSize: 11, mt: 0.25,
-                color: done ? colors.brand : colors.muted,
-                fontWeight: done ? 600 : 400,
-              }}>
-                {done ? fmtWhen(s.completedAt) : 'Pending'}
-              </Typography>
-              {done && s.note && (
-                <Typography sx={{ fontSize: 11.5, color: colors.muted, mt: 0.3, lineHeight: 1.4 }}>
-                  {s.note}
-                </Typography>
+    <Box sx={{
+      mt: 1, p: { xs: 2.5, sm: 3.5 },
+      bgcolor: '#fafaf7',
+      border: `1px solid ${colors.border}`,
+      borderRadius: 2,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* Subtle brand stripe at the top so the card has a tiny accent without
+          shouting. */}
+      <Box sx={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: `linear-gradient(90deg, ${colors.brand} 0%, ${colors.brandH} 100%)`,
+      }} />
+
+      {/* Header: small mark + "Project status" label + progress count */}
+      <Stack direction="row" alignItems="center" gap={1.25} mb={1.75}>
+        <Box sx={{
+          width: 28, height: 28, borderRadius: 1,
+          bgcolor: colors.brand, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, fontWeight: 800, fontSize: 13, letterSpacing: 0.5,
+        }}>
+          JP
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{
+            fontSize: 11, color: colors.muted, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 1,
+          }}>
+            Project status
+          </Typography>
+          <Typography sx={{ fontSize: 13, color: colors.text, fontWeight: 700, mt: 0.3 }}>
+            {doneCount} of {steps.length} steps complete
+          </Typography>
+        </Box>
+        <Typography sx={{ fontSize: 18, fontWeight: 800, color: colors.brand, letterSpacing: -0.5 }}>
+          {progressPct}%
+        </Typography>
+      </Stack>
+
+      {/* Slim progress bar — visual reinforcement of the % count. */}
+      <Box sx={{
+        height: 4, borderRadius: 999, bgcolor: colors.border,
+        overflow: 'hidden', mb: 2.5,
+      }}>
+        <Box sx={{
+          width: `${progressPct}%`, height: '100%',
+          background: `linear-gradient(90deg, ${colors.brand} 0%, ${colors.brandH} 100%)`,
+          transition: 'width 0.5s ease',
+        }} />
+      </Box>
+
+      {/* Steps */}
+      <Box sx={{ position: 'relative', pl: 0.5 }}>
+        {steps.map((s, i) => {
+          const done = !!s.completedAt;
+          const isLast = i === steps.length - 1;
+          const connectorActive = i < lastDoneIdx;
+          return (
+            <Box key={s.id || i} sx={{ display: 'flex', alignItems: 'flex-start', position: 'relative', pb: isLast ? 0 : 2.25 }}>
+              {!isLast && (
+                <Box sx={{
+                  position: 'absolute', left: 11, top: 22, bottom: -2, width: 2,
+                  bgcolor: connectorActive ? colors.brandH : colors.border,
+                  transition: 'background 0.4s ease',
+                }} />
               )}
+              <Box sx={{
+                width: 24, height: 24, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, zIndex: 1,
+                bgcolor: done ? colors.brandH : '#fff',
+                border: done ? `2px solid ${colors.brandH}` : `2px solid ${colors.border}`,
+                color: done ? '#fff' : colors.muted,
+                transition: 'all 0.3s ease',
+              }}>
+                {done
+                  ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
+                  : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
+              </Box>
+              <Box sx={{ ml: 1.75, flex: 1, pt: 0.15, minWidth: 0 }}>
+                <Typography sx={{
+                  fontSize: 14, fontWeight: done ? 700 : 600,
+                  color: done ? colors.text : colors.muted,
+                  lineHeight: 1.3,
+                }}>
+                  {s.label}
+                </Typography>
+                <Typography sx={{
+                  fontSize: 11, mt: 0.25,
+                  color: done ? colors.brand : colors.muted,
+                  fontWeight: done ? 600 : 400,
+                }}>
+                  {done ? fmtWhen(s.completedAt) : 'Pending'}
+                </Typography>
+                {done && s.note && (
+                  <Typography sx={{ fontSize: 11.5, color: colors.muted, mt: 0.3, lineHeight: 1.4 }}>
+                    {s.note}
+                  </Typography>
+                )}
+                {/* Optional carrier / tracking link — admin attaches a URL on
+                    a step (typically "Blanks shipping" or "On the way to you")
+                    and we surface it as a clear, clickable pill here. */}
+                {s.link && /^https?:\/\//i.test(s.link) && (
+                  <Box
+                    component="a" href={s.link} target="_blank" rel="noopener noreferrer"
+                    sx={{
+                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                      mt: 0.6, px: 1.2, py: 0.35, borderRadius: 999,
+                      bgcolor: 'rgba(74,222,128,0.12)',
+                      color: colors.brand, textDecoration: 'none',
+                      fontSize: 11, fontWeight: 700,
+                      border: `1px solid ${colors.brandH}`,
+                      transition: 'background 0.15s ease, transform 0.15s ease',
+                      '&:hover': {
+                        bgcolor: 'rgba(74,222,128,0.22)',
+                        transform: 'translateY(-1px)',
+                      },
+                    }}>
+                    Track shipment →
+                  </Box>
+                )}
+              </Box>
             </Box>
-          </Box>
-        );
-      })}
+          );
+        })}
+      </Box>
+
+      {/* Tiny footer reassurance — only when there's still work to do */}
+      {doneCount < steps.length && (
+        <Typography sx={{
+          mt: 2.5, pt: 1.5, borderTop: `1px solid ${colors.border}`,
+          fontSize: 11, color: colors.muted, textAlign: 'center', lineHeight: 1.5,
+        }}>
+          We update this page as each step happens — usually within a day of the milestone.
+          {logo ? '' : ' Questions? Reply to the email we sent you.'}
+        </Typography>
+      )}
     </Box>
   );
 }

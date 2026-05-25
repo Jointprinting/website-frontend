@@ -2962,6 +2962,9 @@ function TrackingPanel({ project, authHdr, onLocal }) {
   const [savedAt, setSavedAt] = React.useState(null);
   const [editingLabelIdx, setEditingLabelIdx] = React.useState(-1);
   const [draftLabel, setDraftLabel] = React.useState('');
+  // Row index whose link input is currently expanded. Only one row at a time
+  // so the panel doesn't grow uncontrollably. -1 = no row expanded.
+  const [editingLinkIdx, setEditingLinkIdx] = React.useState(-1);
   const saveTimerRef = React.useRef(null);
 
   // When the parent's project changes (different project opened), reset our
@@ -3206,6 +3209,12 @@ function TrackingPanel({ project, authHdr, onLocal }) {
                       </IconButton>
                     </span>
                   </Tooltip>
+                  <Tooltip title={s.link ? 'Edit shipping / tracking link' : 'Attach a shipping or tracking URL'}>
+                    <IconButton onClick={() => setEditingLinkIdx(editingLinkIdx === i ? -1 : i)} size="small"
+                      sx={{ p: 0.3, color: s.link ? B.green : B.muted, '&:hover': { color: B.green } }}>
+                      <LinkIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title={s.hidden ? 'Show to client' : 'Hide from client (kept in your view)'}>
                     <IconButton onClick={() => toggleHidden(i)} size="small"
                       sx={{ p: 0.3, color: s.hidden ? '#fbbf24' : B.muted, '&:hover': { color: B.green } }}>
@@ -3219,6 +3228,23 @@ function TrackingPanel({ project, authHdr, onLocal }) {
                     </IconButton>
                   </Tooltip>
                 </Stack>
+                {/* Inline link editor — full width below the step row when
+                    the link icon is toggled on, or when a link is already
+                    saved so admin can see what's attached without re-toggling. */}
+                {(editingLinkIdx === i || s.link) && (
+                  <Box sx={{
+                    gridColumn: '1 / -1',
+                    display: 'flex', alignItems: 'center', gap: 1,
+                    pl: 3.5, pr: 0.5, pb: 0.4,
+                  }}>
+                    <LinkIcon sx={{ fontSize: 12, color: B.muted }} />
+                    <TextField placeholder="https://carrier.com/track/123…" size="small" fullWidth
+                      value={s.link || ''}
+                      onChange={e => updateStep(i, { link: e.target.value })}
+                      onBlur={() => persistNow(steps)}
+                      sx={{ ...darkInput, '& .MuiInputBase-input': { fontSize: 11, py: 0.4, color: B.white } }} />
+                  </Box>
+                )}
               </Box>
             );
           })}
