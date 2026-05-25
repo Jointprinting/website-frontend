@@ -31,6 +31,7 @@ import LaunchIcon from '@mui/icons-material/Launch';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import config from '../../config.json';
+import JpLoader from '../../common/JpLoader';
 
 const BRAND = {
   bg:       '#0c1410',
@@ -720,7 +721,7 @@ export default function CatalogManagerTab({ token }) {
       {/* Body */}
       {loading ? (
         <Stack alignItems="center" sx={{ py: 6 }}>
-          <CircularProgress size={28} sx={{ color: BRAND.green }} />
+          <JpLoader size={56} label="Loading catalogs…" />
         </Stack>
       ) : catalogs.length === 0 ? (
         <Paper elevation={0} sx={{

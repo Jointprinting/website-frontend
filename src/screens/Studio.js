@@ -69,6 +69,7 @@ import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
 import BackupTab from './studio/BackupTab';
 import BackupIcon from '@mui/icons-material/Backup';
+import JpLoader from '../common/JpLoader';
 
 const TOKEN_KEY = 'jpStudioToken';
 
@@ -505,7 +506,7 @@ function SubmissionsTab({ token, onOpenClients }) {
 
       {loading ? (
         <Box display="flex" justifyContent="center" py={8}>
-          <CircularProgress sx={{ color: BRAND.green }} size={32} />
+          <JpLoader size={56} label="Loading inquiries…" />
         </Box>
       ) : items.length === 0 ? (
         <Fade in>

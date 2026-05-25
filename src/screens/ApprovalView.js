@@ -14,6 +14,7 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import axios from 'axios';
 import config from '../config.json';
 import jpLogoColored from '../modules/images/logo_colored.webp';
+import JpLoader from '../common/JpLoader';
 
 const COLORS = {
   bg:     '#f6f6f4',
@@ -106,7 +107,7 @@ export default function ApprovalView() {
   if (loading) {
     return (
       <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress sx={{ color: COLORS.brand }} />
+        <JpLoader size={72} label="Loading…" tone="light" />
       </Box>
     );
   }

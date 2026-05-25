@@ -24,11 +24,11 @@ import CardContent from '@mui/material/CardContent';
 import CardActions from '@mui/material/CardActions';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '../modules/components/Typography';
 import { getPreset } from '../common/catalogPresets';
 import CatalogToast from '../common/CatalogToast';
+import JpLoader from '../common/JpLoader';
 import config from '../config.json';
 
 // Filenames present under public/catalogs/. Any catalog whose pdfFileName is
@@ -182,7 +182,7 @@ function Catalogs() {
             a dead-end page). */}
         {loading ? (
           <Stack alignItems="center" sx={{ py: 8 }}>
-            <CircularProgress size={32} sx={{ color: '#2e7d32' }} />
+            <JpLoader size={64} label="Loading catalogs…" tone="light" />
           </Stack>
         ) : (
           <Grid container spacing={{ xs: 3, md: 4 }}>

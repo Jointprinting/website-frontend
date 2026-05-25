@@ -1,7 +1,7 @@
 import { React, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Stack, Typography, Chip, Divider, Pagination,
-  CircularProgress, Button, Tooltip, TextField, InputAdornment,
+  Button, Tooltip, TextField, InputAdornment,
   useMediaQuery, Grid, Paper, Avatar, IconButton, Drawer,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -12,6 +12,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
+import JpLoader from '../common/JpLoader';
 
 const SIDEBAR_BG  = '#0c1a11';
 const GREEN       = '#4ade80';
@@ -503,9 +504,8 @@ const [loading,    setLoading]    = useState(true);
 
         <Box sx={{ flex: 1, px: { xs: 1.5, sm: 3 }, pb: selectedProducts.length > 0 ? { xs: 14, sm: 12 } : 5 }}>
           {loading && (
-            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh" gap={2}>
-              <CircularProgress size={44} thickness={4} sx={{ color: '#1a3d2b' }} />
-              <Typography variant="body2" color="text.secondary" textAlign="center">Loading catalog…</Typography>
+            <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="55vh">
+              <JpLoader size={72} label="Loading catalog…" tone="light" />
             </Box>
           )}
           {!loading && error && (

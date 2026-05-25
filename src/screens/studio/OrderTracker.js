@@ -39,6 +39,7 @@ import ConfirmationBuilder from './ConfirmationBuilder';
 import QuoteBuilder from './QuoteBuilder';
 import config from '../../config.json';
 import jpLogoWhite from '../../modules/images/logo_white.webp';
+import JpLoader from '../../common/JpLoader';
 
 const base = `${config.backendUrl}/api`;
 // Primary filters: the ones you actually act on. Delivered / Cancelled stay
@@ -729,7 +730,7 @@ export default function OrderTracker({ token, onBack }) {
       <Box sx={{ p: 3, pb: selectMode ? 12 : 6 }}>
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
-            <CircularProgress sx={{ color: B.green }} />
+            <JpLoader size={60} label="Loading projects…" />
           </Box>
         ) : filtered.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 10, color: B.muted }}>
