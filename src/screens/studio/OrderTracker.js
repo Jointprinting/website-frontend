@@ -1971,11 +1971,6 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
           <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
         ) : (
           <>
-            <Typography sx={{ color: B.muted, fontSize: 11, mb: 1.5 }}>
-              Scans every saved jpstudio mockup and matches it to a project by batch
-              number (#000061A–D all belong to one project) or by the company name in
-              its title. Nothing changes until you press Apply.
-            </Typography>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
               <HealthStat label="Library"        value={summary.libraryMockups} />
