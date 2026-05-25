@@ -331,7 +331,10 @@ export default function OrderTracker({ token, onBack }) {
       if (activeProject?._id === id) setActiveProject(r.data);
       return r.data;
     } catch (e) {
-      alert(`Save failed: ${e.message}`);
+      // Let callers detect failure so they can avoid closing a dialog over
+      // an unsaved change. Still surface the error to the user immediately.
+      alert(`Save failed: ${e.response?.data?.message || e.message}`);
+      return null;
     }
   };
 
@@ -349,8 +352,11 @@ export default function OrderTracker({ token, onBack }) {
   const handleConfirmMockups = async (selected) => {
     const project = picker.project;
     if (!project) return;
-    await handleSave(project._id, { mockupNumbers: selected });
-    setPicker({ open: false, project: null });
+    const saved = await handleSave(project._id, { mockupNumbers: selected });
+    // Only close the picker if the save actually landed. handleSave returns
+    // null on failure (after alerting the user), so the dialog stays open
+    // with the selection intact and they can retry without re-picking.
+    if (saved) setPicker({ open: false, project: null });
   };
 
   const handleOpenCleanup = async () => {
