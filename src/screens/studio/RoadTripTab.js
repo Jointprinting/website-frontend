@@ -852,24 +852,28 @@ export default function RoadTripTab({ token }) {
       map.addLayer({
         id: HEATMAP_LAYER, type: 'heatmap', source: HEATMAP_SOURCE,
         paint: {
-          // Per-point weight 0.4 → 3 dispensaries clustered close to one
-          // another saturate the gradient (≈1.2 density). 1 isolated pin
-          // stays green; 2 nearby = yellow; 3+ = red.
-          'heatmap-weight': 0.4,
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.4, 12, 1.0],
-          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 18, 10, 34],
-          'heatmap-opacity': 0.72,
+          // Each point contributes 0.6 to density. Two clustered = 1.2,
+          // three+ = pushes hard into red. Mapbox normalises density 0..1
+          // per-viewport, so the relative scale stays useful even when
+          // there are 50+ pins on screen.
+          'heatmap-weight': 0.6,
+          // Big intensity so the blobs actually pop on the dark style.
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.9, 9, 1.6, 14, 2.4],
+          // Much bigger radius so individual pins bleed into clusters
+          // visually instead of looking like halos around each marker.
+          'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 4, 30, 8, 55, 12, 90],
+          'heatmap-opacity': 0.9,
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
             0,    'rgba(0,0,0,0)',
-            0.15, 'rgba(74,222,128,0.25)',
-            0.45, 'rgba(74,222,128,0.55)',
-            0.7,  'rgba(251,191,36,0.7)',
-            0.9,  'rgba(248,113,113,0.9)',
+            0.08, 'rgba(74,222,128,0.35)',
+            0.30, 'rgba(74,222,128,0.7)',
+            0.55, 'rgba(251,191,36,0.85)',
+            0.80, 'rgba(248,113,113,0.95)',
             1,    'rgba(248,113,113,1)',
           ],
         },
-      }, 'waterway-label'); // insert below labels so city names stay readable
+      }); // no `before` arg — draw on top of base style so the heat is visible
     }
   }, [savedItems]);
 
