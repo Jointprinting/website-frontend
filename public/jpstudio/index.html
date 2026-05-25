@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#080910"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>JP Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -691,113 +695,360 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .kbd{font-family:var(--fm);font-size:8px;background:var(--s2);border:1px solid var(--bd2);border-radius:3px;padding:1px 5px;color:var(--tx3)}
 
 .mobile-panel-toggle{display:none}
+#mobile-bottom-bar{display:none}
+#mobile-drawer-backdrop{display:none}
+.mobile-only{display:none}
 
 @media(max-width:1100px){:root{--pl:242px;--pr:264px}}
 
-/* ─── Mobile / Tablet responsive ─────────────────────────────── */
+/* ─── Mobile / Tablet responsive ─────────────────────────────────
+   Smart mobile layout:
+   • Header: compact single-row with brand + nav tabs only
+   • Canvas: fills the viewport between header & bottom bar
+   • Left/Right panels: slide-up bottom sheets w/ backdrop
+   • Fixed bottom action bar: Setup · pages · Save · Details
+   • Modals (S&S, Logo Editor, Picker): full-screen
+   • Touch: 44px min tap targets, 16px inputs (no iOS zoom),
+     safe-area-inset padding, 100dvh, pinch-zoom on canvas
+   ───────────────────────────────────────────────────────────── */
 @media(max-width:768px){
-  :root{--pl:100%;--pr:100%;--hh:44px}
-
-  /* Stack panels vertically */
-  #studio-view{
-    display:flex;
-    flex-direction:column;
-    height:auto;
-    overflow-y:auto;
+  :root{
+    --pl:100%;--pr:100%;--hh:48px;
+    /* Bottom bar height incl. iOS home-indicator safe area */
+    --bb:calc(56px + env(safe-area-inset-bottom,0px));
   }
 
-  /* Header — compact on mobile */
-  #header{
-    flex-wrap:wrap;
-    height:auto;
-    padding:8px 12px;
-    gap:6px;
-  }
-  .hdr-right{
-    width:100%;
-    display:flex;
-    justify-content:flex-end;
-    gap:6px;
-    flex-wrap:wrap;
-  }
-  .nav-tabs{
-    order:-1;
-    width:100%;
-    justify-content:center;
-  }
-
-  /* Left panel — full width, collapsible */
-  .panel.panel-left{
-    width:100%;
-    max-height:0;
+  html,body{
     overflow:hidden;
-    transition:max-height .3s ease;
-    border-right:none;
-    border-bottom:1px solid var(--bd);
+    /* Disable rubber-band scroll bleeding into the app */
+    overscroll-behavior:none;
+    /* Tap highlights — we handle :active ourselves */
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .mobile-only{display:initial}
+  .desktop-only{display:none!important}
+
+  /* ─── Header: single compact row ───────────────────────── */
+  #header{
+    height:var(--hh);
+    padding:0 12px;
+    padding-top:env(safe-area-inset-top,0px);
+    height:calc(var(--hh) + env(safe-area-inset-top,0px));
+    gap:0;
+  }
+  .brand-name{font-size:16px}
+  .hdr-div{margin:0 10px}
+  /* Hide the overflow buttons; they live in the right drawer now */
+  .hdr-right{display:none}
+  .nav-tabs{flex:1;justify-content:center;height:var(--hh)}
+  .nav-tab{padding:0 12px;font-size:13px}
+
+  /* ─── App / Studio view layout ─────────────────────────── */
+  #app{
+    padding-top:calc(var(--hh) + env(safe-area-inset-top,0px));
+    height:100vh;height:100dvh;
+  }
+  #views{flex:1;min-height:0}
+
+  /* Studio view: canvas takes everything, panels are sheets */
+  #studio-view{
+    display:block;
+    height:100%;
+    overflow:hidden;
     position:relative;
   }
-  .panel.panel-left.mobile-open{
-    max-height:600px;
-    overflow-y:auto;
-  }
 
-  /* Canvas area — full width */
+  /* ─── Canvas — full bleed between header and bottom bar ── */
   #canvas-area{
-    flex:none;
-    width:100%;
-    min-height:300px;
-    border-left:none;
-    border-right:none;
-    border-top:1px solid var(--bd);
-    border-bottom:1px solid var(--bd);
+    position:absolute;inset:0;
+    width:100%;height:100%;
+    padding:10px 8px calc(var(--bb) + 10px);
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
   }
-
-  /* Right panel — full width, collapsible */
-  .panel.panel-right{
-    width:100%;
-    max-height:0;
-    overflow:hidden;
-    transition:max-height .3s ease;
-    border-left:none;
-    border-top:1px solid var(--bd);
+  #canvas-area::before{
+    width:300px;height:300px;top:10%;opacity:.4;
   }
-  .panel.panel-right.mobile-open{
-    max-height:700px;
-    overflow-y:auto;
+  /* Hide desktop page nav; nav lives in the bottom bar on mobile */
+  #canvas-toolbar{display:none}
+  #pdf-canvas-wrapper{
+    margin:0 auto;
+    max-width:100%;
+    /* Pinch-zoom transform happens on inner #pdf-canvas-zoom */
+    overflow:visible;
+    touch-action:none;
   }
-
-  /* PDF canvas */
+  #pdf-canvas-zoom{
+    transform-origin:0 0;
+    will-change:transform;
+    display:inline-block;
+  }
   #pdf-canvas{
     max-width:100%;
     height:auto!important;
+    display:block;
   }
 
-  /* Mobile panel toggle buttons */
-  .mobile-panel-toggle{
-    display:flex;
+  /* ─── Bottom-sheet panels (left & right) ───────────────── */
+  .panel.panel-left,.panel.panel-right{
+    position:fixed;
+    left:0;right:0;bottom:0;
     width:100%;
-    padding:8px 16px;
+    max-height:88vh;max-height:88dvh;
+    height:auto;
     background:var(--s0);
     border:none;
+    border-top:1px solid var(--bd2);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -16px 48px rgba(0,0,0,.6);
+    z-index:120;
+    transform:translateY(100%);
+    transition:transform .28s var(--ease-out);
+    animation:none;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    display:flex;flex-direction:column;
+  }
+  .panel.panel-left.mobile-open,
+  .panel.panel-right.mobile-open{
+    transform:translateY(0);
+    max-height:88vh;max-height:88dvh;
+  }
+  .panel .panel-scroll{
+    flex:1;min-height:0;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding-bottom:18px;
+  }
+  .psec{padding:14px 16px}
+  .psec-lbl{font-size:10px}
+
+  /* Backdrop behind open sheets */
+  #mobile-drawer-backdrop{
+    display:block;
+    position:fixed;inset:0;z-index:110;
+    background:rgba(5,6,12,.55);
+    backdrop-filter:blur(3px);
+    opacity:0;pointer-events:none;
+    transition:opacity .24s var(--ease);
+  }
+  #mobile-drawer-backdrop.open{opacity:1;pointer-events:auto}
+
+  /* Sheet header (replaces the old toggle button) */
+  .mobile-panel-toggle{
+    display:flex;
+    flex-direction:column;align-items:center;gap:8px;
+    width:100%;padding:8px 16px 12px;
+    background:var(--s0);border:none;
     border-bottom:1px solid var(--bd);
-    color:var(--tx2);
-    font-size:12px;
-    font-weight:600;
-    cursor:pointer;
+    color:var(--tx);
+    font-size:14px;font-weight:600;
+    font-family:var(--f);cursor:pointer;
+    position:sticky;top:0;z-index:2;
+    flex-shrink:0;
+  }
+  .mobile-panel-toggle::before{
+    content:'';width:36px;height:4px;border-radius:2px;
+    background:var(--bd3);flex-shrink:0;
+  }
+  .mobile-panel-toggle > span:first-of-type{
+    width:100%;text-align:center;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  /* Hide the legacy arrow inside the toggle */
+  .mobile-panel-toggle-arrow{display:none}
+
+  /* ─── Fixed bottom action bar ──────────────────────────── */
+  #mobile-bottom-bar{
+    display:flex;
+    position:fixed;left:0;right:0;bottom:0;
+    height:var(--bb);
+    padding:0 8px env(safe-area-inset-bottom,0px);
+    background:rgba(12,13,19,.96);
+    backdrop-filter:blur(14px);
+    border-top:1px solid var(--bd2);
+    z-index:90;
     align-items:center;
     justify-content:space-between;
-    font-family:var(--f);
+    gap:4px;
   }
-  .mobile-panel-toggle:hover{background:var(--s1);color:var(--tx)}
-  .mobile-panel-toggle-arrow{transition:transform .25s ease;display:inline-block}
-  .mobile-panel-toggle.open .mobile-panel-toggle-arrow{transform:rotate(180deg)}
+  .mbb-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;min-height:48px;padding:6px 4px;
+    background:transparent;border:none;color:var(--tx2);
+    font-family:var(--f);font-size:10px;font-weight:600;
+    letter-spacing:.04em;cursor:pointer;border-radius:8px;
+    transition:background .15s,color .15s,transform .12s;
+  }
+  .mbb-btn:active{transform:scale(.94);background:var(--s2)}
+  .mbb-btn-ico{font-size:18px;line-height:1}
+  .mbb-btn.primary{color:var(--ac)}
+  .mbb-btn.primary .mbb-btn-ico{
+    background:var(--ac);color:var(--ac-text);
+    width:34px;height:34px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;font-weight:700;
+    box-shadow:0 2px 12px var(--ac-glow);
+  }
+  .mbb-page{
+    display:flex;align-items:center;gap:2px;flex:1.2;justify-content:center;
+  }
+  .mbb-page-btn{
+    width:34px;height:34px;border-radius:50%;
+    background:var(--s2);border:1px solid var(--bd2);
+    color:var(--tx2);display:flex;align-items:center;justify-content:center;
+    font-size:18px;cursor:pointer;flex-shrink:0;
+    transition:all .15s;
+  }
+  .mbb-page-btn:active{background:var(--s3);transform:scale(.92)}
+  .mbb-page-badge{
+    font-family:var(--fm);font-size:11px;color:var(--tx2);
+    padding:0 8px;min-width:48px;text-align:center;
+  }
 
-  /* Lookbook — compact on mobile */
-  .lb-topbar{flex-wrap:wrap;height:auto;padding:8px 12px}
-  .lb-topbar-search{min-width:0}
-  .lb-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));padding:10px}
-  .lb-export-bar{flex-wrap:wrap}
-  .lb-eb-filename{width:100%}
+  /* Show bottom bar only on the studio view */
+  body.tab-lookbook #mobile-bottom-bar,
+  body.tab-library  #mobile-bottom-bar{display:none}
+
+  /* ─── PDF canvas ───────────────────────────────────────── */
+  #pdf-canvas{max-width:100%;height:auto!important}
+
+  /* ─── Inputs: 16px to prevent iOS zoom-on-focus ───────── */
+  .field input,.field textarea,.field select,
+  .ss-in,.lb-topbar-search,.lb-topbar-select,.lb-eb-input,
+  input[type=text],input[type=search],input[type=email],
+  input[type=tel],input[type=number],textarea,select{
+    font-size:16px!important;
+  }
+  .swatch-hex-in,.swatch-name-in{font-size:14px!important}
+  .field label{font-size:10px}
+
+  /* Bigger tap targets on buttons inside panels */
+  .panel .btn{min-height:38px;padding:8px 12px;font-size:13px}
+  .panel .btn-sm{min-height:34px;font-size:12px}
+  .panel .btn-xs{min-height:30px;font-size:11px;padding:5px 10px}
+  .panel .upload-zone{min-height:96px}
+  .panel .place-btn{padding:11px 4px;font-size:10px;min-height:48px}
+  .panel .side-pill{padding:9px;font-size:11px}
+  .panel .tpl-opt{padding:14px 8px;min-height:60px}
+  .panel .add-swatch{padding:10px;font-size:14px;min-height:38px}
+  .panel .swatch-item{padding:8px 10px}
+
+  /* ─── Lookbook view ────────────────────────────────────── */
+  #lookbook-view-wrapper{height:calc(100dvh - var(--hh) - env(safe-area-inset-top,0px))}
+  .lb-topbar{
+    flex-wrap:wrap;height:auto;padding:10px 12px;gap:8px;
+    position:sticky;top:0;z-index:5;background:var(--s0);
+  }
+  .lb-topbar-search{min-width:0;flex:1 1 100%;height:38px}
+  .lb-topbar-select{flex:1;height:38px}
+  .lb-sel-label{flex:0 0 auto}
+  .lb-grid{grid-template-columns:repeat(2,1fr);padding:12px;gap:10px}
+  .lb-card-imgs{min-height:130px}
+  .lb-card-img{max-height:130px}
+  .lb-export-bar{
+    flex-wrap:wrap;padding:10px 12px;gap:6px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
+  }
+  .lb-export-bar > div{flex-wrap:wrap}
+  .lb-eb-input,.lb-eb-filename{
+    width:100%!important;flex:1 1 100%;height:38px;
+  }
+  .lb-preset{padding:7px 10px!important;font-size:10px!important;min-height:32px}
+  .lb-export-bar .btn{min-height:38px;padding:8px 14px;font-size:12px}
+
+  /* ─── Library view ─────────────────────────────────────── */
+  #library-view-wrapper{height:calc(100dvh - var(--hh) - env(safe-area-inset-top,0px))}
+  .lib-scroll{
+    padding:16px 14px;
+    padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  }
+  .lib-hdr{flex-wrap:wrap;gap:10px;margin-bottom:16px}
+  .lib-hdr h2{font-size:18px}
+  .lib-hdr .btn{flex:1;min-height:38px;font-size:12px}
+  .asset-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  .asset-card .asset-del{
+    opacity:1;background:rgba(9,10,16,.92);
+    padding:5px 9px;font-size:13px;
+  }
+  .saved-mockup-card{padding:12px 14px;gap:12px}
+  .saved-mockup-card .mockup-icon{width:48px;height:48px}
+  .mockup-name{font-size:14px}
+  .mockup-actions .btn{min-height:34px;font-size:12px}
+
+  /* ─── Modals: full-screen on phones ────────────────────── */
+  .modal-bg,
+  #ss-modal-overlay,
+  #logo-editor-overlay,
+  #library-picker-overlay{
+    align-items:flex-end;
+    padding:0;
+  }
+  .modal-box,
+  .picker-modal,
+  #logo-editor-modal,
+  #ss-modal-overlay > .modal-box{
+    width:100vw!important;max-width:100vw!important;
+    height:100dvh;max-height:100dvh;
+    border-radius:0;
+    padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));
+    padding-top:calc(14px + env(safe-area-inset-top,0px));
+    gap:12px;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    animation:mInMobile .26s var(--ease-out);
+  }
+  @keyframes mInMobile{
+    from{opacity:0;transform:translateY(20px)}
+    to  {opacity:1;transform:translateY(0)}
+  }
+  .modal-box .modal-footer,
+  .picker-modal .modal-footer{
+    position:sticky;bottom:0;
+    background:linear-gradient(to top,var(--s0) 70%,transparent);
+    padding:12px 0 0;margin-top:auto;
+  }
+  .modal-box .btn,
+  .picker-modal .btn,
+  #logo-editor-modal .btn{
+    min-height:44px;font-size:13px;
+  }
+  .modal-actions{flex-wrap:wrap;gap:8px}
+  .modal-actions .btn{flex:1;min-width:0}
+  #picker-grid{max-height:none!important;flex:1}
+
+  /* Logo editor canvas — sized by JS, but make sure modal fits */
+  #logo-editor-canvas{
+    max-width:100%;
+    margin:0 auto;
+    background:#1c1c1c;
+  }
+
+  /* S&S modal */
+  .ss-prevs{gap:10px}
+  .ss-tab{padding:10px 6px;font-size:11px}
+
+  /* Toasts: position above the bottom bar */
+  #toast-container{
+    bottom:calc(var(--bb) + 12px);
+    left:12px;right:12px;
+    align-items:center;
+  }
+  .toast{max-width:none;width:100%;text-align:center}
+
+  /* Sync status pill: hide label, keep just the dot */
+  #sync-label{display:none}
+}
+
+/* Very small phones */
+@media(max-width:380px){
+  .nav-tab{padding:0 10px;font-size:12px}
+  .brand-name{font-size:14px}
+  .mbb-btn{font-size:9px}
+  .mbb-btn-ico{font-size:16px}
+  .asset-grid{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 </head>
@@ -920,7 +1171,9 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
       <span id="preview-status" class="preview-status" title="Preview auto-updates as you edit">Up to date</span>
     </div>
     <div id="pdf-canvas-wrapper">
-      <canvas id="pdf-canvas"></canvas>
+      <div id="pdf-canvas-zoom">
+        <canvas id="pdf-canvas"></canvas>
+      </div>
       <div id="loading-overlay"><div class="jp-loader" role="img" aria-label="Loading"></div></div>
     </div>
   </div>
@@ -1246,16 +1499,178 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   </div>
 </div>
 
+<!-- ─── Mobile drawer backdrop & bottom action bar ───────────────
+     Hidden on desktop via CSS. Backdrop closes any open sheet on tap;
+     the bottom bar is the primary mobile nav for the Studio view. -->
+<div id="mobile-drawer-backdrop" onclick="closeAllMobilePanels()"></div>
+<nav id="mobile-bottom-bar" aria-label="Studio actions">
+  <button class="mbb-btn" onclick="toggleMobilePanel('left')" aria-label="Garment setup">
+    <span class="mbb-btn-ico">⊞</span><span>Setup</span>
+  </button>
+  <div class="mbb-page" role="group" aria-label="Page navigation">
+    <button class="mbb-page-btn" onclick="changePage(-1)" aria-label="Previous page">‹</button>
+    <span class="mbb-page-badge" id="mobile-page-badge">1 / 1</span>
+    <button class="mbb-page-btn" onclick="changePage(1)" aria-label="Next page">›</button>
+  </div>
+  <button class="mbb-btn primary" onclick="saveMockupToLibrary()" aria-label="Save mockup">
+    <span class="mbb-btn-ico">↑</span><span>Save</span>
+  </button>
+  <button class="mbb-btn" onclick="exportPdf()" aria-label="Export PDF">
+    <span class="mbb-btn-ico">↓</span><span>PDF</span>
+  </button>
+  <button class="mbb-btn" onclick="toggleMobilePanel('right')" aria-label="Print details">
+    <span class="mbb-btn-ico">⊟</span><span>Details</span>
+  </button>
+</nav>
+
 <div id="toast-container"></div>
 <script>
-// ─── Mobile panel toggle ───────────────────────────────────────────
+// ─── Mobile panel sheets ───────────────────────────────────────────
+// Bottom-sheet drawers (left=Setup, right=Details). Tapping a toggle:
+//   • Closes the other sheet if open
+//   • Toggles this sheet's `mobile-open` class
+//   • Shows/hides the backdrop and locks body scroll while open
+// On desktop these CSS rules are inert (panels render inline).
 function toggleMobilePanel(side, btn) {
   const panel = document.querySelector(`.panel-${side}`);
   if (!panel) return;
-  const isOpen = panel.classList.toggle('mobile-open');
-  btn.classList.toggle('open', isOpen);
-  btn.querySelector('.mobile-panel-toggle-arrow').style.transform = isOpen ? 'rotate(180deg)' : '';
+  const other = document.querySelector(`.panel-${side === 'left' ? 'right' : 'left'}`);
+  if (other) other.classList.remove('mobile-open');
+  const willOpen = !panel.classList.contains('mobile-open');
+  panel.classList.toggle('mobile-open', willOpen);
+  const bd = document.getElementById('mobile-drawer-backdrop');
+  if (bd) bd.classList.toggle('open', willOpen);
+  document.body.classList.toggle('drawer-open', willOpen);
+  // Sync the in-panel header toggle's visual state (if invoked from button)
+  const inPanelBtn = panel.querySelector('.mobile-panel-toggle');
+  if (inPanelBtn) inPanelBtn.classList.toggle('open', willOpen);
 }
+function closeAllMobilePanels() {
+  document.querySelectorAll('.panel.mobile-open').forEach(p => p.classList.remove('mobile-open'));
+  const bd = document.getElementById('mobile-drawer-backdrop');
+  if (bd) bd.classList.remove('open');
+  document.body.classList.remove('drawer-open');
+  document.querySelectorAll('.mobile-panel-toggle.open').forEach(b => b.classList.remove('open'));
+}
+// Wire up mobile patches after the rest of the app's script blocks have
+// defined their globals (switchTab, openLogoEditor, etc. live further down).
+function _initMobilePatches() {
+  // Close drawers + track active tab on body when nav tabs switch
+  const origSwitch = window.switchTab;
+  if (typeof origSwitch === 'function') {
+    window.switchTab = function(tab, btn) {
+      closeAllMobilePanels();
+      document.body.classList.remove('tab-studio','tab-lookbook','tab-library');
+      document.body.classList.add('tab-' + tab);
+      return origSwitch.apply(this, arguments);
+    };
+  }
+  // Mirror the desktop page badge into the mobile bottom-bar badge
+  const badge = document.getElementById('page-badge');
+  if (badge) {
+    const mob = () => {
+      const m = document.getElementById('mobile-page-badge');
+      if (m) m.textContent = (badge.textContent || '').replace(/^Page\s+/i, '');
+    };
+    new MutationObserver(mob).observe(badge, { childList:true, characterData:true, subtree:true });
+    mob();
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initMobilePatches);
+} else {
+  // DOM is already parsed — defer to next tick so later <script>s have run.
+  setTimeout(_initMobilePatches, 0);
+}
+
+// ─── Pinch-zoom for the PDF preview on touch devices ──────────────
+// Simple two-finger pinch + pan + double-tap-to-fit. Lives on
+// #pdf-canvas-wrapper; the inner #pdf-canvas-zoom carries the transform.
+// Single-finger taps still bubble (we don't preventDefault on 1-touch).
+(function initPinchZoom(){
+  const wrap = document.getElementById('pdf-canvas-wrapper');
+  const zoom = document.getElementById('pdf-canvas-zoom');
+  if (!wrap || !zoom) return;
+  let scale = 1, tx = 0, ty = 0;
+  let startDist = 0, startScale = 1;
+  let startMidX = 0, startMidY = 0, startTx = 0, startTy = 0;
+  let startTouchX = 0, startTouchY = 0;
+  let isPinching = false, isPanning = false;
+  let lastTap = 0;
+
+  function apply() {
+    zoom.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
+  }
+  function reset() {
+    scale = 1; tx = 0; ty = 0; apply();
+  }
+  window.__resetPdfZoom = reset;
+
+  function dist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+  function mid(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
+
+  wrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      isPinching = true; isPanning = false;
+      startDist = dist(e.touches[0], e.touches[1]);
+      startScale = scale;
+      const m = mid(e.touches[0], e.touches[1]);
+      const r = wrap.getBoundingClientRect();
+      startMidX = m.x - r.left; startMidY = m.y - r.top;
+      startTx = tx; startTy = ty;
+      e.preventDefault();
+    } else if (e.touches.length === 1 && scale > 1) {
+      isPanning = true;
+      startTouchX = e.touches[0].clientX;
+      startTouchY = e.touches[0].clientY;
+      startTx = tx; startTy = ty;
+    } else if (e.touches.length === 1) {
+      // Track for double-tap-to-fit
+      const now = Date.now();
+      if (now - lastTap < 280) {
+        reset();
+        lastTap = 0;
+      } else {
+        lastTap = now;
+      }
+    }
+  }, { passive:false });
+
+  wrap.addEventListener('touchmove', (e) => {
+    if (isPinching && e.touches.length === 2) {
+      const d = dist(e.touches[0], e.touches[1]);
+      const newScale = Math.max(1, Math.min(5, startScale * (d / startDist)));
+      // Zoom around the pinch midpoint
+      const k = newScale / startScale;
+      tx = startMidX - k * (startMidX - startTx);
+      ty = startMidY - k * (startMidY - startTy);
+      scale = newScale;
+      apply();
+      e.preventDefault();
+    } else if (isPanning && e.touches.length === 1) {
+      tx = startTx + (e.touches[0].clientX - startTouchX);
+      ty = startTy + (e.touches[0].clientY - startTouchY);
+      apply();
+      e.preventDefault();
+    }
+  }, { passive:false });
+
+  wrap.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) isPinching = false;
+    if (e.touches.length === 0) {
+      isPanning = false;
+      if (scale <= 1.02) reset();
+    }
+  });
+
+  // Reset zoom when the canvas re-renders (we don't know exact event,
+  // so reset on resize/orientationchange — common trigger points).
+  window.addEventListener('resize', reset);
+  window.addEventListener('orientationchange', reset);
+})();
+
+// Mark the initial tab class on body for mobile bottom-bar visibility
+document.body.classList.add('tab-studio');
 
 // ─── S&S API via Cloudflare Worker ────────────────────────────────
 let _ssWorkerUrl = localStorage.getItem('jp_ss_worker') || '';
@@ -2477,8 +2892,20 @@ function openLogoEditor(side) {
   if (!logoB64)  { toast('Upload a logo first','error'); return; }
   fabricSide = side;
   document.getElementById('logo-editor-overlay').classList.add('open');
-  const modalW = Math.min(window.innerWidth*.85, 620);
-  const modalH = Math.min(window.innerHeight*.62, 500);
+  // Size the editor canvas. On phones the modal is full-screen with a
+  // sticky footer, so derive available area from the viewport instead of
+  // using a fixed % that would overflow.
+  const isMobile = window.innerWidth <= 768;
+  let modalW, modalH;
+  if (isMobile) {
+    const sideInset = 28;        // 14px L/R padding on the modal
+    const chromeH   = 180;       // title + p + footer + paddings + safe-area
+    modalW = Math.min(window.innerWidth - sideInset, 620);
+    modalH = Math.max(220, Math.min(window.innerHeight - chromeH, modalW * 0.78));
+  } else {
+    modalW = Math.min(window.innerWidth*.85, 620);
+    modalH = Math.min(window.innerHeight*.62, 500);
+  }
   const cvEl = document.getElementById('logo-editor-canvas');
   cvEl.width=modalW; cvEl.height=modalH;
   if (fabricCanvas){ fabricCanvas.dispose(); fabricCanvas=null; }
