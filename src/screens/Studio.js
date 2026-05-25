@@ -42,6 +42,7 @@ import {
   Snackbar,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -120,6 +121,11 @@ function Login({ onAuthed }) {
   const [show, setShow] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  // Success state drives the unlock animation + fade-out. Once we have a token
+  // we hold the user on the Login card for ~650ms so the lock can morph and
+  // the card fade away, then call onAuthed to swap to StudioBody. Without
+  // this the screen would hard-cut from password form → fully rendered hub.
+  const [success, setSuccess] = React.useState(false);
   // Local count of wrong-password tries this session — gives the user a
   // heads-up like "2 attempts left" before the backend actually locks them.
   // Resets on success.
@@ -137,10 +143,16 @@ function Login({ onAuthed }) {
         localStorage.setItem(TOKEN_KEY, res.data.token);
         setFailCount(0);
         setLockedMsg('');
-        onAuthed(res.data.token);
-      } else {
-        setErr('Login failed.');
+        setSuccess(true);
+        // Hold the user on the success animation long enough for the unlock
+        // morph + 450ms card fade-out to play, then hand off to StudioBody
+        // (which Fades + Grows in on its own). 500ms keeps the handoff right
+        // at the edge of the exit animation so the gap between login and hub
+        // is imperceptible against the shared dark background.
+        setTimeout(() => onAuthed(res.data.token), 500);
+        return;
       }
+      setErr('Login failed.');
     } catch (e) {
       const status = e?.response?.status;
       const msg = e?.response?.data?.message || 'Wrong password.';
@@ -189,20 +201,31 @@ function Login({ onAuthed }) {
           '50%': { transform: 'translate(-50px,-20px)' },
         },
       }} />
-      <Grow in timeout={500}>
+      <Fade in={!success} timeout={success ? 450 : 0} unmountOnExit>
+      <Grow in={!success} timeout={success ? 450 : 500}>
         <Paper elevation={0} sx={{
           p: 4, borderRadius: 4, width: '100%', maxWidth: 420,
           bgcolor: BRAND.panel, border: `1px solid ${BRAND.border}`,
           position: 'relative', zIndex: 1,
+          transition: 'transform 0.45s ease, box-shadow 0.45s ease',
+          transform: success ? 'translateY(-6px)' : 'none',
+          boxShadow: success ? '0 24px 60px -28px rgba(74,222,128,0.55)' : 'none',
         }}>
           <Stack spacing={1.5} alignItems="center" mb={3}>
             <Box sx={{
-              bgcolor: BRAND.greenDk, color: BRAND.green,
+              bgcolor: success ? BRAND.green : BRAND.greenDk,
+              color: success ? BRAND.greenDk : BRAND.green,
               width: 48, height: 48, borderRadius: 2,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 0 5px rgba(74,222,128,0.07)',
+              boxShadow: success
+                ? '0 0 0 10px rgba(74,222,128,0.15)'
+                : '0 0 0 5px rgba(74,222,128,0.07)',
+              transition: 'all 0.35s ease',
+              transform: success ? 'rotate(-8deg) scale(1.05)' : 'none',
             }}>
-              <LockIcon sx={{ fontSize: 22 }} />
+              {success
+                ? <LockOpenIcon sx={{ fontSize: 22 }} />
+                : <LockIcon sx={{ fontSize: 22 }} />}
             </Box>
             <MuiTypography
               sx={{
@@ -260,21 +283,24 @@ function Login({ onAuthed }) {
               </Fade>
               <Button
                 type="submit" variant="contained" size="large"
-                disabled={busy || !!lockedMsg} fullWidth
+                disabled={busy || !!lockedMsg || success} fullWidth
                 sx={{
                   borderRadius: 2, fontWeight: 800, textTransform: 'none', py: 1.4,
                   bgcolor: BRAND.green, color: BRAND.greenDk,
                   '&:hover': { bgcolor: '#22c55e', transform: 'translateY(-1px)' },
-                  '&:disabled': { bgcolor: 'rgba(74,222,128,0.4)' },
+                  '&:disabled': { bgcolor: success ? BRAND.green : 'rgba(74,222,128,0.4)',
+                                  color: success ? BRAND.greenDk : undefined,
+                                  opacity: success ? 1 : undefined },
                   transition: 'all 0.15s',
                 }}
               >
-                {busy ? <CircularProgress size={22} sx={{ color: BRAND.greenDk }} /> : 'Sign in'}
+                {success ? 'Welcome back' : busy ? <CircularProgress size={22} sx={{ color: BRAND.greenDk }} /> : 'Sign in'}
               </Button>
             </Stack>
           </form>
         </Paper>
       </Grow>
+      </Fade>
     </Box>
   );
 }
