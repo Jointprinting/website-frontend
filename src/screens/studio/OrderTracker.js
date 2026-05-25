@@ -32,6 +32,11 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1621,6 +1626,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         ))}
       </Box>
 
+      {/* Client tracking timeline — shown to the client on the same approval
+          link after they approve. Admin ticks off steps as the project moves
+          and the client's open page updates within a minute. */}
+      <TrackingPanel project={local} authHdr={authHdr} onLocal={setLocal} />
+
       {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
       {(() => {
         const KIND_META = {
@@ -2919,6 +2929,301 @@ function ClientProfileSection({ client, saving, saveClient }) {
             <Field label="Sticky notes (per client)" field="notes" multiline />
           </Box>
         </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── TrackingPanel ───────────────────────────────────────────────────────────
+// Client-facing order tracking timeline editor. Admin checks off each step
+// as it happens; the client (viewing the same approval link) sees the
+// timeline fill in green within ~60s. Edits are saved by PATCHing the whole
+// steps array — cheaper than per-step endpoints and keeps add/remove/reorder
+// trivial.
+//
+// Hidden steps: keep the row visible in this admin view but suppress it
+// from the client. Useful when the blank vendor and printer are the same
+// place (hide one of those two), or when the client picks up in-person
+// (hide "On the way to you").
+function TrackingPanel({ project, authHdr, onLocal }) {
+  const initial = (project && project.tracking && project.tracking.steps) || [];
+  const [steps, setSteps] = React.useState(initial);
+  const [saving, setSaving] = React.useState(false);
+  const [savedAt, setSavedAt] = React.useState(null);
+  const [editingLabelIdx, setEditingLabelIdx] = React.useState(-1);
+  const [draftLabel, setDraftLabel] = React.useState('');
+  const saveTimerRef = React.useRef(null);
+
+  // When the parent's project changes (different project opened), reset our
+  // local steps. Otherwise we'd render the previous project's tracking on
+  // top of the new one for a frame.
+  React.useEffect(() => {
+    const next = (project && project.tracking && project.tracking.steps) || [];
+    setSteps(next);
+    setSavedAt(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?._id]);
+
+  const persist = React.useCallback(async (nextSteps) => {
+    if (!project || !project._id) return;
+    setSaving(true);
+    try {
+      const r = await axios.patch(`${base}/orders/${project._id}/tracking`,
+        { steps: nextSteps }, authHdr);
+      const returned = (r.data && r.data.tracking && r.data.tracking.steps) || nextSteps;
+      // Propagate to parent so the drawer's `local` reflects the latest steps
+      // (matters for subsequent re-opens of the drawer).
+      if (onLocal) {
+        onLocal(prev => prev ? { ...prev, tracking: { steps: returned } } : prev);
+      }
+      setSavedAt(Date.now());
+    } catch (e) {
+      alert(`Couldn't save tracking: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setSaving(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?._id, authHdr, onLocal]);
+
+  // Debounced save: many UI mutations in quick succession (typing a label,
+  // dragging a date picker) become one network round-trip ~600ms after the
+  // last edit. Critical actions (tick / hide / add / remove) save immediately
+  // by calling persistNow() instead of going through the debounce.
+  const scheduleSave = React.useCallback((nextSteps) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => persist(nextSteps), 600);
+  }, [persist]);
+  const persistNow = React.useCallback((nextSteps) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    persist(nextSteps);
+  }, [persist]);
+
+  React.useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  }, []);
+
+  const updateStep = (idx, patch, immediate = false) => {
+    const next = steps.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    setSteps(next);
+    if (immediate) persistNow(next); else scheduleSave(next);
+  };
+
+  const initDefaults = async () => {
+    if (!project || !project._id) return;
+    if (steps.length > 0) return;
+    setSaving(true);
+    try {
+      const r = await axios.post(`${base}/orders/${project._id}/tracking/init`, {}, authHdr);
+      const returned = (r.data && r.data.tracking && r.data.tracking.steps) || [];
+      setSteps(returned);
+      if (onLocal) {
+        onLocal(prev => prev ? { ...prev, tracking: { steps: returned } } : prev);
+      }
+      setSavedAt(Date.now());
+    } catch (e) {
+      alert(`Couldn't initialize tracking: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleComplete = (idx) => {
+    const cur = steps[idx];
+    const next = { ...cur, completedAt: cur.completedAt ? null : new Date().toISOString() };
+    const arr = steps.map((s, i) => i === idx ? next : s);
+    setSteps(arr);
+    persistNow(arr);
+  };
+
+  const toggleHidden = (idx) => {
+    updateStep(idx, { hidden: !steps[idx].hidden }, true);
+  };
+
+  const removeStep = (idx) => {
+    const arr = steps.filter((_, i) => i !== idx);
+    setSteps(arr);
+    persistNow(arr);
+  };
+
+  const moveStep = (idx, dir) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= steps.length) return;
+    const arr = [...steps];
+    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+    setSteps(arr);
+    persistNow(arr);
+  };
+
+  const addCustom = () => {
+    const id = `custom_${Date.now().toString(36)}`;
+    const arr = [...steps, { id, label: 'New step', completedAt: null, note: '', hidden: false }];
+    setSteps(arr);
+    persistNow(arr);
+    setEditingLabelIdx(arr.length - 1);
+    setDraftLabel('New step');
+  };
+
+  const commitLabelEdit = (idx) => {
+    const trimmed = String(draftLabel || '').slice(0, 80);
+    if (trimmed && trimmed !== steps[idx].label) {
+      updateStep(idx, { label: trimmed }, true);
+    }
+    setEditingLabelIdx(-1);
+    setDraftLabel('');
+  };
+
+  // datetime-local needs YYYY-MM-DDTHH:mm in local time. Empty if not set.
+  const toLocalInput = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const fromLocalInput = (s) => {
+    if (!s) return null;
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  };
+
+  return (
+    <Box sx={{ px: 2.5, pb: 2 }}>
+      <Stack direction="row" alignItems="center" gap={1} mb={1}>
+        <TimelineIcon sx={{ color: B.green, fontSize: 14 }} />
+        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Client tracking
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {saving ? (
+          <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>Saving…</Typography>
+        ) : savedAt && (
+          <Typography sx={{ color: B.green, fontSize: 10 }}>Saved</Typography>
+        )}
+      </Stack>
+
+      {steps.length === 0 ? (
+        <Box sx={{
+          border: `1px dashed ${B.faint}`, borderRadius: 1.5, p: 1.75,
+          textAlign: 'center',
+        }}>
+          <Typography sx={{ color: B.muted, fontSize: 11.5, mb: 1, lineHeight: 1.5 }}>
+            No tracking timeline yet. Initialize the default steps (confirmation
+            approved → arrived) — the client sees them on the same approval link
+            once they approve.
+          </Typography>
+          <Button onClick={initDefaults} disabled={saving}
+            startIcon={saving ? <CircularProgress size={12} sx={{ color: B.greenDk }} /> : <TimelineIcon sx={{ fontSize: 14 }} />}
+            sx={{
+              bgcolor: B.green, color: B.greenDk, fontSize: 11, fontWeight: 700,
+              textTransform: 'none', px: 1.5, py: 0.5,
+              '&:hover': { bgcolor: '#3bd070' },
+            }}>
+            Start tracking
+          </Button>
+        </Box>
+      ) : (
+        <Stack gap={0.5}>
+          {steps.map((s, i) => {
+            const done = !!s.completedAt;
+            const editing = editingLabelIdx === i;
+            return (
+              <Box key={s.id || i}
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '20px 1fr auto auto',
+                  alignItems: 'center', gap: 1,
+                  py: 0.6, px: 0.5,
+                  borderBottom: `1px solid ${B.faint}`,
+                  opacity: s.hidden ? 0.45 : 1,
+                }}>
+                {/* Tick / un-tick */}
+                <Tooltip title={done ? 'Mark not done' : 'Mark complete (sets timestamp to now)'}>
+                  <IconButton onClick={() => toggleComplete(i)} size="small" sx={{ p: 0 }}>
+                    {done
+                      ? <CheckCircleIcon sx={{ fontSize: 18, color: B.green }} />
+                      : <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: B.muted }} />}
+                  </IconButton>
+                </Tooltip>
+
+                {/* Label */}
+                {editing ? (
+                  <TextField value={draftLabel} autoFocus size="small"
+                    onChange={e => setDraftLabel(e.target.value)}
+                    onBlur={() => commitLabelEdit(i)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); commitLabelEdit(i); }
+                      if (e.key === 'Escape') { setEditingLabelIdx(-1); setDraftLabel(''); }
+                    }}
+                    sx={{ ...darkInput, '& .MuiInputBase-input': { fontSize: 12, py: 0.5, color: B.white } }} />
+                ) : (
+                  <Box onClick={() => { setEditingLabelIdx(i); setDraftLabel(s.label || ''); }}
+                    sx={{
+                      cursor: 'text', fontSize: 12,
+                      color: done ? B.white : B.muted,
+                      fontWeight: done ? 700 : 500,
+                      textDecoration: s.hidden ? 'line-through' : 'none',
+                      '&:hover': { color: B.green },
+                    }}>
+                    {s.label || <em style={{ color: B.muted }}>Unlabeled</em>}
+                  </Box>
+                )}
+
+                {/* Timestamp picker */}
+                <TextField type="datetime-local" size="small"
+                  value={toLocalInput(s.completedAt)}
+                  onChange={e => updateStep(i, { completedAt: fromLocalInput(e.target.value) })}
+                  sx={{
+                    ...darkInput,
+                    '& .MuiInputBase-input': { fontSize: 10.5, py: 0.4, color: done ? B.white : B.muted, minWidth: 150 },
+                  }} />
+
+                {/* Per-row actions */}
+                <Stack direction="row" gap={0}>
+                  <Tooltip title="Move up">
+                    <span>
+                      <IconButton onClick={() => moveStep(i, -1)} size="small" disabled={i === 0}
+                        sx={{ p: 0.3, color: B.muted, '&:hover': { color: B.green } }}>
+                        <Box component="span" sx={{ fontSize: 11, lineHeight: 1 }}>▲</Box>
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Move down">
+                    <span>
+                      <IconButton onClick={() => moveStep(i, 1)} size="small" disabled={i === steps.length - 1}
+                        sx={{ p: 0.3, color: B.muted, '&:hover': { color: B.green } }}>
+                        <Box component="span" sx={{ fontSize: 11, lineHeight: 1 }}>▼</Box>
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={s.hidden ? 'Show to client' : 'Hide from client (kept in your view)'}>
+                    <IconButton onClick={() => toggleHidden(i)} size="small"
+                      sx={{ p: 0.3, color: s.hidden ? '#fbbf24' : B.muted, '&:hover': { color: B.green } }}>
+                      {s.hidden ? <VisibilityOffIcon sx={{ fontSize: 14 }} /> : <VisibilityIcon sx={{ fontSize: 14 }} />}
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Remove step">
+                    <IconButton onClick={() => removeStep(i)} size="small"
+                      sx={{ p: 0.3, color: B.muted, '&:hover': { color: '#f87171' } }}>
+                      <CloseIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </Box>
+            );
+          })}
+          <Stack direction="row" gap={1} sx={{ pt: 0.5 }}>
+            <Button onClick={addCustom}
+              startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+              sx={{ color: B.green, fontSize: 10.5, textTransform: 'none', minWidth: 0, px: 1 }}>
+              Add step
+            </Button>
+            <Box sx={{ flex: 1 }} />
+            <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
+              Client view auto-refreshes within a minute.
+            </Typography>
+          </Stack>
+        </Stack>
       )}
     </Box>
   );
