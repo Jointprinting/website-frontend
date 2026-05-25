@@ -739,7 +739,10 @@ export default function OrderTracker({ token, onBack }) {
           <Box sx={{
             display: 'grid',
             gap: { xs: 1.2, md: 2 },
-            gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(160px, 1fr))', sm: 'repeat(auto-fill, minmax(220px, 1fr))', md: 'repeat(auto-fill, minmax(280px, 1fr))' },
+            // Slightly narrower minmax than before so the new taller (1:1
+            // hero) cards still feel balanced — width drops with the height
+            // increase instead of looking like big squares.
+            gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(150px, 1fr))', sm: 'repeat(auto-fill, minmax(200px, 1fr))', md: 'repeat(auto-fill, minmax(240px, 1fr))' },
           }}>
             {filtered.map(p => (
               <ProjectCard key={p._id} project={p}
@@ -1022,10 +1025,11 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
       },
     }}>
-      {/* Mockup hero — single 4:3 for all cards so the grid stays uniform.
-          With objectFit:contain the mockups always show in full, even when
-          the 2x2 grid makes each cell smaller. */}
-      <Box sx={{ position: 'relative', aspectRatio: '4/3', bgcolor: B.bg, overflow: 'hidden' }}>
+      {/* Square hero for every card. Pairs well with the narrower grid:
+          shirt mockups (portrait) fit cleanly in a 1:1 cell — and in the 2x2
+          grid each cell becomes 1:2 portrait which is exactly a shirt's
+          shape, so no clipping anywhere. */}
+      <Box sx={{ position: 'relative', aspectRatio: '1/1', bgcolor: B.bg, overflow: 'hidden' }}>
         {selectMode && (
           <Box sx={{
             position: 'absolute', top: 8, left: 8, zIndex: 3,
