@@ -1022,11 +1022,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
       },
     }}>
-      {/* Mockup hero — taller when we're showing 2 rows of mockups so the
-          bottom row isn't cropped by the body section below. */}
-      <Box sx={{ position: 'relative',
-        aspectRatio: mockupTiles.length > 2 ? '1/1' : '4/3',
-        bgcolor: B.bg, overflow: 'hidden' }}>
+      {/* Mockup hero — single 4:3 for all cards so the grid stays uniform.
+          With objectFit:contain the mockups always show in full, even when
+          the 2x2 grid makes each cell smaller. */}
+      <Box sx={{ position: 'relative', aspectRatio: '4/3', bgcolor: B.bg, overflow: 'hidden' }}>
         {selectMode && (
           <Box sx={{
             position: 'absolute', top: 8, left: 8, zIndex: 3,
