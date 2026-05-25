@@ -1857,6 +1857,12 @@ function initDB() {
         try { await syncToCloud(); } catch (_) {}
         try { refreshSyncBadge(); } catch (_) {}
         try { _refreshSaveGate(); } catch (_) {}
+        // Deep-link: ?mockup=<remoteId> opens that mockup straight into the
+        // editor for one-click editing from the OrderTracker drawer.
+        try {
+          const mid = new URLSearchParams(window.location.search).get('mockup');
+          if (mid) await loadMockupByRemoteId(mid);
+        } catch (_) {}
       }, 800);
     };
     req.onerror = ()=>rej(req.error);
@@ -3104,13 +3110,27 @@ async function loadAssetToStudio(type,item) {
   else              { pg.frontLogoBase64 =item.base64; pg.frontCompositeBase64=null; updateThumb('frontLogo', item.base64); scheduleUpdate(); toast('Logo loaded ✓'); }
 }
 async function loadMockup(id,e) {
-  e.stopPropagation();
+  if (e) e.stopPropagation();
   if (!db) return;
   const item=await dbGet('mockups',id);
   if (!item) return;
   saveFormToState();
   state.pages[state.currentPage]=item.pageState;
   loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
+}
+
+// Deep-link entry from the OrderTracker drawer: open jpstudio with
+// ?mockup=<remoteId> and we'll load that specific mockup straight into the
+// editor. Finds by remoteId (UUID stable across local + cloud).
+async function loadMockupByRemoteId(remoteId) {
+  if (!db || !remoteId) return false;
+  try {
+    const all = await dbGetAll('mockups');
+    const hit = (all || []).find(m => m.remoteId === remoteId);
+    if (!hit) return false;
+    await loadMockup(hit.id);
+    return true;
+  } catch (_) { return false; }
 }
 async function deleteAsset(store,id,e) {
   e.stopPropagation();
