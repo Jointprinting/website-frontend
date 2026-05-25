@@ -2123,11 +2123,22 @@ function StudioBody({ token, onLogout }) {
       .then((res) => {
         if (cancelled) return;
         const u = res.data || {};
-        // If today's API budget has any meaningful usage, a sweep ran.
-        // Use > 5 as the threshold so a single accidental /search/places
-        // doesn't suppress the indicator (sweeps use ~30+ calls).
-        const usedToday = (u.places_calls_today || 0) > 5;
-        setSweepNeeded(!usedToday);
+        // The dot's a "do it" nudge — only fire when the sweep is actually
+        // runnable. Two conditions:
+        //   1) the sweep hasn't already burned through today's API budget
+        //      (>5 calls is the floor where a real sweep starts; a stray
+        //      /search/places pulls 1-2)
+        //   2) there's enough remaining budget to actually start a sweep.
+        //      The backend refuses to launch when remaining < 6 (callsPerPair *
+        //      3 in jpwPlacesIngest), so we match that floor here. When the
+        //      budget's tapped out, the dot disappears so the indicator stops
+        //      nagging for an action that can't happen.
+        const used = u.places_calls_today || 0;
+        const cap  = u.daily_cap || 0;
+        const remaining = Math.max(0, cap - used);
+        const sweepRan = used > 5;
+        const hasBudget = remaining >= 6;
+        setSweepNeeded(!sweepRan && hasBudget);
       })
       .catch(() => { /* if endpoint fails, hide the dot */ });
     axios.get(`${config.backendUrl}/api/submissions/unseen-count`,
