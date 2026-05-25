@@ -1062,7 +1062,11 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
               }}>
                 {t.item && t.item.thumbnail ? (
                   <Box component="img" src={t.item.thumbnail} alt=""
-                    sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block',
+                      // Keep the full mockup visible (shirts are tall, the
+                      // hero cell is squat-ish). cover was cropping the
+                      // garment bottom under the PAID badge / client logo.
+                      backgroundColor: B.bg }} />
                 ) : (
                   <Box sx={{ width: '100%', height: '100%',
                     bgcolor: t.item ? B.panelHi : 'rgba(251,191,36,0.05)',
