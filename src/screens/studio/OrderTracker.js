@@ -1707,11 +1707,10 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Build confirmation
         </Button>
-        <Button startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
-          onClick={() => onShareApproval && onShareApproval()}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-          Share for approval
-        </Button>
+        {/* "Share for approval" lives in the confirmation builder only —
+            sharing makes sense once a confirmation page exists, not from the
+            raw order drawer. The handler is still wired through so the
+            confirmation builder's button works. */}
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
           sx={{ color: '#f87171', fontSize: 11, textTransform: 'none' }}>
