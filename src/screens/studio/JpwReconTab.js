@@ -1083,7 +1083,19 @@ function SweepDialog({ open, onClose, api, reference, onDone, autoStart, onAutoS
     && haltedToday
     && /cap reached|budget|daily places api/i.test(status?.halted_reason || '');
   const blocked = budgetExhausted || statusSaysBudget;
-  const blockReason = "Daily Google Places budget is used up. Resets at midnight.";
+  // Precise countdown built from the server-provided ISO so the user knows
+  // exactly when the next sweep window opens.
+  const _resetIn = (() => {
+    const iso = usage && usage.next_reset_at;
+    if (!iso) return '';
+    const ms = new Date(iso).getTime() - Date.now();
+    if (!isFinite(ms) || ms <= 0) return ' Resets soon.';
+    const mins = Math.floor(ms / 60000);
+    if (mins < 60) return ` Next sweep in ${mins}m.`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m ? ` Next sweep in ${h}h ${m}m.` : ` Next sweep in ${h}h.`;
+  })();
+  const blockReason = "Daily Google Places budget is used up." + _resetIn;
 
   const submit = async () => {
     setBusy(true); setErr('');
