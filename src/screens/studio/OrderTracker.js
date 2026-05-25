@@ -1022,8 +1022,11 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
       },
     }}>
-      {/* Mockup hero */}
-      <Box sx={{ position: 'relative', aspectRatio: '4/3', bgcolor: B.bg, overflow: 'hidden' }}>
+      {/* Mockup hero — taller when we're showing 2 rows of mockups so the
+          bottom row isn't cropped by the body section below. */}
+      <Box sx={{ position: 'relative',
+        aspectRatio: mockupTiles.length > 2 ? '1/1' : '4/3',
+        bgcolor: B.bg, overflow: 'hidden' }}>
         {selectMode && (
           <Box sx={{
             position: 'absolute', top: 8, left: 8, zIndex: 3,
@@ -1387,16 +1390,30 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
-                  {tiles.map((t, i) => (
-                    <Box key={i} sx={{
+                  {tiles.map((t, i) => {
+                    // Click a tile → open jpstudio with both the project and
+                    // the specific mockup deep-linked. The user can edit it
+                    // and re-save with one click. Stable identifier is the
+                    // mockup's remoteId (UUID, same value local + cloud).
+                    const remoteId = t.item?.remoteId || '';
+                    const editUrl = t.item
+                      ? `/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}&mockup=${encodeURIComponent(remoteId)}`
+                      : null;
+                    return (
+                    <Box key={i} onClick={() => editUrl && window.open(editUrl, '_blank', 'noopener,noreferrer')}
+                      title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Studio` : ''}
+                      sx={{
                       aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
                       border: `1px solid ${t.item ? B.border : 'rgba(251,191,36,0.35)'}`,
                       bgcolor: B.panelHi, position: 'relative',
+                      cursor: t.item ? 'pointer' : 'default',
+                      transition: 'border-color 0.12s, transform 0.12s',
                       '&:hover .tile-x': { opacity: 1 },
+                      '&:hover': t.item ? { borderColor: B.green, transform: 'translateY(-1px)' } : {},
                     }}>
                       {t.source !== 'auto' && (
                         <IconButton className="tile-x" size="small"
-                          onClick={() => removeMockup(t.num)}
+                          onClick={(e) => { e.stopPropagation(); removeMockup(t.num); }}
                           title={`Remove ${t.num} from this project`}
                           sx={{
                             position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
@@ -1439,7 +1456,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                         {t.num}
                       </Box>
                     </Box>
-                  ))}
+                  );
+                  })}
                 </Box>
               )}
             </>
