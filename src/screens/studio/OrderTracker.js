@@ -1973,7 +1973,7 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
           <>
             <Typography sx={{ color: B.muted, fontSize: 11, mb: 1.5 }}>
               Scans every saved jpstudio mockup and matches it to a project by batch
-              number (#000061A–D all belong to one project) or by the company name in
+              number (#000061A, B, C… through Z and beyond all belong to one project) or by the company name in
               its title. Nothing changes until you press Apply.
             </Typography>
 
