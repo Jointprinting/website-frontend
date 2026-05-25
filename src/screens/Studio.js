@@ -1948,7 +1948,7 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay, notice, badge }) {
+function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
   const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
@@ -2029,6 +2029,15 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
               {desc}
             </MuiTypography>
           )}
+          {countdown && (
+            <MuiTypography sx={{
+              color: BRAND.green, fontSize: 10.5, fontWeight: 700,
+              letterSpacing: 0.3, mt: 0.6,
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+            }}>
+              {countdown}
+            </MuiTypography>
+          )}
         </Box>
         <ChevronRightIcon className="hub-chev" sx={{
           position: 'absolute', top: 14, right: 12,
@@ -2040,7 +2049,21 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
   );
 }
 
-function Hub({ onPick, sweepNeeded, unseenInquiries }) {
+// Format an ISO timestamp as a "Xh Ym" countdown (or "Xm" under an hour,
+// "soon" inside a minute). Used by the Lead Recon hub tile so the user can
+// glance and know when the daily budget rolls over.
+function _fmtCountdown(iso) {
+  if (!iso) return '';
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!isFinite(ms) || ms <= 0) return 'soon';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
   let cardIdx = 0;
   return (
     <Stack spacing={4}>
@@ -2075,6 +2098,7 @@ function Hub({ onPick, sweepNeeded, unseenInquiries }) {
           }}>
             {group.tools.map((t) => {
               const showNotice = t.id === 'jpwrecon' && sweepNeeded;
+              const showResetCountdown = t.id === 'jpwrecon' && !sweepNeeded && sweepBlocked && nextResetAt;
               const badge = t.id === 'submissions' ? (unseenInquiries || 0) : 0;
               const card = (
                 <HubCard
@@ -2083,6 +2107,7 @@ function Hub({ onPick, sweepNeeded, unseenInquiries }) {
                   delay={cardIdx * 50}
                   onClick={() => onPick(t.id)}
                   notice={showNotice ? "Today's sweep not run yet" : null}
+                  countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
                   badge={badge}
                 />
               );
@@ -2109,6 +2134,11 @@ function StudioBody({ token, onLogout }) {
   // Lead Recon card. Read once on hub view; cheap enough not to bother
   // polling.
   const [sweepNeeded, setSweepNeeded] = React.useState(false);
+  // When the sweep has already run today (or budget's tapped out), show
+  // "Next sweep in 3h 24m" on the Lead Recon card instead of the green
+  // nudge dot. nextResetAt is the server-reported UTC midnight ISO string.
+  const [sweepBlocked, setSweepBlocked] = React.useState(false);
+  const [nextResetAt, setNextResetAt]   = React.useState(null);
   const [unseenInquiries, setUnseenInquiries] = React.useState(0);
   React.useEffect(() => {
     if (view !== 'hub') return;
@@ -2139,6 +2169,10 @@ function StudioBody({ token, onLogout }) {
         const sweepRan = used > 5;
         const hasBudget = remaining >= 6;
         setSweepNeeded(!sweepRan && hasBudget);
+        // Either condition means the user can't do another sweep right now —
+        // we'll surface the countdown on the tile.
+        setSweepBlocked(sweepRan || !hasBudget);
+        setNextResetAt(u.next_reset_at || null);
       })
       .catch(() => { /* if endpoint fails, hide the dot */ });
     axios.get(`${config.backendUrl}/api/submissions/unseen-count`,
@@ -2257,7 +2291,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} unseenInquiries={unseenInquiries} />
+          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{

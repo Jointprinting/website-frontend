@@ -23,6 +23,7 @@ import axios from 'axios';
 import config from '../../config.json';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 import jpLogoColored from '../../modules/images/logo_colored.webp';
+import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
 // Absolute URL so the logo also resolves inside the about:blank print popup.
 const BRAND_LOGO = `${window.location.origin}${jpLogoColored}`;
@@ -118,10 +119,17 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     const key = `confirmation-draft:${project._id}`;
     let restored = false;
     let seed;
-    try {
-      const raw = window.localStorage.getItem(key);
-      if (raw) { seed = JSON.parse(raw); restored = true; }
-    } catch (_) {}
+    const raw = lsGet(key, null);
+    if (raw) {
+      try { seed = JSON.parse(raw); restored = true; }
+      catch (e) {
+        // Don't swallow — log the bad payload so a one-time storage
+        // corruption (partial write, DevTools edit, etc.) is debuggable.
+        // We fall through to the server-state seed below; the bad draft
+        // gets overwritten on the next auto-save.
+        console.warn(`[ConfirmationBuilder] discarding corrupt draft at ${key}:`, e.message);
+      }
+    }
     if (!seed) {
       if (project.confirmation && Object.keys(project.confirmation).length > 0) {
         seed = project.confirmation;
@@ -158,7 +166,8 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   useEffect(() => {
     if (!project || !local) return;
     try {
-      window.localStorage.setItem(`confirmation-draft:${project._id}`, JSON.stringify(local));
+      const ok = lsSet(`confirmation-draft:${project._id}`, JSON.stringify(local));
+      if (!ok) throw new Error('storage unavailable');
       if (draftSaveError) setDraftSaveError('');
     } catch (e) {
       // Quota exceeded is the common case — usually triggered by a big
@@ -204,7 +213,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     try {
       await onSave({ confirmation: local });
       // Server confirmed — drop the local draft.
-      try { window.localStorage.removeItem(`confirmation-draft:${project._id}`); } catch (_) {}
+      lsRemove(`confirmation-draft:${project._id}`);
       setDirty(false);
       setRestoredFromDraft(false);
     } finally {

@@ -29,6 +29,7 @@ import Alert from '@mui/material/Alert';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import config from '../../config.json';
+import { lsGet, lsSet } from '../../common/jpStorage';
 import {
   haversineMiles, formatMiles, formatMinutes,
 } from './_roadTripGeo';
@@ -435,17 +436,13 @@ function MapStyleSwitcher({ current, onChange }) {
 function PanelSection({ title, defaultOpen = true, persistKey, children }) {
   const [open, setOpen] = React.useState(() => {
     if (!persistKey) return defaultOpen;
-    try {
-      const v = localStorage.getItem(persistKey);
-      return v == null ? defaultOpen : v === '1';
-    } catch { return defaultOpen; }
+    const v = lsGet(persistKey, null);
+    return v == null ? defaultOpen : v === '1';
   });
   const toggle = () => {
     const next = !open;
     setOpen(next);
-    if (persistKey) {
-      try { localStorage.setItem(persistKey, next ? '1' : '0'); } catch {}
-    }
+    if (persistKey) lsSet(persistKey, next ? '1' : '0');
   };
   return (
     <Box sx={{ mb: 2.5 }}>
