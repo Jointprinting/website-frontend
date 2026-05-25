@@ -1903,19 +1903,19 @@ const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
     tools: [
-      { id: 'clients',     label: 'Order Tracker', Icon: PeopleOutlineIcon },
-      { id: 'mockup',      label: 'Mockup Studio', Icon: DesignServicesIcon },
-      { id: 'submissions', label: 'Inquiries',     Icon: InboxIcon },
-      { id: 'catalogs',    label: 'Catalogs',      Icon: MenuBookOutlinedIcon },
-      { id: 'roadtrip',    label: 'Field Map',     Icon: ExploreOutlinedIcon },
-      { id: 'backup',      label: 'Backup',        Icon: BackupIcon },
+      { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
+      { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
+      { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
+      { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
+      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
+      { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
   {
     brand: 'JP Webworks',
     tools: [
-      { id: 'coldcall',  label: 'Cold Call Tree', Icon: PhoneInTalkIcon },
-      { id: 'jpwrecon',  label: 'Lead Recon',     Icon: TrackChangesOutlinedIcon },
+      { id: 'coldcall',  label: 'Cold Call Tree', desc: 'On-the-fly call script',     Icon: PhoneInTalkIcon },
+      { id: 'jpwrecon',  label: 'Lead Recon',     desc: 'Daily lead sweep + queue',   Icon: TrackChangesOutlinedIcon },
     ],
   },
 ];
@@ -1924,7 +1924,7 @@ const HUB_GROUPS = [
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
 function HubCard({ tool, onClick, delay, notice, badge }) {
-  const { label, Icon } = tool;
+  const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
     <Grow in timeout={400 + delay}>
@@ -1936,36 +1936,37 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
           bgcolor: BRAND.panel,
           border: `1px solid ${BRAND.border}`,
           borderRadius: 2.5,
-          aspectRatio: '1.4 / 1',
-          minHeight: 132,
+          minHeight: 168,
           transition: 'border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 1.4,
-          background: 'linear-gradient(160deg, rgba(74,222,128,0.04) 0%, rgba(255,255,255,0.01) 60%, transparent 100%)',
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          gap: 1.5,
+          p: { xs: 2, sm: 2.5 },
+          background: 'linear-gradient(160deg, rgba(74,222,128,0.05) 0%, rgba(255,255,255,0.01) 60%, transparent 100%)',
           '&:hover': {
             borderColor: BRAND.green,
             transform: 'translateY(-3px)',
             boxShadow: '0 12px 32px -16px rgba(74,222,128,0.45)',
             '& .hub-icon': { color: BRAND.greenDk, bgcolor: BRAND.green },
             '& .hub-label': { color: BRAND.green },
+            '& .hub-chev': { transform: 'translateX(3px)', color: BRAND.green },
           },
         }}
       >
         <Box
           className="hub-icon"
           sx={{
-            width: 56, height: 56, borderRadius: 2,
+            width: 48, height: 48, borderRadius: 2,
             bgcolor: BRAND.greenDk, color: BRAND.green,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.18s ease',
             position: 'relative',
           }}
         >
-          <Icon sx={{ fontSize: 28 }} />
+          <Icon sx={{ fontSize: 24 }} />
           {notice && !badge && (
             <Box sx={{
               position: 'absolute', top: -3, right: -3,
@@ -1989,12 +1990,26 @@ function HubCard({ tool, onClick, delay, notice, badge }) {
             </Box>
           )}
         </Box>
-        <MuiTypography className="hub-label" sx={{
-          color: BRAND.white, fontWeight: 700, fontSize: 14, letterSpacing: 0.2,
-          transition: 'color 0.18s ease',
-        }}>
-          {label}
-        </MuiTypography>
+        <Box sx={{ flexGrow: 1, minHeight: 0 }}>
+          <MuiTypography className="hub-label" sx={{
+            color: BRAND.white, fontWeight: 700, fontSize: 15, letterSpacing: 0.2,
+            transition: 'color 0.18s ease', lineHeight: 1.25, mb: 0.25,
+          }}>
+            {label}
+          </MuiTypography>
+          {desc && (
+            <MuiTypography sx={{
+              color: BRAND.muted, fontSize: 11.5, lineHeight: 1.35,
+            }}>
+              {desc}
+            </MuiTypography>
+          )}
+        </Box>
+        <ChevronRightIcon className="hub-chev" sx={{
+          position: 'absolute', top: 14, right: 12,
+          fontSize: 18, color: 'rgba(255,255,255,0.25)',
+          transition: 'transform 0.18s ease, color 0.18s ease',
+        }} />
       </Paper>
     </Grow>
   );
@@ -2006,23 +2021,31 @@ function Hub({ onPick, sweepNeeded, unseenInquiries }) {
     <Stack spacing={4}>
       {HUB_GROUPS.map((group) => (
         <Box key={group.brand}>
-          <MuiTypography
-            variant="overline"
-            sx={{
-              color: BRAND.green, fontWeight: 800, letterSpacing: 2.5,
-              fontSize: 10, display: 'block', mb: 1.5,
-            }}
-          >
-            {group.brand}
-          </MuiTypography>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.75 }}>
+            <Box sx={{ height: 1, flexGrow: 0, width: 24, bgcolor: BRAND.green, opacity: 0.5 }} />
+            <MuiTypography
+              variant="overline"
+              sx={{
+                color: BRAND.green, fontWeight: 800, letterSpacing: 2.5,
+                fontSize: 10, lineHeight: 1,
+              }}
+            >
+              {group.brand}
+            </MuiTypography>
+            <Box sx={{ height: 1, flexGrow: 1, bgcolor: BRAND.faint }} />
+          </Stack>
           <Box sx={{
             display: 'grid',
-            gap: 1.5,
-            // Square tiles read like a launcher, not a kanban row.
+            gap: { xs: 1.25, sm: 1.5 },
+            // Wider grid on desktop fills the empty horizontal space the
+            // previous 3-col layout left behind. 4 across on lg keeps the
+            // common tiles (Order Tracker, Mockup Studio, Inquiries, Catalogs)
+            // on one comfortable row.
             gridTemplateColumns: {
               xs: 'repeat(2, 1fr)',
               sm: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
               md: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+              lg: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             },
           }}>
             {group.tools.map((t) => {
@@ -2167,7 +2190,10 @@ function StudioBody({ token, onLogout }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 3, md: 5 } }}>
       <BackupNagBanner token={token} onClick={() => setView('backup')} />
-      <Container maxWidth="md">
+      {/* On the hub we want the wider 4-up grid; once you enter a tool, the
+          existing tools were designed against the narrower md container so we
+          keep that to avoid stretching tab UIs. */}
+      <Container maxWidth={isHub ? 'lg' : 'md'}>
         <Fade in timeout={350}>
           <Stack
             direction="row"
