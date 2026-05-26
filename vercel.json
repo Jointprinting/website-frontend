@@ -7,5 +7,9 @@
         { "key": "Content-Type", "value": "text/vcard; charset=utf-8" }
       ]
     }
+  ],
+  "redirects": [
+    { "source": "/demos", "destination": "/", "permanent": false },
+    { "source": "/demos/:path*", "destination": "/", "permanent": false }
   ]
 }

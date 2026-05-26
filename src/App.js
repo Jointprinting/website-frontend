@@ -24,7 +24,6 @@ const Product       = lazy(() => import('./screens/Product'));
 const Products      = lazy(() => import('./screens/Products'));
 const Studio        = lazy(() => import('./screens/Studio'));
 const Catalogs      = lazy(() => import('./screens/Catalogs'));
-const Demos         = lazy(() => import('./screens/demos'));
 const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
 
 // Routes that should be presented bare — no public coupon banner, no public
@@ -66,7 +65,6 @@ function AppShell() {
           <Route exact path="/studio" element={<Studio />} />
           <Route exact path="/admin" element={<Studio />} />
           <Route exact path="/catalogs" element={<Catalogs />} />
-          <Route exact path="/demos" element={<Demos />} />
           <Route exact path="/terms" element={<Terms />} />
           <Route exact path="/privacy" element={<Privacy />} />
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
