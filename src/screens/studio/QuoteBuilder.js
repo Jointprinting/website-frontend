@@ -1,18 +1,20 @@
 // src/screens/studio/QuoteBuilder.js
 //
 // Full-screen quote builder. Each line: qty, style, description, blank cost,
-// print type/details, print cost. Markup tier strip (5%–70%) per line; manual
-// unit-price override. Above the lines: project-wide meta (ship-to state, the
-// printer, one-time setup, shipping). Sticky footer shows units · COGS ·
-// profit · margin (red→green) · client total.
+// print type/details, print cost, and its OWN one-time setup + shipping. Setup
+// and shipping are per-line because lines are usually alternative options (3
+// brands of tee, the client picks one) — each option must carry its full
+// setup/shipping, spread across only its own quantity. Markup tier strip
+// (5%–70%) per line; manual unit-price override. Sticky footer shows
+// units · COGS · profit · margin (red→green) · client total.
 //
-// Persists `quoteLines`, `shipToState`, `printerName`, `setupCost`,
-// `shippingCost` on the project via onSave().
+// Persists `quoteLines` (incl. per-line setupCost/shippingCost), `shipToState`,
+// and `printerName` on the project via onSave().
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress, InputAdornment,
+  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
@@ -32,11 +34,21 @@ function marginColor(pct) {
   return `hsl(${hue.toFixed(0)}, 70%, 55%)`;
 }
 
+// True per-unit cost for a line: blank + print + this option's full setup +
+// shipping spread across its own quantity. The single source of truth used for
+// COGS, the markup tiers, and the footer totals.
+function lineCogsPerUnit(l) {
+  const q = num(l.qty);
+  const setupShip = Math.max(0, num(l.setupCost)) + Math.max(0, num(l.shippingCost));
+  return num(l.blankCost) + num(l.printCost) + (q > 0 ? setupShip / q : 0);
+}
+
 function emptyLine() {
   return {
     qty: 1, styleCode: '', description: '',
     blankCost: 0,
     printType: '', printDetails: '', printCost: 0,
+    setupCost: 0, shippingCost: 0,
     markup: 1.4, unitPrice: 0,
   };
 }
@@ -45,8 +57,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
   const [printerName,  setPrinterName]  = useState('');
-  const [setupCost,    setSetupCost]    = useState('');
-  const [shippingCost, setShippingCost] = useState('');
   const [saving,       setSaving]       = useState(false);
   const [dirty,        setDirty]        = useState(false);
 
@@ -55,40 +65,33 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       setLines((project.quoteLines || []).map(l => ({ ...l })));
       setShipToState(project.shipToState || '');
       setPrinterName(project.printerName || '');
-      setSetupCost(project.setupCost ? String(project.setupCost) : '');
-      setShippingCost(project.shippingCost ? String(project.shippingCost) : '');
       setDirty(false);
     }
   }, [open, project]);
 
   const totals = useMemo(() => {
-    let qty = 0, blanksAndPrint = 0, lineRevenue = 0;
+    let qty = 0, totalCogs = 0, lineRevenue = 0, extras = 0;
     lines.forEach(l => {
       const q = num(l.qty);
-      const lineUnitCogs = num(l.blankCost) + num(l.printCost);
-      const u = num(l.unitPrice) || lineUnitCogs * (num(l.markup) || 1);
-      qty            += q;
-      blanksAndPrint += q * lineUnitCogs;
-      lineRevenue    += q * u;
+      const setupShip = Math.max(0, num(l.setupCost)) + Math.max(0, num(l.shippingCost));
+      const unitCogs  = lineCogsPerUnit(l);
+      // unitPrice (set via a tier or by hand) already carries this line's
+      // setup/shipping, so it's the whole client-side revenue for the line.
+      const u = num(l.unitPrice) || unitCogs * (num(l.markup) || 1);
+      qty         += q;
+      extras      += setupShip;
+      // COGS = raw blanks + print (× qty) + the full setup + shipping for the line.
+      totalCogs   += q * (num(l.blankCost) + num(l.printCost)) + setupShip;
+      lineRevenue += q * u;
     });
-    // Costs are clamped non-negative so a typo'd "-100" in the shipping
-    // field can't fake a higher margin in the live preview. Negative
-    // discounts belong on the confirmation builder, not the quote.
-    const extras = Math.max(0, num(setupCost)) + Math.max(0, num(shippingCost));
-    const clientTotal = lineRevenue + extras;
-    const totalCogs   = blanksAndPrint + extras;
+    const clientTotal = lineRevenue;
     const profit      = clientTotal - totalCogs;
-    // Per-unit allocation of the one-time setup + shipping across every unit
-    // in the quote — so each line's COGS column reads honestly.
-    const setupPerUnit = qty > 0 ? Math.max(0, num(setupCost)) / qty : 0;
-    const shipPerUnit  = qty > 0 ? Math.max(0, num(shippingCost)) / qty : 0;
     return {
       qty, cogs: totalCogs, lineRevenue, extras,
       clientTotal, profit,
-      setupPerUnit, shipPerUnit,
       marginPct: clientTotal > 0 ? (profit / clientTotal) * 100 : 0,
     };
-  }, [lines, setupCost, shippingCost]);
+  }, [lines]);
 
   if (!project) return null;
 
@@ -97,11 +100,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     setDirty(true);
   };
   const selectTier = (i, pct) => {
-    const l = lines[i];
-    // Honest "cost" the markup applies to includes the line's blank + print
-    // PLUS the allocated setup/shipping per unit, so the locked unit price
-    // is the markup over true COGS — matches the COGS column.
-    const c = num(l.blankCost) + num(l.printCost) + totals.setupPerUnit + totals.shipPerUnit;
+    const c = lineCogsPerUnit(lines[i]);   // markup applies over this line's true unit cost
     setLine(i, {
       unitPrice: +(c * (1 + pct / 100)).toFixed(2),
       markup:    +(1 + pct / 100).toFixed(4),
@@ -119,8 +118,10 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         quoteLines: lines,
         shipToState,
         printerName,
-        setupCost:    num(setupCost),
-        shippingCost: num(shippingCost),
+        // Legacy order-level setup/shipping are retired — per-line now drives
+        // every total. Zero them so a stale value can't sneak back into COGS.
+        setupCost: 0,
+        shippingCost: 0,
       });
       setDirty(false);
     } finally {
@@ -163,9 +164,10 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
-        {/* Project-level meta — sticks with the quote so re-quotes don't forget */}
+        {/* Project-level meta — sticks with the quote so re-quotes don't forget.
+            Setup + shipping moved onto each line (each option carries its own). */}
         <Box sx={{ display: 'grid', gap: 1, mb: 2,
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' } }}>
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)' } }}>
           <QF label="Ship to (state)">
             <TextField size="small" value={shipToState} placeholder="PA"
               onChange={e => setMeta(setShipToState)(e.target.value)} sx={inkInput} />
@@ -173,16 +175,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <QF label="Printer">
             <TextField size="small" value={printerName} placeholder="In-house · Heritage · Anchor…"
               onChange={e => setMeta(setPrinterName)(e.target.value)} sx={inkInput} />
-          </QF>
-          <QF label="Setup cost (one-time)">
-            <TextField size="small" type="number" value={setupCost} placeholder="0"
-              onChange={e => setMeta(setSetupCost)(e.target.value)} sx={inkInput}
-              InputProps={{ startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { color: B.muted } }}>$</InputAdornment> }} />
-          </QF>
-          <QF label="Shipping cost">
-            <TextField size="small" type="number" value={shippingCost} placeholder="0"
-              onChange={e => setMeta(setShippingCost)(e.target.value)} sx={inkInput}
-              InputProps={{ startAdornment: <InputAdornment position="start" sx={{ '& .MuiTypography-root': { color: B.muted } }}>$</InputAdornment> }} />
           </QF>
         </Box>
 
@@ -199,8 +191,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <Stack gap={2}>
             {lines.map((line, i) => (
               <QuoteLineCard key={i} line={line}
-                setupPerUnit={totals.setupPerUnit}
-                shipPerUnit={totals.shipPerUnit}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
                 onRemove={() => removeLine(i)} />
@@ -261,7 +251,7 @@ function FooterStat({ label, value, accent, dim }) {
   );
 }
 
-function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -269,9 +259,10 @@ function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSel
   };
   const tf = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
 
-  const blankAndPrint = num(line.blankCost) + num(line.printCost);
-  const cogsPerUnit   = blankAndPrint + setupPerUnit + shipPerUnit;       // honest unit-cost
   const qty           = num(line.qty);
+  const setupShip     = Math.max(0, num(line.setupCost)) + Math.max(0, num(line.shippingCost));
+  const setupShipPerUnit = qty > 0 ? setupShip / qty : 0;
+  const cogsPerUnit   = lineCogsPerUnit(line);                            // blank + print + setup/ship spread over this line's qty
   const unitPrice = num(line.unitPrice) || cogsPerUnit * (num(line.markup) || 1);
   const lineTotal = qty * unitPrice;
   const profit    = unitPrice - cogsPerUnit;
@@ -284,12 +275,13 @@ function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSel
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
       {/* Inputs ordered left-to-right: product · style · qty · print · blank
-          · print$ · setup (allocated) · ship (allocated) · COGS / unit. */}
+          · print$ · setup (full) · ship (full) · COGS / unit. Setup + shipping
+          are the FULL cost for this option; they're spread across its qty in COGS. */}
       <Box sx={{ p: 1.5, display: 'grid', gap: 1, alignItems: 'end',
         gridTemplateColumns: {
           xs: 'repeat(2, 1fr)',
           sm: 'repeat(3, 1fr)',
-          lg: '1.6fr 100px 64px 1.6fr 88px 88px 76px 76px 84px 36px',
+          lg: '1.6fr 100px 64px 1.6fr 88px 88px 88px 88px 84px 36px',
         } }}>
         <QF label="Product">
           <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
@@ -325,19 +317,13 @@ function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSel
           <TextField size="small" type="number" value={line.printCost ?? ''}
             onChange={e => onPatch({ printCost: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Setup $ ea">
-          <Box sx={{ color: B.muted, fontSize: 13, fontFamily: 'monospace', height: 36,
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
-            border: `1px solid ${B.faint}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
-            {setupPerUnit > 0 ? fmt(setupPerUnit) : '—'}
-          </Box>
+        <QF label="Setup $ (total)">
+          <TextField size="small" type="number" value={line.setupCost ?? ''}
+            onChange={e => onPatch({ setupCost: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Ship $ ea">
-          <Box sx={{ color: B.muted, fontSize: 13, fontFamily: 'monospace', height: 36,
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
-            border: `1px solid ${B.faint}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
-            {shipPerUnit > 0 ? fmt(shipPerUnit) : '—'}
-          </Box>
+        <QF label="Ship $ (total)">
+          <TextField size="small" type="number" value={line.shippingCost ?? ''}
+            onChange={e => onPatch({ shippingCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="COGS / unit">
           <Box sx={{ color: B.white, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', height: 36,
@@ -359,7 +345,8 @@ function QuoteLineCard({ line, setupPerUnit = 0, shipPerUnit = 0, onPatch, onSel
             Markup tiers
           </Typography>
           <Typography sx={{ color: B.muted, fontSize: 10 }}>
-            COGS {fmt(cogsPerUnit)}/unit — click a tier to lock that price
+            COGS {fmt(cogsPerUnit)}/unit
+            {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click a tier to lock that price
           </Typography>
         </Stack>
         {cogsPerUnit <= 0 ? (

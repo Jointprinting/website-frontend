@@ -31,6 +31,32 @@ function money(n) {
   return `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const _norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+
+// Mirror the server PDF's confirmation totals: percent custom-lines apply to
+// the running subtotal, in order.
+function computeConfTotals(conf) {
+  const items = Array.isArray(conf?.items) ? conf.items : [];
+  const itemsSubtotal = items.reduce((s, it) =>
+    s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
+  let running = itemsSubtotal;
+  const lines = (conf?.customLines || []).map(l => {
+    const isPct = !!l.isPercent;
+    const amt = Number(l.amount) || 0;
+    const value = isPct ? running * amt / 100 : amt;
+    running += value;
+    const base = l.label || (isPct ? 'Adjustment' : 'Add-on');
+    return { label: isPct ? `${base} - ${amt}%` : base, value };
+  });
+  return { itemsSubtotal, lines, grandTotal: running };
+}
+
+function confItemTitle(it, idx) {
+  const productLabel = it.productName || it.brandName || '';
+  const head = productLabel && it.styleCode ? `${productLabel} (${it.styleCode})` : (productLabel || it.styleCode);
+  return [head, it.color, it.printType].filter(Boolean).join(' · ') || `Item ${idx + 1}`;
+}
+
 export default function ApprovalView() {
   const { projectId } = useParams();
   const [params] = useSearchParams();
@@ -175,6 +201,24 @@ export default function ApprovalView() {
   const subtotal = itemRows.reduce((s, r) => s + (Number(r.lineTotal) || 0), 0);
   const total = Number(p.totalValue) || subtotal;
 
+  // Full confirmation (matches the downloadable PDF) when one's been built.
+  const conf = p.confirmation || {};
+  const confItems = Array.isArray(conf.items) ? conf.items : [];
+  const hasConf = confItems.length > 0;
+  const confTotals = computeConfTotals(conf);
+  const mockupByNum = {};
+  mockups.forEach(m => { const k = _norm(m.mockupNum); if (k) mockupByNum[k] = m.thumbnail; });
+  // Per-item image: explicit snapshot → legacy single → the referenced mockup's
+  // thumbnail (matched by #). Same resolution order the PDF uses, so every
+  // colorway shows its own photo.
+  const confItemImages = (it) => {
+    const snaps = (it.mockupSnapshots || []).map(s => s && s.dataUrl).filter(Boolean);
+    if (snaps.length) return snaps;
+    if (it.customMockupDataUrl) return [it.customMockupDataUrl];
+    const lib = it.mockupNum ? mockupByNum[_norm(it.mockupNum)] : null;
+    return lib ? [lib] : [];
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, color: COLORS.text, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       <Box sx={{ maxWidth: 820, mx: 'auto', p: { xs: 2, md: 4 } }}>
@@ -225,8 +269,9 @@ export default function ApprovalView() {
           )}
         </Box>
 
-        {/* Mockups */}
-        {mockups.length > 0 && (
+        {/* Mockups — only when there's no full confirmation; otherwise each
+            item below shows its own photo (one per colorway), matching the PDF. */}
+        {!hasConf && mockups.length > 0 && (
           <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
             <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5 }}>
               Mockups
@@ -243,51 +288,121 @@ export default function ApprovalView() {
           </Box>
         )}
 
-        {/* Items / quote */}
-        <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5 }}>
-            Items
-          </Typography>
-          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
-                <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Description</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Unit $</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Line $</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itemRows.length === 0 ? (
-                <tr><td colSpan={4} style={{ padding: '14px 8px', color: '#999', fontStyle: 'italic' }}>
-                  No line items
-                </td></tr>
-              ) : itemRows.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}` }}>{r.qty || ''}</td>
-                  <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}` }}>{r.description || ''}</td>
-                  <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
-                  <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
-                </tr>
+        {/* Order details — the full confirmation (matches the downloadable PDF)
+            when one's been built; otherwise the simpler quote table. */}
+        {hasConf ? (
+          <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
+            <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5 }}>
+              Order details
+            </Typography>
+            {confItems.map((it, idx) => {
+              const sizes = (it.sizes || []).filter(sz => Number(sz.qty) > 0);
+              const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
+              const imgs = confItemImages(it);
+              return (
+                <Box key={idx} sx={{ py: 2.5, borderTop: idx ? `1px solid ${COLORS.border}` : 'none' }}>
+                  <Typography sx={{ fontWeight: 700, fontSize: 15, mb: 1.5 }}>{confItemTitle(it, idx)}</Typography>
+                  {imgs.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 1.5 }}>
+                      {imgs.map((src, i) => (
+                        <Box key={i} component="img" src={src} alt="" loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          sx={{ width: 150, height: 150, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4' }} />
+                      ))}
+                    </Box>
+                  )}
+                  {sizes.length > 0 && (
+                    <Box component="table" sx={{ width: '100%', maxWidth: 320, borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Size</th>
+                          <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sizes.map((sz, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>{sz.label || '—'}</td>
+                            <td style={{ padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{Number(sz.qty) || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Box>
+                  )}
+                  <Typography sx={{ textAlign: 'right', fontSize: 13, fontWeight: 700, mt: 1 }}>
+                    Item subtotal&nbsp;&nbsp;{money(itemSubtotal)}
+                  </Typography>
+                </Box>
+              );
+            })}
+            <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${COLORS.border}` }}>
+              <Stack direction="row" justifyContent="flex-end" gap={4} sx={{ fontSize: 13, mb: 0.5 }}>
+                <Box sx={{ color: COLORS.muted }}>Subtotal</Box>
+                <Box sx={{ minWidth: 96, textAlign: 'right' }}>{money(confTotals.itemsSubtotal)}</Box>
+              </Stack>
+              {confTotals.lines.map((l, i) => (
+                <Stack key={i} direction="row" justifyContent="flex-end" gap={4} sx={{ fontSize: 13, mb: 0.5 }}>
+                  <Box sx={{ color: COLORS.muted }}>{l.label}</Box>
+                  <Box sx={{ minWidth: 96, textAlign: 'right' }}>{money(l.value)}</Box>
+                </Stack>
               ))}
-              <tr>
-                <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 16 }}>Total</td>
-                <td          style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 16 }}>{money(total)}</td>
-              </tr>
-            </tbody>
-          </Box>
-
-          {p.confirmationTerms && (
-            <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${COLORS.border}` }}>
-              <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
-                Terms
-              </Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                {p.confirmationTerms}
-              </Typography>
+              <Stack direction="row" justifyContent="flex-end" alignItems="baseline" gap={4} sx={{ mt: 1, pt: 1, borderTop: '2px solid #111' }}>
+                <Box sx={{ fontWeight: 800, fontSize: 18 }}>Total</Box>
+                <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 800, fontSize: 18, color: COLORS.brand }}>{money(confTotals.grandTotal)}</Box>
+              </Stack>
             </Box>
-          )}
-        </Box>
+            {p.confirmationTerms && (
+              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${COLORS.border}` }}>
+                <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>Terms</Typography>
+                <Typography sx={{ color: COLORS.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{p.confirmationTerms}</Typography>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
+            <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5 }}>
+              Items
+            </Typography>
+            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
+                  <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Description</th>
+                  <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Unit $</th>
+                  <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Line $</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemRows.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: '14px 8px', color: '#999', fontStyle: 'italic' }}>
+                    No line items
+                  </td></tr>
+                ) : itemRows.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}` }}>{r.qty || ''}</td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}` }}>{r.description || ''}</td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 16 }}>Total</td>
+                  <td          style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: '2px solid #111', fontSize: 16 }}>{money(total)}</td>
+                </tr>
+              </tbody>
+            </Box>
+            {p.confirmationTerms && (
+              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${COLORS.border}` }}>
+                <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
+                  Terms
+                </Typography>
+                <Typography sx={{ color: COLORS.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {p.confirmationTerms}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
 
         {/* Action panel — locked once the client has either approved OR
             requested changes, so the link stays consistent on every reload. */}
