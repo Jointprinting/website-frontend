@@ -233,7 +233,7 @@ export default function ApprovalView() {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               {mockups.map((m, i) => (
                 <Box key={i} sx={{ aspectRatio: '4/3', bgcolor: '#f4f4f4', borderRadius: 1, overflow: 'hidden' }}>
-                  {m.thumbnail && <Box component="img" src={m.thumbnail} alt={m.name}
+                  {m.thumbnail && <Box component="img" src={m.thumbnail} alt={m.name} loading="lazy"
                     sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 </Box>
               ))}

@@ -112,7 +112,7 @@ export default function OrderTracker({ token, onBack }) {
     // the project list still renders, just with stale stats.
     const [pr, mk, ds, lg] = await Promise.allSettled([
       axios.get(`${base}/orders/projects`, authHdr),
-      axios.get(`${base}/studio/library/mockups`, authHdr),
+      axios.get(`${base}/studio/library/mockups?summary=1`, authHdr),
       axios.get(`${base}/orders/dashboard`, authHdr),
       axios.get(`${base}/client-logos`, authHdr),
     ]);
@@ -1089,7 +1089,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
                 bgcolor: B.bg, position: 'relative',
               }}>
                 {t.item && t.item.thumbnail ? (
-                  <Box component="img" src={t.item.thumbnail} alt=""
+                  <Box component="img" src={t.item.thumbnail} alt="" loading="lazy"
                     sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block',
                       // Keep the full mockup visible (shirts are tall, the
                       // hero cell is squat-ish). cover was cropping the
@@ -1471,7 +1471,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                         }} title="Matched automatically by client name">AUTO</Box>
                       )}
                       {t.item && t.item.thumbnail ? (
-                        <Box component="img" src={t.item.thumbnail} alt={t.item.name}
+                        <Box component="img" src={t.item.thumbnail} alt={t.item.name} loading="lazy"
                           sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
