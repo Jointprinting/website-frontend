@@ -184,7 +184,8 @@ export default function ApprovalView() {
             {logo && (
               <Box sx={{ width: 56, height: 56, p: 0.5, bgcolor: '#fff', border: `1px solid ${COLORS.border}`,
                 borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                <Box component="img" src={logo} alt=""
+                <Box component="img" src={logo} alt="" loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
               </Box>
             )}
@@ -234,6 +235,7 @@ export default function ApprovalView() {
               {mockups.map((m, i) => (
                 <Box key={i} sx={{ aspectRatio: '4/3', bgcolor: '#f4f4f4', borderRadius: 1, overflow: 'hidden' }}>
                   {m.thumbnail && <Box component="img" src={m.thumbnail} alt={m.name} loading="lazy"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 </Box>
               ))}
