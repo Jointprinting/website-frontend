@@ -1395,11 +1395,24 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                   Mockups · {tiles.length}
                 </Typography>
-                <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
-                  onClick={onOpenPicker}
-                  sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-                  {tiles.length === 0 ? 'Link mockups' : 'Edit mockups'}
-                </Button>
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  {/* Always-present "New mockup" — opens a fresh studio deep-linked
+                      to this project so each click starts a NEW lettered mockup
+                      (A, B, C…). Previously the only studio entry point lived in the
+                      empty state, so once one mockup existed there was no way to add
+                      another. "Edit"/"Link" still opens the picker to attach existing
+                      mockups. */}
+                  <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => window.open(`/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer')}
+                    sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                    New mockup
+                  </Button>
+                  <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
+                    onClick={onOpenPicker}
+                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    {tiles.length === 0 ? 'Link' : 'Edit'}
+                  </Button>
+                </Stack>
               </Stack>
               {tiles.length === 0 ? (
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,

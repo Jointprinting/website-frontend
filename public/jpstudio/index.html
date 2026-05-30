@@ -2507,6 +2507,26 @@ async function linkMockupToProject(projectId, mockupNumber) {
     proj.mockupNumbers = updated;
   } catch(e) { /* best-effort */ }
 }
+
+// Ask the server for the next consecutive mockup number for this project and
+// reserve+link it atomically. The server is authoritative — this fixes the
+// stale-cache / double-"A" race the old client-side _nextMockupNum had, and is
+// what lets you add unlimited mockups (A, B, C…) to one order. Returns the
+// assigned number (e.g. "#000133B"), or null on failure so the caller can fall
+// back to the local estimate.
+async function assignMockupNumber(projectId) {
+  const token = getStudioToken();
+  if (!token || !projectId) return null;
+  try {
+    const res = await fetch(`${BACKEND}/api/orders/${projectId}/mockups/assign`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.mockupNum) ? data.mockupNum : null;
+  } catch(_) { return null; }
+}
 // dbSave: adds remoteId then saves locally + fires cloud backup
 function dbSave(store,data){
   if (!data.remoteId) data.remoteId = generateUUID();
@@ -2610,7 +2630,15 @@ function changePage(dir) {
 }
 function addPage() {
   saveFormToState();
-  state.pages.push(defaultPageInfo());
+  const cur = state.pages[state.currentPage] || {};
+  const fresh = defaultPageInfo();
+  // Carry the project link (and client) forward so consecutive mockups made in
+  // one session all attach to the same order and auto-letter A, B, C…. The new
+  // page is otherwise blank — new mockup, new number, new identity.
+  fresh.projectId = cur.projectId || '';
+  fresh.projectNumber = cur.projectNumber || '';
+  fresh.client = cur.client || '';
+  state.pages.push(fresh);
   state.currentPage = state.pages.length-1;
   loadPageIntoForm();
   renderPageDots();
@@ -3452,18 +3480,30 @@ async function saveMockupToLibrary() {
     document.getElementById('f-project')?.focus();
     return;
   }
-  // Auto-generate mockup number — prefer the project-aware next letter,
-  // fall back to a sequential number for unlinked mockups.
-  if (!pg.mockupNum) {
-    const proj = pg.projectId && (window.PROJECTS_CACHE || []).find(p => p._id === pg.projectId);
-    if (proj) {
-      pg.mockupNum = _nextMockupNum(proj);
-    } else {
-      try {
-        const existing = await dbGetAll('mockups');
-        pg.mockupNum = String(existing.length + 1).padStart(3,'0');
-      } catch(e) {
-        pg.mockupNum = String(Date.now()).slice(-6);
+  // Decide the mockup number. A brand-new mockup asks the SERVER to reserve +
+  // link the next consecutive letter atomically (authoritative — no stale-cache
+  // double-"A"). An existing mockup (opened from a tile/deep-link, or already
+  // saved this session) keeps its number and just updates in place: no new
+  // letter, no duplicate.
+  const isExisting = !!pg._savedRemoteId;
+  let assignedViaServer = false;
+  if (!isExisting) {
+    const assigned = pg.projectId ? await assignMockupNumber(pg.projectId) : null;
+    if (assigned) {
+      pg.mockupNum = assigned;          // server already pushed it onto the order
+      assignedViaServer = true;
+    } else if (!pg.mockupNum) {
+      // Fallback: no project, or the endpoint was unreachable. Old behavior.
+      const proj = pg.projectId && (window.PROJECTS_CACHE || []).find(p => p._id === pg.projectId);
+      if (proj) {
+        pg.mockupNum = _nextMockupNum(proj);
+      } else {
+        try {
+          const existing = await dbGetAll('mockups');
+          pg.mockupNum = String(existing.length + 1).padStart(3,'0');
+        } catch(e) {
+          pg.mockupNum = String(Date.now()).slice(-6);
+        }
       }
     }
     document.getElementById('f-mockupnum').value = pg.mockupNum;
@@ -3485,12 +3525,22 @@ async function saveMockupToLibrary() {
     client: pg.client || '',
     thumbnail: pg.frontCompositeBase64 || pg.frontBlankBase64 || null,
     data:      pg.backCompositeBase64  || pg.backBlankBase64  || null,
-    pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null})),
+    // Reuse the existing remoteId on an edit so the cloud item is UPDATED, not
+    // duplicated. New mockups let dbSave mint a fresh UUID. The internal _saved*
+    // identity fields are local bookkeeping — stripped from the synced state.
+    remoteId: pg._savedRemoteId || undefined,
+    pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})),
   };
   try{
-    await dbSave('mockups',snapshot);
-    if (pg.projectId && pg.mockupNum) {
-      // Format mockup number for Order linking: ensure it carries the leading #
+    const localId = await dbSave('mockups',snapshot);
+    // Remember this page's identity so a re-save updates it instead of minting
+    // a new lettered mockup. (dbSave fills snapshot.remoteId if it was new.)
+    pg._savedRemoteId = snapshot.remoteId;
+    pg._savedDbId = localId;
+    // Only link via the legacy whole-array PUT when the atomic endpoint wasn't
+    // used (it already pushed the number). Skip entirely for existing mockups —
+    // they're already linked.
+    if (!isExisting && !assignedViaServer && pg.projectId && pg.mockupNum) {
       const formatted = pg.mockupNum.startsWith('#') ? pg.mockupNum : `#${pg.mockupNum}`;
       await linkMockupToProject(pg.projectId, formatted);
     }
@@ -3699,6 +3749,10 @@ async function loadMockup(id,e) {
     ps.backCompositeBase64 = item.data;
     if (!ps.backBlankBase64) ps.backBlankBase64 = item.data;
   }
+  // Remember the identity of the mockup we just loaded so a re-save UPDATES it
+  // (same remoteId, same letter) instead of minting a new lettered duplicate.
+  ps._savedRemoteId = item.remoteId || '';
+  ps._savedDbId = item.id;
   state.pages[state.currentPage]=ps;
   loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
 }
