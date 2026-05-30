@@ -314,7 +314,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         <Box sx={{ px: 2.5, py: 0.6, bgcolor: 'rgba(251,191,36,0.12)',
           borderBottom: `1px solid rgba(251,191,36,0.25)`,
           color: '#fbbf24', fontSize: 11, fontWeight: 600 }}>
-          Restored from a local draft you didn't save last time. Hit Save when you're done to commit it.
+          Restored your unsaved draft from last time — everything saves automatically as you go.
         </Box>
       )}
 
