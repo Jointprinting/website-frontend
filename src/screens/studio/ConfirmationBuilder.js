@@ -150,7 +150,13 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         };
       }
     }
-    setLocal(JSON.parse(JSON.stringify(seed)));
+    const safeSeed = seed ? JSON.parse(JSON.stringify(seed)) : {};
+    // Old confirmations (and pre-`shipping` drafts) may lack sub-objects the
+    // editor reads unguarded — default them so the dialog never crashes blank.
+    safeSeed.shipping = safeSeed.shipping || { name: '', attention: '', streetAddress: '', cityStateZip: '' };
+    safeSeed.items = Array.isArray(safeSeed.items) ? safeSeed.items : [];
+    safeSeed.customLines = Array.isArray(safeSeed.customLines) ? safeSeed.customLines : [];
+    setLocal(safeSeed);
     setDirty(false);
     setRestoredFromDraft(restored);
   // eslint-disable-next-line react-hooks/exhaustive-deps

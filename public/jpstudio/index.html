@@ -2141,7 +2141,7 @@ async function apiSyncSave(store, item) {
     // Shrink the heavy bits in parallel so we don't ship a 17MB doc.
     const [thumb, data] = await Promise.all([
       _shrinkBase64ForSync(item.thumbnail),
-      _shrinkBase64ForSync(item.data, 1200, 0.82),     // blanks/logos can stay larger
+      _shrinkBase64ForSync(item.data || item.base64, 1200, 0.82),     // blanks/logos keep the image in `base64` — map it into `data` so it actually syncs + offloads to R2
     ]);
     const res = await fetch(`${BACKEND}/api/studio/library/${store}`, {
       method:'POST',
@@ -2283,6 +2283,8 @@ async function syncFromBackend() {
       for (const ri of remoteItems) {
         if (ri.remoteId && localIds.has(ri.remoteId)) continue;
         const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Date.now() };
+        // Blanks/logos render from a local `base64` field; the cloud stores the image in `data`, so map it back on hydration.
+        if (store === 'blanks' || store === 'logos') local.base64 = local.data || '';
         // Mockups: the cloud copy of pageState has its base64s stripped (see
         // _trimPageStateForSync). Hydrate the front + back composites from
         // the top-level `thumbnail` and `data` slots so the canvas has the
@@ -3008,6 +3010,7 @@ function confirmLogoPosition() {
   const blankB64 = pg[fabricSide==='front'?'frontBlankBase64':'backBlankBase64'];
   const logoB64  = pg[fabricSide==='front'?'frontLogoBase64' :'backLogoBase64'];
   const blankNative = new Image();
+  blankNative.crossOrigin = 'anonymous';   // lets us composite an R2-hosted blank onto the canvas without tainting it (needs the R2 bucket CORS policy). Ignored for base64.
   blankNative.onload = ()=>{
     const bW=blankNative.naturalWidth, bH=blankNative.naturalHeight;
     const displayW=blankObj?blankObj.getScaledWidth():fabricCanvas.width;
@@ -3020,6 +3023,7 @@ function confirmLogoPosition() {
     const ctx=off.getContext('2d');
     ctx.drawImage(blankNative,0,0,bW,bH);
     const logoNative=new Image();
+    logoNative.crossOrigin='anonymous';
     logoNative.onload=()=>{
       const lx=(logoObj.left-originX)*sX, ly=(logoObj.top-originY)*sY;
       const lw=logoObj.getScaledWidth()*sX, lh=logoObj.getScaledHeight()*sY;

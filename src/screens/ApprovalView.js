@@ -187,7 +187,9 @@ export default function ApprovalView() {
         const blank = Number(l.blankCost) || 0;
         const print = Number(l.printCost) || 0;
         const m     = Number(l.markup)    || 1;
-        const derivedUnit = +((blank + print) * m).toFixed(2);
+        const q     = Number(l.qty)       || 0;
+        const setupShip = (Number(l.setupCost) || 0) + (Number(l.shippingCost) || 0);
+        const derivedUnit = +(((blank + print) + (q > 0 ? setupShip / q : 0)) * m).toFixed(2);
         const unit = Number(l.unitPrice) || derivedUnit;
         const desc = [l.styleCode, l.description, l.color, l.printType && `(${l.printType}${l.printDetails ? ' · ' + l.printDetails : ''})`]
           .filter(Boolean).join(' · ');
