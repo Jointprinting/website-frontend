@@ -112,7 +112,7 @@ export default function OrderTracker({ token, onBack }) {
     // the project list still renders, just with stale stats.
     const [pr, mk, ds, lg] = await Promise.allSettled([
       axios.get(`${base}/orders/projects`, authHdr),
-      axios.get(`${base}/studio/library/mockups`, authHdr),
+      axios.get(`${base}/studio/library/mockups?summary=1`, authHdr),
       axios.get(`${base}/orders/dashboard`, authHdr),
       axios.get(`${base}/client-logos`, authHdr),
     ]);
@@ -1089,7 +1089,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
                 bgcolor: B.bg, position: 'relative',
               }}>
                 {t.item && t.item.thumbnail ? (
-                  <Box component="img" src={t.item.thumbnail} alt=""
+                  <Box component="img" src={t.item.thumbnail} alt="" loading="lazy"
                     sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block',
                       // Keep the full mockup visible (shirts are tall, the
                       // hero cell is squat-ish). cover was cropping the
@@ -1395,11 +1395,24 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                   Mockups · {tiles.length}
                 </Typography>
-                <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
-                  onClick={onOpenPicker}
-                  sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-                  {tiles.length === 0 ? 'Link mockups' : 'Edit mockups'}
-                </Button>
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  {/* Always-present "New mockup" — opens a fresh studio deep-linked
+                      to this project so each click starts a NEW lettered mockup
+                      (A, B, C…). Previously the only studio entry point lived in the
+                      empty state, so once one mockup existed there was no way to add
+                      another. "Edit"/"Link" still opens the picker to attach existing
+                      mockups. */}
+                  <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => window.open(`/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer')}
+                    sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                    New mockup
+                  </Button>
+                  <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
+                    onClick={onOpenPicker}
+                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    {tiles.length === 0 ? 'Link' : 'Edit'}
+                  </Button>
+                </Stack>
               </Stack>
               {tiles.length === 0 ? (
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
@@ -1458,7 +1471,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                         }} title="Matched automatically by client name">AUTO</Box>
                       )}
                       {t.item && t.item.thumbnail ? (
-                        <Box component="img" src={t.item.thumbnail} alt={t.item.name}
+                        <Box component="img" src={t.item.thumbnail} alt={t.item.name} loading="lazy"
                           sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
