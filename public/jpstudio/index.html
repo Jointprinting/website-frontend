@@ -1908,16 +1908,25 @@ async function loadApiColor(colorObj, parentData) {
 
   ssSetSkeleton(false);
 
-  // Set title in studio if blank — use full brand+style from parent data
+  // Title (when blank) and subtitle are both derived from the picked S&S
+  // product. Title is normally set from the project ("[Company] Merch"), so we
+  // only fill it here when nothing's there yet. Subtitle always reflects the
+  // chosen product/colorway in the house style, e.g. "Comfort Colors 1717, Black".
   const pg = state.pages[state.currentPage];
+  const brandStyle = parentData?.name || ((document.getElementById('ss-style').value || '').trim());
+  const color = colorObj.color || (document.getElementById('ss-color').value || '').trim();
   if (!pg.title) {
-    const brandStyle = parentData?.name || ((document.getElementById('ss-style').value || '').trim());
-    const color = colorObj.color || (document.getElementById('ss-color').value || '').trim();
     const titleVal = brandStyle + (color ? ' – ' + color : '');
     document.getElementById('f-title').value = titleVal;
     pg.title = titleVal;
-    markPreviewDirty();
   }
+  const subEl = document.getElementById('f-subtitle');
+  if (subEl && !pg.subtitle && brandStyle) {
+    const subtitleVal = brandStyle + (color ? ', ' + color : '');
+    subEl.value = subtitleVal;
+    pg.subtitle = subtitleVal;
+  }
+  markPreviewDirty();
 }
 
 async function previewApiImage(side, url) {
@@ -2462,9 +2471,12 @@ function onProjectChange() {
   if (clientEl) clientEl.value = proj.clientName || proj.companyName || '';
   const titleEl = document.getElementById('f-title');
   if (titleEl) {
-    const first = _firstName(proj.clientName);
-    const co    = (proj.companyName || '').trim();
-    titleEl.value = [first, co, 'Merch'].filter(Boolean).join(' ');
+    // Company name only — e.g. "Acme Merch", not "John Acme Merch". The
+    // title is the company's merch line, not the contact person, so we no
+    // longer prepend the client's first name. Fall back to the contact name
+    // only when no company is set.
+    const co = (proj.companyName || proj.clientName || '').trim();
+    titleEl.value = [co, 'Merch'].filter(Boolean).join(' ');
   }
   const numEl = document.getElementById('f-mockupnum');
   if (numEl) numEl.value = _nextMockupNum(proj);
