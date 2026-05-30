@@ -1552,8 +1552,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         <Box sx={{ gridColumn: '1 / -1' }}>
           {(() => {
             const qLines = local.quoteLines || [];
-            const lineUnit = (l) => Number(l.unitPrice)
-              || ((Number(l.blankCost) || 0) + (Number(l.printCost) || 0)) * (Number(l.markup) || 1);
+            const lineUnit = (l) => {
+              const q = Number(l.qty) || 0;
+              const setupShip = (Number(l.setupCost) || 0) + (Number(l.shippingCost) || 0);
+              const unitCogs = (Number(l.blankCost) || 0) + (Number(l.printCost) || 0) + (q > 0 ? setupShip / q : 0);
+              return Number(l.unitPrice) || unitCogs * (Number(l.markup) || 1);
+            };
             const qTotal = qLines.reduce((s, l) => s + (Number(l.qty) || 0) * lineUnit(l), 0);
             return (
               <>
