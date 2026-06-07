@@ -19,7 +19,7 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* ── Hero ───────────────────────────────── */}
+      {/* ── Hero ──────────────────────────────────── */}
       <section className="relative isolate flex min-h-[78vh] items-end overflow-hidden">
         {heroSrc && (
           <Image
@@ -49,7 +49,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Welcome ──────────────────────────── */}
+      {/* ── Welcome ──────────────────────────────── */}
       <section className="container-x py-20">
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div>
@@ -79,7 +79,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Upcoming events ───────────────────── */}
+      {/* ── Upcoming events ─────────────────────── */}
       <section className="bg-sand/60 py-20">
         <div className="container-x">
           <SectionHeading
@@ -96,7 +96,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Visit / location credibility ───────── */}
+      {/* ── Visit / location credibility ───────────── */}
       <section className="container-x py-20">
         <div className="grid gap-10 md:grid-cols-[1.2fr_1fr]">
           <div>
@@ -122,7 +122,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Featured shop ───────────────────── */}
+      {/* ── Featured shop ──────────────────────── */}
       <section className="bg-sand/60 py-20">
         <div className="container-x">
           <SectionHeading
@@ -139,7 +139,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Gallery ──────────────────────── */}
+      {/* ── Gallery ─────────────────────────── */}
       {settings.gallery?.length > 0 && (
         <section className="container-x py-20">
           <SectionHeading eyebrow="Around the barn" title="A few moments" />
@@ -164,7 +164,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Community CTA band ──────────────── */}
+      {/* ── Community CTA band ──────────────────── */}
       <section className="bg-pine">
         <div className="container-x grid items-center gap-8 py-16 md:grid-cols-2">
           <div>

@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortableText } from "@portabletext/react";
-import { getEvent } from "@/lib/content";
+import { getEvent, getEvents } from "@/lib/content";
 import { urlForImage } from "@/sanity/client";
 import { formatEventDate, formatEventTime } from "@/lib/format";
 
