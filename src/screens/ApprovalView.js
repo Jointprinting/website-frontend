@@ -70,6 +70,7 @@ export default function ApprovalView() {
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesText, setChangesText] = useState('');
   const [name, setName] = useState('');          // optional — so we know who on the team acted
+  const [email, setEmail] = useState('');        // optional — so we know which email approved
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
 
   // Derived from the server's approvalStatus so reopening the link shows the
@@ -132,7 +133,7 @@ export default function ApprovalView() {
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`,
-        { name: name.trim() });
+        { name: name.trim(), email: email.trim() });
       await refresh();
     } catch (e) {
       // 409 = someone on the team already approved or sent it back. Not an
@@ -153,7 +154,7 @@ export default function ApprovalView() {
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
-        { message: changesText, name: name.trim() });
+        { message: changesText, name: name.trim(), email: email.trim() });
       setChangesOpen(false);
       setChangesText('');
       await refresh();
@@ -463,9 +464,12 @@ export default function ApprovalView() {
                   <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
                 </Box>
               )}
-              <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Your name (optional — so we know who approved)"
-                sx={{ mb: 1.5 }} />
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1.5 }}>
+                <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Your name (optional)" />
+                <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="Your email (optional — so we know who approved)" />
+              </Stack>
               <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                 <Button onClick={handleApprove} disabled={actionBusy}
                   startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <CheckCircleOutlineIcon />}
@@ -496,6 +500,8 @@ export default function ApprovalView() {
           </Typography>
           <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
             placeholder="Your name (optional)" sx={{ mb: 1.5 }} />
+          <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="Your email (optional)" sx={{ mb: 1.5 }} />
           <TextField fullWidth multiline minRows={4} autoFocus
             value={changesText} onChange={e => setChangesText(e.target.value)}
             placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L." />
