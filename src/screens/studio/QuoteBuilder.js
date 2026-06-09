@@ -11,7 +11,7 @@
 // Persists `quoteLines` (incl. per-line setupCost/shippingCost), `shipToState`,
 // and `printerName` on the project via onSave().
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
   Dialog, DialogContent, FormControl, Select, MenuItem,
@@ -96,30 +96,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     catch (e) { /* quota — server autosave still covers us */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project?._id, lines, shipToState, printerName, dirty]);
-
-  const totals = useMemo(() => {
-    let qty = 0, totalCogs = 0, lineRevenue = 0, extras = 0;
-    lines.forEach(l => {
-      const q = num(l.qty);
-      const setupShip = Math.max(0, num(l.setupCost)) + Math.max(0, num(l.shippingCost));
-      const unitCogs  = lineCogsPerUnit(l);
-      // unitPrice (set via a tier or by hand) already carries this line's
-      // setup/shipping, so it's the whole client-side revenue for the line.
-      const u = num(l.unitPrice) || unitCogs * (num(l.markup) || 1);
-      qty         += q;
-      extras      += setupShip;
-      // COGS = raw blanks + print (× qty) + the full setup + shipping for the line.
-      totalCogs   += q * (num(l.blankCost) + num(l.printCost)) + setupShip;
-      lineRevenue += q * u;
-    });
-    const clientTotal = lineRevenue;
-    const profit      = clientTotal - totalCogs;
-    return {
-      qty, cogs: totalCogs, lineRevenue, extras,
-      clientTotal, profit,
-      marginPct: clientTotal > 0 ? (profit / clientTotal) * 100 : 0,
-    };
-  }, [lines]);
 
   // No Save button — autosave ~800ms after the last edit. On failure we keep
   // `dirty` set so the next edit (or close) retries; the localStorage draft is
@@ -255,43 +231,10 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           </Button>
         )}
       </DialogContent>
-
-      {/* Totals footer — minimal green, margin spectrum carries the visual cue */}
-      <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.panel, borderTop: `1px solid ${B.border}`,
-        px: 2.5, py: 1.2, display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 }, flexWrap: 'wrap' }}>
-        {/* No aggregate profit/margin here — every line is an alternative option
-            the client picks ONE of, so summing profit across them is a fiction.
-            The real per-option numbers (profit/unit + total revenue) live on each
-            line card below. */}
-        <FooterStat label="Units"  value={String(totals.qty)} />
-        <FooterStat label="COGS"   value={fmt(totals.cogs)} />
-        {totals.extras > 0 && (
-          <FooterStat label="Setup + Ship" value={fmt(totals.extras)} dim />
-        )}
-        <Box sx={{ flex: 1 }} />
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Client total
-          </Typography>
-          <Typography sx={{ color: B.white, fontSize: 22, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
-            {fmt(totals.clientTotal)}
-          </Typography>
-        </Box>
-      </Box>
+      {/* No totals footer — every line is an alternative brand/option the client
+          picks ONE of, so a summed units/COGS/revenue/profit/margin would be a
+          fiction. All the numbers that matter live per-line on each card. */}
     </Dialog>
-  );
-}
-
-function FooterStat({ label, value, accent, dim }) {
-  return (
-    <Box sx={{ opacity: dim ? 0.6 : 1 }}>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-        {label}
-      </Typography>
-      <Typography sx={{ color: accent || B.white, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
-        {value}
-      </Typography>
-    </Box>
   );
 }
 
@@ -445,6 +388,14 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
           </Typography>
           <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
             {fmt(profit)} · {marginPct.toFixed(0)}%
+          </Typography>
+        </Box>
+        <Box>
+          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            Total profit · {qty} unit{qty === 1 ? '' : 's'}
+          </Typography>
+          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
+            {fmt(profit * qty)}
           </Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
