@@ -38,7 +38,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import QuoteBuilder from './QuoteBuilder';
@@ -1257,9 +1257,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (project) setLocal({ ...project }); }, [project?._id]);
 
-  // Server-driven collections still need to flow back in: mockups attached by
-  // the picker / auto-link, uploaded files, and quote lines edited in the
-  // quoter. Sync just those without touching the text fields being edited.
+  // Server-driven fields still need to flow back in: mockups attached by the
+  // picker / auto-link, uploaded files, quote lines edited in the quoter, and —
+  // since money + sale date now derive from the confirmation — totalValue, cogs,
+  // orderDate, and the confirmation itself. Sync just those without touching the
+  // text fields being edited.
   useEffect(() => {
     if (!project) return;
     setLocal(prev => (prev ? {
@@ -1267,9 +1269,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       mockupNumbers: project.mockupNumbers || [],
       files:         project.files,
       quoteLines:    project.quoteLines,
+      confirmation:  project.confirmation,
+      totalValue:    project.totalValue,
+      cogs:          project.cogs,
+      orderDate:     project.orderDate,
     } : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.mockupNumbers, project?.files, project?.quoteLines]);
+  }, [project?.mockupNumbers, project?.files, project?.quoteLines, project?.confirmation, project?.totalValue, project?.cogs, project?.orderDate]);
 
   // Auto-link: silently promote auto-matched mockups + drop stale references
   // when the drawer opens, so the project's mockupNumbers always matches what
@@ -1628,24 +1634,32 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           options={[{ value: 'no', label: 'Unpaid' }, { value: 'yes', label: 'Paid' }]}
           onChange={v => { const b = v === 'yes'; updateLocal({ paid: b }); saveField('paid', b); }} />
 
-        <InlineField label="Total $" type="number" value={local.totalValue || ''} savingHint={savingField === 'totalValue'}
-          onChange={v => { updateLocal({ totalValue: Number(v) || 0 }); queueField('totalValue', Number(v) || 0); }}
-          onBlur={v => saveField('totalValue', Number(v) || 0)} />
-        <InlineField label="COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
-          onChange={v => { updateLocal({ cogs: Number(v) || 0 }); queueField('cogs', Number(v) || 0); }}
-          onBlur={v => saveField('cogs', Number(v) || 0)} />
+        {hasConfirmation(local.confirmation) ? (
+          <>
+            {/* Money is the approved confirmation's, not hand-typed — the quoter
+                is pre-approval options; the confirmation is the real order. */}
+            <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="From confirmation" />
+            <ReadonlyField label="COGS $"  value={fmt(confCogs(local.confirmation))}  hint="From confirmation" />
+          </>
+        ) : (
+          <>
+            <InlineField label="Total $" type="number" value={local.totalValue || ''} savingHint={savingField === 'totalValue'}
+              onChange={v => { updateLocal({ totalValue: Number(v) || 0 }); queueField('totalValue', Number(v) || 0); }}
+              onBlur={v => saveField('totalValue', Number(v) || 0)} />
+            <InlineField label="COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
+              onChange={v => { updateLocal({ cogs: Number(v) || 0 }); queueField('cogs', Number(v) || 0); }}
+              onBlur={v => saveField('cogs', Number(v) || 0)} />
+          </>
+        )}
 
         <InlineField label="Printer"  value={local.printerName} savingHint={savingField === 'printerName'}
           onChange={v => { updateLocal({ printerName: v }); queueField('printerName', v); }} onBlur={v => saveField('printerName', v)} />
         <InlineField label="Supplier" value={local.supplier || ''} savingHint={savingField === 'supplier'}
           onChange={v => { updateLocal({ supplier: v }); queueField('supplier', v); }} onBlur={v => saveField('supplier', v)} />
 
-        <InlineDateField label="Date of sale" value={local.orderDate}     savingHint={savingField === 'orderDate'}
-          onChange={v => saveField('orderDate', v)} />
-        <InlineDateField label="Arrive at printer" value={local.shipDate} savingHint={savingField === 'shipDate'}
-          onChange={v => saveField('shipDate', v)} />
-        <InlineDateField label="Arrive at client" value={local.deliveredDate} savingHint={savingField === 'deliveredDate'}
-          onChange={v => saveField('deliveredDate', v)} />
+        {/* Sale + delivery dates aren't hand-entered here anymore — date of sale
+            comes from the confirmation, and delivery progress lives in the
+            tracker timeline below. */}
 
         <Box sx={{ gridColumn: '1 / -1' }}>
           <ItemsEditor
@@ -1896,22 +1910,19 @@ function InlineSelect({ label, value, options, onChange, savingHint }) {
   );
 }
 
-function InlineDateField({ label, value, onChange, savingHint }) {
-  const v = value ? new Date(value).toISOString().slice(0, 10) : '';
+// Read-only money cell — used for Total/COGS once they derive from the
+// confirmation, so the admin sees the number but can't hand-edit it.
+function ReadonlyField({ label, value, hint }) {
   return (
     <Box>
       <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
-        {label} {savingHint && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+        {label}
       </Typography>
-      <TextField
-        size="small"
-        fullWidth
-        type="date"
-        value={v}
-        onChange={e => onChange(e.target.value || null)}
-        sx={darkInput}
-        InputLabelProps={{ shrink: true }}
-      />
+      <Box sx={{ height: 40, display: 'flex', alignItems: 'center', px: 1.5, borderRadius: 1,
+        border: `1px solid ${B.faint}`, bgcolor: 'rgba(255,255,255,0.03)' }}>
+        <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{value}</Typography>
+      </Box>
+      {hint && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, fontStyle: 'italic' }}>{hint}</Typography>}
     </Box>
   );
 }

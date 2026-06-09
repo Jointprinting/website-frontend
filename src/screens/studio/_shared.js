@@ -59,6 +59,33 @@ export const scrollbar = {
 export const fmt = (n) =>
   `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// ── Confirmation-derived money ────────────────────────────────────────────────
+// The confirmation page (the APPROVED doc) is the source of truth for an order's
+// revenue + COGS — the quoter is just pre-approval options. Revenue = item size
+// rows (qty × unitPrice) plus custom add-on lines (flat or %). COGS = each item's
+// total qty × its internal unitCost (carried over from the quote, never shown to
+// the client). Mirrors the backend _confirmationTotals — keep the two in sync.
+export const hasConfirmation = (conf) =>
+  !!(conf && Array.isArray(conf.items) && conf.items.length > 0);
+
+export function confRevenue(conf) {
+  if (!conf || !Array.isArray(conf.items)) return 0;
+  let rev = conf.items.reduce((s, it) =>
+    s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
+  (conf.customLines || []).forEach((l) => {
+    rev += l.isPercent ? rev * (Number(l.amount) || 0) / 100 : (Number(l.amount) || 0);
+  });
+  return rev;
+}
+
+export function confCogs(conf) {
+  if (!conf || !Array.isArray(conf.items)) return 0;
+  return conf.items.reduce((s, it) => {
+    const qty = (it.sizes || []).reduce((q, sz) => q + (Number(sz.qty) || 0), 0);
+    return s + qty * (Number(it.unitCost) || 0);
+  }, 0);
+}
+
 export const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 

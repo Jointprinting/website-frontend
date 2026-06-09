@@ -1018,6 +1018,12 @@ function seedItemFromQuote(line) {
   // qty unset so the admin distributes across sizes manually.
   const description = line.description || '';
   const brandGuess = description.split(/\s/)[0] || '';
+  // Carry the quote line's true cost/unit (blank + print + setup/ship spread
+  // over its qty) so the order's COGS can be derived from the confirmation.
+  // Internal only — never rendered on the client-facing doc.
+  const q = Number(line.qty) || 0;
+  const setupShip = Math.max(0, Number(line.setupCost) || 0) + Math.max(0, Number(line.shippingCost) || 0);
+  const unitCost = (Number(line.blankCost) || 0) + (Number(line.printCost) || 0) + (q > 0 ? setupShip / q : 0);
   return {
     mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
     productName: '',
@@ -1026,6 +1032,7 @@ function seedItemFromQuote(line) {
     printType: line.printType || '',
     color:     line.color || '',
     printerName: line.supplier ? '' : '',
+    unitCost:  +unitCost.toFixed(4),
     sizes:     DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: Number(line.unitPrice) || 0 })),
   };
 }
