@@ -32,8 +32,49 @@ const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
 // client-facing surface, also bare.
 const STUDIO_ROUTES = ['/studio', '/admin', '/approve'];
 
+// Per-route titles + meta descriptions. Every page used to share the single
+// static title from index.html, which hurts SEO and makes tabs/history
+// indistinguishable.
+const ROUTE_META = {
+  '/':          { title: 'Joint Printing | Custom Merch & Screen Printing',  desc: 'Custom screen printing, embroidery, and branded merch — designed, produced, and delivered by Joint Printing.' },
+  '/about':     { title: 'About | Joint Printing',                            desc: 'Who we are and how Joint Printing makes custom merch easy.' },
+  '/contact':   { title: 'Contact | Joint Printing',                          desc: 'Get a quote or ask a question — we respond fast.' },
+  '/product':   { title: 'Product | Joint Printing',                          desc: 'Product details, colors, and sizing.' },
+  '/products':  { title: 'Products | Joint Printing',                         desc: 'Browse blank styles for your next custom merch run.' },
+  '/faq':       { title: 'FAQ | Joint Printing',                              desc: 'Answers about pricing, turnaround, artwork, and shipping.' },
+  '/customize': { title: 'Free Mockup | Joint Printing',                      desc: 'Send us your logo and get a free mockup on real products.' },
+  '/catalogs':  { title: 'Catalogs | Joint Printing',                         desc: 'Download our latest product catalogs.' },
+  '/terms':     { title: 'Terms of Service | Joint Printing',                 desc: 'Joint Printing terms of service.' },
+  '/privacy':   { title: 'Privacy Policy | Joint Printing',                   desc: 'Joint Printing privacy policy.' },
+  '/studio':    { title: 'Studio | Joint Printing' },
+  '/admin':     { title: 'Studio | Joint Printing' },
+};
+
+function useRouteMeta(pathname) {
+  React.useEffect(() => {
+    const meta = ROUTE_META[pathname]
+      || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null);
+    document.title = (meta && meta.title) || 'Joint Printing | Custom Merch & Screen Printing';
+    const tag = document.querySelector('meta[name="description"]');
+    if (tag && meta && meta.desc) tag.setAttribute('content', meta.desc);
+  }, [pathname]);
+}
+
+function NotFound() {
+  return (
+    <div style={{ minHeight: '50vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24 }}>
+      <h1 style={{ fontSize: 42, margin: 0 }}>404</h1>
+      <p style={{ fontSize: 16, color: '#555' }}>
+        That page doesn't exist. <a href="/" style={{ color: '#1a7f3c' }}>Back to the homepage</a>
+      </p>
+    </div>
+  );
+}
+
 function AppShell() {
   const { pathname } = useLocation();
+  useRouteMeta(pathname);
   const isStudio = STUDIO_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
   );
@@ -68,6 +109,7 @@ function AppShell() {
           <Route exact path="/terms" element={<Terms />} />
           <Route exact path="/privacy" element={<Privacy />} />
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
       {!isStudio && <Footer />}

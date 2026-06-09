@@ -7,7 +7,7 @@
 // Layout: editor on the left (controls), live preview on the right (the
 // printable / shareable doc). On narrow screens they stack.
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
   Dialog, DialogContent, FormControlLabel, Switch, CircularProgress, MenuItem, Select, Tooltip,
@@ -167,6 +167,10 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   // a few big mockups will silently lose every edit otherwise).
   const [draftSaveError, setDraftSaveError] = useState('');
 
+  // Monotonic edit counter — bumped on every update() so persist() can tell
+  // whether edits landed while a save was in flight.
+  const editVersionRef = useRef(0);
+
   // Persist every edit to localStorage so an accidental backdrop click,
   // tab close, or browser crash can't kill the user's work.
   useEffect(() => {
@@ -212,16 +216,29 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
 
   if (!project || !local) return null;
 
-  const update = (patch) => { setLocal(prev => ({ ...prev, ...patch })); setDirty(true); };
+  const update = (patch) => {
+    editVersionRef.current += 1;
+    setLocal(prev => ({ ...prev, ...patch }));
+    setDirty(true);
+  };
 
   const persist = async () => {
+    // Snapshot the edit version so keystrokes typed while the save is in
+    // flight are never marked "saved" — they re-trigger the autosave.
+    const versionAtSave = editVersionRef.current;
     setSaving(true);
     try {
-      await onSave({ confirmation: local });
-      // Server confirmed — drop the local draft.
-      lsRemove(`confirmation-draft:${project._id}`);
-      setDirty(false);
-      setRestoredFromDraft(false);
+      const saved = await onSave({ confirmation: local });
+      // onSave resolves with null when the PUT failed (it already alerted).
+      // Treat that as a real failure: keep the dirty flag, keep the
+      // localStorage draft, keep beforeunload protection.
+      if (!saved) throw new Error('save failed');
+      if (editVersionRef.current === versionAtSave) {
+        // Server confirmed and nothing changed since — drop the local draft.
+        lsRemove(`confirmation-draft:${project._id}`);
+        setDirty(false);
+        setRestoredFromDraft(false);
+      }
     } finally {
       setSaving(false);
     }
@@ -798,7 +815,10 @@ function Preview({ conf, project, mockupMap, clientLogo, totals }) {
           </Typography>
           <InfoRow label="Order Title"  value={conf.orderTitle} />
           <InfoRow label="Client Name"  value={project.clientName || project.companyName} />
-          <InfoRow label="Date"         value={conf.orderDate ? new Date(conf.orderDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''} />
+          {/* timeZone UTC: orderDate is stored as UTC midnight — local-time
+              rendering shows the previous day in US timezones and disagrees
+              with the server PDF. */}
+          <InfoRow label="Date"         value={conf.orderDate ? new Date(conf.orderDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''} />
         </Box>
         <Box>
           <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>

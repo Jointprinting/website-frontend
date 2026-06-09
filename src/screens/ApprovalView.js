@@ -184,16 +184,14 @@ export default function ApprovalView() {
   const items = p.items || [];
   const itemRows = quoteLines.length > 0
     ? quoteLines.map(l => {
-        const blank = Number(l.blankCost) || 0;
-        const print = Number(l.printCost) || 0;
-        const m     = Number(l.markup)    || 1;
-        const q     = Number(l.qty)       || 0;
-        const setupShip = (Number(l.setupCost) || 0) + (Number(l.shippingCost) || 0);
-        const derivedUnit = +(((blank + print) + (q > 0 ? setupShip / q : 0)) * m).toFixed(2);
-        const unit = Number(l.unitPrice) || derivedUnit;
+        // unitPrice arrives resolved from the server — the public payload
+        // carries no cost/markup fields to derive from (by design: those
+        // are internal margin data).
+        const q    = Number(l.qty) || 0;
+        const unit = Number(l.unitPrice) || 0;
         const desc = [l.styleCode, l.description, l.color, l.printType && `(${l.printType}${l.printDetails ? ' · ' + l.printDetails : ''})`]
           .filter(Boolean).join(' · ');
-        return { qty: l.qty, description: desc, unitPrice: unit, lineTotal: (Number(l.qty) || 0) * unit };
+        return { qty: l.qty, description: desc, unitPrice: unit, lineTotal: q * unit };
       })
     : items.map(i => ({
         qty: i.qty, description: i.description,
@@ -245,7 +243,7 @@ export default function ApprovalView() {
                 <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
                   {[
                     p.orderNumber ? `Invoice #${p.orderNumber}` : null,
-                    p.orderDate ? new Date(p.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+                    p.orderDate ? new Date(p.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : null,
                   ].filter(Boolean).join(' · ')}
                 </Typography>
               )}

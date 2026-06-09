@@ -60,6 +60,10 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const [saving,       setSaving]       = useState(false);
   const [dirty,        setDirty]        = useState(false);
 
+  // Seed only when the dialog opens (or switches project) — NOT on every
+  // project object refresh. The parent swaps in the server response after
+  // each save; reseeding from it would discard anything typed while that
+  // save was in flight.
   useEffect(() => {
     if (open && project) {
       setLines((project.quoteLines || []).map(l => ({ ...l })));
@@ -67,7 +71,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       setPrinterName(project.printerName || '');
       setDirty(false);
     }
-  }, [open, project]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, project?._id]);
 
   const totals = useMemo(() => {
     let qty = 0, totalCogs = 0, lineRevenue = 0, extras = 0;
@@ -114,7 +119,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const persist = async () => {
     setSaving(true);
     try {
-      await onSave({
+      const saved = await onSave({
         quoteLines: lines,
         shipToState,
         printerName,
@@ -123,7 +128,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         setupCost: 0,
         shippingCost: 0,
       });
-      setDirty(false);
+      // onSave resolves with null on failure (already alerted) — stay dirty
+      // so the close guard still protects the unsaved lines.
+      if (saved) setDirty(false);
     } finally {
       setSaving(false);
     }
