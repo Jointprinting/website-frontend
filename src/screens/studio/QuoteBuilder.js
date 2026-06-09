@@ -14,12 +14,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress,
+  Dialog, DialogContent, FormControl, Select, MenuItem,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { B, scrollbar, darkInput, fmt } from './_shared';
+import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
@@ -60,14 +61,41 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const [saving,       setSaving]       = useState(false);
   const [dirty,        setDirty]        = useState(false);
 
+  // Seed from the freshest source: a local draft (which survives a tab close
+  // or crash mid-quote) wins over the server copy. Keyed on project id so an
+  // autosave round-trip — which hands us a brand-new project object with the
+  // same id — never re-seeds and clobbers in-progress edits.
   useEffect(() => {
-    if (open && project) {
-      setLines((project.quoteLines || []).map(l => ({ ...l })));
-      setShipToState(project.shipToState || '');
-      setPrinterName(project.printerName || '');
-      setDirty(false);
+    if (!open || !project) return;
+    let seed = null;
+    const raw = lsGet(`quote-draft:${project._id}`, null);
+    if (raw) {
+      try { seed = JSON.parse(raw); }
+      catch (e) { console.warn('[QuoteBuilder] discarding corrupt draft:', e.message); }
     }
-  }, [open, project]);
+    if (!seed) {
+      seed = {
+        lines: (project.quoteLines || []).map(l => ({ ...l })),
+        shipToState: project.shipToState || '',
+        printerName: project.printerName || '',
+      };
+    }
+    setLines(Array.isArray(seed.lines) ? seed.lines.map(l => ({ ...l })) : []);
+    setShipToState(seed.shipToState || '');
+    setPrinterName(seed.printerName || '');
+    setDirty(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, project?._id]);
+
+  // Mirror every edit into localStorage so a tab close / browser crash mid-quote
+  // can't lose work. The debounced server autosave below is the primary net;
+  // this is the belt-and-suspenders that survives even an offline crash.
+  useEffect(() => {
+    if (!open || !project || !dirty) return;
+    try { lsSet(`quote-draft:${project._id}`, JSON.stringify({ lines, shipToState, printerName })); }
+    catch (e) { /* quota — server autosave still covers us */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, project?._id, lines, shipToState, printerName, dirty]);
 
   const totals = useMemo(() => {
     let qty = 0, totalCogs = 0, lineRevenue = 0, extras = 0;
@@ -93,6 +121,24 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     };
   }, [lines]);
 
+  // No Save button — autosave ~800ms after the last edit. On failure we keep
+  // `dirty` set so the next edit (or close) retries; the localStorage draft is
+  // the fallback if the user never comes back.
+  useEffect(() => {
+    if (!open || !dirty || !project) return undefined;
+    const t = setTimeout(() => { persist().catch(() => { /* stay dirty, retry later */ }); }, 800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, dirty, lines, shipToState, printerName]);
+
+  // Warn if the tab is closed with an edit still mid-flight to the server.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const onUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty]);
+
   if (!project) return null;
 
   const setLine = (i, patch) => {
@@ -114,7 +160,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const persist = async () => {
     setSaving(true);
     try {
-      await onSave({
+      const ok = await onSave({
         quoteLines: lines,
         shipToState,
         printerName,
@@ -123,22 +169,28 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         setupCost: 0,
         shippingCost: 0,
       });
-      setDirty(false);
+      // Only drop the safety net once the server has actually confirmed the
+      // save. On failure we keep `dirty` + the draft so nothing is lost.
+      if (ok) {
+        lsRemove(`quote-draft:${project._id}`);
+        setDirty(false);
+      }
     } finally {
       setSaving(false);
     }
   };
-  const requestClose = () => {
-    if (dirty && !window.confirm('You have unsaved quote changes. Close anyway?')) return;
+  // Closing just commits — no "unsaved changes?" prompt. The draft in
+  // localStorage is the backstop if the final save can't reach the server.
+  const closeWithSave = async () => {
+    if (dirty) { try { await persist(); } catch (e) { /* draft survives locally */ } }
     onClose();
   };
 
-  const marginCol = marginColor(totals.marginPct);
   const inkInput  = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
 
   return (
     <Dialog open={open}
-      onClose={(_, reason) => { if (reason === 'backdropClick') return; requestClose(); }}
+      onClose={(_, reason) => { if (reason === 'backdropClick') return; closeWithSave(); }}
       maxWidth={false} fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
@@ -151,16 +203,14 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
             Project #{project.projectNumber || '—'}
             {(project.companyName || project.clientName) ? ` · ${project.companyName || project.clientName}` : ''}
-            {dirty ? ' · unsaved' : ''}
           </Typography>
         </Typography>
-        <Button size="small" disabled={saving || !dirty} onClick={persist}
-          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, px: 1.5,
-            bgcolor: dirty ? B.green : 'transparent', color: dirty ? B.greenDk : B.muted,
-            '&:hover': { bgcolor: dirty ? '#3bd070' : 'transparent' } }}>
-          {saving ? <CircularProgress size={12} sx={{ color: B.greenDk }} /> : (dirty ? 'Save' : 'Saved')}
-        </Button>
-        <IconButton size="small" onClick={requestClose}><CloseIcon fontSize="small" /></IconButton>
+        {/* Invisible autosave — no Save button. Just a quiet status so the user
+            knows their work is being kept without ever having to press a thing. */}
+        <Typography sx={{ fontSize: 11, fontWeight: 600, color: B.muted, mr: 0.5, whiteSpace: 'nowrap' }}>
+          {saving ? 'Saving…' : (dirty ? 'Saving soon…' : 'Saved ✓')}
+        </Typography>
+        <IconButton size="small" onClick={closeWithSave}><CloseIcon fontSize="small" /></IconButton>
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
@@ -209,21 +259,15 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       {/* Totals footer — minimal green, margin spectrum carries the visual cue */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.panel, borderTop: `1px solid ${B.border}`,
         px: 2.5, py: 1.2, display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 }, flexWrap: 'wrap' }}>
+        {/* No aggregate profit/margin here — every line is an alternative option
+            the client picks ONE of, so summing profit across them is a fiction.
+            The real per-option numbers (profit/unit + total revenue) live on each
+            line card below. */}
         <FooterStat label="Units"  value={String(totals.qty)} />
         <FooterStat label="COGS"   value={fmt(totals.cogs)} />
         {totals.extras > 0 && (
           <FooterStat label="Setup + Ship" value={fmt(totals.extras)} dim />
         )}
-        <FooterStat label="Profit" value={fmt(totals.profit)}
-          accent={totals.profit >= 0 ? marginCol : '#f87171'} />
-        <Box>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Margin
-          </Typography>
-          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
-            {totals.marginPct.toFixed(1)}%
-          </Typography>
-        </Box>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ textAlign: 'right' }}>
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
@@ -360,6 +404,7 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
               gridTemplateColumns: `repeat(${TIERS.length}, minmax(60px, 1fr))` }}>
               {TIERS.map(pct => {
                 const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
+                const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
                 const sel = selectedPct === pct;
                 return (
                   <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
@@ -374,6 +419,10 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
                     </Typography>
                     <Typography sx={{ color: sel ? B.green : B.white, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}>
                       {fmt(price)}
+                    </Typography>
+                    <Typography sx={{ color: sel ? B.green : B.muted, fontSize: 9, fontWeight: 600, fontFamily: 'monospace', mt: 0.1 }}
+                      title="Profit per unit at this margin">
+                      {fmt(tierProfit)}/u
                     </Typography>
                   </Box>
                 );
@@ -394,14 +443,14 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Profit / unit
           </Typography>
-          <Typography sx={{ color: marginCol, fontSize: 13, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
             {fmt(profit)} · {marginPct.toFixed(0)}%
           </Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ textAlign: 'right' }}>
           <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Line total · {qty} unit{qty === 1 ? '' : 's'}
+            Total revenue · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
           <Typography sx={{ color: B.white, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>
             {fmt(lineTotal)}
