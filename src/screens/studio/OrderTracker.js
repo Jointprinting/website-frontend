@@ -32,6 +32,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -2322,6 +2323,13 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
                     {copied ? 'Copied ✓' : 'Copy'}
                   </Button>
                 </Stack>
+                {/* See exactly what the client sees — read-only, no view logged,
+                    works even after they've approved. */}
+                <Button onClick={() => window.open(`${url}&preview=1`, '_blank', 'noopener')}
+                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ color: B.green, fontSize: 12, textTransform: 'none', fontWeight: 700, px: 0.5, mb: 1 }}>
+                  Preview as client
+                </Button>
                 {expiresAt && (
                   <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
                     Works until {new Date(expiresAt).toLocaleString()}.

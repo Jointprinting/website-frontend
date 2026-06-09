@@ -61,6 +61,10 @@ export default function ApprovalView() {
   const { projectId } = useParams();
   const [params] = useSearchParams();
   const token = params.get('token');
+  // Admin "preview as client" mode (?preview=1): renders the client review
+  // exactly as they see it, but read-only — actions disabled, no view logged,
+  // and the pre-approval layout shows even after the order is approved/locked.
+  const isPreview = params.get('preview') === '1';
 
   const [data, setData]   = useState(null);
   const [err, setErr]     = useState('');
@@ -84,7 +88,7 @@ export default function ApprovalView() {
       if (!token) { setErr('This link is missing a token.'); setLoading(false); return; }
       try {
         const r = await axios.get(
-          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
+          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}${isPreview ? '&preview=1' : ''}`);
         if (cancelled) return;
         setData(r.data);
       } catch (e) {
@@ -97,7 +101,7 @@ export default function ApprovalView() {
     }
     load();
     return () => { cancelled = true; };
-  }, [projectId, token]);
+  }, [projectId, token, isPreview]);
 
   const refresh = async () => {
     try {
@@ -112,7 +116,7 @@ export default function ApprovalView() {
   // refresh the tab to see "Blanks shipping" turn green. Pauses when the tab
   // is hidden to avoid hammering the server while nobody's looking.
   useEffect(() => {
-    if (approvalStatus !== 'approved') return;
+    if (approvalStatus !== 'approved' || isPreview) return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
@@ -130,6 +134,7 @@ export default function ApprovalView() {
   }, [approvalStatus, projectId, token]);
 
   const handleApprove = async () => {
+    if (isPreview) return;   // preview is read-only
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`,
@@ -151,6 +156,7 @@ export default function ApprovalView() {
   };
 
   const handleRequestChanges = async () => {
+    if (isPreview) return;   // preview is read-only
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
@@ -429,7 +435,33 @@ export default function ApprovalView() {
         {/* Action panel — locked once the client has either approved OR
             requested changes, so the link stays consistent on every reload. */}
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          {approvalStatus === 'requested_changes' ? (
+          {isPreview ? (
+            <>
+              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#eef6ff', border: '1px solid #bfdbfe' }}>
+                <Typography sx={{ color: '#1e3a8a', fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
+                  👁 Preview — this is exactly what your client sees. Approve and Request changes are disabled here.
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
+              <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 2 }}>
+                Your client approves here, or sends it back with notes if anything needs a tweak.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+                <Button disabled startIcon={<CheckCircleOutlineIcon />}
+                  sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 700, textTransform: 'none',
+                    px: 3, py: 1.2, fontSize: 14, flex: 1,
+                    '&.Mui-disabled': { bgcolor: COLORS.brand, color: '#fff', opacity: 0.5 } }}>
+                  Approve &amp; proceed
+                </Button>
+                <Button disabled variant="outlined" startIcon={<EditNoteIcon />}
+                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
+                    textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1,
+                    '&.Mui-disabled': { opacity: 0.5 } }}>
+                  Request changes
+                </Button>
+              </Stack>
+            </>
+          ) : approvalStatus === 'requested_changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
               <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Thanks — we&apos;re on it.</Typography>
