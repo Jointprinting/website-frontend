@@ -209,7 +209,7 @@ export default function ApprovalView() {
   const hasConf = confItems.length > 0;
   const confTotals = computeConfTotals(conf);
   const mockupByNum = {};
-  mockups.forEach(m => { const k = _norm(m.mockupNum); if (k) mockupByNum[k] = m.thumbnail; });
+  mockups.forEach(m => { const k = _norm(m.mockupNum); if (k) mockupByNum[k] = { front: m.thumbnail, back: m.back }; });
   // Per-item image: explicit snapshot → legacy single → the referenced mockup's
   // thumbnail (matched by #). Same resolution order the PDF uses, so every
   // colorway shows its own photo.
@@ -218,7 +218,7 @@ export default function ApprovalView() {
     if (snaps.length) return snaps;
     if (it.customMockupDataUrl) return [it.customMockupDataUrl];
     const lib = it.mockupNum ? mockupByNum[_norm(it.mockupNum)] : null;
-    return lib ? [lib] : [];
+    return lib ? [lib.front, lib.back].filter(Boolean) : [];   // front + back when the mockup has both
   };
 
   return (
@@ -314,11 +314,12 @@ export default function ApprovalView() {
                     </Box>
                   )}
                   {sizes.length > 0 && (
-                    <Box component="table" sx={{ width: '100%', maxWidth: 320, borderCollapse: 'collapse', fontSize: 13 }}>
+                    <Box component="table" sx={{ width: '100%', maxWidth: 400, borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr>
                           <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Size</th>
                           <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
+                          <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Unit price</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -326,6 +327,7 @@ export default function ApprovalView() {
                           <tr key={i}>
                             <td style={{ padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>{sz.label || '—'}</td>
                             <td style={{ padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{Number(sz.qty) || 0}</td>
+                            <td style={{ padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right' }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
                           </tr>
                         ))}
                       </tbody>
