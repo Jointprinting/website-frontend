@@ -101,13 +101,26 @@ function emptyItem() {
   };
 }
 
+// orderDate is a pure CALENDAR date (no time-of-day meaning). The <input
+// type="date"> writes it as UTC midnight (new Date('2026-06-09') = 00:00Z), so
+// we must ALWAYS render it back in UTC — otherwise toLocaleDateString() in any
+// timezone west of UTC rolls "06/09" back to "06/08". todayCalendarISO() seeds
+// today's LOCAL calendar day as that same UTC-midnight value.
+function todayCalendarISO() {
+  const d = new Date();
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
+}
+function fmtCalendarDate(d, opts) {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
+}
+
 export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
-  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
 
   // Load the draft on open. Order of precedence:
   //   1. A localStorage draft for this project (always wins — if you typed
@@ -117,11 +130,10 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   useEffect(() => {
     if (!project) return;
     const key = `confirmation-draft:${project._id}`;
-    let restored = false;
     let seed;
     const raw = lsGet(key, null);
     if (raw) {
-      try { seed = JSON.parse(raw); restored = true; }
+      try { seed = JSON.parse(raw); }
       catch (e) {
         // Don't swallow — log the bad payload so a one-time storage
         // corruption (partial write, DevTools edit, etc.) is debuggable.
@@ -143,7 +155,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         );
         seed = {
           orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
-          orderDate:   project.orderDate || new Date().toISOString(),
+          orderDate:   project.orderDate || todayCalendarISO(),
           shipping:    { name: project.companyName || '', attention: project.clientName || '', streetAddress: '', cityStateZip: '' },
           items,
           customLines: [],
@@ -158,7 +170,6 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     safeSeed.customLines = Array.isArray(safeSeed.customLines) ? safeSeed.customLines : [];
     setLocal(safeSeed);
     setDirty(false);
-    setRestoredFromDraft(restored);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id]);
 
@@ -221,7 +232,6 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
       // Server confirmed — drop the local draft.
       lsRemove(`confirmation-draft:${project._id}`);
       setDirty(false);
-      setRestoredFromDraft(false);
     } finally {
       setSaving(false);
     }
@@ -315,14 +325,6 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
-
-      {restoredFromDraft && (
-        <Box sx={{ px: 2.5, py: 0.6, bgcolor: 'rgba(251,191,36,0.12)',
-          borderBottom: `1px solid rgba(251,191,36,0.25)`,
-          color: '#fbbf24', fontSize: 11, fontWeight: 600 }}>
-          Restored your unsaved draft from last time — everything saves automatically as you go.
-        </Box>
-      )}
 
       {draftSaveError && (
         <Box sx={{ px: 2.5, py: 0.6, bgcolor: 'rgba(248,113,113,0.12)',
@@ -798,7 +800,7 @@ function Preview({ conf, project, mockupMap, clientLogo, totals }) {
           </Typography>
           <InfoRow label="Order Title"  value={conf.orderTitle} />
           <InfoRow label="Client Name"  value={project.clientName || project.companyName} />
-          <InfoRow label="Date"         value={conf.orderDate ? new Date(conf.orderDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''} />
+          <InfoRow label="Date"         value={fmtCalendarDate(conf.orderDate, { month: 'long', day: 'numeric', year: 'numeric' })} />
         </Box>
         <Box>
           <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>
@@ -1016,6 +1018,12 @@ function seedItemFromQuote(line) {
   // qty unset so the admin distributes across sizes manually.
   const description = line.description || '';
   const brandGuess = description.split(/\s/)[0] || '';
+  // Carry the quote line's true cost/unit (blank + print + setup/ship spread
+  // over its qty) so the order's COGS can be derived from the confirmation.
+  // Internal only — never rendered on the client-facing doc.
+  const q = Number(line.qty) || 0;
+  const setupShip = Math.max(0, Number(line.setupCost) || 0) + Math.max(0, Number(line.shippingCost) || 0);
+  const unitCost = (Number(line.blankCost) || 0) + (Number(line.printCost) || 0) + (q > 0 ? setupShip / q : 0);
   return {
     mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
     productName: '',
@@ -1024,6 +1032,7 @@ function seedItemFromQuote(line) {
     printType: line.printType || '',
     color:     line.color || '',
     printerName: line.supplier ? '' : '',
+    unitCost:  +unitCost.toFixed(4),
     sizes:     DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: Number(line.unitPrice) || 0 })),
   };
 }

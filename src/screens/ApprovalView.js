@@ -61,6 +61,10 @@ export default function ApprovalView() {
   const { projectId } = useParams();
   const [params] = useSearchParams();
   const token = params.get('token');
+  // Admin "preview as client" mode (?preview=1): renders the client review
+  // exactly as they see it, but read-only — actions disabled, no view logged,
+  // and the pre-approval layout shows even after the order is approved/locked.
+  const isPreview = params.get('preview') === '1';
 
   const [data, setData]   = useState(null);
   const [err, setErr]     = useState('');
@@ -69,6 +73,9 @@ export default function ApprovalView() {
   const [actionBusy, setActionBusy] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesText, setChangesText] = useState('');
+  const [name, setName] = useState('');          // optional — so we know who on the team acted
+  const [email, setEmail] = useState('');        // optional — so we know which email approved
+  const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
 
   // Derived from the server's approvalStatus so reopening the link shows the
   // same locked state for the client every time.
@@ -81,7 +88,7 @@ export default function ApprovalView() {
       if (!token) { setErr('This link is missing a token.'); setLoading(false); return; }
       try {
         const r = await axios.get(
-          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
+          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}${isPreview ? '&preview=1' : ''}`);
         if (cancelled) return;
         setData(r.data);
       } catch (e) {
@@ -94,7 +101,7 @@ export default function ApprovalView() {
     }
     load();
     return () => { cancelled = true; };
-  }, [projectId, token]);
+  }, [projectId, token, isPreview]);
 
   const refresh = async () => {
     try {
@@ -109,7 +116,7 @@ export default function ApprovalView() {
   // refresh the tab to see "Blanks shipping" turn green. Pauses when the tab
   // is hidden to avoid hammering the server while nobody's looking.
   useEffect(() => {
-    if (approvalStatus !== 'approved') return;
+    if (approvalStatus !== 'approved' || isPreview) return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
@@ -127,27 +134,44 @@ export default function ApprovalView() {
   }, [approvalStatus, projectId, token]);
 
   const handleApprove = async () => {
+    if (isPreview) return;   // preview is read-only
     setActionBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`);
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`,
+        { name: name.trim(), email: email.trim() });
       await refresh();
     } catch (e) {
-      alert(e.response?.data?.message || 'Approval failed. Try again or contact us directly.');
+      // 409 = someone on the team already approved or sent it back. Not an
+      // error from this person's point of view — just refresh into the locked
+      // state and show the friendly note instead of a scary alert.
+      if (e.response?.status === 409) {
+        setLockedNote(e.response.data?.message || '');
+        await refresh();
+      } else {
+        alert(e.response?.data?.message || "That didn't go through — please try again, or just reply to our email and we'll take care of it.");
+      }
     } finally {
       setActionBusy(false);
     }
   };
 
   const handleRequestChanges = async () => {
+    if (isPreview) return;   // preview is read-only
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
-        { message: changesText });
+        { message: changesText, name: name.trim(), email: email.trim() });
       setChangesOpen(false);
       setChangesText('');
       await refresh();
     } catch (e) {
-      alert(e.response?.data?.message || 'Could not send your feedback. Try again or reply to our email.');
+      if (e.response?.status === 409) {
+        setChangesOpen(false);
+        setLockedNote(e.response.data?.message || '');
+        await refresh();
+      } else {
+        alert(e.response?.data?.message || "We couldn't send your notes just now — please try again, or reply to our email and we'll pick it up there.");
+      }
     } finally {
       setActionBusy(false);
     }
@@ -245,7 +269,7 @@ export default function ApprovalView() {
                 <Typography sx={{ color: COLORS.muted, fontSize: 12, mt: 0.5 }}>
                   {[
                     p.orderNumber ? `Invoice #${p.orderNumber}` : null,
-                    p.orderDate ? new Date(p.orderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+                    p.orderDate ? new Date(p.orderDate).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) : null,
                   ].filter(Boolean).join(' · ')}
                 </Typography>
               )}
@@ -411,16 +435,42 @@ export default function ApprovalView() {
         {/* Action panel — locked once the client has either approved OR
             requested changes, so the link stays consistent on every reload. */}
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          {approvalStatus === 'requested_changes' ? (
+          {isPreview ? (
+            <>
+              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#eef6ff', border: '1px solid #bfdbfe' }}>
+                <Typography sx={{ color: '#1e3a8a', fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
+                  👁 Preview — this is exactly what your client sees. Approve and Request changes are disabled here.
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
+              <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 2 }}>
+                Your client approves here, or sends it back with notes if anything needs a tweak.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+                <Button disabled startIcon={<CheckCircleOutlineIcon />}
+                  sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 700, textTransform: 'none',
+                    px: 3, py: 1.2, fontSize: 14, flex: 1,
+                    '&.Mui-disabled': { bgcolor: COLORS.brand, color: '#fff', opacity: 0.5 } }}>
+                  Approve &amp; proceed
+                </Button>
+                <Button disabled variant="outlined" startIcon={<EditNoteIcon />}
+                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
+                    textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1,
+                    '&.Mui-disabled': { opacity: 0.5 } }}>
+                  Request changes
+                </Button>
+              </Stack>
+            </>
+          ) : approvalStatus === 'requested_changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
-              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Got it — we&apos;ll revise.</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Thanks — we&apos;re on it.</Typography>
               <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                Your notes are with the team. We&apos;ll send a new proof shortly.
+                Your notes are with our team, and we&apos;ll get a fresh proof over to you soon.
               </Typography>
-              {p.approvalAt && (
+              {(p.approvalBy || p.approvalAt) && (
                 <Typography sx={{ color: COLORS.muted, fontSize: 11, mt: 1.5 }}>
-                  Sent {new Date(p.approvalAt).toLocaleString()}
+                  {p.approvalBy ? `Sent by ${p.approvalBy}` : 'Sent'}{p.approvalAt ? ` · ${new Date(p.approvalAt).toLocaleString()}` : ''}
                 </Typography>
               )}
             </Box>
@@ -428,19 +478,30 @@ export default function ApprovalView() {
             <Box sx={{ py: 1 }}>
               <Box sx={{ textAlign: 'center', mb: 3 }}>
                 <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
-                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re approved — thank you!</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re all set — thank you!</Typography>
                 <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                  We&apos;ll move through the steps below and update this page as each one happens.
+                  {p.approvalBy ? `Approved by ${p.approvalBy}. ` : ''}We&apos;ll move through the steps below and keep this page updated as each one happens.
                 </Typography>
               </Box>
               <TrackingTimeline steps={p.tracking?.steps || []} colors={COLORS} />
             </Box>
           ) : (
             <>
-              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
               <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 2 }}>
-                Approve to lock this in for production. Request changes if anything needs to tweak.
+                If everything looks good, hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
               </Typography>
+              {lockedNote && (
+                <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#fff8e1', border: '1px solid #fde68a' }}>
+                  <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
+                </Box>
+              )}
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1.5 }}>
+                <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Your name (optional)" />
+                <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="Your email (optional — so we know who approved)" />
+              </Stack>
               <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                 <Button onClick={handleApprove} disabled={actionBusy}
                   startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <CheckCircleOutlineIcon />}
@@ -467,8 +528,12 @@ export default function ApprovalView() {
         <DialogTitle sx={{ fontWeight: 800 }}>Request changes</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 1.5 }}>
-            What needs to be different? Be as specific as you'd like — colors, sizes, copy, anything.
+            What would you like changed? Be as specific as you like — colors, sizes, copy, anything at all.
           </Typography>
+          <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Your name (optional)" sx={{ mb: 1.5 }} />
+          <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="Your email (optional)" sx={{ mb: 1.5 }} />
           <TextField fullWidth multiline minRows={4} autoFocus
             value={changesText} onChange={e => setChangesText(e.target.value)}
             placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L." />
