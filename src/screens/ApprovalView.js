@@ -134,7 +134,9 @@ export default function ApprovalView() {
   }, [approvalStatus, projectId, token]);
 
   const handleApprove = async () => {
-    if (isPreview) return;   // preview is read-only
+    // Preview renders the client's page 1:1; intercept the action so the admin
+    // can't approve on the client's behalf.
+    if (isPreview) { alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`,
@@ -156,7 +158,7 @@ export default function ApprovalView() {
   };
 
   const handleRequestChanges = async () => {
-    if (isPreview) return;   // preview is read-only
+    if (isPreview) { setChangesOpen(false); alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
@@ -435,33 +437,7 @@ export default function ApprovalView() {
         {/* Action panel — locked once the client has either approved OR
             requested changes, so the link stays consistent on every reload. */}
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
-          {isPreview ? (
-            <>
-              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#eef6ff', border: '1px solid #bfdbfe' }}>
-                <Typography sx={{ color: '#1e3a8a', fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
-                  👁 Preview — this is exactly what your client sees. Approve and Request changes are disabled here.
-                </Typography>
-              </Box>
-              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Ready to move forward?</Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 2 }}>
-                Your client approves here, or sends it back with notes if anything needs a tweak.
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
-                <Button disabled startIcon={<CheckCircleOutlineIcon />}
-                  sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 700, textTransform: 'none',
-                    px: 3, py: 1.2, fontSize: 14, flex: 1,
-                    '&.Mui-disabled': { bgcolor: COLORS.brand, color: '#fff', opacity: 0.5 } }}>
-                  Approve &amp; proceed
-                </Button>
-                <Button disabled variant="outlined" startIcon={<EditNoteIcon />}
-                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
-                    textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1,
-                    '&.Mui-disabled': { opacity: 0.5 } }}>
-                  Request changes
-                </Button>
-              </Stack>
-            </>
-          ) : approvalStatus === 'requested_changes' ? (
+          {approvalStatus === 'requested_changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
               <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Thanks — we&apos;re on it.</Typography>
