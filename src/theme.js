@@ -104,6 +104,53 @@ const theme = {
       fontSize: 14,
     },
   },
+  shape: {
+    borderRadius: 10,
+  },
+  components: {
+    // Global motion + tactility pass: every interactive surface eases the
+    // same way (200ms standard curve), buttons lift a hair on hover, cards
+    // shed the harsh default shadows. Studio screens style themselves with
+    // their own dark palette but inherit the same motion language.
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), background-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+          '@media (hover: hover)': {
+            '&:hover': { transform: 'translateY(-1px)' },
+            '&:active': { transform: 'translateY(0)' },
+          },
+        },
+        contained: {
+          boxShadow: '0 1px 2px rgba(20, 30, 24, 0.18)',
+          '&:hover': { boxShadow: '0 6px 16px rgba(20, 30, 24, 0.22)' },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        elevation1: { boxShadow: '0 1px 3px rgba(20, 30, 24, 0.07), 0 4px 14px rgba(20, 30, 24, 0.05)' },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          transition: 'transform 250ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+        },
+      },
+    },
+    MuiLink: {
+      styleOverrides: {
+        root: { transition: 'color 150ms ease, opacity 150ms ease' },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 14 },
+      },
+    },
+  },
 };
 
 export default theme;

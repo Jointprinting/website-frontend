@@ -9,14 +9,62 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import IconButton from '@mui/material/IconButton';
 import MenuIcon from '@mui/icons-material/Menu';
-import { Link as ReactRouterLink } from 'react-router-dom';
+import { Link as ReactRouterLink, useLocation } from 'react-router-dom';
 import AppBar from '../modules/components/AppBar';
 import Toolbar from '../modules/components/Toolbar';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import boxLogo from '../modules/images/logo_white.webp';
 
+const NAV_LINKS = [
+  { label: 'PRODUCTS', to: '/products' },
+  { label: 'CATALOGS', to: '/catalogs' },
+  { label: 'ABOUT',    to: '/about' },
+  { label: 'CONTACT',  to: '/contact' },
+  { label: 'FAQ',      to: '/faq' },
+];
+
+// Desktop nav link with a brand-green underline that slides in on hover and
+// stays put on the current page — quiet feedback for where you are.
+function NavLink({ label, to, active }) {
+  return (
+    <Typography
+      component={ReactRouterLink}
+      to={to}
+      sx={{
+        position: 'relative',
+        color: 'white',
+        textDecoration: 'none',
+        fontWeight: 900,
+        fontSize: 14,
+        fontFamily: 'Roboto Condensed',
+        py: 0.5,
+        opacity: active ? 1 : 0.92,
+        transition: 'opacity 150ms ease',
+        '&:hover': { opacity: 1 },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          left: 0,
+          bottom: 0,
+          height: 2,
+          width: '100%',
+          borderRadius: 1,
+          backgroundColor: '#4ade80',
+          transform: active ? 'scaleX(1)' : 'scaleX(0)',
+          transformOrigin: 'left center',
+          transition: 'transform 220ms cubic-bezier(0.4, 0, 0.2, 1)',
+        },
+        '&:hover::after': { transform: 'scaleX(1)' },
+      }}
+    >
+      {label}
+    </Typography>
+  );
+}
+
 function Navbar() {
   const mobile = useMediaQuery('(max-width: 800px)');
+  const { pathname } = useLocation();
 
   const DrawerComponent = () => {
     const [openDrawer, setOpenDrawer] = React.useState(false);
@@ -116,71 +164,9 @@ function Navbar() {
             </Typography>
           </Stack>
           <Stack direction="row" spacing={4} alignItems="center">
-            <Typography
-              component={ReactRouterLink}
-              to="/products"
-              sx={{
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 900,
-                fontSize: 14,
-                fontFamily: 'Roboto Condensed',
-              }}
-            >
-              PRODUCTS
-            </Typography>
-            <Typography
-              component={ReactRouterLink}
-              to="/catalogs"
-              sx={{
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 900,
-                fontSize: 14,
-                fontFamily: 'Roboto Condensed',
-              }}
-            >
-              CATALOGS
-            </Typography>
-            <Typography
-              component={ReactRouterLink}
-              to="/about"
-              sx={{
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 900,
-                fontSize: 14,
-                fontFamily: 'Roboto Condensed',
-              }}
-            >
-              ABOUT
-            </Typography>
-            <Typography
-              component={ReactRouterLink}
-              to="/contact"
-              sx={{
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 900,
-                fontSize: 14,
-                fontFamily: 'Roboto Condensed',
-              }}
-            >
-              CONTACT
-            </Typography>
-            <Typography
-              component={ReactRouterLink}
-              to="/faq"
-              sx={{
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 900,
-                fontSize: 14,
-                fontFamily: 'Roboto Condensed',
-              }}
-            >
-              FAQ
-            </Typography>
+            {NAV_LINKS.map((l) => (
+              <NavLink key={l.to} {...l} active={pathname === l.to} />
+            ))}
           </Stack>
         </Toolbar>
       </AppBar>

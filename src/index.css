@@ -11,3 +11,70 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Anchor jumps glide instead of snapping (disabled for users who asked the
+   OS for less motion). */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Brand-green text selection — small, everywhere, unmistakably ours. */
+::selection {
+  background: #06752b;
+  color: #ffffff;
+}
+
+/* Keyboard focus gets the brand ring instead of the browser default blue. */
+:focus-visible {
+  outline: 2px solid #06752b;
+  outline-offset: 2px;
+}
+
+/* Slim branded scrollbar on the public site (WebKit + Firefox). The studio
+   screens override this with their own dark scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b9c9bd transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #b9c9bd;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #06752b;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Per-navigation fade: App.js keys this wrapper on the pathname so each
+   route change re-runs the animation. Cheap (opacity/transform only) and
+   subtle enough to feel like polish, not a slideshow. */
+.route-fade {
+  animation: routeFadeIn 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes routeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-fade {
+    animation: none;
+  }
+}
