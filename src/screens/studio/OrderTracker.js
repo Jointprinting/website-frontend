@@ -845,9 +845,10 @@ export default function OrderTracker({ token, onBack }) {
         onClose={() => setConfirmation(null)}
         onShareApproval={() => confirmation && shareApprovalFor(confirmation._id)}
         onSave={async (patch) => {
-          if (!confirmation) return;
+          if (!confirmation) return null;
           const updated = await handleSave(confirmation._id, patch);
           if (updated) setConfirmation(updated);
+          return updated;
         }}
       />
 
@@ -1278,33 +1279,27 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.mockupNumbers, project?.files, project?.quoteLines, project?.confirmation, project?.totalValue, project?.cogs, project?.orderDate]);
 
-  // Auto-link: silently promote auto-matched mockups + drop stale references
-  // when the drawer opens, so the project's mockupNumbers always matches what
-  // the user sees. No Tidy button, no manual step.
+  // Auto-link: silently promote auto-matched mockups when the drawer opens.
+  // ADD-ONLY by design — never prune existing refs here. Pruning against the
+  // studio library destroyed real data in two cases: (a) the library fetch
+  // failed or came back empty, wiping EVERY link on the project, and (b)
+  // legacy GDrive mockup refs aren't in jpstudio but are intentionally kept
+  // as "NOT IN STUDIO" flags on the card.
   const lastAutoLinkedRef = React.useRef(null);
   useEffect(() => {
     if (!project || !project._id) return;
     if (lastAutoLinkedRef.current === project._id) return;     // once per session/project
+    if (!mockups || mockups.length === 0) return;              // library not loaded — don't touch links
     const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
     const current = project.mockupNumbers || [];
-    // Studio items keyed by normalized mockup # — used to drop missing refs.
-    const studioByNorm = {};
-    (mockups || []).forEach(m => {
-      const k = norm(m.pageState && m.pageState.mockupNum);
-      if (k) studioByNorm[k] = m;
-    });
-    const cleaned = current.filter(n => studioByNorm[norm(n)]);
-    const cleanedKeys = new Set(cleaned.map(norm));
+    const currentKeys = new Set(current.map(norm));
     const toAdd = (autoMatched || [])
       .map(m => m.pageState && m.pageState.mockupNum)
-      .filter(n => n && !cleanedKeys.has(norm(n)));
-    const next = [...cleaned, ...toAdd];
-    const changed = next.length !== current.length || next.some((v, i) => v !== current[i]);
-    if (changed) {
-      lastAutoLinkedRef.current = project._id;
-      onSave(project._id, { mockupNumbers: next }).catch(() => { /* keep silent — drawer still works */ });
-    } else {
-      lastAutoLinkedRef.current = project._id;
+      .filter(n => n && !currentKeys.has(norm(n)));
+    lastAutoLinkedRef.current = project._id;
+    if (toAdd.length > 0) {
+      onSave(project._id, { mockupNumbers: [...current, ...toAdd] })
+        .catch(() => { /* keep silent — drawer still works */ });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id, mockups, autoMatched]);
@@ -1764,12 +1759,31 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           <Stack key={i} direction="row" alignItems="center" gap={1}
             sx={{ py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 12 }}>
             <AttachFileIcon sx={{ fontSize: 13, color: B.muted }} />
-            <Typography component="a"
-              href={`${base}/orders/${project._id}/files/${f.filename}?token=${token}`}
-              target="_blank" rel="noreferrer"
+            {/* Fetched with the Authorization header, not a ?token= link —
+                the backend only reads the header (plain links always 401'd)
+                and this keeps the admin JWT out of URLs/history. */}
+            <Typography component="a" href="#download"
+              onClick={async (e) => {
+                e.preventDefault();
+                try {
+                  const r = await axios.get(
+                    `${base}/orders/${project._id}/files/${encodeURIComponent(f.filename)}`,
+                    { ...authHdr, responseType: 'blob' });
+                  const url = URL.createObjectURL(r.data);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = f.originalName || f.filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+                } catch (err) {
+                  alert(`Download failed: ${err.response?.data?.message || err.message}`);
+                }
+              }}
               sx={{ color: B.white, fontSize: 12, textDecoration: 'none', flex: 1,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                '&:hover': { color: B.green } }}>
+                cursor: 'pointer', '&:hover': { color: B.green } }}>
               {f.originalName || f.filename}
             </Typography>
             <Typography sx={{ color: B.muted, fontSize: 10 }}>
