@@ -32,13 +32,14 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import QuoteBuilder from './QuoteBuilder';
@@ -103,7 +104,11 @@ export default function OrderTracker({ token, onBack }) {
   const [qbLoading,   setQbLoading]   = useState(false);
   const [qbBusy,      setQbBusy]      = useState(false);
   const [moreAnchor,  setMoreAnchor]  = useState(null);
-  const [shareDialog, setShareDialog] = useState({ open: false, projectId: null, ttl: 7, email: '', sentTo: '', url: '', expiresAt: null, busy: false, err: '' });
+  const [shareDialog, setShareDialog] = useState({
+    open: false, projectId: null, ttl: 7, emails: '',
+    url: '', expiresAt: null, recipients: [], status: null,
+    loading: false, busy: false, err: '', notice: '',
+  });
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -479,9 +484,27 @@ export default function OrderTracker({ token, onBack }) {
   // builder's header button. Opens a real dialog (browser prompt was ugly)
   // where the user picks TTL, generates the link, and copies it from a field
   // they can verify before sending.
-  const shareApprovalFor = (projectId) => {
+  const shareApprovalFor = async (projectId) => {
     if (!projectId) return;
-    setShareDialog({ open: true, projectId, ttl: 7, email: '', sentTo: '', url: '', expiresAt: null, busy: false, err: '' });
+    setShareDialog({
+      open: true, projectId, ttl: 7, emails: '',
+      url: '', expiresAt: null, recipients: [], status: null,
+      loading: true, busy: false, err: '', notice: '',
+    });
+    try {
+      // Reuse-or-mint the shared hub token. rotate:false never disturbs a live
+      // link, so just opening the dialog is safe.
+      const r = await axios.post(`${base}/orders/${projectId}/approval-link`, { rotate: false }, authHdr);
+      const url = `${window.location.origin}/approve/${projectId}?token=${r.data.token}`;
+      setShareDialog(s => (s.projectId === projectId && s.open) ? {
+        ...s, loading: false, url, expiresAt: r.data.expiresAt,
+        recipients: r.data.recipients || [], status: r.data.approvalStatus || null,
+      } : s);
+    } catch (e) {
+      setShareDialog(s => (s.projectId === projectId && s.open) ? {
+        ...s, loading: false, err: e.response?.data?.message || e.message,
+      } : s);
+    }
   };
 
   const loadQbStatus = async () => {
@@ -808,8 +831,7 @@ export default function OrderTracker({ token, onBack }) {
           if (!quote) return null;
           const updated = await handleSave(quote._id, patch);
           if (updated) setQuote(updated);
-          // null on failure — the builder keeps its dirty state and retries.
-          return updated;
+          return updated;   // truthy = server confirmed; lets the quoter clear its draft
         }}
       />
 
@@ -854,33 +876,43 @@ export default function OrderTracker({ token, onBack }) {
       <ShareApprovalDialog
         state={shareDialog}
         setTtl={(v) => setShareDialog(s => ({ ...s, ttl: v }))}
-        setEmail={(v) => setShareDialog(s => ({ ...s, email: v }))}
+        setEmails={(v) => setShareDialog(s => ({ ...s, emails: v }))}
         onClose={() => setShareDialog(s => ({ ...s, open: false }))}
-        onGenerate={async () => {
-          setShareDialog(s => ({ ...s, busy: true, err: '' }));
+        onSend={async () => {
+          const list = parseEmails(shareDialog.emails);
+          if (list.length === 0) { setShareDialog(s => ({ ...s, err: 'Enter at least one email address.' })); return; }
+          setShareDialog(s => ({ ...s, busy: true, err: '', notice: '' }));
+          try {
+            const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
+            // rotate:false → everyone shares the SAME hub link; adding a person
+            // never breaks the ones already invited.
+            const r = await axios.post(`${base}/orders/${shareDialog.projectId}/approval-link/send`, {
+              emails: list, ttlDays, rotate: false, frontendOrigin: window.location.origin,
+            }, authHdr);
+            const failedNote = (r.data.failed && r.data.failed.length)
+              ? ` · couldn't reach ${r.data.failed.map(f => f.email).join(', ')}` : '';
+            setShareDialog(s => ({
+              ...s, busy: false, emails: '',
+              url: r.data.url, expiresAt: r.data.expiresAt,
+              recipients: r.data.recipients || s.recipients,
+              notice: `Sent to ${(r.data.sentTo || []).join(', ')} ✓${failedNote}`,
+            }));
+          } catch (e) {
+            setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
+          }
+        }}
+        onStartFresh={async () => {
+          if (!window.confirm('Start a fresh link? The current link stops working and any approvals so far reset. Use this when the quote or proof has changed.')) return;
+          setShareDialog(s => ({ ...s, busy: true, err: '', notice: '' }));
           try {
             const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
             const r = await axios.post(`${base}/orders/${shareDialog.projectId}/approval-link`,
               { ttlDays, rotate: true }, authHdr);
             const url = `${window.location.origin}/approve/${shareDialog.projectId}?token=${r.data.token}`;
-            setShareDialog(s => ({ ...s, busy: false, url, expiresAt: r.data.expiresAt, ttl: ttlDays }));
-          } catch (e) {
-            setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
-          }
-        }}
-        onSendEmail={async () => {
-          if (!shareDialog.email) { setShareDialog(s => ({ ...s, err: 'Enter an email address first.' })); return; }
-          setShareDialog(s => ({ ...s, busy: true, err: '' }));
-          try {
-            const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
-            const r = await axios.post(`${base}/orders/${shareDialog.projectId}/approval-link/send`, {
-              email: shareDialog.email,
-              ttlDays,
-              rotate: true,
-              frontendOrigin: window.location.origin,
-            }, authHdr);
             setShareDialog(s => ({
-              ...s, busy: false, url: r.data.url, expiresAt: r.data.expiresAt, sentTo: r.data.sentTo, ttl: ttlDays,
+              ...s, busy: false, url, expiresAt: r.data.expiresAt,
+              recipients: r.data.recipients || [], status: r.data.approvalStatus || null,
+              notice: 'Fresh link ready — the old one no longer works.',
             }));
           } catch (e) {
             setShareDialog(s => ({ ...s, busy: false, err: e.response?.data?.message || e.message }));
@@ -1221,7 +1253,31 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
 
-  useEffect(() => { if (project) setLocal({ ...project }); }, [project]);
+  // Full re-seed only when a DIFFERENT project opens. Keyed on id so an
+  // autosave round-trip — which hands back a fresh project object with the same
+  // id — can't reset the form and wipe whatever the user is mid-typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project) setLocal({ ...project }); }, [project?._id]);
+
+  // Server-driven fields still need to flow back in: mockups attached by the
+  // picker / auto-link, uploaded files, quote lines edited in the quoter, and —
+  // since money + sale date now derive from the confirmation — totalValue, cogs,
+  // orderDate, and the confirmation itself. Sync just those without touching the
+  // text fields being edited.
+  useEffect(() => {
+    if (!project) return;
+    setLocal(prev => (prev ? {
+      ...prev,
+      mockupNumbers: project.mockupNumbers || [],
+      files:         project.files,
+      quoteLines:    project.quoteLines,
+      confirmation:  project.confirmation,
+      totalValue:    project.totalValue,
+      cogs:          project.cogs,
+      orderDate:     project.orderDate,
+    } : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.mockupNumbers, project?.files, project?.quoteLines, project?.confirmation, project?.totalValue, project?.cogs, project?.orderDate]);
 
   // Auto-link: silently promote auto-matched mockups when the drawer opens.
   // ADD-ONLY by design — never prune existing refs here. Pruning against the
@@ -1274,17 +1330,77 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     }
   };
 
+  // ── Invisible autosave ──────────────────────────────────────────────────
+  // Text fields stream edits through a debounced queue so work commits ~700ms
+  // after you stop typing — not just on blur — so a mid-type tab close / crash
+  // can't lose the field you're in. Selects, toggles, dates and list commits
+  // save immediately. Multiple pending fields fold into one PUT.
+  //
+  // Pending edits are tagged with the project id they belong to, so a flush
+  // that lands after the user has switched projects can never write one order's
+  // edits onto another. These hooks must stay ABOVE the early return.
+  const pendingRef   = React.useRef({ id: null, patch: {} });
+  const saveTimerRef = React.useRef(null);
+
+  const flushFields = React.useCallback(async () => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    const { id, patch } = pendingRef.current;
+    pendingRef.current = { id: null, patch: {} };
+    const keys = Object.keys(patch);
+    if (!id || keys.length === 0) return;
+    setSavingField(keys[0]);
+    try { await onSave(id, patch); }
+    finally { setSavingField(''); }
+  }, [onSave]);
+
+  // Flush the freshest pending edits on unmount, without re-subscribing each render.
+  const flushRef = React.useRef(flushFields);
+  flushRef.current = flushFields;
+  useEffect(() => () => { flushRef.current(); }, []);
+
+  // Warn before a tab close if a debounced edit hasn't reached the server yet.
+  useEffect(() => {
+    const onUnload = (e) => {
+      if (Object.keys(pendingRef.current.patch).length === 0) return;
+      e.preventDefault(); e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, []);
+
   if (!project || !local) return null;
 
   const meta = STATUS_META[local.status] || STATUS_META.quoted;
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
-  const saveField = async (key, value) => {
-    if (project[key] === value) return;
-    setSavingField(key);
-    await onSave(project._id, { [key]: value });
-    setSavingField('');
+  // Stage a change against the CURRENT project. If something for another project
+  // is still queued, commit that first (against its own id).
+  const stageField = (key, value) => {
+    if (pendingRef.current.id && pendingRef.current.id !== project._id) flushFields();
+    const cur = pendingRef.current.id === project._id ? pendingRef.current.patch : {};
+    pendingRef.current = { id: project._id, patch: { ...cur, [key]: value } };
   };
+
+  // Debounced (text typing). Skips values that already match what's saved.
+  const queueField = (key, value) => {
+    if (project[key] === value) {
+      if (pendingRef.current.id === project._id) delete pendingRef.current.patch[key];
+      return;
+    }
+    stageField(key, value);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { flushFields(); }, 700);
+  };
+
+  // Immediate (blur, selects, dates, list commits). Folds in any queued text.
+  const saveField = (key, value) => {
+    if (project[key] !== value) stageField(key, value);
+    else if (pendingRef.current.id === project._id) delete pendingRef.current.patch[key];
+    flushFields();
+  };
+
+  // Commit any queued edit before the drawer closes, then hand off to the parent.
+  const handleClose = () => { flushFields(); onClose(); };
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -1316,7 +1432,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}
+    <Drawer anchor="right" open={open} onClose={handleClose}
       PaperProps={{ sx: { bgcolor: B.bg, color: B.white, width: { xs: '100%', md: 560 }, ...scrollbar } }}>
       {/* Drawer header */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.bg, borderBottom: `1px solid ${B.border}`,
@@ -1361,7 +1477,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           px: 1.2, py: 0.4, borderRadius: 1, fontSize: 10, fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: 0.4,
         }}>{meta.label}</Box>
-        <IconButton onClick={onClose} size="small" sx={{ color: B.muted }}>
+        <IconButton onClick={handleClose} size="small" sx={{ color: B.muted }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
@@ -1503,9 +1619,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       {/* Fields */}
       <Box sx={{ p: { xs: 1.5, md: 2.5 }, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         <InlineField label="Company"      value={local.companyName} savingHint={savingField === 'companyName'}
-          onChange={v => updateLocal({ companyName: v })} onBlur={v => saveField('companyName', v)} />
+          onChange={v => { updateLocal({ companyName: v }); queueField('companyName', v); }} onBlur={v => saveField('companyName', v)} />
         <InlineField label="Client name"  value={local.clientName} savingHint={savingField === 'clientName'}
-          onChange={v => updateLocal({ clientName: v })} onBlur={v => saveField('clientName', v)} />
+          onChange={v => { updateLocal({ clientName: v }); queueField('clientName', v); }} onBlur={v => saveField('clientName', v)} />
 
         <InlineSelect label="Status" value={local.status} savingHint={savingField === 'status'}
           options={STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
@@ -1514,24 +1630,32 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           options={[{ value: 'no', label: 'Unpaid' }, { value: 'yes', label: 'Paid' }]}
           onChange={v => { const b = v === 'yes'; updateLocal({ paid: b }); saveField('paid', b); }} />
 
-        <InlineField label="Total $" type="number" value={local.totalValue || ''} savingHint={savingField === 'totalValue'}
-          onChange={v => updateLocal({ totalValue: Number(v) || 0 })}
-          onBlur={v => saveField('totalValue', Number(v) || 0)} />
-        <InlineField label="COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
-          onChange={v => updateLocal({ cogs: Number(v) || 0 })}
-          onBlur={v => saveField('cogs', Number(v) || 0)} />
+        {hasConfirmation(local.confirmation) ? (
+          <>
+            {/* Money is the approved confirmation's, not hand-typed — the quoter
+                is pre-approval options; the confirmation is the real order. */}
+            <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="From confirmation" />
+            <ReadonlyField label="COGS $"  value={fmt(confCogs(local.confirmation))}  hint="From confirmation" />
+          </>
+        ) : (
+          <>
+            <InlineField label="Total $" type="number" value={local.totalValue || ''} savingHint={savingField === 'totalValue'}
+              onChange={v => { updateLocal({ totalValue: Number(v) || 0 }); queueField('totalValue', Number(v) || 0); }}
+              onBlur={v => saveField('totalValue', Number(v) || 0)} />
+            <InlineField label="COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
+              onChange={v => { updateLocal({ cogs: Number(v) || 0 }); queueField('cogs', Number(v) || 0); }}
+              onBlur={v => saveField('cogs', Number(v) || 0)} />
+          </>
+        )}
 
         <InlineField label="Printer"  value={local.printerName} savingHint={savingField === 'printerName'}
-          onChange={v => updateLocal({ printerName: v })} onBlur={v => saveField('printerName', v)} />
+          onChange={v => { updateLocal({ printerName: v }); queueField('printerName', v); }} onBlur={v => saveField('printerName', v)} />
         <InlineField label="Supplier" value={local.supplier || ''} savingHint={savingField === 'supplier'}
-          onChange={v => updateLocal({ supplier: v })} onBlur={v => saveField('supplier', v)} />
+          onChange={v => { updateLocal({ supplier: v }); queueField('supplier', v); }} onBlur={v => saveField('supplier', v)} />
 
-        <InlineDateField label="Date of sale" value={local.orderDate}     savingHint={savingField === 'orderDate'}
-          onChange={v => saveField('orderDate', v)} />
-        <InlineDateField label="Arrive at printer" value={local.shipDate} savingHint={savingField === 'shipDate'}
-          onChange={v => saveField('shipDate', v)} />
-        <InlineDateField label="Arrive at client" value={local.deliveredDate} savingHint={savingField === 'deliveredDate'}
-          onChange={v => saveField('deliveredDate', v)} />
+        {/* Sale + delivery dates aren't hand-entered here anymore — date of sale
+            comes from the confirmation, and delivery progress lives in the
+            tracker timeline below. */}
 
         <Box sx={{ gridColumn: '1 / -1' }}>
           <ItemsEditor
@@ -1607,7 +1731,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         </Box>
         <Box sx={{ gridColumn: '1 / -1' }}>
           <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
-            onChange={v => updateLocal({ notes: v })} onBlur={v => saveField('notes', v)} />
+            onChange={v => { updateLocal({ notes: v }); queueField('notes', v); }} onBlur={v => saveField('notes', v)} />
         </Box>
       </Box>
 
@@ -1801,22 +1925,19 @@ function InlineSelect({ label, value, options, onChange, savingHint }) {
   );
 }
 
-function InlineDateField({ label, value, onChange, savingHint }) {
-  const v = value ? new Date(value).toISOString().slice(0, 10) : '';
+// Read-only money cell — used for Total/COGS once they derive from the
+// confirmation, so the admin sees the number but can't hand-edit it.
+function ReadonlyField({ label, value, hint }) {
   return (
     <Box>
       <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
-        {label} {savingHint && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+        {label}
       </Typography>
-      <TextField
-        size="small"
-        fullWidth
-        type="date"
-        value={v}
-        onChange={e => onChange(e.target.value || null)}
-        sx={darkInput}
-        InputLabelProps={{ shrink: true }}
-      />
+      <Box sx={{ height: 40, display: 'flex', alignItems: 'center', px: 1.5, borderRadius: 1,
+        border: `1px solid ${B.faint}`, bgcolor: 'rgba(255,255,255,0.03)' }}>
+        <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{value}</Typography>
+      </Box>
+      {hint && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, fontStyle: 'italic' }}>{hint}</Typography>}
     </Box>
   );
 }
@@ -2145,18 +2266,39 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
   );
 }
 
+// Split a free-text field ("a@x.com, b@y.com  c@z.com") into a deduped list.
+// The backend re-validates and reports any address it couldn't use.
+function parseEmails(str) {
+  const seen = new Set();
+  return String(str || '')
+    .split(/[\s,;]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(e => { const k = e.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 // ── ShareApprovalDialog ──────────────────────────────────────────────────────
-// MUI replacement for the old window.prompt + alert flow. Two-step: pick the
-// TTL, click Generate, then the URL renders in a read-only field with a Copy
-// button so the user can verify what they're sending before they paste it.
-function ShareApprovalDialog({ state, setTtl, setEmail, onClose, onGenerate, onSendEmail }) {
-  const { open, ttl, email, sentTo, url, expiresAt, busy, err } = state;
+// One shared "hub" link for a project's approval page. Send it to as many people
+// as needed — everyone gets the SAME URL, and the first approve / change-request
+// locks it in (enforced atomically server-side). Adding a recipient never breaks
+// the people already invited; "Start a fresh link" is the only thing that rotates
+// the token, for when the quote/proof has changed.
+function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStartFresh }) {
+  const { open, ttl, emails, url, expiresAt, recipients = [], status, loading, busy, err, notice } = state;
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => { if (open) setCopied(false); }, [open, url]);
   const copy = async () => {
     try { await navigator.clipboard.writeText(url); setCopied(true); }
     catch (_) { /* clipboard blocked — user can still select+copy */ }
   };
+  const kind = status && status.status;
+  const statusLabel = kind === 'approved'
+    ? `Approved${status.by ? ` by ${status.by}` : ''}${status.at ? ` · ${new Date(status.at).toLocaleDateString()}` : ''}`
+    : kind === 'requested_changes'
+      ? `Changes requested${status.by ? ` by ${status.by}` : ''}`
+      : 'Awaiting review';
+  const statusColor = kind === 'approved' ? B.green : kind === 'requested_changes' ? '#fbbf24' : B.muted;
+
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
@@ -2168,79 +2310,102 @@ function ShareApprovalDialog({ state, setTtl, setEmail, onClose, onGenerate, onS
         <IconButton size="small" onClick={onClose} disabled={busy}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>
-        {!url ? (
+        {loading ? (
+          <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
+        ) : (
           <>
             <Typography sx={{ color: B.muted, fontSize: 12, mb: 2 }}>
-              Generating a new link rotates the token — any previous link for this project stops working,
-              so the client can't approve against stale prices later.
+              One shared link for everyone who needs to weigh in — send it to as many people as you like.
+              They all see the same page, and the first approval (or change request) locks it in.
             </Typography>
-            <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 1 }}>
-              <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 600 }}>Stays live for</Typography>
-              <TextField
-                type="number" size="small" value={ttl}
-                onChange={e => setTtl(e.target.value)}
-                inputProps={{ min: 1, max: 365 }}
-                sx={{ width: 80, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 14, py: 0.6, textAlign: 'right' } }}
-              />
-              <Typography sx={{ color: B.muted, fontSize: 13 }}>days · default 7, max 365</Typography>
+
+            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: statusColor }} />
+              <Typography sx={{ color: statusColor, fontSize: 12, fontWeight: 700 }}>{statusLabel}</Typography>
             </Stack>
 
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 2, mb: 0.5 }}>
-              Send to client by email (recommended)
+            {url && (
+              <>
+                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.5 }}>
+                  Shared link
+                </Typography>
+                <Stack direction="row" gap={1} sx={{ mb: 0.5 }}>
+                  <TextField fullWidth value={url} InputProps={{ readOnly: true }} onFocus={e => e.target.select()}
+                    sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, fontFamily: 'monospace', py: 0.7 } }} />
+                  <Button variant="contained" onClick={copy}
+                    sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}>
+                    {copied ? 'Copied ✓' : 'Copy'}
+                  </Button>
+                </Stack>
+                {/* See exactly what the client sees — read-only, no view logged,
+                    works even after they've approved. */}
+                <Button onClick={() => window.open(`${url}&preview=1`, '_blank', 'noopener')}
+                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ color: B.green, fontSize: 12, textTransform: 'none', fontWeight: 700, px: 0.5, mb: 1 }}>
+                  Preview as client
+                </Button>
+                {expiresAt && (
+                  <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
+                    Works until {new Date(expiresAt).toLocaleString()}.
+                  </Typography>
+                )}
+              </>
+            )}
+
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 1, mb: 0.5 }}>
+              Email it to one or more people
             </Typography>
-            <Stack direction="row" gap={1} sx={{ mb: 1.5 }}>
-              <TextField
-                type="email" size="small" value={email || ''} placeholder="client@company.com"
-                onChange={e => setEmail(e.target.value)}
-                sx={{ flex: 1, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.7 } }}
-              />
-              <Button variant="contained" disabled={busy || !email} onClick={onSendEmail}
+            <TextField fullWidth multiline minRows={2} value={emails || ''}
+              placeholder="client@company.com, partner@company.com"
+              onChange={e => setEmails(e.target.value)}
+              sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13 } }} />
+            <Stack direction="row" alignItems="center" gap={1.5} sx={{ mt: 1.5, flexWrap: 'wrap' }}>
+              <Button variant="contained" disabled={busy || !String(emails || '').trim()} onClick={onSend}
                 startIcon={busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <SendIcon sx={{ fontSize: 16 }} />}
                 sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
                 Send
               </Button>
+              <Stack direction="row" alignItems="center" gap={0.5}>
+                <Typography sx={{ color: B.muted, fontSize: 12 }}>Live for</Typography>
+                <TextField type="number" size="small" value={ttl} onChange={e => setTtl(e.target.value)}
+                  inputProps={{ min: 1, max: 365 }}
+                  sx={{ width: 64, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.5, textAlign: 'right' } }} />
+                <Typography sx={{ color: B.muted, fontSize: 12 }}>days</Typography>
+              </Stack>
             </Stack>
 
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 1, mb: 0.5 }}>
-              Or just generate the link
-            </Typography>
-            {err && <Typography sx={{ color: '#f87171', fontSize: 12, mb: 1.5 }}>{err}</Typography>}
-            <Button variant="outlined" disabled={busy} onClick={onGenerate} fullWidth
-              startIcon={busy ? <CircularProgress size={14} sx={{ color: B.green }} /> : <LinkIcon />}
-              sx={{ color: B.green, borderColor: B.green, fontWeight: 700, textTransform: 'none',
-                '&:hover': { borderColor: '#3bd070', bgcolor: 'rgba(74,222,128,0.06)' } }}>
-              {busy ? 'Generating…' : 'Copy / paste link instead'}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Typography sx={{ color: B.green, fontSize: 13, fontWeight: 700, mb: 1 }}>
-              {sentTo ? `Sent to ${sentTo} ✓` : 'Link ready ✓'}
-            </Typography>
-            <TextField
-              fullWidth value={url} multiline minRows={2} maxRows={3}
-              onFocus={e => e.target.select()}
-              sx={{ ...darkInput,
-                '& .MuiInputBase-input': { color: B.white, fontSize: 12, fontFamily: 'monospace' },
-              }}
-              InputProps={{ readOnly: true }}
-            />
-            {expiresAt && (
-              <Typography sx={{ color: B.muted, fontSize: 11, mt: 1 }}>
-                Expires {new Date(expiresAt).toLocaleString()}.
-                {sentTo ? '' : ' You can send this link to one client or several — anyone with the link can approve until expiry.'}
-              </Typography>
+            {notice && <Typography sx={{ color: B.green, fontSize: 12, mt: 1.5 }}>{notice}</Typography>}
+            {err && <Typography sx={{ color: '#f87171', fontSize: 12, mt: 1.5 }}>{err}</Typography>}
+
+            {recipients.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+                  Already sent to ({recipients.length})
+                </Typography>
+                <Stack gap={0.3}>
+                  {recipients.map((r, i) => (
+                    <Stack key={i} direction="row" justifyContent="space-between" alignItems="center"
+                      sx={{ fontSize: 12, color: B.white, borderBottom: `1px solid ${B.faint}`, py: 0.35 }}>
+                      <span>{r.email}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                        {r.sentAt ? new Date(r.sentAt).toLocaleDateString() : ''}
+                      </span>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Box>
             )}
-            <Stack direction="row" gap={1} mt={2}>
-              <Button variant="contained" onClick={copy}
-                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', flex: 1 }}>
-                {copied ? 'Copied ✓' : 'Copy link'}
+
+            <Box sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${B.faint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button onClick={onStartFresh} disabled={busy}
+                sx={{ color: B.muted, fontSize: 11, textTransform: 'none', '&:hover': { color: '#f87171', bgcolor: 'transparent' } }}>
+                Start a fresh link
               </Button>
-              <Button onClick={() => onClose()}
+              <Button onClick={onClose} disabled={busy}
                 sx={{ color: B.muted, textTransform: 'none', fontSize: 12 }}>
                 Done
               </Button>
-            </Stack>
+            </Box>
           </>
         )}
       </DialogContent>
