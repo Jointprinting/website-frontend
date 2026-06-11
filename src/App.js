@@ -94,6 +94,10 @@ function AppShell() {
           </div>
         }
       >
+        {/* Keyed on pathname so every navigation replays the soft fade-up
+            (see .route-fade in index.css). Skipped inside Studio — it's a
+            single route whose internal navigation shouldn't remount. */}
+        <div key={isStudio ? 'studio' : pathname} className={isStudio ? undefined : 'route-fade'}>
         <Routes>
           <Route exact path="/" element={<Home />} />
           <Route exact path="/about" element={<About />} />
@@ -111,6 +115,7 @@ function AppShell() {
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </div>
       </Suspense>
       {!isStudio && <Footer />}
     </>
