@@ -2370,7 +2370,14 @@ async function loadProjects() {
     // Honor ?project=<id> from the launch URL so the OrderTracker can deep-link
     // straight into "save a mockup for this project". Otherwise keep whatever
     // the user had selected.
-    const initialProject = new URLSearchParams(window.location.search).get('project');
+    // Apply only ONCE per session: loadProjects() reruns after every save,
+    // and re-forcing the URL's project would silently snap the form back
+    // after the user deliberately switched — linking the next mockup to the
+    // wrong order.
+    const initialProject = window._jpDeepLinkApplied
+      ? null
+      : new URLSearchParams(window.location.search).get('project');
+    if (initialProject) window._jpDeepLinkApplied = true;
     const proj = initialProject && window.PROJECTS_CACHE.find(p => p._id === initialProject);
     if (proj) {
       sel.value = initialProject;
@@ -2406,17 +2413,21 @@ function renderProjectBanner(proj) {
 
 function _firstName(s) { return (s || '').trim().split(/\s+/)[0] || ''; }
 function _nextMockupNum(project) {
+  // Excel-style sequence A…Z, AA, AB… — mirrors the server's
+  // _nextMockupLetter exactly. The old single-letter scan went blind past Z
+  // and re-issued "AA" forever.
   const projNumRaw = String(project.projectNumber || '').split('-')[0];
   if (!projNumRaw) return '';
-  const padded = projNumRaw.padStart(6, '0');
-  const base = `#${padded}`;
-  const matches = (project.mockupNumbers || []).filter(m => m && m.startsWith(base));
-  if (matches.length === 0) return `${base}A`;
-  const letters = matches.map(m => m.slice(base.length).toUpperCase()).filter(l => /^[A-Z]$/.test(l));
-  if (letters.length === 0) return `${base}A`;
-  const maxLetter = letters.reduce((a, b) => a > b ? a : b);
-  if (maxLetter === 'Z') return `${base}AA`;
-  return `${base}${String.fromCharCode(maxLetter.charCodeAt(0) + 1)}`;
+  const base = `#${projNumRaw.padStart(6, '0')}`;
+  const toNum = (l) => { let n = 0; for (const c of l) n = n * 26 + (c.charCodeAt(0) - 64); return n; };
+  const toLet = (n) => { let r = ''; while (n > 0) { const m = (n - 1) % 26; r = String.fromCharCode(65 + m) + r; n = Math.floor((n - 1) / 26); } return r; };
+  const nums = (project.mockupNumbers || [])
+    .filter(m => m && m.startsWith(base))
+    .map(m => m.slice(base.length).toUpperCase())
+    .filter(l => /^[A-Z]+$/.test(l))
+    .map(toNum);
+  const max = nums.length ? Math.max(...nums) : 0;
+  return `${base}${toLet(max + 1)}`;
 }
 
 // Typeahead -> hidden <select>. User types/picks a label like "#132 · Bleu
@@ -3074,9 +3085,16 @@ const SCHEDULE_DEBOUNCE_MS = 250;
 function scheduleUpdate(){ markPreviewDirty(); _queueAutoRefresh(SCHEDULE_DEBOUNCE_MS); }
 function liveUpdate(){ markPreviewDirty(); _queueAutoRefresh(LIVE_DEBOUNCE_MS); }
 function markPreviewDirty(){
+  // Any edit signal also marks the session as having unsaved canvas work —
+  // everything lives in this page's memory only, so the beforeunload guard
+  // below is the difference between an "are you sure?" and silent total loss.
+  window._jpUnsaved = true;
   const p=document.getElementById('preview-status');
   if(p){ p.classList.add('dirty'); p.classList.remove('rendering'); p.textContent='Updating…'; }
 }
+window.addEventListener('beforeunload', (e) => {
+  if (window._jpUnsaved) { e.preventDefault(); e.returnValue = ''; }
+});
 function markPreviewRendering(){
   const p=document.getElementById('preview-status');
   if(p){ p.classList.remove('dirty'); p.classList.add('rendering'); p.textContent='Rendering…'; }
@@ -3474,6 +3492,12 @@ function _refreshSaveGate() {
 
 async function saveMockupToLibrary() {
   if (!db){toast('Database not ready','error');return;}
+  // In-flight guard: a double-click (or Ctrl+S + click) used to fire two
+  // saves, and both raced the server letter-assign — one design, two
+  // library rows with two different numbers.
+  if (saveMockupToLibrary._busy) return;
+  saveMockupToLibrary._busy = true;
+  try {
   saveFormToState();
   const pg=state.pages[state.currentPage];
   // Foolproof gate — won't save unlinked. Auto-derived fields only make sense
@@ -3549,10 +3573,12 @@ async function saveMockupToLibrary() {
       await linkMockupToProject(pg.projectId, formatted);
     }
     toast(`"${name}" saved ✓`,'success');
+    window._jpUnsaved = false;   // committed — drop the close-tab warning
     refreshClientSuggestions();
     loadProjects().catch(()=>{}); // refresh project cache so next mockup picks next letter
   }
   catch(e){toast('Save failed','error');}
+  } finally { saveMockupToLibrary._busy = false; }
 }
 
 // Maintain a fresh list of distinct client names for autocomplete + filters.
