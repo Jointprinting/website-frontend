@@ -1868,6 +1868,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   </Box>
                   <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
                     {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
+                    {(e.by || e.email) && (
+                      <Box component="span" sx={{ color: B.green, fontSize: 10, display: 'block', mt: 0.2 }}>
+                        {[e.by, e.email && `<${e.email}>`].filter(Boolean).join(' ')}
+                      </Box>
+                    )}
                   </Box>
                   <Box sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
                     {fmtRelative(e.at)}

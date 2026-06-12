@@ -61,6 +61,11 @@ export default function ApprovalView() {
   const { projectId } = useParams();
   const [params] = useSearchParams();
   const token = params.get('token');
+  // Personal recipient tag from the share email (base64url of their email) —
+  // passed through on every call so the server attributes views/picks/
+  // approvals to the right person without asking anyone to type anything.
+  const rTag = params.get('r') || '';
+  const q = `token=${encodeURIComponent(token || '')}${rTag ? `&r=${encodeURIComponent(rTag)}` : ''}`;
   // Admin "preview as client" mode (?preview=1): renders the client review
   // exactly as they see it, but read-only — actions disabled, no view logged,
   // and the pre-approval layout shows even after the order is approved/locked.
@@ -73,8 +78,6 @@ export default function ApprovalView() {
   const [actionBusy, setActionBusy] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesText, setChangesText] = useState('');
-  const [name, setName] = useState('');          // optional — so we know who on the team acted
-  const [email, setEmail] = useState('');        // optional — so we know which email approved
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
   const [picks, setPicks] = useState({});           // group label -> quote line index
   const [pickBusy, setPickBusy] = useState(false);
@@ -91,7 +94,7 @@ export default function ApprovalView() {
       if (!token) { setErr('This link is missing a token.'); setLoading(false); return; }
       try {
         const r = await axios.get(
-          `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}${isPreview ? '&preview=1' : ''}`);
+          `${config.backendUrl}/api/public/projects/${projectId}?${q}${isPreview ? '&preview=1' : ''}`);
         if (cancelled) return;
         setData(r.data);
       } catch (e) {
@@ -104,12 +107,12 @@ export default function ApprovalView() {
     }
     load();
     return () => { cancelled = true; };
-  }, [projectId, token, isPreview]);
+  }, [projectId, token, isPreview, q]);
 
   const refresh = async () => {
     try {
       const r = await axios.get(
-        `${config.backendUrl}/api/public/projects/${projectId}?token=${encodeURIComponent(token)}`);
+        `${config.backendUrl}/api/public/projects/${projectId}?${q}`);
       setData(r.data);
     } catch (_) { /* keep existing data */ }
   };
@@ -142,8 +145,7 @@ export default function ApprovalView() {
     if (isPreview) { alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?token=${encodeURIComponent(token)}`,
-        { name: name.trim(), email: email.trim() });
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?${q}`, {});
       await refresh();
     } catch (e) {
       // 409 = someone on the team already approved or sent it back. Not an
@@ -164,8 +166,8 @@ export default function ApprovalView() {
     if (isPreview) { setChangesOpen(false); alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?token=${encodeURIComponent(token)}`,
-        { message: changesText, name: name.trim(), email: email.trim() });
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?${q}`,
+        { message: changesText });
       setChangesOpen(false);
       setChangesText('');
       await refresh();
@@ -259,8 +261,8 @@ export default function ApprovalView() {
     if (!allPicked) return;
     setPickBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?token=${encodeURIComponent(token)}`,
-        { picks: groupNames.map(g => pickFor(g)), by: name.trim(), email: email.trim() });
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`,
+        { picks: groupNames.map(g => pickFor(g)) });
       setRepicking(false);
       await refresh();
     } catch (e) {
@@ -428,12 +430,6 @@ export default function ApprovalView() {
                 <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
               </Box>
             )}
-            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1.5, mt: 1 }}>
-              <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Your name (optional)" />
-              <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="Your email (optional)" />
-            </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
               <Button fullWidth disabled={pickBusy || !allPicked} onClick={submitPicks} variant="contained"
                 sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 800, textTransform: 'none',
@@ -627,12 +623,6 @@ export default function ApprovalView() {
                   <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
                 </Box>
               )}
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1.5 }}>
-                <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Your name (optional)" />
-                <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="Your email (optional — so we know who approved)" />
-              </Stack>
               <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                 <Button onClick={handleApprove} disabled={actionBusy}
                   startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <CheckCircleOutlineIcon />}
@@ -647,7 +637,7 @@ export default function ApprovalView() {
                   sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
                     textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1,
                     '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
-                  Request changes
+                  Request edits
                 </Button>
               </Stack>
             </>
@@ -657,15 +647,11 @@ export default function ApprovalView() {
       </Box>
 
       <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>Request changes</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>Request edits</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 1.5 }}>
             What would you like changed? Be as specific as you like — colors, sizes, copy, anything at all.
           </Typography>
-          <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
-            placeholder="Your name (optional)" sx={{ mb: 1.5 }} />
-          <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="Your email (optional)" sx={{ mb: 1.5 }} />
           <TextField fullWidth multiline minRows={4} autoFocus
             value={changesText} onChange={e => setChangesText(e.target.value)}
             placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L." />
