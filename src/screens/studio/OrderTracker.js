@@ -1273,6 +1273,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [uploading, setUploading] = useState(false);
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
+  // Which drawer tab is showing. Overview is the everyday editing surface, so
+  // each open lands there; the choice is plain component state — nothing
+  // persists across opens and the URL never changes.
+  const [tab, setTab] = useState('overview');
+  useEffect(() => { if (open) setTab('overview'); }, [open]);
 
   // Full re-seed only when a DIFFERENT project opens. Keyed on id so an
   // autosave round-trip — which hands back a fresh project object with the same
@@ -1511,6 +1516,45 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         onOpenConfirmation={onOpenConfirmation}
         onOpenPos={() => setPoOpen(true)} />
 
+      {/* Tab bar — the drawer's sections grouped into three panels so it
+          reads as one organized surface instead of a long scroll. Overview
+          (default) = the editable project; Approval = the client-facing
+          side; Files & Activity = uploads + the history trail. Full-width
+          tabs on mobile, inline on desktop. */}
+      <Box role="tablist" sx={{
+        display: 'flex', alignItems: 'stretch', mt: 1.5,
+        borderBottom: `1px solid ${B.border}`,
+        px: { xs: 0, md: 2.5 },
+      }}>
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'approval', label: 'Approval' },
+          { id: 'files',    label: 'Files & Activity' },
+        ].map(t => {
+          const active = tab === t.id;
+          return (
+            <Box key={t.id} role="tab" aria-selected={active}
+              onClick={() => setTab(t.id)}
+              sx={{
+                flex: { xs: 1, md: '0 0 auto' },
+                textAlign: 'center', cursor: 'pointer', userSelect: 'none',
+                px: { xs: 0.5, md: 2 }, py: 1.1,
+                fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+                textTransform: 'uppercase', whiteSpace: 'nowrap',
+                color: active ? B.green : B.muted,
+                boxShadow: active
+                  ? `inset 0 -2px 0 0 ${B.green}`
+                  : 'inset 0 -2px 0 0 transparent',
+                transition: 'color 180ms ease, box-shadow 180ms ease',
+                '&:hover': { color: active ? B.green : B.white },
+              }}>
+              {t.label}
+            </Box>
+          );
+        })}
+      </Box>
+
+      {tab === 'overview' && (<>
       {/* Mockup grid */}
       <Box sx={{ px: 2.5, pt: 2 }}>
         {(() => {
@@ -1769,9 +1813,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 
       {/* Client profile (sticky info that follows this company across projects) */}
       <ClientProfileSection client={client} saving={clientSaving} saveClient={saveClient} />
+      </>)}
 
-      {/* Files */}
-      <Box sx={{ px: 2.5, pb: 2 }}>
+      {tab === 'files' && (
+      /* Files */
+      <Box sx={{ px: 2.5, pt: 2, pb: 2 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
           <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Files · {(local.files || []).length}
@@ -1821,17 +1867,96 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           </Stack>
         ))}
       </Box>
+      )}
+
+      {tab === 'approval' && (<>
+      {/* Share for approval — the one shared hub link per project. The dialog
+          (opened from here or from the confirmation builder's header button)
+          handles generating/copying the link, emailing recipients, and
+          rotating the token; this panel is the drawer-side entry point. */}
+      <Box sx={{ px: 2.5, pt: 2, pb: 2 }}>
+        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+          Client approval
+        </Typography>
+        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.5 }}>
+          <Typography sx={{ color: B.muted, fontSize: 11, lineHeight: 1.5, mb: 1 }}>
+            One shared link for everyone who needs to weigh in. Open the share
+            dialog to generate or copy the link, email it to recipients, and
+            see who already has it.
+          </Typography>
+          <Button startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
+            onClick={() => onShareApproval()}
+            sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, fontSize: 11,
+              textTransform: 'none', px: 1.5, '&:hover': { bgcolor: '#3bd070' } }}>
+            Share approval link
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Approval events — what the client did on the shared link. The full
+          merged history (admin + client) lives under Files & Activity. */}
+      {(() => {
+        const EV_META = {
+          viewed:            { color: B.muted,   label: 'Viewed' },
+          approved:          { color: B.green,   label: 'Approved' },
+          requested_changes: { color: '#fbbf24', label: 'Requested changes' },
+        };
+        const events = [...(local.approvalEvents || [])]
+          .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+        return (
+          <Box sx={{ px: 2.5, pb: 2 }}>
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+              Approval events · {events.length}
+            </Typography>
+            {events.length === 0 ? (
+              <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5,
+                textAlign: 'center', color: B.muted, fontSize: 11 }}>
+                Nothing yet — events appear when the client opens, approves, or
+                requests changes on the shared link.
+              </Box>
+            ) : (
+              <Stack gap={0.5}>
+                {events.slice(0, 15).map((e, i) => {
+                  const km = EV_META[e.kind] || { color: B.muted, label: e.kind || '—' };
+                  return (
+                    <Box key={i} sx={{
+                      display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 1, alignItems: 'start',
+                      py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 11,
+                    }}>
+                      <Box sx={{ color: km.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                        {km.label}
+                      </Box>
+                      <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                        {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
+                        {(e.by || e.email) && (
+                          <Box component="span" sx={{ color: B.green, fontSize: 10, display: 'block', mt: 0.2 }}>
+                            {[e.by, e.email && `<${e.email}>`].filter(Boolean).join(' ')}
+                          </Box>
+                        )}
+                      </Box>
+                      <Box sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
+                        {fmtRelative(e.at)}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            )}
+          </Box>
+        );
+      })()}
 
       {/* Client tracking timeline — shown to the client on the same approval
           link after they approve. Admin ticks off steps as the project moves
           and the client's open page updates within a minute. */}
       <TrackingPanel project={local} authHdr={authHdr} onLocal={setLocal} />
+      </>)}
 
       <PoBuilderDialog open={poOpen} project={project} authHdr={authHdr}
         onClose={() => setPoOpen(false)} />
 
       {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
-      {(() => {
+      {tab === 'files' && (() => {
         const KIND_META = {
           // client-side approvalEvents
           viewed:             { color: B.muted,   label: 'Viewed',             actor: 'client' },
@@ -1890,7 +2015,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         );
       })()}
 
-      {/* Footer actions */}
+      {/* Pushes the footer to the drawer's bottom edge when the active tab's
+          content is shorter than the viewport (sticky alone won't). */}
+      <Box sx={{ flex: 1 }} />
+
+      {/* Footer actions — visible on every tab */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.bg, borderTop: `1px solid ${B.border}`,
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
@@ -1906,10 +2035,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           POs
         </Button>
-        {/* "Share for approval" lives in the confirmation builder only —
-            sharing makes sense once a confirmation page exists, not from the
-            raw order drawer. The handler is still wired through so the
-            confirmation builder's button works. */}
+        {/* "Share for approval" lives on the Approval tab (and in the
+            confirmation builder's header) — not in this footer, which stays
+            reserved for the three always-relevant actions. */}
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
           sx={{ color: '#f87171', fontSize: 11, textTransform: 'none' }}>
