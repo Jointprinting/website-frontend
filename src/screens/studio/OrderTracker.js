@@ -178,6 +178,11 @@ export default function OrderTracker({ token, onBack }) {
         m[normMockupKey(k)] = x;
       }
       if (x.name && !m[x.name]) m[x.name] = x;
+      // The confirmation builder's picker stores NORMALIZED values (uppercase,
+      // #/zeros stripped) — name-keyed mockups must resolve through the same
+      // key or their image breaks in the builder while fine on the PDF.
+      const nk = normMockupKey(x.name);
+      if (nk && !m[nk]) m[nk] = x;
     });
     return m;
   }, [mockups]);

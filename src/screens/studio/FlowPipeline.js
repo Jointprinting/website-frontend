@@ -20,6 +20,7 @@ export default function FlowPipeline({ project, authHdr, onOpenQuote, onOpenConf
   useEffect(() => {
     if (!project || !project._id) return;
     let cancelled = false;
+    setPoCount(null);   // don't show the previous project's PO state while loading
     axios.get(`${config.backendUrl}/api/orders/${project._id}/pos`, authHdr)
       .then(r => { if (!cancelled) setPoCount((r.data.pos || []).length); })
       .catch(() => { if (!cancelled) setPoCount(null); });
