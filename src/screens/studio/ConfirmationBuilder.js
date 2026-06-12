@@ -150,8 +150,13 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         // the seeded items in order — so a 3-line quote with 3 mockups in
         // jpstudio comes up with each item pre-attached to its mockup.
         const matchedNums = inferMockupNumsFor(project, mockups);
+        // A line's own design wins: its mockup # (explicit link) or uploaded
+        // vendor render (items with no mockup number — ashtrays etc.); the
+        // positional auto-match is the fallback.
         const items = chosenQuoteLines(project.quoteLines).map((line, i) =>
-          ({ ...seedItemFromQuote(line), mockupNum: matchedNums[i] || '' }),
+          ({ ...seedItemFromQuote(line),
+             mockupNum: line.mockupNum || matchedNums[i] || '',
+             customMockupDataUrl: line.image || '' }),
         );
         seed = {
           orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
