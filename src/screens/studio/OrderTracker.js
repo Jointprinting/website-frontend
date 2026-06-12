@@ -42,6 +42,7 @@ import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
 import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
+import PoBuilderDialog from './PoBuilderDialog';
 import QuoteBuilder from './QuoteBuilder';
 import config from '../../config.json';
 import jpLogoWhite from '../../modules/images/logo_white.webp';
@@ -1260,6 +1261,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
 }
 
 function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
+  const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1811,6 +1813,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           and the client's open page updates within a minute. */}
       <TrackingPanel project={local} authHdr={authHdr} onLocal={setLocal} />
 
+      <PoBuilderDialog open={poOpen} project={project} authHdr={authHdr}
+        onClose={() => setPoOpen(false)} />
+
       {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
       {(() => {
         const KIND_META = {
@@ -1876,6 +1881,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           onClick={() => onOpenConfirmation()}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           Build confirmation
+        </Button>
+        <Button startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
+          onClick={() => setPoOpen(true)}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          POs
         </Button>
         {/* "Share for approval" lives in the confirmation builder only —
             sharing makes sense once a confirmation page exists, not from the
