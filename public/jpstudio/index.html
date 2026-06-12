@@ -263,6 +263,16 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .btn-icon{padding:5px 7px}
 .btn-full{width:100%;justify-content:center}
 
+/* Keyboard focus ring for non-.btn interactive controls (tabs, pills,
+   tiles, selects). :focus-visible only — no ring on mouse/touch taps. */
+.nav-tab:focus-visible,.side-pill:focus-visible,.place-btn:focus-visible,
+.tpl-opt:focus-visible,.page-dot:focus-visible,.mbb-btn:focus-visible,
+.mbb-page-btn:focus-visible,.ss-tab:focus-visible,.lb-card:focus-visible,
+.asset-card:focus-visible,
+select:focus-visible{
+  outline:2px solid var(--ac);outline-offset:2px;border-radius:var(--r);
+}
+
 /* ─── Layout ──────────────────────────────────────────────────── */
 #app{padding-top:var(--hh);height:100vh;display:flex;flex-direction:column}
 #views{flex:1;overflow:hidden}
@@ -387,14 +397,16 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   -webkit-mask-size:contain;mask-size:contain;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   -webkit-mask-position:center;mask-position:center;
-  background:linear-gradient(110deg,#1a3d2b 0%,#1a3d2b 35%,#4ade80 50%,#1a3d2b 65%,#1a3d2b 100%);
+  /* Single accent family: sweep runs dim-accent → accent → dim-accent
+     (was a hardcoded #1a3d2b/#4ade80 pair from the old palette). */
+  background:linear-gradient(110deg,var(--ac3) 0%,var(--ac3) 35%,var(--ac) 50%,var(--ac3) 65%,var(--ac3) 100%);
   background-size:250% 100%;
   animation:jpLoaderSweep 1.4s linear infinite, jpLoaderPulse 2.4s ease-in-out infinite;
 }
 @keyframes jpLoaderSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
 @keyframes jpLoaderPulse{0%,100%{opacity:.85}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){
-  .jp-loader{animation:jpLoaderPulse 1.8s ease-in-out infinite;background:#4ade80}
+  .jp-loader{animation:jpLoaderPulse 1.8s ease-in-out infinite;background:var(--ac)}
 }
 /* Tiny inline spinner — kept for buttons / search-while-typing where the
    mask logo doesn't read at that size. */
@@ -433,7 +445,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .swatch-item{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:6px 8px;display:flex;flex-direction:column;gap:4px}
 .swatch-row{display:flex;align-items:center;gap:5px}
 .swatch-hex{font-family:var(--fm);font-size:9px;color:var(--tx2);flex:1;min-width:0}
-.swatch-hex-in{background:transparent;border:1px solid var(--bd2);border-radius:3px;color:var(--tx1);font-family:var(--fm);font-size:10px;padding:3px 5px;flex:1;min-width:0;outline:none;text-transform:uppercase;transition:border-color .15s;letter-spacing:.3px}
+.swatch-hex-in{background:transparent;border:1px solid var(--bd2);border-radius:3px;color:var(--tx);font-family:var(--fm);font-size:10px;padding:3px 5px;flex:1;min-width:0;outline:none;text-transform:uppercase;transition:border-color .15s;letter-spacing:.3px}
 .swatch-hex-in:focus{border-color:var(--ac);background:var(--s0)}
 .swatch-hex-in.invalid{border-color:#e36363}
 .swatch-name-in{background:transparent;border:none;border-bottom:1px solid var(--bd2);color:var(--tx2);font-family:var(--fm);font-size:9px;padding:2px 0;outline:none;width:100%;transition:border-color .15s}
@@ -498,7 +510,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 /* Cloud sync state dot on saved-mockup-cards */
 .sync-dot { font-size: 11px; font-weight: 700; margin-left: 2px; }
 .sync-dot.synced { color: var(--ac); }
-.sync-dot.pending { color: #f59e0b; }
+.sync-dot.pending { color: var(--amber); }
 
 /* Client tag chip on saved-mockup-cards */
 .client-chip {
@@ -674,6 +686,33 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
 .modal-actions{display:flex;gap:6px;align-items:center}
 .modal-actions-sep{flex:1}
 
+/* Print-placement constraints bar (logo editor) */
+#print-area-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#print-area-bar label{font-family:var(--fm);font-size:9px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3);flex-shrink:0}
+#print-category{
+  background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);
+  color:var(--tx2);font-family:var(--f);font-size:11px;padding:5px 8px;
+  outline:none;cursor:pointer;transition:border-color .15s var(--ease);
+}
+#print-category:focus{border-color:var(--ac)}
+#print-area-presets{display:flex;gap:4px;flex-wrap:wrap}
+.pa-chip{
+  background:var(--s1);border:1px solid var(--bd2);border-radius:99px;
+  color:var(--tx3);font-family:var(--fm);font-size:9px;letter-spacing:.05em;
+  text-transform:uppercase;padding:4px 10px;cursor:pointer;
+  transition:all .18s var(--ease);
+}
+.pa-chip:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-dim)}
+#print-constraint-info{
+  font-family:var(--fm);font-size:10px;color:var(--tx3);min-height:15px;
+  letter-spacing:.02em;transition:color .2s var(--ease);
+}
+#print-constraint-info.at-max{color:var(--amber)}
+@media(max-width:768px){
+  #print-category{min-height:44px;font-size:13px}
+  .pa-chip{min-height:36px;padding:8px 12px;font-size:10px}
+}
+
 /* ─── Library picker ──────────────────────────────────────────── */
 #library-picker-overlay{position:fixed;inset:0;background:rgba(5,6,12,.92);display:none;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(8px)}
 #library-picker-overlay.open{display:flex}
@@ -733,6 +772,9 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   #header{
     height:var(--hh);
     padding:0 12px;
+    /* Notch-safe on all four sides (landscape notches eat L/R edges) */
+    padding-left:max(12px,env(safe-area-inset-left,0px));
+    padding-right:max(12px,env(safe-area-inset-right,0px));
     padding-top:env(safe-area-inset-top,0px);
     height:calc(var(--hh) + env(safe-area-inset-top,0px));
     gap:0;
@@ -865,7 +907,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     display:flex;
     position:fixed;left:0;right:0;bottom:0;
     height:var(--bb);
-    padding:0 8px env(safe-area-inset-bottom,0px);
+    padding:0 max(8px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(8px,env(safe-area-inset-left,0px));
     background:rgba(12,13,19,.96);
     backdrop-filter:blur(14px);
     border-top:1px solid var(--bd2);
@@ -925,16 +967,18 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   .swatch-hex-in,.swatch-name-in{font-size:14px!important}
   .field label{font-size:10px}
 
-  /* Bigger tap targets on buttons inside panels */
-  .panel .btn{min-height:38px;padding:8px 12px;font-size:13px}
-  .panel .btn-sm{min-height:34px;font-size:12px}
-  .panel .btn-xs{min-height:30px;font-size:11px;padding:5px 10px}
+  /* Touch targets: every tappable control ≥44px tall on phones */
+  .panel .btn{min-height:44px;padding:10px 12px;font-size:13px}
+  .panel .btn-sm{min-height:44px;font-size:12px}
+  .panel .btn-xs{min-height:44px;font-size:12px;padding:8px 10px}
   .panel .upload-zone{min-height:96px}
   .panel .place-btn{padding:11px 4px;font-size:10px;min-height:48px}
-  .panel .side-pill{padding:9px;font-size:11px}
+  .panel .side-pill{padding:9px;font-size:11px;min-height:44px}
   .panel .tpl-opt{padding:14px 8px;min-height:60px}
-  .panel .add-swatch{padding:10px;font-size:14px;min-height:38px}
+  .panel .add-swatch{padding:10px;font-size:14px;min-height:44px}
   .panel .swatch-item{padding:8px 10px}
+  .mbb-page-btn{width:44px;height:44px}
+  .btn-icon{min-height:44px;min-width:44px}
 
   /* ─── Lookbook view ────────────────────────────────────── */
   #lookbook-view-wrapper{height:calc(100dvh - var(--hh) - env(safe-area-inset-top,0px))}
@@ -942,8 +986,8 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     flex-wrap:wrap;height:auto;padding:10px 12px;gap:8px;
     position:sticky;top:0;z-index:5;background:var(--s0);
   }
-  .lb-topbar-search{min-width:0;flex:1 1 100%;height:38px}
-  .lb-topbar-select{flex:1;height:38px}
+  .lb-topbar-search{min-width:0;flex:1 1 100%;height:44px}
+  .lb-topbar-select{flex:1;height:44px}
   .lb-sel-label{flex:0 0 auto}
   .lb-grid{grid-template-columns:repeat(2,1fr);padding:12px;gap:10px}
   .lb-card-imgs{min-height:130px}
@@ -954,10 +998,10 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   }
   .lb-export-bar > div{flex-wrap:wrap}
   .lb-eb-input,.lb-eb-filename{
-    width:100%!important;flex:1 1 100%;height:38px;
+    width:100%!important;flex:1 1 100%;height:44px;
   }
-  .lb-preset{padding:7px 10px!important;font-size:10px!important;min-height:32px}
-  .lb-export-bar .btn{min-height:38px;padding:8px 14px;font-size:12px}
+  .lb-preset{padding:9px 12px!important;font-size:10px!important;min-height:40px}
+  .lb-export-bar .btn{min-height:44px;padding:10px 14px;font-size:12px}
 
   /* ─── Library view ─────────────────────────────────────── */
   #library-view-wrapper{height:calc(100dvh - var(--hh) - env(safe-area-inset-top,0px))}
@@ -967,16 +1011,21 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   }
   .lib-hdr{flex-wrap:wrap;gap:10px;margin-bottom:16px}
   .lib-hdr h2{font-size:18px}
-  .lib-hdr .btn{flex:1;min-height:38px;font-size:12px}
-  .asset-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  .lib-hdr .btn{flex:1;min-height:44px;font-size:12px}
+  /* Library grid: roomier tiles + always-visible delete on touch */
+  .asset-grid{grid-template-columns:repeat(3,1fr);gap:10px}
+  .asset-name{padding:8px;font-size:10px}
   .asset-card .asset-del{
     opacity:1;background:rgba(9,10,16,.92);
-    padding:5px 9px;font-size:13px;
+    padding:8px 11px;font-size:14px;
   }
+  /* Filter/sort controls in the library are comfortable to tap */
+  .lib-scroll input[type=search],
+  .lib-scroll select{min-height:44px}
   .saved-mockup-card{padding:12px 14px;gap:12px}
   .saved-mockup-card .mockup-icon{width:48px;height:48px}
   .mockup-name{font-size:14px}
-  .mockup-actions .btn{min-height:34px;font-size:12px}
+  .mockup-actions .btn{min-height:44px;font-size:12px}
 
   /* ─── Modals: full-screen on phones ────────────────────── */
   .modal-bg,
@@ -1066,7 +1115,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
     <button class="nav-tab" onclick="switchTab('library',this)">Library</button>
   </nav>
   <div class="hdr-right">
-    <span id="sync-status" title="Library auto-syncs to the cloud — open on any device and refresh to pull." style="font-size:11px;color:var(--tx3);display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18)"><span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block"></span><span id="sync-label">All synced</span></span>
+    <span id="sync-status" title="Library auto-syncs to the cloud — open on any device and refresh to pull." style="font-size:11px;color:var(--tx3);display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:var(--r);background:var(--ac-dim);border:1px solid rgba(184,242,86,.25)"><span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--ac);display:inline-block"></span><span id="sync-label">All synced</span></span>
     <button class="btn btn-secondary btn-sm" onclick="openSsModal()">⬡ S&amp;S Finder</button>
     <button class="btn btn-ghost btn-sm" id="borders-btn" onclick="togglePrintPreview()">Borders: OFF</button>
     <button class="btn btn-ac btn-sm" onclick="exportPdf()">↓ Export PDF</button>
@@ -1201,7 +1250,7 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
           <select id="f-project" onchange="onProjectChange()" style="display:none">
             <option value="">— Pick a project —</option>
           </select>
-          <div id="f-project-error" style="display:none;color:#f87171;font-size:10px;margin-top:4px">Pick a project to save this mockup.</div>
+          <div id="f-project-error" style="display:none;color:var(--red);font-size:10px;margin-top:4px">Pick a project to save this mockup.</div>
         </div>
         <div class="field"><label>Client</label><input type="text" id="f-client" list="client-suggestions" placeholder="Auto-filled from project" oninput="liveUpdate()"/><datalist id="client-suggestions"></datalist></div>
         <div class="field">
@@ -1478,6 +1527,21 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);
   <div id="logo-editor-modal">
     <h3>Position Logo on Garment</h3>
     <p>Drag to reposition · Corner handles to resize · Use presets for quick placement</p>
+    <!-- Print-placement constraints v1: pick a product type to get a dashed
+         printable-area guide + clamped drag/scale. 'Generic' = no limits
+         (the pre-existing behavior, and the default). -->
+    <div id="print-area-bar">
+      <label for="print-category">Product</label>
+      <select id="print-category" onchange="onPrintCategoryChange()">
+        <option value="generic">Generic — no limits</option>
+        <option value="tshirt">T-Shirt</option>
+        <option value="hoodie">Hoodie</option>
+        <option value="hat">Hat</option>
+        <option value="tote">Tote Bag</option>
+      </select>
+      <div id="print-area-presets"></div>
+    </div>
+    <div id="print-constraint-info"></div>
     <canvas id="logo-editor-canvas"></canvas>
     <div class="modal-actions">
       <button class="btn btn-ac" onclick="confirmLogoPosition()">✓ Apply</button>
@@ -2020,6 +2084,103 @@ const PRESETS = {
   nk: { label:'Nape',        xPct:.50, yPct:.18, wPct:.19 },
 };
 
+// ── Print-Placement Constraints v1 ─────────────────────────────────
+// Per product category × view: the max printable area in REAL INCHES and
+// where it sits on the garment. Numbers are industry-standard imprint sizes
+// (tee full-front/back 12×16 screen print, left-chest 4×4, hoodie front
+// 12×12, hat front 5.5×2.25 embroidery, tote 10×10).
+//
+// INCHES → EDITOR-CANVAS PIXELS (the one place this mapping lives):
+//   The logo editor shows the blank garment photo scaled to fit the modal.
+//   ASSUMPTION: the garment spans roughly the full width of the blank image
+//   (true for the S&S / product-photography blanks this app loads), and that
+//   span equals `garmentWidthIn` real inches for the category — e.g. an
+//   adult tee photographed flat reads ≈22in across the chest/sleeves.
+//   Therefore:  pixelsPerInch = blankImg.getScaledWidth() / garmentWidthIn
+//   The guide box, drag/scale clamping, and the inch readout all derive from
+//   that one ratio inside _printAreaRect(). If a category's blanks are
+//   framed differently, tune garmentWidthIn here — nowhere else.
+//
+// Per-area fields:
+//   maxWIn/maxHIn — printable rectangle, inches
+//   topPct        — top edge of the area as a fraction of blank-image height
+//                   (anchors the box below collar / hood / handles)
+//   anchor        — human description of the anchor rule
+//   method        — decoration method the limit comes from (warning copy)
+//   presets       — quick placements: wIn = print width in inches,
+//                   cx/cy = logo center as a fraction of the printable area
+const PRINT_AREAS = {
+  generic: { label:'Generic', garmentWidthIn:null, areas:{} }, // no limits — default
+  tshirt: {
+    label:'T-Shirt', garmentWidthIn:22,
+    areas:{
+      front:{ maxWIn:12, maxHIn:16, topPct:.21, method:'screen print',
+              anchor:'full front — starts ~3in below the collar',
+              presets:[
+                {label:'Left Chest', wIn:4,   cx:.27, cy:.14},
+                {label:'Ctr Chest',  wIn:10,  cx:.50, cy:.28},
+                {label:'Full Front', wIn:12,  cx:.50, cy:.50},
+              ]},
+      back:{ maxWIn:12, maxHIn:16, topPct:.16, method:'screen print',
+             anchor:'full back — starts just below the collar seam',
+             presets:[
+               {label:'Upper Back', wIn:10,  cx:.50, cy:.16},
+               {label:'Full Back',  wIn:12,  cx:.50, cy:.50},
+               {label:'Nape',       wIn:3.5, cx:.50, cy:.06},
+             ]},
+    },
+  },
+  hoodie: {
+    label:'Hoodie', garmentWidthIn:24,
+    areas:{
+      front:{ maxWIn:12, maxHIn:12, topPct:.30, method:'screen print',
+              anchor:'chest — below the hood, above the kangaroo pocket',
+              presets:[
+                {label:'Left Chest', wIn:4,  cx:.27, cy:.18},
+                {label:'Ctr Chest',  wIn:10, cx:.50, cy:.40},
+                {label:'Full Front', wIn:12, cx:.50, cy:.50},
+              ]},
+      back:{ maxWIn:12, maxHIn:14, topPct:.22, method:'screen print',
+             anchor:'full back — below the hood seam',
+             presets:[
+               {label:'Upper Back', wIn:10, cx:.50, cy:.18},
+               {label:'Full Back',  wIn:12, cx:.50, cy:.50},
+             ]},
+    },
+  },
+  hat: {
+    label:'Hat', garmentWidthIn:8.5,
+    areas:{
+      front:{ maxWIn:5.5, maxHIn:2.25, topPct:.38, method:'embroidery',
+              anchor:'front crown panels, centered',
+              presets:[
+                {label:'Front Panel', wIn:4.5, cx:.50, cy:.50},
+              ]},
+      back:{ maxWIn:4, maxHIn:1.75, topPct:.42, method:'embroidery',
+             anchor:'back arc above the closure',
+             presets:[
+               {label:'Back Arc', wIn:3.5, cx:.50, cy:.50},
+             ]},
+    },
+  },
+  tote: {
+    label:'Tote Bag', garmentWidthIn:16,
+    areas:{
+      front:{ maxWIn:10, maxHIn:10, topPct:.34, method:'screen print',
+              anchor:'centered on the bag face, below the handles',
+              presets:[
+                {label:'Center', wIn:8,  cx:.50, cy:.50},
+                {label:'Full',   wIn:10, cx:.50, cy:.50},
+              ]},
+      back:{ maxWIn:10, maxHIn:10, topPct:.34, method:'screen print',
+             anchor:'centered on the bag face, below the handles',
+             presets:[
+               {label:'Center', wIn:8, cx:.50, cy:.50},
+             ]},
+    },
+  },
+};
+
 let placeSide = 'front';
 
 // ── State ──────────────────────────────────────────────────────────
@@ -2037,6 +2198,7 @@ function defaultPageInfo() {
     frontColors:[], backColors:[],
     printFront:{type:'',dims:'',loc:''},
     printBack:{type:'',dims:'',loc:''},
+    printCategory:'generic',   // placement constraints off by default
     template:1,
   };
 }
@@ -2047,6 +2209,8 @@ let fabricCanvas = null;
 let fabricSide = null;
 let pickerTarget = null;
 let pendingPreset = null;
+let _peBlankImg = null;     // blank garment image inside the logo editor
+let _printGuideRect = null; // dashed printable-area guide (non-interactive)
 
 // Lookbook state
 let lbQueue = [];
@@ -2249,15 +2413,15 @@ async function refreshSyncBadge() {
   if (!dot || !label) return;
   const n = await countUnsynced().catch(()=>0);
   if (n > 0) {
-    dot.style.background = '#f59e0b';
+    dot.style.background = 'var(--amber)';
     label.textContent = `Syncing ${n}…`;
     // Auto-retry — best-effort, swallow errors (the dot stays amber until clear).
     try { await syncToCloud(); } catch (_) {}
     const after = await countUnsynced().catch(()=>0);
-    if (after === 0) { dot.style.background = '#4ade80'; label.textContent = 'All synced'; }
+    if (after === 0) { dot.style.background = 'var(--ac)'; label.textContent = 'All synced'; }
     else             { label.textContent = `${after} pending`; }
   } else {
-    dot.style.background = '#4ade80';
+    dot.style.background = 'var(--ac)';
     label.textContent = 'All synced';
   }
 }
@@ -2405,9 +2569,9 @@ function renderProjectBanner(proj) {
   if (!proj) return;
   const b = document.createElement('div');
   b.id = 'deep-link-banner';
-  b.style.cssText = 'position:sticky;top:0;z-index:50;background:rgba(74,222,128,0.12);border-bottom:1px solid #1a3d2b;color:#4ade80;padding:6px 14px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px';
+  b.style.cssText = 'position:sticky;top:0;z-index:50;background:var(--ac-dim);border-bottom:1px solid var(--ac3);color:var(--ac);padding:6px 14px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px';
   const label = `Saving to Project #${proj.projectNumber || '?'} · ${(proj.companyName || proj.clientName || 'Untitled').replace(/</g,'&lt;')}`;
-  b.innerHTML = `<span>📎</span><span>${label}</span><button onclick="(function(){const u=new URL(window.location.href);u.searchParams.delete('project');window.history.replaceState({},'',u);document.getElementById('deep-link-banner').remove();document.getElementById('f-project').value='';onProjectChange();})()" style="margin-left:auto;background:transparent;border:1px solid rgba(74,222,128,0.5);color:#4ade80;font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer">Clear</button>`;
+  b.innerHTML = `<span>📎</span><span>${label}</span><button onclick="(function(){const u=new URL(window.location.href);u.searchParams.delete('project');window.history.replaceState({},'',u);document.getElementById('deep-link-banner').remove();document.getElementById('f-project').value='';onProjectChange();})()" style="margin-left:auto;background:transparent;border:1px solid var(--ac3);color:var(--ac);font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer">Clear</button>`;
   document.body.insertBefore(b, document.body.firstChild);
 }
 
@@ -2950,6 +3114,146 @@ function updateColorName(side,idx,val){ const arr=side==='front'?state.pages[sta
 function addColor(side){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(arr.length>=12){toast('Max 12 colors');return;} arr.push({hex:'#ffffff',name:''}); renderColorSwatches(side,arr); scheduleUpdate(); }
 function removeColor(side,idx){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; arr.splice(idx,1); renderColorSwatches(side,arr); scheduleUpdate(); }
 
+// ── Logo Editor: print-placement constraints ──────────────────────
+// All of these are no-ops while the Product select is 'generic', so the
+// editor behaves exactly as it always did unless a category is chosen.
+
+// The printable rectangle in editor-canvas pixels (or null when inactive).
+// This is the single inches→pixels conversion point — see PRINT_AREAS.
+function _printAreaRect() {
+  if (!fabricCanvas || !_peBlankImg || !fabricSide) return null;
+  const cat  = document.getElementById('print-category')?.value || 'generic';
+  const spec = PRINT_AREAS[cat];
+  const area = spec && spec.areas && spec.areas[fabricSide];
+  if (!area || !spec.garmentWidthIn) return null;
+  const bL = _peBlankImg.left, bT = _peBlankImg.top;
+  const bW = _peBlankImg.getScaledWidth(), bH = _peBlankImg.getScaledHeight();
+  const ppi = bW / spec.garmentWidthIn;          // pixels per real inch
+  const w = Math.min(area.maxWIn * ppi, bW);
+  let h = area.maxHIn * ppi;
+  const top = bT + bH * area.topPct;
+  if (top + h > bT + bH) h = bT + bH - top;      // keep the box on the garment
+  return { left: bL + (bW - w) / 2, top, width: w, height: h, ppi, area, cat };
+}
+
+// Clamp the logo's scale and position into the active printable rectangle.
+function _clampLogoToPrintArea(logo) {
+  const a = _printAreaRect();
+  if (!a || !logo) return;
+  // 1) Cap size — rotation-aware bounding box may not exceed the area.
+  let br = logo.getBoundingRect(true, true);
+  const f = Math.min(a.width / br.width, a.height / br.height);
+  if (f < 1) {
+    logo.scaleX *= f; logo.scaleY *= f;
+    logo.setCoords();
+    br = logo.getBoundingRect(true, true);
+  }
+  // 2) Keep inside — push the bounding box back into the rectangle.
+  let dx = 0, dy = 0;
+  if (br.left < a.left)                          dx = a.left - br.left;
+  if (br.top  < a.top)                           dy = a.top  - br.top;
+  if (br.left + br.width  > a.left + a.width)    dx = a.left + a.width  - (br.left + br.width);
+  if (br.top  + br.height > a.top  + a.height)   dy = a.top  + a.height - (br.top  + br.height);
+  if (dx || dy) { logo.left += dx; logo.top += dy; logo.setCoords(); }
+}
+
+// Non-blocking size line under the Product select: live inch readout,
+// turns amber when the logo is pinned at the area's max width/height.
+function _updateConstraintInfo(logo) {
+  const el = document.getElementById('print-constraint-info');
+  if (!el) return;
+  const a = _printAreaRect();
+  if (!a) { el.textContent = ''; el.classList.remove('at-max'); return; }
+  if (!logo && fabricCanvas) logo = fabricCanvas.getObjects().find(o => o.selectable !== false);
+  if (!logo) {
+    el.textContent = `Printable area ${a.area.maxWIn}″ × ${a.area.maxHIn}″ · ${a.area.anchor}`;
+    el.classList.remove('at-max');
+    return;
+  }
+  const wIn = logo.getScaledWidth() / a.ppi;
+  const hIn = logo.getScaledHeight() / a.ppi;
+  const atMaxW = wIn >= a.area.maxWIn - .05;
+  const atMaxH = hIn >= a.area.maxHIn - .05;
+  if (atMaxW || atMaxH) {
+    const dim = atMaxW ? 'width' : 'height';
+    const lim = atMaxW ? a.area.maxWIn : a.area.maxHIn;
+    el.textContent = `At the ${lim}″ max ${dim} for ${a.area.method} · logo ${wIn.toFixed(1)}″ × ${hIn.toFixed(1)}″`;
+    el.classList.add('at-max');
+  } else {
+    el.textContent = `Logo ${wIn.toFixed(1)}″ × ${hIn.toFixed(1)}″ · max ${a.area.maxWIn}″ × ${a.area.maxHIn}″ ${a.area.method}`;
+    el.classList.remove('at-max');
+  }
+}
+
+// Dashed guide box showing the printable area (purely visual).
+function _refreshPrintGuide() {
+  if (!fabricCanvas) return;
+  if (_printGuideRect) { fabricCanvas.remove(_printGuideRect); _printGuideRect = null; }
+  const a = _printAreaRect();
+  if (!a) { fabricCanvas.requestRenderAll(); return; }
+  _printGuideRect = new fabric.Rect({
+    left: a.left, top: a.top, width: a.width, height: a.height,
+    fill: 'rgba(184,242,86,.04)',        // --ac at 4% (fabric can't read CSS vars)
+    stroke: '#b8f256', strokeWidth: 1.5, strokeDashArray: [6, 4],
+    selectable: false, evented: false, objectCaching: false,
+  });
+  fabricCanvas.add(_printGuideRect);
+  // Stacking: blank at the very back, guide above it, logo on top.
+  fabricCanvas.sendToBack(_printGuideRect);
+  if (_peBlankImg) fabricCanvas.sendToBack(_peBlankImg);
+  fabricCanvas.requestRenderAll();
+}
+
+// Inch-based quick placements for the active category/side.
+function _renderPrintPresetChips() {
+  const wrap = document.getElementById('print-area-presets');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const a = _printAreaRect();
+  if (!a || !a.area.presets) return;
+  a.area.presets.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pa-chip';
+    b.textContent = `${p.label} ${p.wIn}″`;
+    b.onclick = () => applyPrintAreaPreset(i);
+    wrap.appendChild(b);
+  });
+}
+
+function applyPrintAreaPreset(i) {
+  if (!fabricCanvas) return;
+  const a = _printAreaRect();
+  if (!a) return;
+  const p = a.area.presets && a.area.presets[i];
+  const logo = fabricCanvas.getObjects().find(o => o.selectable !== false);
+  if (!p || !logo) return;
+  logo.set({ angle: 0 });
+  // Size by inch width, capped by both axes of the printable area.
+  let s = (Math.min(p.wIn, a.area.maxWIn) * a.ppi) / logo.width;
+  if ((logo.height * s) / a.ppi > a.area.maxHIn) s = (a.area.maxHIn * a.ppi) / logo.height;
+  logo.set({ scaleX: s, scaleY: s });
+  const w = logo.getScaledWidth(), h = logo.getScaledHeight();
+  logo.set({ left: a.left + a.width * p.cx - w / 2, top: a.top + a.height * p.cy - h / 2 });
+  logo.setCoords();
+  _clampLogoToPrintArea(logo);
+  _updateConstraintInfo(logo);
+  fabricCanvas.setActiveObject(logo);
+  fabricCanvas.requestRenderAll();
+}
+
+function onPrintCategoryChange() {
+  const sel = document.getElementById('print-category');
+  const pg = state.pages[state.currentPage];
+  if (pg && sel) pg.printCategory = sel.value;   // remembered per page
+  _refreshPrintGuide();
+  _renderPrintPresetChips();
+  const logo = fabricCanvas && fabricCanvas.getObjects().find(o => o.selectable !== false);
+  if (logo) _clampLogoToPrintArea(logo);
+  _updateConstraintInfo(logo || null);
+  if (fabricCanvas) fabricCanvas.requestRenderAll();
+}
+
 // ── Logo Editor ───────────────────────────────────────────────────
 function openLogoEditor(side) {
   const pg = state.pages[state.currentPage];
@@ -2959,6 +3263,12 @@ function openLogoEditor(side) {
   if (!logoB64)  { toast('Upload a logo first','error'); return; }
   fabricSide = side;
   document.getElementById('logo-editor-overlay').classList.add('open');
+  // Placement constraints: restore this page's product category (default
+  // 'generic' = no constraints, identical to pre-constraint behavior).
+  const catSel = document.getElementById('print-category');
+  if (catSel) catSel.value = pg.printCategory || 'generic';
+  _peBlankImg = null; _printGuideRect = null;
+  _updateConstraintInfo(null);
   // Size the editor canvas. On phones the modal is full-screen with a
   // sticky footer, so derive available area from the viewport instead of
   // using a fixed % that would overflow.
@@ -2966,7 +3276,7 @@ function openLogoEditor(side) {
   let modalW, modalH;
   if (isMobile) {
     const sideInset = 28;        // 14px L/R padding on the modal
-    const chromeH   = 180;       // title + p + footer + paddings + safe-area
+    const chromeH   = 252;       // title + p + product/constraints bar + footer + paddings + safe-area
     modalW = Math.min(window.innerWidth - sideInset, 620);
     modalH = Math.max(220, Math.min(window.innerHeight - chromeH, modalW * 0.78));
   } else {
@@ -2978,11 +3288,23 @@ function openLogoEditor(side) {
   if (fabricCanvas){ fabricCanvas.dispose(); fabricCanvas=null; }
   fabricCanvas = new fabric.Canvas('logo-editor-canvas',{backgroundColor:'#1c1c1c'});
   fabricCanvas.setWidth(modalW); fabricCanvas.setHeight(modalH);
+  // Live enforcement while dragging/scaling/rotating (no-op for 'generic').
+  const _onLogoChange = e => {
+    const t = e.target;
+    if (t && t.selectable !== false) { _clampLogoToPrintArea(t); _updateConstraintInfo(t); }
+  };
+  fabricCanvas.on('object:moving',   _onLogoChange);
+  fabricCanvas.on('object:scaling',  _onLogoChange);
+  fabricCanvas.on('object:rotating', _onLogoChange);
+  fabricCanvas.on('object:modified', _onLogoChange);
   const posSize = pg[side==='front'?'frontLogoPosSize':'backLogoPosSize'];
   fabric.Image.fromURL(blankB64, blankImg=>{
     const scale=Math.min(modalW/blankImg.width,modalH/blankImg.height)*.93;
     blankImg.set({scaleX:scale,scaleY:scale,selectable:false,evented:false});
     fabricCanvas.centerObject(blankImg); fabricCanvas.add(blankImg);
+    _peBlankImg = blankImg;
+    _refreshPrintGuide();
+    _renderPrintPresetChips();
     fabric.Image.fromURL(logoB64, logoImg=>{
       const preset = pendingPreset;
       pendingPreset = null;
@@ -3005,14 +3327,18 @@ function openLogoEditor(side) {
         fabricCanvas.centerObject(logoImg);
       }
       logoImg.set({lockUniScaling:true});
-      fabricCanvas.add(logoImg); fabricCanvas.setActiveObject(logoImg); fabricCanvas.renderAll();
+      fabricCanvas.add(logoImg); fabricCanvas.setActiveObject(logoImg);
+      _clampLogoToPrintArea(logoImg);   // no-op when category = generic
+      _updateConstraintInfo(logoImg);
+      fabricCanvas.renderAll();
     });
   });
 }
 function confirmLogoPosition() {
   if (!fabricCanvas||!fabricSide) return;
   const objs = fabricCanvas.getObjects();
-  const blankObj = objs.find(o=>o.selectable===false);
+  // _peBlankImg first — the dashed print-area guide is also selectable:false.
+  const blankObj = _peBlankImg || objs.find(o=>o.selectable===false && o!==_printGuideRect);
   const logoObj  = objs.find(o=>o.selectable!==false);
   if (!logoObj) { closeLogoEditor(); return; }
   const pg = state.pages[state.currentPage];
@@ -3060,13 +3386,19 @@ function resetLogoPosition() {
   const logoImg=fabricCanvas.getObjects().find(o=>o.selectable!==false);
   if (!logoImg) return;
   const defScale=Math.min(fabricCanvas.width,fabricCanvas.height)/Math.max(logoImg.width,logoImg.height)*.28;
-  logoImg.set({scaleX:defScale,scaleY:defScale});
-  fabricCanvas.centerObject(logoImg); fabricCanvas.renderAll();
+  logoImg.set({scaleX:defScale,scaleY:defScale,angle:0});
+  fabricCanvas.centerObject(logoImg);
+  _clampLogoToPrintArea(logoImg);
+  _updateConstraintInfo(logoImg);
+  fabricCanvas.renderAll();
 }
 function closeLogoEditor() {
   document.getElementById('logo-editor-overlay').classList.remove('open');
   if (fabricCanvas){fabricCanvas.dispose();fabricCanvas=null;}
   fabricSide=null; pendingPreset=null;
+  _peBlankImg=null; _printGuideRect=null;
+  const info=document.getElementById('print-constraint-info');
+  if(info){info.textContent='';info.classList.remove('at-max');}
 }
 
 // ── PDF Helpers ───────────────────────────────────────────────────
