@@ -43,6 +43,7 @@ import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput,
 import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import PoBuilderDialog from './PoBuilderDialog';
+import FlowPipeline from './FlowPipeline';
 import QuoteBuilder from './QuoteBuilder';
 import config from '../../config.json';
 import jpLogoWhite from '../../modules/images/logo_white.webp';
@@ -1496,6 +1497,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
+
+      {/* The order's journey at a glance — each lit stage is done, the
+          pulsing one is where the project is right now. Quote / Confirmation
+          / PO are shortcuts into their tools. */}
+      <FlowPipeline project={local} authHdr={authHdr}
+        onOpenQuote={onOpenQuote}
+        onOpenConfirmation={onOpenConfirmation}
+        onOpenPos={() => setPoOpen(true)} />
 
       {/* Mockup grid */}
       <Box sx={{ px: 2.5, pt: 2 }}>
