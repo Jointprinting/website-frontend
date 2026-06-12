@@ -150,7 +150,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         // the seeded items in order — so a 3-line quote with 3 mockups in
         // jpstudio comes up with each item pre-attached to its mockup.
         const matchedNums = inferMockupNumsFor(project, mockups);
-        const items = (project.quoteLines || []).map((line, i) =>
+        const items = chosenQuoteLines(project.quoteLines).map((line, i) =>
           ({ ...seedItemFromQuote(line), mockupNum: matchedNums[i] || '' }),
         );
         seed = {
@@ -436,7 +436,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
                 <Button size="small"
                   onClick={() => {
                     const used = new Set(local.items.map(i => i.styleCode + '|' + i.color));
-                    const next = (project.quoteLines || [])
+                    const next = chosenQuoteLines(project.quoteLines)
                       .filter(l => !used.has((l.styleCode || '') + '|' + (l.color || '')))
                       .map(seedItemFromQuote);
                     if (next.length === 0) return;
@@ -1034,6 +1034,17 @@ function inferMockupNumsFor(project, mockups) {
     }
   });
   return out;
+}
+
+// Once the client has picked options, only their accepted lines (plus
+// standalone ungrouped lines and any group added after the pick, which has no
+// accepted line yet) belong on the confirmation — mirrors computeQuoteTotals
+// on the backend.
+function chosenQuoteLines(lines) {
+  const arr = Array.isArray(lines) ? lines : [];
+  if (!arr.some(l => l && l.accepted)) return arr;
+  const decided = new Set(arr.filter(l => l && l.accepted).map(l => l.group));
+  return arr.filter(l => l && (l.accepted || !l.group || !decided.has(l.group)));
 }
 
 function seedItemFromQuote(line) {

@@ -60,7 +60,9 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
   const createPo = async () => {
     setCreating(true);
     try {
-      const r = await axios.post(`${base}/orders/${project._id}/pos`, {}, authHdr);
+      const d = new Date();
+      const localDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = await axios.post(`${base}/orders/${project._id}/pos`, { date: localDay }, authHdr);
       setPos(prev => [r.data, ...prev]);
       setEditing({ ...r.data });
       setDirty(false);
@@ -120,12 +122,17 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
     }
   };
 
-  // Typing a known vendor name pre-fills their contact card.
+  // Typing a known vendor name pre-fills their contact card — but never over
+  // something already typed by hand (correcting a contact then re-touching the
+  // vendor name must not wipe the correction).
   const onVendorName = (name) => {
     const v = vendors.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
     update(v
-      ? { vendorName: name, contactName: v.contactName || '', vendorAddress: v.address || '',
-          shipMethod: editing.shipMethod || v.shipMethod || '', blanksProvided: !!v.blanksProvided }
+      ? { vendorName: name,
+          contactName: editing.contactName || v.contactName || '',
+          vendorAddress: editing.vendorAddress || v.address || '',
+          shipMethod: editing.shipMethod || v.shipMethod || '',
+          blanksProvided: !!v.blanksProvided }
       : { vendorName: name });
   };
 
