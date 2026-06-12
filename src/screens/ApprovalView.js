@@ -376,6 +376,8 @@ export default function ApprovalView() {
             </Typography>
             <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2 }}>
               Pick one option for each product below — all pricing includes printing and shipping.
+              Locking in your picks also signs off the designs shown; if anything needs a tweak first,
+              use &ldquo;Ask a question&rdquo; below.
             </Typography>
             {groupNames.map((g) => (
               <Box key={g} sx={{ mb: 2.5 }}>
@@ -394,6 +396,12 @@ export default function ApprovalView() {
                         {sel
                           ? <CheckCircleOutlineIcon sx={{ color: COLORS.brand, fontSize: 22 }} />
                           : <RadioButtonUncheckedIcon sx={{ color: '#c9c9c2', fontSize: 22 }} />}
+                        {l.image && (
+                          <Box component="img" src={l.image} alt="" loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1,
+                              border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4', flexShrink: 0 }} />
+                        )}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{desc || 'Option'}</Typography>
                           {detail && <Typography sx={{ color: COLORS.muted, fontSize: 12 }}>{detail}</Typography>}
@@ -416,8 +424,14 @@ export default function ApprovalView() {
               <Box sx={{ mb: 2 }}>
                 <Typography sx={{ fontWeight: 800, fontSize: 15, mb: 1 }}>Also in your order</Typography>
                 {standaloneLines.map((l) => (
-                  <Stack key={l.idx} direction="row" justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${COLORS.border}` }}>
-                    <Typography sx={{ fontSize: 13 }}>
+                  <Stack key={l.idx} direction="row" alignItems="center" gap={1.25} justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${COLORS.border}` }}>
+                    {l.image && (
+                      <Box component="img" src={l.image} alt="" loading="lazy"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1,
+                          border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4', flexShrink: 0 }} />
+                    )}
+                    <Typography sx={{ fontSize: 13, flex: 1 }}>
                       {[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
                     </Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
@@ -435,7 +449,7 @@ export default function ApprovalView() {
                 sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 800, textTransform: 'none',
                   px: 3, py: 1.2, fontSize: 14, flex: 2, '&:hover': { bgcolor: '#16352a' } }}>
                 {pickBusy ? <CircularProgress size={18} sx={{ color: '#fff' }} />
-                  : allPicked ? 'Lock in my picks' : 'Pick one option per product'}
+                  : allPicked ? 'Lock in picks & approve designs' : 'Pick one option per product'}
               </Button>
               <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy}
                 sx={{ color: COLORS.text, border: `1px solid ${COLORS.border}`, fontWeight: 700,

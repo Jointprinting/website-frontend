@@ -11,7 +11,7 @@
 // Persists `quoteLines` (incl. per-line setupCost/shippingCost), `shipToState`,
 // and `printerName` on the project via onSave().
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
   Dialog, DialogContent, FormControl, Select, MenuItem,
@@ -19,6 +19,7 @@ import {
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -282,6 +283,69 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   );
 }
 
+// Downscale an uploaded design render to a compact JPEG data URL so quote
+// lines stay light in the order document (vendor renders arrive as multi-MB
+// photos; ~700px is plenty for the approval card and the admin preview).
+function readDesignImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 700;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
+
+// The design the client signs off when picking this line: a studio mockup #
+// and/or an uploaded vendor render (ashtrays etc. have no mockup number).
+function DesignAttach({ line, onPatch, tf }) {
+  const fileRef = useRef(null);
+  return (
+    <QF label="Design (mockup # or image)" sx={{ width: { xs: '100%', sm: 230 } }}>
+      <Stack direction="row" gap={0.75} alignItems="center">
+        <TextField size="small" fullWidth value={line.mockupNum || ''} placeholder="#000061A"
+          onChange={e => onPatch({ mockupNum: e.target.value })} sx={tf} />
+        <input ref={fileRef} type="file" accept="image/*" hidden
+          onChange={async (e) => {
+            const f = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            try { onPatch({ image: await readDesignImage(f) }); }
+            catch (err) { alert(err.message); }
+          }} />
+        {line.image ? (
+          <Box component="img" src={line.image} alt="" title="Click to replace · the client sees this on the option card"
+            onClick={() => fileRef.current?.click()}
+            sx={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.18)' }} />
+        ) : (
+          <IconButton size="small" title="Upload a vendor render (for items with no mockup #)"
+            onClick={() => fileRef.current?.click()}
+            sx={{ color: B.muted, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 1.5,
+              '&:hover': { color: B.green, borderColor: B.green } }}>
+            <ImageOutlinedIcon sx={{ fontSize: 17 }} />
+          </IconButton>
+        )}
+        {line.image && (
+          <IconButton size="small" title="Remove image" onClick={() => onPatch({ image: '' })}
+            sx={{ color: B.muted, p: 0.3, '&:hover': { color: '#f87171' } }}>
+            <CloseIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        )}
+      </Stack>
+    </QF>
+  );
+}
+
 function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
@@ -355,6 +419,7 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
           <TextField size="small" fullWidth type="number" value={line.qty ?? ''}
             onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
         </QF>
+        <DesignAttach line={line} onPatch={onPatch} tf={tf} />
         <IconButton size="small" onClick={onRemove} title="Remove line"
           sx={{ color: B.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
             '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
