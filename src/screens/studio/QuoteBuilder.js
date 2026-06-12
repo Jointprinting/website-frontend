@@ -29,10 +29,24 @@ const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer'
 
 const num = (v) => Number(v) || 0;
 
+// Muted accent hues rotated across line groups so alternative options that
+// belong to the same group read as a set at a glance.
+const GROUP_HUES = [
+  'rgba(125, 211, 252, 0.65)',  // sky
+  'rgba(251, 191, 36, 0.60)',   // amber
+  'rgba(196, 181, 253, 0.65)',  // violet
+  'rgba(94, 234, 212, 0.60)',   // teal
+];
+
 // Margin colour spectrum: 0% → red, ~40% → green. Capped so 50%+ stays green.
 function marginColor(pct) {
   const hue = Math.max(0, Math.min(135, pct * 3.4));   // 0 → red, 40 → ~136 → green
   return `hsl(${hue.toFixed(0)}, 70%, 55%)`;
+}
+// Matching translucent chip background for the profit/margin pills.
+function marginBg(pct) {
+  const hue = Math.max(0, Math.min(135, pct * 3.4));
+  return `hsla(${hue.toFixed(0)}, 70%, 55%, 0.14)`;
 }
 
 // True per-unit cost for a line: blank + print + this option's full setup +
@@ -162,7 +176,25 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     onClose();
   };
 
-  const inkInput  = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
+  const inkInput = {
+    ...darkInput,
+    '& .MuiOutlinedInput-root': {
+      ...darkInput['& .MuiOutlinedInput-root'],
+      borderRadius: 2,
+      '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' },
+    },
+    '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 },
+  };
+
+  // Group accents: only groups shared by 2+ lines get a hue — a lone group
+  // name isn't a "set" yet, so it stays neutral until a sibling appears.
+  const groupNames = [...new Set(lines.map(l => (l.group || '').trim()).filter(Boolean))];
+  const accentFor = (g) => {
+    const name = (g || '').trim();
+    if (!name) return null;
+    if (lines.filter(l => (l.group || '').trim() === name).length < 2) return null;
+    return GROUP_HUES[groupNames.indexOf(name) % GROUP_HUES.length];
+  };
 
   return (
     <Dialog open={open}
@@ -192,14 +224,14 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
         {/* Project-level meta — sticks with the quote so re-quotes don't forget.
             Setup + shipping moved onto each line (each option carries its own). */}
-        <Box sx={{ display: 'grid', gap: 1, mb: 2,
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)' } }}>
+        <Box sx={{ display: 'grid', gap: 1.25, mb: 2.5, maxWidth: 640,
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           <QF label="Ship to (state)">
-            <TextField size="small" value={shipToState} placeholder="PA"
+            <TextField size="small" fullWidth value={shipToState} placeholder="PA"
               onChange={e => setMeta(setShipToState)(e.target.value)} sx={inkInput} />
           </QF>
           <QF label="Printer">
-            <TextField size="small" value={printerName} placeholder="In-house · Heritage · Anchor…"
+            <TextField size="small" fullWidth value={printerName} placeholder="In-house · Heritage · Anchor…"
               onChange={e => setMeta(setPrinterName)(e.target.value)} sx={inkInput} />
           </QF>
         </Box>
@@ -210,21 +242,23 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
             options — the client picks ONE per group on the approval page;
             ungrouped lines are always part of the order. */}
         <datalist id="quote-group-options">
-          {[...new Set(lines.map(l => (l.group || '').trim()).filter(Boolean))].map(g =>
-            <option key={g} value={g} />)}
+          {groupNames.map(g => <option key={g} value={g} />)}
         </datalist>
         {lines.length === 0 ? (
-          <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 6, textAlign: 'center', color: B.muted }}>
+          <Box sx={{ border: '1px dashed rgba(255,255,255,0.14)', borderRadius: 3, py: 6,
+            textAlign: 'center', color: B.muted, bgcolor: 'rgba(255,255,255,0.015)' }}>
             <Typography sx={{ fontSize: 13, mb: 1.5 }}>No quote lines yet.</Typography>
             <Button onClick={addLine} startIcon={<AddCircleOutlineIcon />}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>
+              sx={{ color: B.green, textTransform: 'none', fontWeight: 700, borderRadius: 2,
+                px: 2, transition: 'background-color 0.18s',
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
               Add the first line
             </Button>
           </Box>
         ) : (
           <Stack gap={2}>
             {lines.map((line, i) => (
-              <QuoteLineCard key={i} line={line}
+              <QuoteLineCard key={i} line={line} accent={accentFor(line.group)}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
                 onRemove={() => removeLine(i)} />
@@ -234,7 +268,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
 
         {lines.length > 0 && (
           <Button onClick={addLine} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-            sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mt: 1.5 }}>
+            sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mt: 1.5,
+              borderRadius: 2, px: 1.5, transition: 'background-color 0.18s',
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
             Add line
           </Button>
         )}
@@ -246,13 +282,34 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   );
 }
 
-function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
     '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
   };
-  const tf = { ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
+  const inputRoot = {
+    ...darkInput['& .MuiOutlinedInput-root'],
+    borderRadius: 2,
+    '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' },
+  };
+  const tf = {
+    ...darkInput, ...noSpinner,
+    '& .MuiOutlinedInput-root': inputRoot,
+    '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 },
+  };
+  // The group field reads as a rounded chip so grouped alternatives feel like
+  // a labelled set rather than yet another boxed input.
+  const groupChip = {
+    ...darkInput,
+    '& .MuiOutlinedInput-root': {
+      ...darkInput['& .MuiOutlinedInput-root'],
+      borderRadius: 999,
+      ...(accent ? { '& fieldset': { borderColor: accent, transition: 'border-color 0.18s' } }
+                 : { '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' } }),
+    },
+    '& .MuiInputBase-input': { color: B.white, fontSize: 12.5, py: 0.85, px: 1.75 },
+  };
 
   const qty           = num(line.qty);
   const setupShip     = Math.max(0, num(line.setupCost)) + Math.max(0, num(line.shippingCost));
@@ -268,80 +325,95 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
     : null;
 
   return (
-    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
-      {/* Inputs ordered left-to-right: product · style · qty · print · blank
-          · print$ · setup (full) · ship (full) · COGS / unit. Setup + shipping
-          are the FULL cost for this option; they're spread across its qty in COGS. */}
-      <Box sx={{ p: 1.5, display: 'grid', gap: 1, alignItems: 'end',
-        gridTemplateColumns: {
-          xs: 'repeat(2, 1fr)',
-          sm: 'repeat(3, 1fr)',
-          lg: '110px 1.5fr 96px 64px 1.5fr 88px 88px 88px 88px 84px 36px',
-        } }}>
-        <QF label="Group (client picks 1)">
-          <TextField size="small" value={line.group || ''} placeholder="Bucket Hats"
+    <Box sx={{
+      border: '1px solid rgba(255,255,255,0.07)',
+      // Lines that share a group wear a per-group hue down the left edge so
+      // alternative options are scannable as a set.
+      borderLeft: accent ? `3px solid ${accent}` : '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 3, overflow: 'hidden',
+      bgcolor: 'rgba(255,255,255,0.03)',
+      transition: 'background-color 0.18s',
+      '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+    }}>
+      {/* Line header — what is this option: group chip, product, style, qty */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.75,
+        display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
+        <QF label="Group (client picks 1)" sx={{ width: { xs: '100%', sm: 190 } }}>
+          <TextField size="small" fullWidth value={line.group || ''} placeholder="Bucket Hats"
             inputProps={{ list: 'quote-group-options' }}
-            onChange={e => onPatch({ group: e.target.value })} sx={tf} />
+            onChange={e => onPatch({ group: e.target.value })} sx={groupChip} />
         </QF>
-        <QF label="Product">
-          <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
+        <QF label="Product" sx={{ flex: '1 1 200px', minWidth: 160 }}>
+          <TextField size="small" fullWidth value={line.description || ''} placeholder="T-shirt · black"
             onChange={e => onPatch({ description: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Style">
-          <TextField size="small" value={line.styleCode || ''} placeholder="SS4500"
+        <QF label="Style" sx={{ flex: '1 1 90px', maxWidth: { sm: 130 } }}>
+          <TextField size="small" fullWidth value={line.styleCode || ''} placeholder="SS4500"
             onChange={e => onPatch({ styleCode: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Qty">
-          <TextField size="small" type="number" value={line.qty ?? ''}
+        <QF label="Qty" sx={{ width: 76 }}>
+          <TextField size="small" fullWidth type="number" value={line.qty ?? ''}
             onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Print (type + details)">
-          <Stack direction="row" gap={0.5}>
-            <FormControl size="small" sx={{ ...darkInput, minWidth: 100 }}>
-              <Select value={line.printType || ''} displayEmpty
-                onChange={e => onPatch({ printType: e.target.value })}
-                sx={{ color: B.white, fontSize: 13 }}>
-                <MenuItem value=""><em>—</em></MenuItem>
-                {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <TextField size="small" value={line.printDetails || ''} placeholder="1c front + 2c back"
-              onChange={e => onPatch({ printDetails: e.target.value })} sx={{ ...tf, flex: 1 }} />
-          </Stack>
-        </QF>
-        <QF label="Blank $">
-          <TextField size="small" type="number" value={line.blankCost ?? ''}
-            onChange={e => onPatch({ blankCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Print $">
-          <TextField size="small" type="number" value={line.printCost ?? ''}
-            onChange={e => onPatch({ printCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Setup $ (total)">
-          <TextField size="small" type="number" value={line.setupCost ?? ''}
-            onChange={e => onPatch({ setupCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Ship $ (total)">
-          <TextField size="small" type="number" value={line.shippingCost ?? ''}
-            onChange={e => onPatch({ shippingCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="COGS / unit">
-          <Box sx={{ color: B.white, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', height: 36,
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1,
-            border: `1px solid ${B.border}`, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.04)' }}>
-            {cogsPerUnit > 0 ? fmt(cogsPerUnit) : '—'}
-          </Box>
-        </QF>
-        <IconButton size="small" onClick={onRemove}
-          sx={{ color: B.muted, mb: 0.2, '&:hover': { color: '#f87171' } }}>
+        <IconButton size="small" onClick={onRemove} title="Remove line"
+          sx={{ color: B.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
+            '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
           <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
 
-      {/* Markup tier strip — only the SELECTED tier wears the green; the rest stay neutral */}
-      <Box sx={{ px: 1.5, pb: 0.5 }}>
-        <Stack direction="row" alignItems="baseline" gap={1} mb={0.5} flexWrap="wrap">
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+      {/* Costs row — numeric inputs in consistent columns. Setup + shipping
+          are the FULL cost for this option; they're spread across its qty in COGS. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5, display: 'grid', gap: 1.25, alignItems: 'end',
+        gridTemplateColumns: {
+          xs: 'repeat(2, minmax(0, 1fr))',
+          sm: 'repeat(3, minmax(0, 1fr))',
+          lg: '150px minmax(150px, 1.4fr) repeat(4, minmax(88px, 1fr)) 120px',
+        } }}>
+        <QF label="Print type">
+          <FormControl size="small" fullWidth sx={{ ...darkInput, '& .MuiOutlinedInput-root': inputRoot }}>
+            <Select value={line.printType || ''} displayEmpty
+              onChange={e => onPatch({ printType: e.target.value })}
+              sx={{ color: B.white, fontSize: 13, borderRadius: 2 }}>
+              <MenuItem value=""><em>—</em></MenuItem>
+              {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </QF>
+        <QF label="Print details">
+          <TextField size="small" fullWidth value={line.printDetails || ''} placeholder="1c front + 2c back"
+            onChange={e => onPatch({ printDetails: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Blank $">
+          <TextField size="small" fullWidth type="number" value={line.blankCost ?? ''}
+            onChange={e => onPatch({ blankCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Print $">
+          <TextField size="small" fullWidth type="number" value={line.printCost ?? ''}
+            onChange={e => onPatch({ printCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Setup $ (total)">
+          <TextField size="small" fullWidth type="number" value={line.setupCost ?? ''}
+            onChange={e => onPatch({ setupCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Ship $ (total)">
+          <TextField size="small" fullWidth type="number" value={line.shippingCost ?? ''}
+            onChange={e => onPatch({ shippingCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="COGS / unit">
+          <Box sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace', height: 37,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1.25,
+            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, bgcolor: 'rgba(0,0,0,0.22)' }}>
+            {cogsPerUnit > 0 ? fmt(cogsPerUnit) : '—'}
+          </Box>
+        </QF>
+      </Box>
+
+      {/* Markup tier strip — a segmented control on an inset darker track.
+          Only the SELECTED tier wears the brand green; the rest stay neutral. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
+        <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
+          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase' }}>
             Markup tiers
           </Typography>
           <Typography sx={{ color: B.muted, fontSize: 10 }}>
@@ -350,73 +422,83 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
           </Typography>
         </Stack>
         {cogsPerUnit <= 0 ? (
-          <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, py: 1, textAlign: 'center',
-            color: B.muted, fontSize: 11 }}>
+          <Box sx={{ border: '1px dashed rgba(255,255,255,0.12)', borderRadius: 2.5, py: 1.25,
+            textAlign: 'center', color: B.muted, fontSize: 11 }}>
             Enter a blank or print cost to see pricing tiers.
           </Box>
         ) : (
-          <Box sx={{ overflowX: 'auto', ...scrollbar }}>
-            <Box sx={{ display: 'grid', gap: 0.5,
-              gridTemplateColumns: `repeat(${TIERS.length}, minmax(60px, 1fr))` }}>
-              {TIERS.map(pct => {
-                const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
-                const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
-                const sel = selectedPct === pct;
-                return (
-                  <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
-                    cursor: 'pointer', borderRadius: 1, py: 0.6, textAlign: 'center',
-                    border: `1px solid ${sel ? B.green : B.border}`,
-                    bgcolor: sel ? 'rgba(74,222,128,0.14)' : 'transparent',
-                    transition: 'border-color 0.1s, background 0.1s',
-                    '&:hover': { borderColor: sel ? B.green : '#666' },
-                  }}>
-                    <Typography sx={{ color: sel ? B.green : B.muted, fontSize: 10, fontWeight: 700 }}>
-                      +{pct}%
-                    </Typography>
-                    <Typography sx={{ color: sel ? B.green : B.white, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}>
-                      {fmt(price)}
-                    </Typography>
-                    <Typography sx={{ color: sel ? B.green : B.muted, fontSize: 9, fontWeight: 600, fontFamily: 'monospace', mt: 0.1 }}
-                      title="Profit per unit at this margin">
-                      {fmt(tierProfit)}/u
-                    </Typography>
-                  </Box>
-                );
-              })}
-            </Box>
+          <Box sx={{ bgcolor: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: 2.5, p: 0.5, display: 'flex',
+            overflowX: 'auto', scrollSnapType: 'x proximity', ...scrollbar }}>
+            {TIERS.map(pct => {
+              const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
+              const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
+              const sel = selectedPct === pct;
+              return (
+                <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
+                  cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
+                  py: 0.7, px: 0.5, borderRadius: 1.75, scrollSnapAlign: 'start',
+                  bgcolor: sel ? B.green : 'transparent',
+                  boxShadow: sel ? '0 1px 8px rgba(74,222,128,0.35)' : 'none',
+                  transition: 'background-color 0.18s, box-shadow 0.18s',
+                  '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)' },
+                }}>
+                  <Typography sx={{ color: sel ? 'rgba(12,20,16,0.75)' : B.muted, fontSize: 10, fontWeight: 700,
+                    transition: 'color 0.18s' }}>
+                    +{pct}%
+                  </Typography>
+                  <Typography sx={{ color: sel ? '#0c1410' : B.white, fontSize: 12, fontWeight: 800,
+                    fontFamily: 'monospace', transition: 'color 0.18s' }}>
+                    {fmt(price)}
+                  </Typography>
+                  <Typography sx={{ color: sel ? 'rgba(12,20,16,0.75)' : B.muted, fontSize: 9, fontWeight: 600,
+                    fontFamily: 'monospace', mt: 0.1, transition: 'color 0.18s' }}
+                    title="Profit per unit at this margin">
+                    {fmt(tierProfit)}/u
+                  </Typography>
+                </Box>
+              );
+            })}
           </Box>
         )}
       </Box>
 
-      {/* Committed price + line total + per-unit profit with color-coded margin */}
-      <Box sx={{ px: 1.5, py: 1, mt: 0.5, borderTop: `1px solid ${B.faint}`,
-        display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
+      {/* Committed price footer — unit price, profit/margin chips, line total */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, py: 1.5, borderTop: '1px solid rgba(255,255,255,0.06)',
+        bgcolor: 'rgba(0,0,0,0.15)',
+        display: 'flex', alignItems: 'flex-end', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap' }}>
         <QF label="Unit price">
           <TextField size="small" type="number" value={line.unitPrice ?? ''}
-            onChange={e => onPatch({ unitPrice: e.target.value })} sx={{ ...tf, width: 120 }} />
+            onChange={e => onPatch({ unitPrice: e.target.value })} sx={{ ...tf, width: 130 }} />
         </QF>
         <Box>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
             Profit / unit
           </Typography>
-          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', px: 1.25, py: 0.4,
+            borderRadius: 999, bgcolor: marginBg(marginPct), color: marginCol,
+            fontSize: 12, fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.4,
+            transition: 'background-color 0.18s, color 0.18s' }}>
             {fmt(profit)} · {marginPct.toFixed(0)}%
-          </Typography>
+          </Box>
         </Box>
         <Box>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
             Total profit · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
-          <Typography sx={{ color: marginCol, fontSize: 15, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', px: 1.25, py: 0.4,
+            borderRadius: 999, bgcolor: marginBg(marginPct), color: marginCol,
+            fontSize: 12, fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.4,
+            transition: 'background-color 0.18s, color 0.18s' }}>
             {fmt(profit * qty)}
-          </Typography>
+          </Box>
         </Box>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase' }}>
             Total revenue · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
-          <Typography sx={{ color: B.white, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: B.white, fontSize: 21, fontWeight: 700, letterSpacing: -0.3, fontFamily: 'monospace', lineHeight: 1.3 }}>
             {fmt(lineTotal)}
           </Typography>
         </Box>
@@ -425,10 +507,10 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
   );
 }
 
-function QF({ label, children }) {
+function QF({ label, children, sx }) {
   return (
-    <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.3 }}>
+    <Box sx={sx}>
+      <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.4 }}>
         {label}
       </Typography>
       {children}
