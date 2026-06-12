@@ -205,6 +205,14 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         </Box>
 
         {/* Lines */}
+        {/* Shared datalist so typing a group name autocompletes to ones
+            already used on this quote. Lines sharing a group are alternative
+            options — the client picks ONE per group on the approval page;
+            ungrouped lines are always part of the order. */}
+        <datalist id="quote-group-options">
+          {[...new Set(lines.map(l => (l.group || '').trim()).filter(Boolean))].map(g =>
+            <option key={g} value={g} />)}
+        </datalist>
         {lines.length === 0 ? (
           <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 6, textAlign: 'center', color: B.muted }}>
             <Typography sx={{ fontSize: 13, mb: 1.5 }}>No quote lines yet.</Typography>
@@ -268,8 +276,13 @@ function QuoteLineCard({ line, onPatch, onSelectTier, onRemove }) {
         gridTemplateColumns: {
           xs: 'repeat(2, 1fr)',
           sm: 'repeat(3, 1fr)',
-          lg: '1.6fr 100px 64px 1.6fr 88px 88px 88px 88px 84px 36px',
+          lg: '110px 1.5fr 96px 64px 1.5fr 88px 88px 88px 88px 84px 36px',
         } }}>
+        <QF label="Group (client picks 1)">
+          <TextField size="small" value={line.group || ''} placeholder="Bucket Hats"
+            inputProps={{ list: 'quote-group-options' }}
+            onChange={e => onPatch({ group: e.target.value })} sx={tf} />
+        </QF>
         <QF label="Product">
           <TextField size="small" value={line.description || ''} placeholder="T-shirt · black"
             onChange={e => onPatch({ description: e.target.value })} sx={tf} />

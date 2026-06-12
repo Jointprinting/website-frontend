@@ -572,7 +572,11 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
   const lookedUp = item.mockupNum
     ? (mockupMap[item.mockupNum] || mockupMap[normMockupKey(item.mockupNum)])
     : null;
-  const hasBack = !!(lookedUp && lookedUp.pageState && lookedUp.pageState.backCompositeBase64);
+  // The back composite lives in the library item's top-level `data` slot
+  // (R2 URL in summaries) or, for legacy inline docs, as a server-set
+  // hasBack flag. pageState composites are stripped at sync — reading
+  // backCompositeBase64 here meant this toggle could never appear.
+  const hasBack = !!(lookedUp && (lookedUp.data || lookedUp.hasBack));
   const snapshots = item.mockupSnapshots || [];
 
   return (
@@ -596,13 +600,13 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
         </Typography>
         <Stack direction="row" gap={1} alignItems="center">
           <Select size="small" displayEmpty fullWidth
-            value={item.mockupNum || ''}
+            value={normMockupKey(item.mockupNum || '')}
             onChange={e => onUpdate({ mockupNum: e.target.value, customMockupDataUrl: '' })}
             sx={{ ...darkInput['& .MuiOutlinedInput-root'], color: B.white, fontSize: 12,
               '& .MuiSelect-icon': { color: B.muted } }}>
             <MenuItem value=""><em>— pick one —</em></MenuItem>
             {projectMockups.map(m => (
-              <MenuItem key={m._id} value={m.pageState?.mockupNum || m.name}>
+              <MenuItem key={m._id} value={normMockupKey(m.pageState?.mockupNum || m.name)}>
                 {(m.pageState?.mockupNum || '—')} · {m.name || 'Untitled'}
               </MenuItem>
             ))}
@@ -877,7 +881,9 @@ function InfoRow({ label, value }) {
 function ItemPreview({ idx, item, mockupMap }) {
   const m = item.mockupNum ? (mockupMap[item.mockupNum] || mockupMap[normMockupKey(item.mockupNum)]) : null;
   const frontImg = item.customMockupDataUrl || (m && m.thumbnail);
-  const backImg  = item.showBack && m && m.pageState && m.pageState.backCompositeBase64;
+  // Back composite comes from the library item's `data` slot (see hasBack
+  // above) — pageState composites never survive sync.
+  const backImg  = item.showBack && m && m.data;
   const snapshots = item.mockupSnapshots || [];
   const hasVariants = snapshots.length > 0;
 

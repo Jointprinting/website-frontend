@@ -76,6 +76,9 @@ export default function ApprovalView() {
   const [name, setName] = useState('');          // optional — so we know who on the team acted
   const [email, setEmail] = useState('');        // optional — so we know which email approved
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
+  const [picks, setPicks] = useState({});           // group label -> quote line index
+  const [pickBusy, setPickBusy] = useState(false);
+  const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
 
   // Derived from the server's approvalStatus so reopening the link shows the
   // same locked state for the client every time.
@@ -227,6 +230,52 @@ export default function ApprovalView() {
   const subtotal = itemRows.reduce((s, r) => s + (Number(r.lineTotal) || 0), 0);
   const total = Number(p.totalValue) || subtotal;
 
+  // ── Interactive quote stage ──────────────────────────────────────────────
+  // Lines sharing a `group` are alternative options (3 brands of tee) — the
+  // client picks ONE per group; ungrouped lines are always included. Once a
+  // confirmation exists the picker retires and the confirmation review takes
+  // over. Until then picks can be changed.
+  const groupNames = [...new Set(quoteLines.map(l => l.group).filter(Boolean))];
+  const hasGroups = groupNames.length > 0;
+  const standaloneLines = quoteLines.map((l, i) => ({ ...l, idx: i })).filter(l => !l.group);
+  const alreadyPicked = quoteLines.some(l => l.accepted) || !!p.optionsPickedAt;
+  const stage = (p.hasConfirmation || (Array.isArray(p.confirmation?.items) && p.confirmation.items.length > 0))
+    ? 'confirmation'
+    : !hasGroups
+      ? 'legacy'
+      : approvalStatus !== 'pending'
+        ? 'legacy'   // terminal decision already made — read-only table + status panel
+        : ((alreadyPicked && !repicking) ? 'picked' : 'picker');
+
+  const pickFor = (g) => {
+    if (picks[g] !== undefined) return picks[g];
+    const acc = quoteLines.findIndex(l => l.group === g && l.accepted);
+    return acc >= 0 ? acc : undefined;
+  };
+  const allPicked = groupNames.every(g => pickFor(g) !== undefined);
+
+  const submitPicks = async () => {
+    if (isPreview) { alert("Preview only — this is exactly what your client sees. Picks work on the real link, not in preview."); return; }
+    if (!allPicked) return;
+    setPickBusy(true);
+    try {
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?token=${encodeURIComponent(token)}`,
+        { picks: groupNames.map(g => pickFor(g)), by: name.trim(), email: email.trim() });
+      setRepicking(false);
+      await refresh();
+    } catch (e) {
+      if (e.response?.status === 409) {
+        setLockedNote(e.response.data?.message || '');
+        setRepicking(false);
+        await refresh();
+      } else {
+        alert(e.response?.data?.message || "That didn't go through — please try again, or just reply to our email and we'll take care of it.");
+      }
+    } finally {
+      setPickBusy(false);
+    }
+  };
+
   // Full confirmation (matches the downloadable PDF) when one's been built.
   const conf = p.confirmation || {};
   const confItems = Array.isArray(conf.items) ? conf.items : [];
@@ -242,7 +291,9 @@ export default function ApprovalView() {
     if (snaps.length) return snaps;
     if (it.customMockupDataUrl) return [it.customMockupDataUrl];
     const lib = it.mockupNum ? mockupByNum[_norm(it.mockupNum)] : null;
-    return lib ? [lib.front, lib.back].filter(Boolean) : [];   // front + back when the mockup has both
+    // Back side only when the admin opted in on the item (showBack) — matches
+    // the builder preview and the PDF.
+    return lib ? [lib.front, it.showBack ? lib.back : null].filter(Boolean) : [];
   };
 
   return (
@@ -316,7 +367,111 @@ export default function ApprovalView() {
 
         {/* Order details — the full confirmation (matches the downloadable PDF)
             when one's been built; otherwise the simpler quote table. */}
-        {hasConf ? (
+        {stage === 'picker' ? (
+          <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
+            <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Your options
+            </Typography>
+            <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2 }}>
+              Pick one option for each product below — all pricing includes printing and shipping.
+            </Typography>
+            {groupNames.map((g) => (
+              <Box key={g} sx={{ mb: 2.5 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: 15, mb: 1 }}>{g}</Typography>
+                <Stack gap={1}>
+                  {quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g).map((l) => {
+                    const sel = pickFor(g) === l.idx;
+                    const unit = Number(l.unitPrice) || 0;
+                    const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
+                    const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
+                    return (
+                      <Box key={l.idx} onClick={() => setPicks(prev => ({ ...prev, [g]: l.idx }))}
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5,
+                          cursor: 'pointer', border: `2px solid ${sel ? COLORS.brandH : COLORS.border}`,
+                          bgcolor: sel ? '#f4fdf7' : '#fff', transition: 'border-color 150ms ease, background 150ms ease' }}>
+                        {sel
+                          ? <CheckCircleOutlineIcon sx={{ color: COLORS.brand, fontSize: 22 }} />
+                          : <RadioButtonUncheckedIcon sx={{ color: '#c9c9c2', fontSize: 22 }} />}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{desc || 'Option'}</Typography>
+                          {detail && <Typography sx={{ color: COLORS.muted, fontSize: 12 }}>{detail}</Typography>}
+                        </Box>
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Typography sx={{ fontWeight: 800, fontSize: 14, color: COLORS.brand }}>
+                            {money(unit)}<Typography component="span" sx={{ color: COLORS.muted, fontSize: 11, fontWeight: 500 }}>/unit</Typography>
+                          </Typography>
+                          <Typography sx={{ color: COLORS.muted, fontSize: 11 }}>
+                            {Number(l.qty) || 0} units · {money((Number(l.qty) || 0) * unit)}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            ))}
+            {standaloneLines.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: 15, mb: 1 }}>Also in your order</Typography>
+                {standaloneLines.map((l) => (
+                  <Stack key={l.idx} direction="row" justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${COLORS.border}` }}>
+                    <Typography sx={{ fontSize: 13 }}>
+                      {[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
+                    </Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
+                  </Stack>
+                ))}
+              </Box>
+            )}
+            {lockedNote && (
+              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#fff8e1', border: '1px solid #fde68a' }}>
+                <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
+              </Box>
+            )}
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1.5, mt: 1 }}>
+              <TextField fullWidth size="small" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Your name (optional)" />
+              <TextField fullWidth size="small" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="Your email (optional)" />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+              <Button fullWidth disabled={pickBusy || !allPicked} onClick={submitPicks} variant="contained"
+                sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 800, textTransform: 'none',
+                  px: 3, py: 1.2, fontSize: 14, flex: 2, '&:hover': { bgcolor: '#16352a' } }}>
+                {pickBusy ? <CircularProgress size={18} sx={{ color: '#fff' }} />
+                  : allPicked ? 'Lock in my picks' : 'Pick one option per product'}
+              </Button>
+              <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy}
+                sx={{ color: COLORS.text, border: `1px solid ${COLORS.border}`, fontWeight: 700,
+                  textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1,
+                  '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
+                Ask a question
+              </Button>
+            </Stack>
+          </Box>
+        ) : stage === 'picked' ? (
+          <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+            <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Got your picks — thank you!</Typography>
+            <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2 }}>
+              We&apos;re putting your confirmation page together now. You&apos;ll get an email when it&apos;s ready to review and approve right here.
+            </Typography>
+            <Box sx={{ maxWidth: 420, mx: 'auto', textAlign: 'left', mb: 2 }}>
+              {quoteLines.filter(l => l.accepted || !l.group).map((l, i) => (
+                <Stack key={i} direction="row" justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${COLORS.border}` }}>
+                  <Typography sx={{ fontSize: 13 }}>
+                    {l.group ? `${l.group}: ` : ''}{[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
+                  </Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
+                </Stack>
+              ))}
+            </Box>
+            <Button size="small" onClick={() => setRepicking(true)}
+              sx={{ color: COLORS.muted, textTransform: 'none', fontSize: 12, textDecoration: 'underline' }}>
+              Change my picks
+            </Button>
+          </Box>
+        ) : stage === 'confirmation' ? (
           <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 4 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
             <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5 }}>
               Order details
@@ -433,7 +588,9 @@ export default function ApprovalView() {
         )}
 
         {/* Action panel — locked once the client has either approved OR
-            requested changes, so the link stays consistent on every reload. */}
+            requested changes, so the link stays consistent on every reload.
+            Hidden during the pick stage (the picker has its own actions). */}
+        {(stage === 'confirmation' || stage === 'legacy' || approvalStatus !== 'pending') && (
         <Box sx={{ bgcolor: COLORS.panel, p: { xs: 2.5, md: 3 }, borderRadius: 2, mt: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.06)' }}>
           {approvalStatus === 'requested_changes' ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
@@ -496,6 +653,7 @@ export default function ApprovalView() {
             </>
           )}
         </Box>
+        )}
       </Box>
 
       <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth>

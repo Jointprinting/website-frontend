@@ -1176,6 +1176,19 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         }}>
           {meta.label}
         </Box>
+        {/* Client picked their quote options — needs a confirmation built.
+            Only meaningful pre-confirmation; the status chip takes over after. */}
+        {project.status === 'quoted' && project.optionsPickedAt && !hasConfirmation(project.confirmation) && (
+          <Box sx={{
+            position: 'absolute', top: 34, right: 8,
+            bgcolor: 'rgba(74,222,128,0.18)', color: B.green,
+            px: 1, py: 0.3, borderRadius: 1,
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+            border: `1px solid ${B.green}40`,
+          }}>
+            PICKED ✓
+          </Box>
+        )}
         {/* Payment badge: PAID > PROCESSING > nothing.
             Set by the QuickBooks sync — open balance → PROCESSING,
             Balance 0 → PAID. Manual checkbox in the drawer still works. */}
