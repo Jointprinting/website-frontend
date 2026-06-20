@@ -833,6 +833,7 @@ export default function OrderTracker({ token, onBack }) {
       <QuoteBuilder
         open={!!quote}
         project={quote}
+        authHdr={authHdr}
         onClose={() => setQuote(null)}
         onSave={async (patch) => {
           if (!quote) return null;
