@@ -20,8 +20,10 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
+import CalculateOutlinedIcon   from '@mui/icons-material/CalculateOutlined';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
+import PricingLookupDialog from './PricingLookupDialog';
 
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
@@ -69,7 +71,7 @@ function emptyLine() {
   };
 }
 
-export default function QuoteBuilder({ open, project, onClose, onSave }) {
+export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }) {
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
   const [printerName,  setPrinterName]  = useState('');
@@ -260,6 +262,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <Stack gap={2}>
             {lines.map((line, i) => (
               <QuoteLineCard key={i} line={line} accent={accentFor(line.group)}
+                authHdr={authHdr} printerName={printerName}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
                 onRemove={() => removeLine(i)} />
@@ -346,7 +349,8 @@ function DesignAttach({ line, onPatch, tf }) {
   );
 }
 
-function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, accent, authHdr, printerName, onPatch, onSelectTier, onRemove }) {
+  const [lookupOpen, setLookupOpen] = useState(false);
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -425,6 +429,16 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
             '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
           <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
         </IconButton>
+      </Box>
+
+      {/* One click pulls this line's print + setup cost from the printer's matrix */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button size="small" startIcon={<CalculateOutlinedIcon sx={{ fontSize: 15 }} />}
+          onClick={() => setLookupOpen(true)}
+          sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
+            '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
+          Look up printer price
+        </Button>
       </Box>
 
       {/* Costs row — numeric inputs in consistent columns. Setup + shipping
@@ -568,6 +582,9 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
           </Typography>
         </Box>
       </Box>
+
+      <PricingLookupDialog open={lookupOpen} authHdr={authHdr} defaultPrinter={printerName} line={line}
+        onApply={(patch) => onPatch(patch)} onClose={() => setLookupOpen(false)} />
     </Box>
   );
 }
