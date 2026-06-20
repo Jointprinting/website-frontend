@@ -1070,7 +1070,7 @@ function seedItemFromQuote(line) {
     styleCode: line.styleCode || '',
     printType: line.printType || '',
     color:     line.color || '',
-    printerName: line.supplier ? '' : '',
+    printerName: line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
     sizes:     DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: Number(line.unitPrice) || 0 })),
   };
