@@ -266,6 +266,22 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
               </PF>
             </Box>
 
+            {/* Due date + proof toggle — optional, print only when set */}
+            <Box sx={{ display: 'grid', gap: 1, mb: 1.5, gridTemplateColumns: { xs: '1fr', md: '180px 1fr' }, alignItems: 'end' }}>
+              <PF label="Due / in-hands date">
+                <TextField size="small" type="date"
+                  value={editing.dueDate ? String(editing.dueDate).slice(0, 10) : ''}
+                  onChange={e => update({ dueDate: e.target.value ? new Date(`${e.target.value}T00:00:00Z`).toISOString() : null })}
+                  sx={inkInput} />
+              </PF>
+              <FormControlLabel sx={{ ml: 0.5, mb: 0.4 }}
+                control={<Switch size="small" checked={!!editing.proofRequired}
+                  onChange={e => update({ proofRequired: e.target.checked })} />}
+                label={<Typography sx={{ color: B.muted, fontSize: 12 }}>
+                  Proof required before production
+                </Typography>} />
+            </Box>
+
             {/* Shipping block */}
             <SectionLabel>Shipping info</SectionLabel>
             <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
