@@ -14,16 +14,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControl, Select, MenuItem,
+  Dialog, DialogContent, FormControl, Select, MenuItem, CircularProgress,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
 import CalculateOutlinedIcon   from '@mui/icons-material/CalculateOutlined';
+import CloudDownloadOutlinedIcon from '@mui/icons-material/CloudDownloadOutlined';
+import axios from 'axios';
+import config from '../../config.json';
 import { B, scrollbar, darkInput, fmt } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import PricingLookupDialog from './PricingLookupDialog';
+
+const apiBase = `${config.backendUrl}/api`;
 
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
@@ -351,6 +356,26 @@ function DesignAttach({ line, onPatch, tf }) {
 
 function QuoteLineCard({ line, accent, authHdr, printerName, onPatch, onSelectTier, onRemove }) {
   const [lookupOpen, setLookupOpen] = useState(false);
+  const [blankBusy, setBlankBusy] = useState(false);
+  const [blankNote, setBlankNote] = useState('');
+  const [blankErr,  setBlankErr]  = useState(false);
+
+  // Pull the averaged non-discounted S–2XL blank cost from S&S onto this line.
+  const pullBlank = async () => {
+    const style = (line.styleCode || '').trim();
+    if (!style) { setBlankErr(true); setBlankNote('Enter a style code first'); return; }
+    setBlankBusy(true); setBlankNote(''); setBlankErr(false);
+    try {
+      const r = await axios.get(`${apiBase}/rate-cards/blank-price`, { ...authHdr, params: { style } });
+      const d = r.data || {};
+      onPatch({ blankCost: d.average });
+      setBlankNote(`avg S–2XL ${fmt(d.average)}${d.missing && d.missing.length ? ` · no ${d.missing.join('/')}` : ''}`);
+    } catch (e) {
+      setBlankErr(true);
+      setBlankNote(e.response?.data?.message || 'Not found on S&S');
+    } finally { setBlankBusy(false); }
+  };
+
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -431,8 +456,21 @@ function QuoteLineCard({ line, accent, authHdr, printerName, onPatch, onSelectTi
         </IconButton>
       </Box>
 
-      {/* One click pulls this line's print + setup cost from the printer's matrix */}
-      <Box sx={{ px: { xs: 1.5, md: 2 }, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* One-click helpers: pull the blank cost from S&S, and the print + setup
+          cost from the printer's matrix, straight onto this line. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, display: 'flex', alignItems: 'center',
+        justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+        {blankNote && (
+          <Typography sx={{ color: blankErr ? '#fbbf24' : B.muted, fontSize: 10.5 }}>{blankNote}</Typography>
+        )}
+        <Button size="small" disabled={blankBusy} onClick={pullBlank}
+          startIcon={blankBusy
+            ? <CircularProgress size={12} sx={{ color: B.muted }} />
+            : <CloudDownloadOutlinedIcon sx={{ fontSize: 15 }} />}
+          sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
+            '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
+          Pull blank $
+        </Button>
         <Button size="small" startIcon={<CalculateOutlinedIcon sx={{ fontSize: 15 }} />}
           onClick={() => setLookupOpen(true)}
           sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
