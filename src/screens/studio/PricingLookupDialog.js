@@ -39,6 +39,7 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
   const [quantity, setQuantity]       = useState(num(line && line.qty) || 12);
   const [numLocations, setNumLocations] = useState(1);
   const [addOns, setAddOns]   = useState([]);
+  const [areaSqIn, setAreaSqIn] = useState(40);
 
   const [result, setResult] = useState(null);
   const [err, setErr]       = useState('');
@@ -84,6 +85,7 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
   const columnAxis = activeGroup?.columnAxis || 'none';
   const columns = useMemo(() => activeGroup?.columns || [], [activeGroup]);
   const perLocation = !!activeGroup?.perLocation;
+  const areaPriced = !!activeGroup?.areaPriced;
   useEffect(() => {
     if (columnAxis === 'imprint_size' && columns.length && !columns.find((c) => c.key === imprintSize)) setImprintSize(columns[0].key);
   }, [columnAxis, columns]); // eslint-disable-line
@@ -96,7 +98,7 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
     const t = setTimeout(() => {
       const input = {
         printerName: printer, method, quantity: num(quantity), numLocations: num(numLocations),
-        numColors: num(numColors), stitchCount: num(stitchCount), imprintSize, sides,
+        numColors: num(numColors), stitchCount: num(stitchCount), imprintSize, sides, areaSqIn: num(areaSqIn),
         garmentShade: selectorDim === 'garment_shade' ? sel : undefined,
         product: selectorDim === 'product' ? sel : undefined,
         selectedAddOns: addOns,
@@ -106,7 +108,7 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
         .catch((e) => { if (!cancel) { setResult(null); setErr(e.response?.data?.message || e.message); } });
     }, 300);
     return () => { cancel = true; clearTimeout(t); };
-  }, [open, printer, method, sel, numColors, stitchCount, imprintSize, sides, quantity, numLocations, addOns, card]); // eslint-disable-line
+  }, [open, printer, method, sel, numColors, stitchCount, imprintSize, sides, quantity, numLocations, areaSqIn, addOns, card]); // eslint-disable-line
 
   const apply = () => {
     if (!result || !result.ok) return;
@@ -216,6 +218,12 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
                     <TextField size="small" type="number" fullWidth value={quantity}
                       onChange={(e) => setQuantity(e.target.value)} sx={ink} />
                   </PF>
+                  {areaPriced && (
+                    <PF label="Design area (sq in)">
+                      <TextField size="small" type="number" fullWidth value={areaSqIn}
+                        onChange={(e) => setAreaSqIn(e.target.value)} sx={ink} />
+                    </PF>
+                  )}
                   {perLocation && (
                     <PF label="# locations">
                       <TextField size="small" type="number" fullWidth value={numLocations}
