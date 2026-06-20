@@ -64,6 +64,8 @@ import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
 import BackupTab from './studio/BackupTab';
+import RateCardEditor from './studio/RateCardEditor';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import JpLoader from '../common/JpLoader';
 
@@ -1933,6 +1935,7 @@ const HUB_GROUPS = [
       { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
+      { id: 'pricing',     label: 'Printer Pricing', desc: 'Edit printer cost matrices',           Icon: RequestQuoteOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
@@ -2255,6 +2258,10 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'backup') {
     return <BackupTab token={token} onBack={() => setView('hub')} />;
+  }
+
+  if (view === 'pricing') {
+    return <RateCardEditor token={token} onBack={() => setView('hub')} />;
   }
 
   return (
