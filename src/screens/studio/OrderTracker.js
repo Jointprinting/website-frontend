@@ -3,7 +3,7 @@
 // with its mockup thumbnails as the hero image. Click a card to drill into the
 // full project view with inline editing.
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
@@ -2120,18 +2120,28 @@ function ReadonlyField({ label, value, hint }) {
 // dedicated quoter (not built yet).
 function ItemsEditor({ items, onChange, onCommit, saving }) {
   const list = items && items.length > 0 ? items : [];
+  // onChange updates parent state asynchronously, so the `list` a blur handler
+  // closes over can trail the last keystroke. Track the freshest array in a ref
+  // and commit THAT on blur, so the final edit is never dropped. Reset whenever
+  // the parent supplies a new array (a blur with no fresh edit commits `list`).
+  const draftRef = useRef(null);
+  useEffect(() => { draftRef.current = null; }, [items]);
 
   const update = (i, patch) => {
     const next = list.map((x, idx) => idx === i ? { ...x, ...patch } : x);
+    draftRef.current = next;
     onChange(next);
   };
+  const commit = () => onCommit(draftRef.current || list);
   const remove = (i) => {
     const next = list.filter((_, idx) => idx !== i);
+    draftRef.current = next;
     onChange(next);
     onCommit(next);
   };
   const add = () => {
     const next = [...list, { description: '', qty: 1, unitPrice: 0 }];
+    draftRef.current = next;
     onChange(next);
   };
 
@@ -2173,11 +2183,11 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
               borderTop: `1px solid ${B.faint}` }}>
               <TextField size="small" type="number" value={it.qty || ''}
                 onChange={e => update(i, { qty: e.target.value })}
-                onBlur={() => onCommit(list)}
+                onBlur={commit}
                 sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
               <TextField size="small" value={it.description || ''}
                 onChange={e => update(i, { description: e.target.value })}
-                onBlur={() => onCommit(list)}
+                onBlur={commit}
                 placeholder="50 Bella+Canvas 3001, Black, screen print"
                 sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4 } }} />
               <IconButton size="small" onClick={() => remove(i)}
