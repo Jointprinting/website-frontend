@@ -66,6 +66,8 @@ import OrderTracker from './studio/OrderTracker';
 import BackupTab from './studio/BackupTab';
 import RateCardEditor from './studio/RateCardEditor';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import FinancesTab from './studio/FinancesTab';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import JpLoader from '../common/JpLoader';
 
@@ -1936,6 +1938,7 @@ const HUB_GROUPS = [
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
       { id: 'pricing',     label: 'Printer Pricing', desc: 'Edit printer cost matrices',           Icon: RequestQuoteOutlinedIcon },
+      { id: 'finances',    label: 'Finances',      desc: 'P&L, margins, expenses',                 Icon: PaidOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
@@ -2262,6 +2265,10 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'pricing') {
     return <RateCardEditor token={token} onBack={() => setView('hub')} />;
+  }
+
+  if (view === 'finances') {
+    return <FinancesTab token={token} onBack={() => setView('hub')} />;
   }
 
   return (
