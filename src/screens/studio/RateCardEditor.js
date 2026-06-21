@@ -128,6 +128,19 @@ export default function RateCardEditor({ token, onBack }) {
             {card.notes && (
               <Typography sx={{ color: B.muted, fontSize: 11.5, fontStyle: 'italic' }}>{card.notes}</Typography>
             )}
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', border: `1px solid ${B.border}`, borderRadius: 2, p: 1.25 }}>
+              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Reliability</Typography>
+              <FormControl size="small" sx={{ ...darkInput, minWidth: 120 }}>
+                <Select value={card.rating || 0}
+                  onChange={(e) => { setCard((p) => ({ ...clone(p), rating: e.target.value })); setDirty(true); }}
+                  sx={{ color: B.white, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: B.muted } }}>
+                  {[0, 1, 2, 3, 4, 5].map((r) => <MenuItem key={r} value={r}>{r ? '★'.repeat(r) : 'Unrated'}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <input value={card.reliabilityNotes || ''} placeholder="Notes — quality, turnaround, issues…"
+                onChange={(e) => { setCard((p) => ({ ...clone(p), reliabilityNotes: e.target.value })); setDirty(true); }}
+                style={{ flex: 1, minWidth: 200, background: 'rgba(0,0,0,0.25)', color: B.white, border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6, padding: '7px 9px', fontSize: 12, outline: 'none' }} />
+            </Box>
             {(card.groups || []).map((g, gi) => (
               <Box key={g.id || gi} sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
                 <Box sx={{ px: 1.5, py: 1, borderBottom: `1px solid ${B.faint || 'rgba(255,255,255,0.06)'}`, display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>

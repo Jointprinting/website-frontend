@@ -90,6 +90,7 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
   // nexus — so warn if the chosen printer sits in the ship-to state.
   const nexusRisk = !!(card && card.state && shipToState &&
     card.state.toUpperCase().includes(String(shipToState).trim().toUpperCase()));
+  const pinfo = printers.find((p) => p.printerName === printer) || {};
   useEffect(() => {
     if (columnAxis === 'imprint_size' && columns.length && !columns.find((c) => c.key === imprintSize)) setImprintSize(columns[0].key);
   }, [columnAxis, columns]); // eslint-disable-line
@@ -172,6 +173,13 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
                 </FormControl>
               </PF>
             </Box>
+
+            {printer && (
+              <Typography sx={{ color: B.muted, fontSize: 11, mt: -0.5 }}>
+                {pinfo.orderCount ? `${pinfo.orderCount} order${pinfo.orderCount === 1 ? '' : 's'} run here` : 'New printer — no orders yet'}
+                {pinfo.rating ? ` · ${'★'.repeat(pinfo.rating)}${'☆'.repeat(5 - pinfo.rating)}` : ''}
+              </Typography>
+            )}
 
             {nexusRisk && (
               <Box sx={{ border: '1px solid #fbbf24', borderRadius: 1.5, p: 1, bgcolor: 'rgba(251,191,36,0.10)', display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
