@@ -1,23 +1,32 @@
 // src/screens/studio/FinancesTab.js
 //
-// The finance tracker UI: P&L, %-of-spend by category, and per-order margins —
-// the analytics that replace the manual spreadsheet + QuickBooks re-keying.
-// Reads the deterministic /api/finances reports. Load history once by importing
-// the JP Ledger CSV; export anytime for your accountant.
+// The finance tracker UI: P&L, %-of-spend by category, per-order margins, and a
+// transactions log where each entry can carry its stored receipt/invoice. Pay a
+// bill → "Add" → upload the receipt + enter the ACTUAL amount → it files the
+// receipt and books the cost into the ledger + analytics in one step (replacing
+// the manual "download invoice → personal Drive" habit). Reads /api/finances.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem, CircularProgress,
+  Dialog, DialogContent, TextField,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import axios from 'axios';
 import config from '../../config.json';
-import { B, scrollbar } from './_shared';
+import { B, darkInput, scrollbar } from './_shared';
 
 const base = `${config.backendUrl}/api`;
 const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const CATEGORIES = [
+  'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
+  'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
+];
 const CAT_COLOR = {
   'Blank COGS': '#60a5fa', 'Printer COGS': '#a78bfa', 'Shipping': '#2dd4bf', 'Art': '#f472b6',
   'Commission': '#fbbf24', 'Software': '#f97316', 'Owner Draw': '#9ca3af', 'Sales Tax': '#ef4444',
@@ -29,18 +38,21 @@ export default function FinancesTab({ token, onBack }) {
   const [year, setYear]       = useState(new Date().getFullYear());
   const [summary, setSummary] = useState(null);
   const [orders, setOrders]   = useState([]);
+  const [txns, setTxns]       = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
+  const [showAdd, setShowAdd] = useState(false);
   const fileRef = useRef(null);
 
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o] = await Promise.all([
+      const [s, o, t] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
+        axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
       ]);
-      setSummary(s.data); setOrders(o.data.orders || []);
+      setSummary(s.data); setOrders(o.data.orders || []); setTxns(t.data.transactions || []);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -62,27 +74,33 @@ export default function FinancesTab({ token, onBack }) {
     try {
       const csv = await file.text();
       const r = await axios.post(`${base}/finances/import`, { csv }, authHdr);
-      setBusy(`Imported ${r.data.imported} rows ✓`);
-      await load();
+      setBusy(`Imported ${r.data.imported} rows ✓`); await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  };
+  const addTxn = async (form) => {
+    await axios.post(`${base}/finances/transactions`, form, authHdr);
+    setShowAdd(false); await load();
   };
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
+  const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: B.panel, borderBottom: `1px solid ${B.border}`,
-        px: { xs: 2, md: 3 }, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        px: { xs: 2, md: 3 }, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
         <Button onClick={onBack} startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />} size="small"
           sx={{ textTransform: 'none', color: B.muted, fontWeight: 600, minWidth: 'auto', px: 1, fontSize: 12,
             '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
         <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Finances</Typography>
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
-        <FormControl size="small" sx={{ minWidth: 96 }}>
+        <Button onClick={() => setShowAdd(true)} size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Add</Button>
+        <FormControl size="small" sx={{ minWidth: 90 }}>
           <Select value={year} onChange={(e) => setYear(e.target.value)}
             sx={{ color: B.white, fontSize: 13, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.04)', '& .MuiSvgIcon-root': { color: B.muted } }}>
             {[2024, 2025, 2026, 2027].map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
-            <MenuItem value="">All years</MenuItem>
+            <MenuItem value="">All</MenuItem>
           </Select>
         </FormControl>
         <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
@@ -96,18 +114,19 @@ export default function FinancesTab({ token, onBack }) {
       <Box sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
         {loading ? (
           <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
-        ) : !summary || (summary.income === 0 && summary.expense === 0) ? (
+        ) : empty ? (
           <Box sx={{ border: '1px dashed rgba(255,255,255,0.14)', borderRadius: 3, py: 6, textAlign: 'center', color: B.muted }}>
             <Typography sx={{ fontSize: 13, mb: 1 }}>No transactions for {year || 'any year'} yet.</Typography>
-            <Button onClick={() => fileRef.current?.click()} startIcon={<FileUploadOutlinedIcon />}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>
-              Import your JP Ledger CSV
-            </Button>
-            <Typography sx={{ fontSize: 11, mt: 1 }}>From the ledger Sheet: File → Download → CSV, then upload here.</Typography>
+            <Stack direction="row" gap={1} justifyContent="center">
+              <Button onClick={() => fileRef.current?.click()} startIcon={<FileUploadOutlinedIcon />}
+                sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>Import ledger CSV</Button>
+              <Button onClick={() => setShowAdd(true)} startIcon={<AddCircleOutlineIcon />}
+                sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>Add one</Button>
+            </Stack>
+            <Typography sx={{ fontSize: 11, mt: 1 }}>From the ledger Sheet: File → Download → CSV, then import here.</Typography>
           </Box>
         ) : (
           <Stack gap={2.5}>
-            {/* P&L summary cards */}
             <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
               <Stat label="Revenue" value={money(summary.income)} color={B.white} />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
@@ -120,11 +139,8 @@ export default function FinancesTab({ token, onBack }) {
               </Typography>
             )}
 
-            {/* Where the money goes */}
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>
-                Where the money goes
-              </Typography>
+              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>Where the money goes</Typography>
               <Stack gap={1}>
                 {expenses.map(([cat, amt]) => {
                   const pct = summary.pctOfSpend?.[cat] || 0;
@@ -143,25 +159,20 @@ export default function FinancesTab({ token, onBack }) {
               </Stack>
             </Box>
 
-            {/* Per-order margins */}
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>
-                Profit by order ({orders.length})
-              </Typography>
+              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Profit by order ({orders.length})</Typography>
               <Box sx={{ overflowX: 'auto', ...scrollbar }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="thead">
                     <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
                       <Box component="th" sx={{ textAlign: 'left !important' }}>Order</Box>
                       <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
-                      <Box component="th">Revenue</Box><Box component="th">Cost</Box>
-                      <Box component="th">Profit</Box><Box component="th">Margin</Box>
+                      <Box component="th">Revenue</Box><Box component="th">Cost</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
                     </Box>
                   </Box>
                   <Box component="tbody">
                     {orders.map((o) => (
-                      <Box component="tr" key={o.orderNumber} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)',
-                        '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                      <Box component="tr" key={o.orderNumber} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
                         <Box component="td" sx={{ textAlign: 'left !important', color: B.muted }}>#{o.orderNumber}</Box>
                         <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
                         <Box component="td" sx={{ color: B.white }}>{money(o.revenue)}</Box>
@@ -174,10 +185,126 @@ export default function FinancesTab({ token, onBack }) {
                 </Box>
               </Box>
             </Box>
+
+            {/* Transactions log + receipts */}
+            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
+              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Transactions ({txns.length})</Typography>
+              <Box sx={{ maxHeight: 460, overflowY: 'auto', ...scrollbar }}>
+                <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <Box component="tbody">
+                    {txns.slice().reverse().map((t) => (
+                      <Box component="tr" key={t._id} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{new Date(t.date).toISOString().slice(0, 10)}</Box>
+                        <Box component="td" sx={{ py: 0.6, px: 0.5 }}>
+                          <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
+                            color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
+                            {t.category}
+                          </Box>
+                        </Box>
+                        <Box component="td" sx={{ py: 0.6, px: 1, color: B.white, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {t.party || t.description}{t.orderNumber ? <Box component="span" sx={{ color: B.muted }}> · #{t.orderNumber}</Box> : null}
+                        </Box>
+                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', color: t.type === 'income' ? B.green : '#f87171' }}>
+                          {t.type === 'income' ? '+' : '−'}{money(t.amount)}
+                        </Box>
+                        <Box component="td" sx={{ py: 0.6, px: 1, width: 28, textAlign: 'center' }}>
+                          {t.receiptUrl
+                            ? <a href={t.receiptUrl} target="_blank" rel="noreferrer" title="View receipt" style={{ color: B.green, display: 'inline-flex' }}><ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} /></a>
+                            : null}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
           </Stack>
         )}
       </Box>
+
+      {showAdd && <AddTxnDialog onClose={() => setShowAdd(false)} onSave={addTxn} />}
     </Box>
+  );
+}
+
+function AddTxnDialog({ onClose, onSave }) {
+  const [type, setType] = useState('expense');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [category, setCategory] = useState('Printer COGS');
+  const [amount, setAmount] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [party, setParty] = useState('');
+  const [description, setDescription] = useState('');
+  const [receiptName, setReceiptName] = useState('');
+  const [receiptDataUrl, setReceiptDataUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const pickReceipt = (file) => {
+    if (!file) return;
+    setReceiptName(file.name);
+    const r = new FileReader();
+    r.onload = () => setReceiptDataUrl(r.result);
+    r.readAsDataURL(file);
+  };
+  const save = async () => {
+    if (!amount || Number(amount) <= 0) { setErr('Enter an amount'); return; }
+    setSaving(true); setErr('');
+    try {
+      await onSave({ type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, receiptDataUrl });
+    } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
+  };
+
+  const fld = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 } };
+  const sel = { color: B.white, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: B.muted } };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Add transaction</Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Stack gap={1.25}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+            <FormControl size="small" sx={fld}>
+              <Select value={type} onChange={(e) => { setType(e.target.value); setCategory(e.target.value === 'income' ? 'Customer Sales' : 'Printer COGS'); }} sx={sel}>
+                <MenuItem value="expense">Expense</MenuItem>
+                <MenuItem value="income">Income</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField size="small" type="date" value={date} onChange={(e) => setDate(e.target.value)} sx={fld} />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1 }}>
+            <FormControl size="small" sx={fld}>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} sx={sel}>
+                {CATEGORIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField size="small" type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} sx={fld} />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+            <TextField size="small" placeholder={type === 'income' ? 'Client' : 'Vendor'} value={party} onChange={(e) => setParty(e.target.value)} sx={fld} />
+            <TextField size="small" placeholder="Order #" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} sx={fld} />
+          </Box>
+          <TextField size="small" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} sx={fld} />
+          <Button component="label" startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ color: receiptName ? B.green : B.muted, textTransform: 'none', justifyContent: 'flex-start', fontSize: 12, border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 0.75 }}>
+            {receiptName || 'Attach receipt / invoice (image or PDF)'}
+            <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
+          </Button>
+          {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
+          <Stack direction="row" justifyContent="flex-end" gap={1}>
+            <Button size="small" onClick={onClose} sx={{ color: B.muted, textTransform: 'none' }}>Cancel</Button>
+            <Button size="small" variant="contained" disabled={saving} onClick={save}
+              sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 800, '&:hover': { bgcolor: B.green } }}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
   );
 }
 
