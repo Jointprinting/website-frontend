@@ -24,7 +24,7 @@ const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c)
 const METHOD_LABEL = { screen_print: 'Screen print', embroidery: 'Embroidery', dtg: 'DTG', dtf: 'DTF', media: 'Media', personalization: 'Personalization' };
 const PRINT_TYPE_FOR = { screen_print: 'Screen Print', dtg: 'DTG', dtf: 'DTF', embroidery: 'Embroidery' };
 
-export default function PricingLookupDialog({ open, authHdr, defaultPrinter, line, onApply, onClose }) {
+export default function PricingLookupDialog({ open, authHdr, defaultPrinter, line, shipToState, onApply, onClose }) {
   const [printers, setPrinters] = useState([]);
   const [printer, setPrinter]   = useState('');
   const [card, setCard]         = useState(null);
@@ -86,6 +86,10 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
   const columns = useMemo(() => activeGroup?.columns || [], [activeGroup]);
   const perLocation = !!activeGroup?.perLocation;
   const areaPriced = !!activeGroup?.areaPriced;
+  // Joint Printing ships to clients from OUT of their state to avoid sales-tax
+  // nexus — so warn if the chosen printer sits in the ship-to state.
+  const nexusRisk = !!(card && card.state && shipToState &&
+    card.state.toUpperCase().includes(String(shipToState).trim().toUpperCase()));
   useEffect(() => {
     if (columnAxis === 'imprint_size' && columns.length && !columns.find((c) => c.key === imprintSize)) setImprintSize(columns[0].key);
   }, [columnAxis, columns]); // eslint-disable-line
@@ -168,6 +172,15 @@ export default function PricingLookupDialog({ open, authHdr, defaultPrinter, lin
                 </FormControl>
               </PF>
             </Box>
+
+            {nexusRisk && (
+              <Box sx={{ border: '1px solid #fbbf24', borderRadius: 1.5, p: 1, bgcolor: 'rgba(251,191,36,0.10)', display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+                <WarningAmberOutlinedIcon sx={{ fontSize: 15, color: '#fbbf24', mt: 0.1 }} />
+                <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>
+                  {printer} is in {card.state} — same as the ship-to state ({shipToState}). Shipping in-state can create sales-tax nexus; consider an out-of-state printer.
+                </Typography>
+              </Box>
+            )}
 
             {loadingCard ? (
               <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={20} sx={{ color: B.green }} /></Box>

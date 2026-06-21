@@ -267,7 +267,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
           <Stack gap={2}>
             {lines.map((line, i) => (
               <QuoteLineCard key={i} line={line} accent={accentFor(line.group)}
-                authHdr={authHdr} printerName={printerName}
+                authHdr={authHdr} printerName={printerName} shipToState={shipToState}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
                 onRemove={() => removeLine(i)} />
@@ -354,7 +354,7 @@ function DesignAttach({ line, onPatch, tf }) {
   );
 }
 
-function QuoteLineCard({ line, accent, authHdr, printerName, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, accent, authHdr, printerName, shipToState, onPatch, onSelectTier, onRemove }) {
   const [lookupOpen, setLookupOpen] = useState(false);
   const [blankBusy, setBlankBusy] = useState(false);
   const [blankNote, setBlankNote] = useState('');
@@ -622,6 +622,7 @@ function QuoteLineCard({ line, accent, authHdr, printerName, onPatch, onSelectTi
       </Box>
 
       <PricingLookupDialog open={lookupOpen} authHdr={authHdr} defaultPrinter={printerName} line={line}
+        shipToState={shipToState}
         onApply={(patch) => onPatch(patch)} onClose={() => setLookupOpen(false)} />
     </Box>
   );
