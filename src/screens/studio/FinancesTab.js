@@ -39,20 +39,26 @@ export default function FinancesTab({ token, onBack }) {
   const [summary, setSummary] = useState(null);
   const [orders, setOrders]   = useState([]);
   const [txns, setTxns]       = useState([]);
+  const [months, setMonths]   = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [editTxn, setEditTxn] = useState(null);
   const fileRef = useRef(null);
 
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t] = await Promise.all([
+      const [s, o, t, m, c] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
+        axios.get(`${base}/finances/by-month`, { ...authHdr, params: { year } }),
+        axios.get(`${base}/finances/by-client`, { ...authHdr, params: { year } }),
       ]);
       setSummary(s.data); setOrders(o.data.orders || []); setTxns(t.data.transactions || []);
+      setMonths(m.data.months || []); setClients(c.data.clients || []);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -80,6 +86,15 @@ export default function FinancesTab({ token, onBack }) {
   const addTxn = async (form) => {
     await axios.post(`${base}/finances/transactions`, form, authHdr);
     setShowAdd(false); await load();
+  };
+  const saveTxn = async (form) => {
+    await axios.put(`${base}/finances/transactions/${editTxn._id}`, form, authHdr);
+    setEditTxn(null); await load();
+  };
+  const deleteTxn = async () => {
+    if (!window.confirm('Delete this transaction?')) return;
+    await axios.delete(`${base}/finances/transactions/${editTxn._id}`, authHdr);
+    setEditTxn(null); await load();
   };
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
@@ -142,6 +157,8 @@ export default function FinancesTab({ token, onBack }) {
               </Typography>
             )}
 
+            <MonthlyTrend months={months} />
+
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
               <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>Where the money goes</Typography>
               <Stack gap={1}>
@@ -161,6 +178,8 @@ export default function FinancesTab({ token, onBack }) {
                 })}
               </Stack>
             </Box>
+
+            <TopClients clients={clients} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
               <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Profit by order ({orders.length})</Typography>
@@ -196,7 +215,8 @@ export default function FinancesTab({ token, onBack }) {
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="tbody">
                     {txns.slice().reverse().map((t) => (
-                      <Box component="tr" key={t._id} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                      <Box component="tr" key={t._id} onClick={() => setEditTxn(t)}
+                        sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
                         <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{new Date(t.date).toISOString().slice(0, 10)}</Box>
                         <Box component="td" sx={{ py: 0.6, px: 0.5 }}>
                           <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
@@ -212,7 +232,7 @@ export default function FinancesTab({ token, onBack }) {
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, width: 28, textAlign: 'center' }}>
                           {t.receiptUrl
-                            ? <a href={t.receiptUrl} target="_blank" rel="noreferrer" title="View receipt" style={{ color: B.green, display: 'inline-flex' }}><ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} /></a>
+                            ? <a href={t.receiptUrl} target="_blank" rel="noreferrer" title="View receipt" onClick={(e) => e.stopPropagation()} style={{ color: B.green, display: 'inline-flex' }}><ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} /></a>
                             : null}
                         </Box>
                       </Box>
@@ -225,19 +245,92 @@ export default function FinancesTab({ token, onBack }) {
         )}
       </Box>
 
-      {showAdd && <AddTxnDialog onClose={() => setShowAdd(false)} onSave={addTxn} />}
+      {showAdd && <TxnDialog onClose={() => setShowAdd(false)} onSave={addTxn} />}
+      {editTxn && <TxnDialog txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
     </Box>
   );
 }
 
-function AddTxnDialog({ onClose, onSave }) {
-  const [type, setType] = useState('expense');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [category, setCategory] = useState('Printer COGS');
-  const [amount, setAmount] = useState('');
-  const [orderNumber, setOrderNumber] = useState('');
-  const [party, setParty] = useState('');
-  const [description, setDescription] = useState('');
+function MonthlyTrend({ months }) {
+  if (!months || months.length === 0) return null;
+  const max = Math.max(1, ...months.map((m) => Math.max(m.income, Math.abs(m.net))));
+  return (
+    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
+      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly trend</Typography>
+        <Stack direction="row" gap={1.5}>
+          <Legend color="rgba(255,255,255,0.22)" label="Revenue" />
+          <Legend color={B.green} label="Profit" />
+        </Stack>
+      </Stack>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', overflowX: 'auto', ...scrollbar, pb: 0.5 }}>
+        {months.map((m) => {
+          const [y, mo] = m.month.split('-');
+          const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short' });
+          return (
+            <Box key={m.month} sx={{ minWidth: 36, flexShrink: 0, textAlign: 'center' }}
+              title={`${label} ${y} · revenue ${money(m.income)} · profit ${money(m.net)}`}>
+              <Box sx={{ height: 92, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (m.income / max) * 100)}%` }} />
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: m.net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(m.net) / max) * 100)}%` }} />
+              </Box>
+              <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4 }}>{label}</Typography>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+function Legend({ color, label }) {
+  return (
+    <Stack direction="row" gap={0.5} alignItems="center">
+      <Box sx={{ width: 9, height: 9, borderRadius: 0.5, bgcolor: color }} />
+      <Typography sx={{ fontSize: 10, color: B.muted }}>{label}</Typography>
+    </Stack>
+  );
+}
+
+function TopClients({ clients }) {
+  if (!clients || clients.length === 0) return null;
+  return (
+    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
+      <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Top clients ({clients.length})</Typography>
+      <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+              <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
+              <Box component="th">Orders</Box><Box component="th">Revenue</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {clients.slice(0, 20).map((c) => (
+              <Box component="tr" key={c.client} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.client}</Box>
+                <Box component="td" sx={{ color: B.muted }}>{c.orders}</Box>
+                <Box component="td" sx={{ color: B.white }}>{money(c.revenue)}</Box>
+                <Box component="td" sx={{ color: c.profit >= 0 ? B.green : '#f87171' }}>{money(c.profit)}</Box>
+                <Box component="td" sx={{ color: c.margin >= 0 ? B.green : '#f87171' }}>{c.margin}%</Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function TxnDialog({ txn, onClose, onSave, onDelete }) {
+  const edit = !!txn;
+  const [type, setType] = useState(txn?.type || 'expense');
+  const [date, setDate] = useState(txn ? new Date(txn.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [category, setCategory] = useState(txn?.category || 'Printer COGS');
+  const [amount, setAmount] = useState(txn ? String(txn.amount) : '');
+  const [orderNumber, setOrderNumber] = useState(txn?.orderNumber || '');
+  const [party, setParty] = useState(txn?.party || '');
+  const [description, setDescription] = useState(txn?.description || '');
   const [receiptName, setReceiptName] = useState('');
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
   const [saving, setSaving] = useState(false);
@@ -253,19 +346,20 @@ function AddTxnDialog({ onClose, onSave }) {
   const save = async () => {
     if (!amount || Number(amount) <= 0) { setErr('Enter an amount'); return; }
     setSaving(true); setErr('');
-    try {
-      await onSave({ type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, receiptDataUrl });
-    } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
+    const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description };
+    if (receiptDataUrl) form.receiptDataUrl = receiptDataUrl;
+    try { await onSave(form); } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
   };
 
   const fld = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 } };
   const sel = { color: B.white, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: B.muted } };
+  const hasReceipt = !!(txn && txn.receiptUrl);
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
       <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Add transaction</Typography>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>{edit ? 'Edit transaction' : 'Add transaction'}</Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>
@@ -292,13 +386,21 @@ function AddTxnDialog({ onClose, onSave }) {
             <TextField size="small" placeholder="Order #" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} sx={fld} />
           </Box>
           <TextField size="small" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} sx={fld} />
+          {hasReceipt && !receiptDataUrl && (
+            <a href={txn.receiptUrl} target="_blank" rel="noreferrer" style={{ color: B.green, fontSize: 12, textDecoration: 'none' }}>
+              View attached receipt ↗
+            </a>
+          )}
           <Button component="label" startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
             sx={{ color: receiptName ? B.green : B.muted, textTransform: 'none', justifyContent: 'flex-start', fontSize: 12, border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 0.75 }}>
-            {receiptName || 'Attach receipt / invoice (image or PDF)'}
+            {receiptName || (hasReceipt ? 'Replace receipt' : 'Attach receipt / invoice (image or PDF)')}
             <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
           </Button>
           {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
-          <Stack direction="row" justifyContent="flex-end" gap={1}>
+          <Stack direction="row" justifyContent="flex-end" gap={1} alignItems="center">
+            {edit && onDelete && (
+              <Button size="small" onClick={onDelete} sx={{ color: '#f87171', textTransform: 'none', mr: 'auto', '&:hover': { bgcolor: 'rgba(248,113,113,0.08)' } }}>Delete</Button>
+            )}
             <Button size="small" onClick={onClose} sx={{ color: B.muted, textTransform: 'none' }}>Cancel</Button>
             <Button size="small" variant="contained" disabled={saving} onClick={save}
               sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 800, '&:hover': { bgcolor: B.green } }}>
