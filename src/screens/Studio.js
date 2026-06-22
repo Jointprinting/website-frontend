@@ -64,8 +64,6 @@ import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
 import BackupTab from './studio/BackupTab';
-import RateCardEditor from './studio/RateCardEditor';
-import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import FinancesTab from './studio/FinancesTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import ReceiptsTab from './studio/ReceiptsTab';
@@ -1939,7 +1937,6 @@ const HUB_GROUPS = [
       { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
-      { id: 'pricing',     label: 'Printer Pricing', desc: 'Edit printer cost matrices',           Icon: RequestQuoteOutlinedIcon },
       { id: 'finances',    label: 'Finances',      desc: 'P&L, margins, expenses',                 Icon: PaidOutlinedIcon },
       { id: 'receipts',    label: 'Receipts',      desc: 'Scan a receipt, book the cost',          Icon: DocumentScannerOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
@@ -2264,10 +2261,6 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'backup') {
     return <BackupTab token={token} onBack={() => setView('hub')} />;
-  }
-
-  if (view === 'pricing') {
-    return <RateCardEditor token={token} onBack={() => setView('hub')} />;
   }
 
   if (view === 'finances') {
