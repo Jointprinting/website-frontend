@@ -85,16 +85,20 @@ export default function ReceiptsTab({ token, onBack }) {
   }, [active, load]);
 
   const upload = async (files) => {
-    if (!files || !files.length) return;
+    const arr = files ? [...files] : [];
+    if (!arr.length) return;
     const fd = new FormData();
-    [...files].forEach((f) => fd.append('files', f));
-    setBusy('Uploading…');
+    arr.forEach((f) => fd.append('files', f));
+    setBusy(`Uploading ${arr.length} file${arr.length === 1 ? '' : 's'}…`);
     try {
-      const r = await axios.post(`${base}/receipts/batch`, fd, authHdr);
+      const r = await axios.post(`${base}/receipts/batch`, fd, { ...authHdr, timeout: 180000 });
       const skipped = (r.data.skipped || []).length;
-      setBusy(`Queued ${r.data.created} receipt${r.data.created === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped} non-receipt` : ''} ✓`);
-      await load();
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+      setBusy(`Queued ${r.data.created} receipt${r.data.created === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''} ✓`);
+    } catch (e) {
+      setBusy(e.response?.data?.message || e.message || 'Upload failed');
+    } finally {
+      await load();   // surface whatever landed, even if the request errored/timed out
+    }
   };
 
   const reprocess = async (id) => {
@@ -145,7 +149,7 @@ export default function ReceiptsTab({ token, onBack }) {
           </Select>
         </FormControl>
         <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf,.heic,.heif,.zip" multiple hidden
-          onChange={(e) => { const fs = e.target.files; e.target.value = ''; upload(fs); }} />
+          onChange={(e) => { const fs = [...e.target.files]; e.target.value = ''; upload(fs); }} />
         <Button onClick={() => fileRef.current?.click()} size="small" variant="contained"
           startIcon={<CloudUploadOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 800, fontSize: 12,
