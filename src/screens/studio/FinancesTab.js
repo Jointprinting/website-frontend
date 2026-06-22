@@ -177,7 +177,7 @@ export default function FinancesTab({ token, onBack }) {
                 <ErrorOutlineIcon sx={{ color: '#fbbf24', mt: 0.2 }} />
                 <Box>
                   <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 14 }}>
-                    Merch is in the red — −{money(Math.abs(summary.net))} {year || 'overall'}
+                    Merch is in the red — −{money(Math.abs(summary.net))} {year ? `in ${year}` : 'overall'}
                   </Typography>
                   <Typography sx={{ color: B.muted, fontSize: 12 }}>
                     No single order lost money, but costs are outpacing real merch sales.
