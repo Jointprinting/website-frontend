@@ -133,9 +133,12 @@ export default function FinancesTab({ token, onBack }) {
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
               <Stat label="Margin" value={`${summary.margin}%`} color={summary.margin >= 0 ? B.green : '#f87171'} />
             </Box>
-            {summary.ownerContribution > 0 && (
+            {(summary.ownerContribution > 0 || summary.ownerDraw > 0) && (
               <Typography sx={{ color: B.muted, fontSize: 11, mt: -1 }}>
-                + {money(summary.ownerContribution)} owner contribution (equity, not counted in profit)
+                {summary.ownerContribution > 0 && <>+ {money(summary.ownerContribution)} owner contribution</>}
+                {summary.ownerContribution > 0 && summary.ownerDraw > 0 && ' · '}
+                {summary.ownerDraw > 0 && <>− {money(summary.ownerDraw)} owner draw (you paid yourself)</>}
+                {' '}— equity, not counted in profit
               </Typography>
             )}
 
