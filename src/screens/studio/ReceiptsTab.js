@@ -17,6 +17,7 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -132,11 +133,22 @@ export default function ReceiptsTab({ token, onBack }) {
   // the file, no new charges) so a big back-catalog clears in one click; only
   // the unmatched stay for manual review.
   const bulkLink = async () => {
-    if (!window.confirm('Sort these out — link receipts that match your ledger (attaches the file, no new charge) and book obvious new overhead (software / fees / travel). Job costs and anything unclear stay for review. Continue?')) return;
-    setBusy('Sorting…');
+    if (!window.confirm('Attach each receipt to the matching expense already in your ledger (no new charges — your ledger stays the source of truth). Anything without a match stays in review. Continue?')) return;
+    setBusy('Linking…');
     try {
       const r = await axios.post(`${base}/receipts/bulk-reconcile`, {}, authHdr);
-      setBusy(`Linked ${r.data.linked} · booked ${r.data.booked || 0} new · ${r.data.unmatched} left to review ✓`);
+      setBusy(`Linked ${r.data.linked} · ${r.data.unmatched} left to review ✓`);
+      await load();
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  };
+  // Undo the receipt booking: remove every ledger entry that came from a receipt
+  // and clear all receipts, restoring the imported spreadsheet ledger exactly.
+  const resetAll = async () => {
+    if (!window.confirm('START OVER — delete every ledger entry created from a receipt and clear all receipts, restoring your imported ledger exactly (your Finances numbers go back to normal). Continue?')) return;
+    setBusy('Resetting…');
+    try {
+      const r = await axios.post(`${base}/receipts/reset`, {}, authHdr);
+      setBusy(`Reset ✓ — removed ${r.data.deletedTransactions} receipt entries, cleared ${r.data.deletedReceipts} receipts`);
       await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
@@ -172,7 +184,7 @@ export default function ReceiptsTab({ token, onBack }) {
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
         <Button onClick={bulkLink} size="small" startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
-          Auto-sort
+          Link matches
         </Button>
         <Button onClick={runReconcile} size="small" startIcon={<FactCheckOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
@@ -181,6 +193,10 @@ export default function ReceiptsTab({ token, onBack }) {
         <Button onClick={clearAll} size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: '#f87171' } }}>
           Clear all
+        </Button>
+        <Button onClick={resetAll} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: '#f87171' } }}>
+          Reset ledger
         </Button>
         <FormControl size="small" sx={{ minWidth: 84 }}>
           <Select value={year} displayEmpty onChange={(e) => setYear(e.target.value)}
@@ -321,13 +337,14 @@ function ReviewDialog({ rec, authHdr, orders = [], onClose, onChanged }) {
   const [date, setDate] = useState(toDateInput(e0.date));
   const [amount, setAmount] = useState(e0.amount != null ? String(e0.amount) : '');
   const [category, setCategory] = useState(EXPENSE_CATEGORIES.includes(e0.category) ? e0.category : 'Other');
-  const [orderNumber, setOrderNumber] = useState(e0.orderNumber || '');
+  const [orderNumber, setOrderNumber] = useState('');  // blank by default — a receipt's printed # is the supplier's invoice #, not one of our order #s
   const [summary, setSummary] = useState(e0.summary || '');
+  const [kind, setKind] = useState(e0.kind === 'refund' ? 'refund' : 'charge');
   const [saving, setSaving] = useState('');
   const [err, setErr] = useState('');
   const [dup, setDup] = useState(null);
 
-  const payload = () => ({ vendor, date, amount: Number(amount), category, orderNumber, summary });
+  const payload = () => ({ vendor, date, amount: Number(amount), category, orderNumber, summary, kind });
 
   const book = async (force = false) => {
     if (!amount || Number(amount) <= 0) { setErr('Enter an amount.'); return; }
@@ -378,7 +395,15 @@ function ReviewDialog({ rec, authHdr, orders = [], onClose, onChanged }) {
 
           {/* fields */}
           <Stack gap={1.5}>
-            <Field label="Vendor (who you paid)"><TextField value={vendor} onChange={(e) => setVendor(e.target.value)} size="small" fullWidth sx={darkInput} /></Field>
+            <Field label="Vendor"><TextField value={vendor} onChange={(e) => setVendor(e.target.value)} size="small" fullWidth sx={darkInput} /></Field>
+            <Field label="Type">
+              <FormControl size="small" fullWidth sx={darkInput}>
+                <Select value={kind} onChange={(ev) => setKind(ev.target.value)}>
+                  <MenuItem value="charge">Charge — money out (expense)</MenuItem>
+                  <MenuItem value="refund">Credit / refund — money back (income)</MenuItem>
+                </Select>
+              </FormControl>
+            </Field>
             <Stack direction="row" gap={1.5}>
               <Field label="Amount (total charged)"><TextField value={amount} onChange={(e) => setAmount(e.target.value)} size="small" fullWidth sx={darkInput}
                 InputProps={{ startAdornment: <Typography sx={{ color: B.muted, mr: 0.5 }}>$</Typography> }} /></Field>
