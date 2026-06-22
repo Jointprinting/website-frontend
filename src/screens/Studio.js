@@ -66,8 +66,6 @@ import OrderTracker from './studio/OrderTracker';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
-import ReceiptsTab from './studio/ReceiptsTab';
-import DocumentScannerOutlinedIcon from '@mui/icons-material/DocumentScannerOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import JpLoader from '../common/JpLoader';
 
@@ -1938,7 +1936,6 @@ const HUB_GROUPS = [
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
       { id: 'finances',    label: 'Finances',      desc: 'P&L, margins, expenses',                 Icon: PaidOutlinedIcon },
-      { id: 'receipts',    label: 'Receipts',      desc: 'Scan a receipt, book the cost',          Icon: DocumentScannerOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
@@ -2265,9 +2262,6 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} />;
-  }
-  if (view === 'receipts') {
-    return <ReceiptsTab token={token} onBack={() => setView('hub')} />;
   }
 
   return (
