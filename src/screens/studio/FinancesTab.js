@@ -245,8 +245,8 @@ export default function FinancesTab({ token, onBack }) {
         )}
       </Box>
 
-      {showAdd && <TxnDialog onClose={() => setShowAdd(false)} onSave={addTxn} />}
-      {editTxn && <TxnDialog txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
+      {showAdd && <TxnDialog token={token} onClose={() => setShowAdd(false)} onSave={addTxn} />}
+      {editTxn && <TxnDialog token={token} txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
     </Box>
   );
 }
@@ -322,7 +322,7 @@ function TopClients({ clients }) {
   );
 }
 
-function TxnDialog({ txn, onClose, onSave, onDelete }) {
+function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
   const edit = !!txn;
   const [type, setType] = useState(txn?.type || 'expense');
   const [date, setDate] = useState(txn ? new Date(txn.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
@@ -333,15 +333,44 @@ function TxnDialog({ txn, onClose, onSave, onDelete }) {
   const [description, setDescription] = useState(txn?.description || '');
   const [receiptName, setReceiptName] = useState('');
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   const pickReceipt = (file) => {
     if (!file) return;
     setReceiptName(file.name);
+    setScanNote('');
     const r = new FileReader();
-    r.onload = () => setReceiptDataUrl(r.result);
+    r.onload = () => {
+      setReceiptDataUrl(r.result);
+      // On a NEW entry, let the AI read the receipt and pre-fill what it can —
+      // you review + correct the rest. Best-effort: any failure (no API key,
+      // unreadable file) just leaves the file attached for manual entry. We
+      // never auto-fill on an edit, so it can't clobber values you already have.
+      if (!edit) scanReceipt(r.result);
+    };
     r.readAsDataURL(file);
+  };
+
+  const scanReceipt = async (dataUrl) => {
+    setScanning(true); setErr('');
+    try {
+      const authHdr = { headers: { Authorization: `Bearer ${token}` } };
+      const res = await axios.post(`${base}/receipts/scan`, { dataUrl }, authHdr);
+      const f = res.data && res.data.configured && res.data.fields;
+      if (!f) { setScanning(false); return; }
+      if (f.type) { setType(f.type); setCategory(f.category || (f.type === 'income' ? 'Customer Sales' : 'Other')); }
+      if (f.party) setParty(f.party);
+      if (f.amount !== '' && f.amount != null) setAmount(String(f.amount));
+      if (f.date) setDate(f.date);
+      if (f.orderNumber) setOrderNumber(f.orderNumber);
+      if (f.description) setDescription(f.description);
+      setScanNote('Auto-filled from the receipt — double-check it before saving.');
+    } catch (_) {
+      // leave fields as-is; the receipt is still attached for manual entry
+    } finally { setScanning(false); }
   };
   const save = async () => {
     if (!amount || Number(amount) <= 0) { setErr('Enter an amount'); return; }
@@ -391,18 +420,25 @@ function TxnDialog({ txn, onClose, onSave, onDelete }) {
               View attached receipt ↗
             </a>
           )}
-          <Button component="label" startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
+          <Button component="label" disabled={scanning}
+            startIcon={scanning ? <CircularProgress size={14} sx={{ color: B.green }} /> : <ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
             sx={{ color: receiptName ? B.green : B.muted, textTransform: 'none', justifyContent: 'flex-start', fontSize: 12, border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 0.75 }}>
-            {receiptName || (hasReceipt ? 'Replace receipt' : 'Attach receipt / invoice (image or PDF)')}
+            {scanning ? 'Reading receipt…' : (receiptName || (hasReceipt ? 'Replace receipt' : 'Attach receipt / invoice (image or PDF)'))}
             <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
           </Button>
+          {!edit && !receiptName && (
+            <Typography sx={{ color: B.muted, fontSize: 10.5, mt: -0.4 }}>
+              Attach a receipt and the AI fills in vendor, amount, date &amp; category for you.
+            </Typography>
+          )}
+          {scanNote && <Typography sx={{ color: B.green, fontSize: 11 }}>{scanNote}</Typography>}
           {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
           <Stack direction="row" justifyContent="flex-end" gap={1} alignItems="center">
             {edit && onDelete && (
               <Button size="small" onClick={onDelete} sx={{ color: '#f87171', textTransform: 'none', mr: 'auto', '&:hover': { bgcolor: 'rgba(248,113,113,0.08)' } }}>Delete</Button>
             )}
             <Button size="small" onClick={onClose} sx={{ color: B.muted, textTransform: 'none' }}>Cancel</Button>
-            <Button size="small" variant="contained" disabled={saving} onClick={save}
+            <Button size="small" variant="contained" disabled={saving || scanning} onClick={save}
               sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 800, '&:hover': { bgcolor: B.green } }}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
