@@ -101,10 +101,6 @@ export default function OrderTracker({ token, onBack }) {
   const [selectMode,  setSelectMode]  = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkSaving,  setBulkSaving]  = useState(false);
-  const [qbOpen,      setQbOpen]      = useState(false);
-  const [qbStatus,    setQbStatus]    = useState(null);
-  const [qbLoading,   setQbLoading]   = useState(false);
-  const [qbBusy,      setQbBusy]      = useState(false);
   const [moreAnchor,  setMoreAnchor]  = useState(null);
   const [shareDialog, setShareDialog] = useState({
     open: false, projectId: null, ttl: 7, emails: '',
@@ -514,46 +510,6 @@ export default function OrderTracker({ token, onBack }) {
     }
   };
 
-  const loadQbStatus = async () => {
-    setQbLoading(true);
-    try {
-      const r = await axios.get(`${base}/quickbooks/status`, authHdr);
-      setQbStatus(r.data);
-    } catch (e) {
-      setQbStatus({ configured: false, connected: false, error: e.message });
-    } finally { setQbLoading(false); }
-  };
-  const handleOpenQb = async () => { setQbOpen(true); await loadQbStatus(); };
-  const handleQbConnect = async () => {
-    try {
-      const r = await axios.get(`${base}/quickbooks/connect`, authHdr);
-      window.open(r.data.url, '_blank', 'width=720,height=820');
-    } catch (e) {
-      alert(`Couldn't start QuickBooks connect: ${e.response?.data?.message || e.message}`);
-    }
-  };
-  const handleQbSync = async () => {
-    setQbBusy(true);
-    try {
-      const r = await axios.post(`${base}/quickbooks/sync`, {}, authHdr);
-      await loadProjects();
-      await loadQbStatus();
-      const s = r.data;
-      alert(`QuickBooks sync complete.\nInvoices checked: ${s.invoicesChecked}\nMatched to projects: ${s.matched}\nNewly marked paid: ${s.markedPaid}`);
-    } catch (e) {
-      alert(`Sync failed: ${e.response?.data?.message || e.message}`);
-    } finally { setQbBusy(false); }
-  };
-  const handleQbDisconnect = async () => {
-    if (!window.confirm('Disconnect QuickBooks?')) return;
-    setQbBusy(true);
-    try {
-      await axios.post(`${base}/quickbooks/disconnect`, {}, authHdr);
-      await loadQbStatus();
-    } catch (e) { alert(`Disconnect failed: ${e.message}`); }
-    finally { setQbBusy(false); }
-  };
-
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -624,17 +580,8 @@ export default function OrderTracker({ token, onBack }) {
             <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>New project</Box>
           </Button>
 
-          {/* Priority-ordered: workflow (QB, multi-select) and lookup (clients)
+          {/* Priority-ordered: workflow (multi-select) and lookup (clients)
               stay visible. Diagnostics/reports/maintenance live in More. */}
-          <Tooltip title="QuickBooks">
-            <span>
-              <IconButton onClick={handleOpenQb} size="small"
-                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
-                <ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
           <Tooltip title={selectMode ? 'Exit multi-select' : 'Select multiple projects'}>
             <span>
               <IconButton onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))} size="small"
@@ -928,18 +875,6 @@ export default function OrderTracker({ token, onBack }) {
         }}
       />
 
-      <QuickBooksDialog
-        open={qbOpen}
-        status={qbStatus}
-        loading={qbLoading}
-        busy={qbBusy}
-        onClose={() => setQbOpen(false)}
-        onConnect={handleQbConnect}
-        onSync={handleQbSync}
-        onDisconnect={handleQbDisconnect}
-        onRefresh={loadQbStatus}
-      />
-
       <AnalyticsDialog
         open={analyticsOpen}
         data={analyticsData}
@@ -1197,9 +1132,8 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
             PICKED ✓
           </Box>
         )}
-        {/* Payment badge: PAID > PROCESSING > nothing.
-            Set by the QuickBooks sync — open balance → PROCESSING,
-            Balance 0 → PAID. Manual checkbox in the drawer still works. */}
+        {/* Payment badge: PAID > PROCESSING > nothing. Set via the manual
+            paid checkbox in the drawer. (PROCESSING is legacy data only.) */}
         {project.paid ? (
           <Box sx={{
             position: 'absolute', bottom: 8, right: 8,
@@ -2588,101 +2522,6 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
               </Button>
             </Box>
           </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── QuickBooksDialog ─────────────────────────────────────────────────────────
-// Status / connect / sync UI for the QuickBooks Online integration. Connect
-// opens the Intuit authorize URL in a popup; after authorizing, the user hits
-// Refresh (the popup auto-closes). Sync pulls invoices and flips paid=true on
-// matching projects whose QBO invoice is fully paid.
-function QuickBooksDialog({ open, status, loading, busy, onClose, onConnect, onSync, onDisconnect, onRefresh }) {
-  const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
-        display: 'flex', alignItems: 'center', gap: 1 }}>
-        <ReceiptLongOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>QuickBooks</Typography>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
-      </Box>
-      <DialogContent sx={{ p: 2.5 }}>
-        {loading ? (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <CircularProgress size={20} sx={{ color: B.green }} />
-          </Box>
-        ) : !status ? (
-          <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
-        ) : !status.configured ? (
-          <Box>
-            <Typography sx={{ color: '#fbbf24', fontSize: 12, fontWeight: 700, mb: 1 }}>
-              Not configured yet
-            </Typography>
-            <Typography sx={{ color: B.muted, fontSize: 11, lineHeight: 1.5 }}>
-              To enable QuickBooks sync, set these env vars on the Render backend:
-              <Box component="ul" sx={{ pl: 2, mt: 0.5 }}>
-                <li><Box component="code" sx={{ color: B.white }}>QBO_CLIENT_ID</Box></li>
-                <li><Box component="code" sx={{ color: B.white }}>QBO_CLIENT_SECRET</Box></li>
-                <li><Box component="code" sx={{ color: B.white }}>QBO_REDIRECT_URI</Box> — must match the Intuit app's redirect URI exactly (e.g. <code>https://jointprinting-backend.onrender.com/api/quickbooks/callback</code>)</li>
-                <li><Box component="code" sx={{ color: B.white }}>QBO_ENVIRONMENT</Box> = <code>production</code></li>
-              </Box>
-              Create the app at developer.intuit.com (Accounting scope).
-            </Typography>
-            <Button onClick={onRefresh} sx={{ color: B.green, fontSize: 11, textTransform: 'none', mt: 1 }}>
-              Refresh status
-            </Button>
-          </Box>
-        ) : !status.connected ? (
-          <Box>
-            <Typography sx={{ color: B.white, fontSize: 13, mb: 1 }}>Not connected.</Typography>
-            <Typography sx={{ color: B.muted, fontSize: 11, mb: 1.5 }}>
-              Click Connect to authorize Joint Printing in QuickBooks. A popup will open; after authorizing, hit Refresh here.
-            </Typography>
-            <Stack direction="row" gap={1}>
-              <Button variant="contained" onClick={onConnect}
-                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
-                Connect QuickBooks
-              </Button>
-              <Button onClick={onRefresh} sx={{ color: B.muted, fontSize: 12, textTransform: 'none' }}>
-                Refresh
-              </Button>
-            </Stack>
-          </Box>
-        ) : (
-          <Box>
-            <Typography sx={{ color: B.green, fontSize: 13, fontWeight: 700, mb: 1 }}>Connected ✓</Typography>
-            <Box sx={{ fontSize: 11, color: B.muted, mb: 1.5,
-              display: 'grid', gridTemplateColumns: '110px 1fr', rowGap: 0.3 }}>
-              <Box>Company</Box><Box sx={{ color: B.white, fontFamily: 'monospace' }}>{status.realmId || '—'}</Box>
-              <Box>Environment</Box><Box sx={{ color: B.white }}>{status.environment}</Box>
-              <Box>Connected</Box><Box sx={{ color: B.white }}>{fmtDate(status.connectedAt)}</Box>
-              <Box>Last sync</Box><Box sx={{ color: B.white }}>{fmtDate(status.lastSyncAt)}</Box>
-            </Box>
-            <Typography sx={{ color: B.muted, fontSize: 10, mb: 1.5, fontStyle: 'italic' }}>
-              Sync matches QuickBooks invoices to projects by invoice number (DocNumber = orderNumber).
-              It only ever marks paid — never un-marks.
-            </Typography>
-            <Stack direction="row" gap={1} flexWrap="wrap">
-              <Button variant="contained" disabled={busy} onClick={onSync}
-                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
-                {busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : 'Sync invoices now'}
-              </Button>
-              <Button onClick={onRefresh} disabled={busy}
-                sx={{ color: B.muted, fontSize: 12, textTransform: 'none' }}>
-                Refresh
-              </Button>
-              <Box sx={{ flex: 1 }} />
-              <Button onClick={onDisconnect} disabled={busy}
-                sx={{ color: '#f87171', fontSize: 12, textTransform: 'none' }}>
-                Disconnect
-              </Button>
-            </Stack>
-          </Box>
         )}
       </DialogContent>
     </Dialog>

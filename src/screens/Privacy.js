@@ -25,17 +25,11 @@ export default function Privacy() {
           do, and to follow up about your order. We do not sell your information.
         </Section>
 
-        <Section title="QuickBooks Online connection">
-          When the studio admin connects our QuickBooks Online account, we receive an OAuth2
-          access token from Intuit. We use that token only to read invoice payment status so
-          we can mark projects as paid in our own system. We do not store any of your customer
-          data from QuickBooks beyond the invoice number and balance for matching purposes.
-        </Section>
-
         <Section title="How we store it">
           Project records and contact submissions live in our application database, hosted on
-          Render. Backups can be downloaded by the studio admin. Approval links use a random
-          token and expire after a set number of days (default 7).
+          Render. The studio admin keeps backups for redundancy — downloaded locally and/or
+          saved to the studio's own private cloud storage (such as Google Drive). Approval
+          links use a random token and expire after a set number of days (default 7).
         </Section>
 
         <Section title="Cookies and tracking">

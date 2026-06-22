@@ -11,6 +11,7 @@ import CloudDownloadIcon   from '@mui/icons-material/CloudDownload';
 import CloudUploadIcon     from '@mui/icons-material/CloudUpload';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon    from '@mui/icons-material/ErrorOutline';
+import CloudSyncIcon       from '@mui/icons-material/CloudSync';
 import { B, fmtDate, fmtRelative } from './_shared';
 import config from '../../config.json';
 import JpLoader from '../../common/JpLoader';
@@ -25,6 +26,11 @@ export default function BackupTab({ token, onBack }) {
   const [restoring, setRestoring] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
   const fileRef = useRef(null);
+
+  // Google Drive off-site auto-backup
+  const [drive, setDrive] = useState(null);
+  const [driveBusy, setDriveBusy] = useState(false);          // connect / disconnect
+  const [driveBackingUp, setDriveBackingUp] = useState(false);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -46,6 +52,60 @@ export default function BackupTab({ token, onBack }) {
   }, []);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  const loadDrive = useCallback(async () => {
+    try {
+      const res = await fetch(`${base}/gdrive/status`, authHdr);
+      const data = await res.json();
+      setDrive(res.ok ? data : { error: data.message || `HTTP ${res.status}` });
+    } catch (e) { setDrive({ error: e.message }); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { loadDrive(); }, [loadDrive]);
+
+  const handleDriveConnect = async () => {
+    setDriveBusy(true);
+    try {
+      const res = await fetch(`${base}/gdrive/connect`, authHdr);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Connect failed');
+      const w = window.open(data.url, 'gdrive-connect', 'width=520,height=700');
+      // Reload status once the consent popup closes.
+      const timer = setInterval(() => {
+        if (!w || w.closed) { clearInterval(timer); loadDrive(); }
+      }, 1000);
+    } catch (e) {
+      alert(`Couldn't start Google Drive connect: ${e.message}`);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveBackupNow = async () => {
+    setDriveBackingUp(true);
+    try {
+      const res = await fetch(`${base}/gdrive/backup-now`, { method: 'POST', headers: authHdr.headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Backup failed');
+      await loadDrive();
+      alert(`Backed up to Google Drive ✓\n${data.fileName} (${(data.sizeBytes / 1024 / 1024).toFixed(1)} MB)`);
+    } catch (e) {
+      alert(`Drive backup failed: ${e.message}`);
+      await loadDrive();
+    } finally {
+      setDriveBackingUp(false);
+    }
+  };
+
+  const handleDriveDisconnect = async () => {
+    if (!window.confirm('Disconnect Google Drive? The site will stop auto-saving backups there.')) return;
+    setDriveBusy(true);
+    try {
+      await fetch(`${base}/gdrive/disconnect`, { method: 'POST', headers: authHdr.headers });
+      await loadDrive();
+    } finally { setDriveBusy(false); }
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -191,6 +251,78 @@ export default function BackupTab({ token, onBack }) {
             </Alert>
           )}
 
+          {/* Google Drive off-site auto-backup */}
+          <Box sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 2, md: 3 }, mb: 2 }}>
+            <Stack direction="row" alignItems="flex-start" gap={1.5} mb={1}>
+              <CloudSyncIcon sx={{ color: B.green, fontSize: 24, mt: 0.3 }} />
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 16 }}>
+                  Off-site auto-backup · Google Drive
+                </Typography>
+                <Typography sx={{ color: B.muted, fontSize: 12, mt: 0.3 }}>
+                  A full backup — ledger, projects, files, and receipt images — pushed to your Drive
+                  every week and on demand. Your second basket if the site or Cloudflare goes down.
+                </Typography>
+              </Box>
+            </Stack>
+
+            {!drive ? (
+              <Typography sx={{ color: B.muted, fontSize: 12 }}>Checking…</Typography>
+            ) : drive.error ? (
+              <Alert severity="warning" sx={{ mt: 1 }}>Couldn’t reach the Drive service — {drive.error}</Alert>
+            ) : !drive.configured ? (
+              <Typography sx={{ color: B.muted, fontSize: 12, mt: 1 }}>
+                Not enabled yet. Set <Box component="code" sx={{ color: B.white }}>GDRIVE_CLIENT_ID</Box> and{' '}
+                <Box component="code" sx={{ color: B.white }}>GDRIVE_CLIENT_SECRET</Box> on the Render backend, then reload this page.
+              </Typography>
+            ) : !drive.connected ? (
+              <Box sx={{ mt: 1 }}>
+                <Typography sx={{ color: B.muted, fontSize: 12, mb: 1.5 }}>
+                  Connect once — a Google window opens, pick your account and allow access. After that it’s hands-off.
+                </Typography>
+                <Button onClick={handleDriveConnect} disabled={driveBusy}
+                  startIcon={driveBusy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <CloudSyncIcon />}
+                  sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 700, py: 1, px: 2,
+                    '&:hover': { bgcolor: '#3bd070' } }}>
+                  Connect Google Drive
+                </Button>
+              </Box>
+            ) : (
+              <Box sx={{ mt: 1 }}>
+                <Stack direction="row" gap={1} alignItems="center" mb={1} flexWrap="wrap">
+                  <Chip size="small" label={`Connected${drive.email ? ' · ' + drive.email : ''}`}
+                    sx={{ bgcolor: 'rgba(74,222,128,0.12)', color: B.green,
+                      border: '1px solid rgba(74,222,128,0.3)', fontWeight: 700 }} />
+                  {drive.lastBackupAt
+                    ? <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                        Last push: {fmtDate(drive.lastBackupAt)} ({fmtRelative(drive.lastBackupAt)})
+                        {drive.lastBackupBytes ? ` · ${(drive.lastBackupBytes / 1024 / 1024).toFixed(1)} MB` : ''}
+                      </Typography>
+                    : <Typography sx={{ color: B.muted, fontSize: 12 }}>No push yet — run one now to confirm it works.</Typography>}
+                </Stack>
+                {drive.lastError && (
+                  <Alert severity="error" sx={{ mb: 1 }}>Last backup error: {drive.lastError}</Alert>
+                )}
+                <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+                  <Button onClick={handleDriveBackupNow} disabled={driveBackingUp}
+                    startIcon={driveBackingUp ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <CloudSyncIcon />}
+                    sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 700, py: 1,
+                      '&:hover': { bgcolor: '#3bd070' } }}>
+                    {driveBackingUp ? 'Backing up to Drive…' : 'Back up to Drive now'}
+                  </Button>
+                  <Button onClick={handleDriveDisconnect} disabled={driveBusy} variant="outlined"
+                    sx={{ color: B.muted, borderColor: B.border, textTransform: 'none', fontWeight: 700, py: 1,
+                      '&:hover': { borderColor: '#f87171', color: '#f87171' } }}>
+                    Disconnect
+                  </Button>
+                </Stack>
+                <Typography sx={{ color: B.muted, fontSize: 11, mt: 1.2 }}>
+                  Auto-runs weekly (Sunday). Saved to a “Joint Printing Backups” folder in your Drive.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+
           {/* What's included */}
           <Box sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 2, md: 3 } }}>
             <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 1.5 }}>
@@ -204,6 +336,8 @@ export default function BackupTab({ token, onBack }) {
                 ['Inquiries',      'Contact form submissions with status + admin notes'],
                 ['Site settings',  'Brand logo, banner messages, theme'],
                 ['Catalogs + products', 'Product catalog + custom catalog overrides'],
+                ['Finances',       'The full income/expense ledger — every transaction'],
+                ['Receipt images', 'Receipt/invoice files attached to finances (pulled from R2)'],
                 ['Admin users',    'Login records (passwords already hashed)'],
                 ['Files',          'Every uploaded project file in /uploads'],
               ].map(([label, desc]) => (
