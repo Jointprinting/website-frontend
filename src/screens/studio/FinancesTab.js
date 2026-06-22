@@ -16,6 +16,8 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import axios from 'axios';
 import config from '../../config.json';
@@ -100,6 +102,11 @@ export default function FinancesTab({ token, onBack }) {
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
   const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
 
+  // #1 alarm: an order that was sold but lost money (revenue in, profit negative).
+  // Orders with no recorded sale yet (revenue 0) aren't losses — they're pending.
+  const losers = (orders || []).filter((o) => o.revenue > 0 && o.profit < 0);
+  const lossTotal = losers.reduce((s, o) => s + Math.abs(o.profit), 0);
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: B.panel, borderBottom: `1px solid ${B.border}`,
@@ -142,6 +149,55 @@ export default function FinancesTab({ token, onBack }) {
           </Box>
         ) : (
           <Stack gap={2.5}>
+            {/* Calm-control status — three honest states:
+                RED   any sold order lost money (your #1 alarm)
+                AMBER orders are fine but merch net is in the red (overhead/timing — what VT3D was hiding)
+                GREEN orders profitable AND merch is in the black */}
+            {losers.length > 0 ? (
+              <Box sx={{ border: '1px solid rgba(248,113,113,0.4)', bgcolor: 'rgba(248,113,113,0.07)', borderRadius: 2, px: 2, py: 1.25 }}>
+                <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.75 }}>
+                  <ErrorOutlineIcon sx={{ color: '#f87171' }} />
+                  <Typography sx={{ color: '#f87171', fontWeight: 800, fontSize: 14, flex: 1 }}>
+                    {losers.length} order{losers.length > 1 ? 's' : ''} lost money — {money(lossTotal)} underwater
+                  </Typography>
+                </Stack>
+                <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ pl: 4 }}>
+                  {losers.map((o) => (
+                    <Box key={o.orderNumber} sx={{ fontSize: 11, color: B.muted, bgcolor: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 1, px: 0.75, py: 0.25 }}>
+                      #{o.orderNumber}{o.client ? ` · ${o.client}` : ''}{' '}
+                      <Box component="span" sx={{ color: '#f87171', fontWeight: 700 }}>{money(o.profit)}</Box>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            ) : summary.net < 0 ? (
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, border: '1px solid rgba(251,191,36,0.4)',
+                bgcolor: 'rgba(251,191,36,0.06)', borderRadius: 2, px: 2, py: 1.25 }}>
+                <ErrorOutlineIcon sx={{ color: '#fbbf24', mt: 0.2 }} />
+                <Box>
+                  <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 14 }}>
+                    Merch is in the red — −{money(Math.abs(summary.net))} {year || 'overall'}
+                  </Typography>
+                  <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                    No single order lost money, but costs are outpacing real merch sales.
+                    {summary.nonMerch && summary.nonMerch.income > 0 && ' VT3D is what was hiding it.'}
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, border: '1px solid rgba(74,222,128,0.3)',
+                bgcolor: 'rgba(74,222,128,0.06)', borderRadius: 2, px: 2, py: 1.25 }}>
+                <CheckCircleOutlineIcon sx={{ color: B.green }} />
+                <Box>
+                  <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14 }}>All clear</Typography>
+                  <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                    Every order {year || 'on record'} made money and merch is in the black. Nothing needs you.
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+
             <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
               <Stat label="Revenue" value={money(summary.income)} color={B.white} />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
@@ -154,6 +210,12 @@ export default function FinancesTab({ token, onBack }) {
                 {summary.ownerContribution > 0 && summary.ownerDraw > 0 && ' · '}
                 {summary.ownerDraw > 0 && <>− {money(summary.ownerDraw)} owner draw (you paid yourself)</>}
                 {' '}— equity, not counted in profit
+              </Typography>
+            )}
+            {summary.nonMerch && summary.nonMerch.income > 0 && (
+              <Typography sx={{ color: B.muted, fontSize: 11, mt: -1 }}>
+                {money(summary.nonMerch.income)} from {summary.nonMerch.label || 'non-merch'} kept separate — counted in your
+                tax export, left out of these merch numbers so the picture's honest.
               </Typography>
             )}
 
