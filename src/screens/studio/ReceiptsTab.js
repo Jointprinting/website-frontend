@@ -17,11 +17,10 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import axios from 'axios';
 import config from '../../config.json';
@@ -40,7 +39,7 @@ const STATUS = {
   review:     { label: 'Needs review', color: '#fbbf24', bg: 'rgba(251,191,36,0.16)' },
   booked:     { label: 'Booked',       color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
   failed:     { label: 'Failed',       color: '#f87171', bg: 'rgba(248,113,113,0.16)' },
-  ignored:    { label: 'Ignored',      color: '#6b7280', bg: 'rgba(107,114,128,0.14)' },
+  ignored:    { label: 'Backup',       color: '#6b7280', bg: 'rgba(107,114,128,0.14)' },
 };
 const conf = { high: '#4ade80', medium: '#fbbf24', low: '#f87171' };
 
@@ -59,7 +58,6 @@ export default function ReceiptsTab({ token, onBack }) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [review, setReview] = useState(null);     // receipt being reviewed
-  const [recon, setRecon] = useState(null);       // reconcile result
   const [orders, setOrders] = useState([]);       // for the order picker in review
   const fileRef = useRef(null);
 
@@ -122,13 +120,6 @@ export default function ReceiptsTab({ token, onBack }) {
     try { await axios.delete(`${base}/receipts/${id}`, authHdr); await load(); }
     catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
-  const runReconcile = async () => {
-    setBusy('Checking against the ledger…');
-    try {
-      const r = await axios.get(`${base}/receipts/reconcile`, { ...authHdr, params: year ? { year } : {} });
-      setRecon(r.data); setBusy('');
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
-  };
   // Link every read receipt that matches an existing ledger expense (attaches
   // the file, no new charges) so a big back-catalog clears in one click; only
   // the unmatched stay for manual review.
@@ -141,24 +132,13 @@ export default function ReceiptsTab({ token, onBack }) {
       await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
-  // Undo the receipt booking: remove every ledger entry that came from a receipt
-  // and clear all receipts, restoring the imported spreadsheet ledger exactly.
-  const resetAll = async () => {
-    if (!window.confirm('START OVER — delete every ledger entry created from a receipt and clear all receipts, restoring your imported ledger exactly (your Finances numbers go back to normal). Continue?')) return;
-    setBusy('Resetting…');
+  // Clear the nag: everything left in review is already saved + searchable; mark
+  // it kept-as-backup so the review count goes to zero.
+  const archiveRest = async () => {
+    setBusy('Filing…');
     try {
-      const r = await axios.post(`${base}/receipts/reset`, {}, authHdr);
-      setBusy(`Reset ✓ — removed ${r.data.deletedTransactions} receipt entries, cleared ${r.data.deletedReceipts} receipts`);
-      await load();
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
-  };
-  // Wipe all non-booked receipts so a batch read with bad data can be re-uploaded.
-  const clearAll = async () => {
-    if (!window.confirm('Delete all receipts that aren’t booked yet? (Booked ones stay.) Use this to clear a bad batch and re-upload the zip.')) return;
-    setBusy('Clearing…');
-    try {
-      const r = await axios.delete(`${base}/receipts`, authHdr);
-      setBusy(`Cleared ${r.data.deleted} ✓`);
+      const r = await axios.post(`${base}/receipts/archive-rest`, {}, authHdr);
+      setBusy(`${r.data.archived} kept as backup ✓`);
       await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
@@ -169,7 +149,7 @@ export default function ReceiptsTab({ token, onBack }) {
     { v: 'processing', label: 'Reading', n: (counts.processing || 0) + (counts.pending || 0) },
     { v: 'booked', label: 'Booked', n: counts.booked || 0 },
     { v: 'failed', label: 'Failed', n: counts.failed || 0 },
-    { v: 'ignored', label: 'Ignored', n: counts.ignored || 0 },
+    { v: 'ignored', label: 'Backup', n: counts.ignored || 0 },
   ];
 
   return (
@@ -186,17 +166,9 @@ export default function ReceiptsTab({ token, onBack }) {
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
           Link matches
         </Button>
-        <Button onClick={runReconcile} size="small" startIcon={<FactCheckOutlinedIcon sx={{ fontSize: 16 }} />}
+        <Button onClick={archiveRest} size="small" startIcon={<InventoryOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
-          Double-check vs ledger
-        </Button>
-        <Button onClick={clearAll} size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
-          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: '#f87171' } }}>
-          Clear all
-        </Button>
-        <Button onClick={resetAll} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
-          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: '#f87171' } }}>
-          Reset ledger
+          Keep rest as backup
         </Button>
         <FormControl size="small" sx={{ minWidth: 84 }}>
           <Select value={year} displayEmpty onChange={(e) => setYear(e.target.value)}
@@ -272,7 +244,6 @@ export default function ReceiptsTab({ token, onBack }) {
         <ReviewDialog key={review._id} rec={review} authHdr={authHdr} orders={orders} onClose={() => setReview(null)}
           onChanged={() => { setReview(null); load(); }} />
       )}
-      {recon && <ReconcileDialog data={recon} onClose={() => setRecon(null)} />}
     </Box>
   );
 }
@@ -497,34 +468,3 @@ function Field({ label, children }) {
   );
 }
 
-function ReconcileDialog({ data, onClose }) {
-  const s = data.summary || {};
-  const Section = ({ title, rows, color, render }) => (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 800, color, mb: 0.5 }}>{title} ({rows.length})</Typography>
-      {rows.length === 0 ? <Typography sx={{ fontSize: 12, color: B.muted }}>None.</Typography> : (
-        <Stack gap={0.5}>{rows.map((r, i) => <Box key={i} sx={{ fontSize: 12, color: B.white, opacity: 0.9, fontFamily: 'monospace' }}>{render(r)}</Box>)}</Stack>
-      )}
-    </Box>
-  );
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, borderRadius: 3, border: `1px solid ${B.border}` } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', px: 2.5, py: 1.5, borderBottom: `1px solid ${B.faint}` }}>
-        <Typography sx={{ fontWeight: 800, fontSize: 15, flex: 1 }}>Receipts vs ledger</Typography>
-        <IconButton size="small" onClick={onClose} sx={{ color: B.muted }}><CloseIcon fontSize="small" /></IconButton>
-      </Box>
-      <DialogContent sx={{ ...scrollbar }}>
-        <Typography sx={{ fontSize: 12, color: B.muted, mb: 1.5 }}>
-          Checked {s.receipts} read receipt(s): {s.matched} match the ledger, {s.conflicts} disagree on amount, {s.missingFromLedger} aren’t in the ledger yet.
-        </Typography>
-        <Section title="Amount conflicts" color="#fbbf24" rows={data.conflicts || []}
-          render={(r) => `${r.vendor || '—'} · receipt ${fmt(r.amount)} vs ledger ${fmt(r.ledgerAmount)} (Δ ${fmt(r.delta)})${r.orderNumber ? ` · #${r.orderNumber}` : ''}`} />
-        <Section title="Missing from ledger" color="#60a5fa" rows={data.missing || []}
-          render={(r) => `${r.vendor || '—'} · ${fmt(r.amount)}${r.date ? ` · ${fmtDate(r.date)}` : ''}${r.orderNumber ? ` · #${r.orderNumber}` : ''}`} />
-        <Section title="Matched" color="#4ade80" rows={(data.matched || []).slice(0, 50)}
-          render={(r) => `${r.vendor || '—'} · ${fmt(r.amount)}${r.orderNumber ? ` · #${r.orderNumber}` : ''}`} />
-      </DialogContent>
-    </Dialog>
-  );
-}
