@@ -117,6 +117,18 @@ export default function ReceiptsTab({ token, onBack }) {
       setRecon(r.data); setBusy('');
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
+  // Link every read receipt that matches an existing ledger expense (attaches
+  // the file, no new charges) so a big back-catalog clears in one click; only
+  // the unmatched stay for manual review.
+  const bulkLink = async () => {
+    if (!window.confirm('Link every receipt that matches an entry already in your ledger — attaches the file, adds NO new charges. Unmatched ones stay for you to review. Continue?')) return;
+    setBusy('Reconciling…');
+    try {
+      const r = await axios.post(`${base}/receipts/bulk-reconcile`, {}, authHdr);
+      setBusy(`Linked ${r.data.linked} to the ledger · ${r.data.unmatched} left to review ✓`);
+      await load();
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  };
 
   const pills = [
     { v: '', label: 'All', n: receipts.length && !filter ? receipts.length : (counts.review || 0) + (counts.pending || 0) + (counts.processing || 0) + (counts.booked || 0) + (counts.failed || 0) + (counts.ignored || 0) },
@@ -137,6 +149,10 @@ export default function ReceiptsTab({ token, onBack }) {
             '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
         <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Receipts</Typography>
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
+        <Button onClick={bulkLink} size="small" startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
+          Link matches
+        </Button>
         <Button onClick={runReconcile} size="small" startIcon={<FactCheckOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
           Double-check vs ledger
