@@ -132,11 +132,11 @@ export default function ReceiptsTab({ token, onBack }) {
   // the file, no new charges) so a big back-catalog clears in one click; only
   // the unmatched stay for manual review.
   const bulkLink = async () => {
-    if (!window.confirm('Link every receipt that matches an entry already in your ledger — attaches the file, adds NO new charges. Unmatched ones stay for you to review. Continue?')) return;
-    setBusy('Reconciling…');
+    if (!window.confirm('Sort these out — link receipts that match your ledger (attaches the file, no new charge) and book obvious new overhead (software / fees / travel). Job costs and anything unclear stay for review. Continue?')) return;
+    setBusy('Sorting…');
     try {
       const r = await axios.post(`${base}/receipts/bulk-reconcile`, {}, authHdr);
-      setBusy(`Linked ${r.data.linked} to the ledger · ${r.data.unmatched} left to review ✓`);
+      setBusy(`Linked ${r.data.linked} · booked ${r.data.booked || 0} new · ${r.data.unmatched} left to review ✓`);
       await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
@@ -172,7 +172,7 @@ export default function ReceiptsTab({ token, onBack }) {
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
         <Button onClick={bulkLink} size="small" startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
-          Link matches
+          Auto-sort
         </Button>
         <Button onClick={runReconcile} size="small" startIcon={<FactCheckOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
