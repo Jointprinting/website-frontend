@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem,
-  CircularProgress, Dialog, DialogContent, TextField, Chip, Tooltip,
+  CircularProgress, Dialog, DialogContent, TextField, Chip, Tooltip, Autocomplete,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
@@ -45,6 +45,8 @@ const conf = { high: '#4ade80', medium: '#fbbf24', low: '#f87171' };
 
 const toDateInput = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 const isImg = (m) => /^image\//.test(m || '') && !/heic|heif/.test(m || '');
+const digits = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '');
+const orderLabel = (o) => `#${o.orderNumber}${o.companyName || o.clientName ? ` · ${o.companyName || o.clientName}` : ''}`;
 
 export default function ReceiptsTab({ token, onBack }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -57,6 +59,7 @@ export default function ReceiptsTab({ token, onBack }) {
   const [busy, setBusy] = useState('');
   const [review, setReview] = useState(null);     // receipt being reviewed
   const [recon, setRecon] = useState(null);       // reconcile result
+  const [orders, setOrders] = useState([]);       // for the order picker in review
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -74,6 +77,14 @@ export default function ReceiptsTab({ token, onBack }) {
   }, [authHdr, filter, year]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+
+  // Load recent orders once so receipt review can tag the right job from a
+  // dropdown — a supplier invoice rarely prints YOUR order #, so you pick it.
+  useEffect(() => {
+    axios.get(`${base}/orders`, { ...authHdr, params: { limit: 200 } })
+      .then((r) => setOrders(r.data.orders || []))
+      .catch(() => {});
+  }, [authHdr]);
 
   // Poll while there's active work so statuses flip from Reading… → Needs review
   // without a manual refresh (and so a rate-limit pause visibly resumes).
@@ -228,7 +239,7 @@ export default function ReceiptsTab({ token, onBack }) {
       </Box>
 
       {review && (
-        <ReviewDialog rec={review} authHdr={authHdr} onClose={() => setReview(null)}
+        <ReviewDialog key={review._id} rec={review} authHdr={authHdr} orders={orders} onClose={() => setReview(null)}
           onChanged={() => { setReview(null); load(); }} />
       )}
       {recon && <ReconcileDialog data={recon} onClose={() => setRecon(null)} />}
@@ -290,7 +301,7 @@ function ReceiptRow({ r, onReview, onRetry, onDelete }) {
   );
 }
 
-function ReviewDialog({ rec, authHdr, onClose, onChanged }) {
+function ReviewDialog({ rec, authHdr, orders = [], onClose, onChanged }) {
   const e0 = rec.extracted || {};
   const [vendor, setVendor] = useState(e0.vendor || '');
   const [date, setDate] = useState(toDateInput(e0.date));
@@ -367,7 +378,20 @@ function ReviewDialog({ rec, authHdr, onClose, onChanged }) {
                   </Select>
                 </FormControl>
               </Field>
-              <Field label="Order # (links to the job)"><TextField value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} size="small" fullWidth sx={darkInput} placeholder="optional" /></Field>
+              <Field label="Order # (links to the job)">
+                <Autocomplete
+                  freeSolo autoSelect handleHomeEndKeys
+                  options={orders}
+                  getOptionLabel={(o) => (typeof o === 'string' ? o : orderLabel(o))}
+                  defaultValue={orderNumber || null}
+                  onChange={(_e, v) => setOrderNumber(digits(typeof v === 'string' ? v : (v ? String(v.orderNumber) : '')))}
+                  renderOption={(props, o) => {
+                    const { key, ...rest } = props;
+                    return <li key={o._id || o.orderNumber} {...rest}>{orderLabel(o)}{o.status ? ` · ${o.status}` : ''}</li>;
+                  }}
+                  renderInput={(params) => <TextField {...params} size="small" fullWidth sx={darkInput} placeholder="optional — type # or pick the job" />}
+                />
+              </Field>
             </Stack>
             <Field label="Description"><TextField value={summary} onChange={(e) => setSummary(e.target.value)} size="small" fullWidth sx={darkInput} /></Field>
 
