@@ -140,6 +140,16 @@ export default function ReceiptsTab({ token, onBack }) {
       await load();
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
+  // Wipe all non-booked receipts so a batch read with bad data can be re-uploaded.
+  const clearAll = async () => {
+    if (!window.confirm('Delete all receipts that aren’t booked yet? (Booked ones stay.) Use this to clear a bad batch and re-upload the zip.')) return;
+    setBusy('Clearing…');
+    try {
+      const r = await axios.delete(`${base}/receipts`, authHdr);
+      setBusy(`Cleared ${r.data.deleted} ✓`);
+      await load();
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  };
 
   const pills = [
     { v: '', label: 'All', n: receipts.length && !filter ? receipts.length : (counts.review || 0) + (counts.pending || 0) + (counts.processing || 0) + (counts.booked || 0) + (counts.failed || 0) + (counts.ignored || 0) },
@@ -167,6 +177,10 @@ export default function ReceiptsTab({ token, onBack }) {
         <Button onClick={runReconcile} size="small" startIcon={<FactCheckOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green } }}>
           Double-check vs ledger
+        </Button>
+        <Button onClick={clearAll} size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: '#f87171' } }}>
+          Clear all
         </Button>
         <FormControl size="small" sx={{ minWidth: 84 }}>
           <Select value={year} displayEmpty onChange={(e) => setYear(e.target.value)}
