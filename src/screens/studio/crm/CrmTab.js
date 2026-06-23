@@ -21,6 +21,7 @@ import {
   Box, Stack, Button, Snackbar, Alert, Typography as MuiTypography,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
@@ -30,6 +31,7 @@ import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import { dayKey, stageMeta } from './_crm';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
+import DashboardView from './DashboardView';
 import TodayView from './TodayView';
 import CalendarView from './CalendarView';
 import CompaniesView from './CompaniesView';
@@ -40,6 +42,7 @@ import PipelineView from './PipelineView';
 const base = `${config.backendUrl}/api/crm`;
 
 const NAV = [
+  { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
   { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
@@ -60,10 +63,15 @@ function gridRange(year, month) {
 export default function CrmTab({ token, onBack }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
-  const [view, setView] = React.useState('today');
+  const [view, setView] = React.useState('dashboard');
   const [openKey, setOpenKey] = React.useState(null); // company detail overlay (null = closed)
 
   // ── Per-view data ────────────────────────────────────────────────────────
+  // Dashboard — the one-shot aggregate (/dashboard): pipeline + follow-ups +
+  // activity + breakdowns + the heads-up feed, all server-computed.
+  const [dashboard, setDashboard] = React.useState(null);
+  const [dashboardLoading, setDashboardLoading] = React.useState(true);
+
   const [today, setToday] = React.useState({ summary: {}, rows: [] });
   const [todayLoading, setTodayLoading] = React.useState(true);
 
@@ -101,6 +109,16 @@ export default function CrmTab({ token, onBack }) {
   const flash = React.useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
 
   // ── Fetchers ─────────────────────────────────────────────────────────────
+  const loadDashboard = React.useCallback(async () => {
+    setDashboardLoading(true);
+    try {
+      const res = await axios.get(`${base}/dashboard`, authHdr);
+      setDashboard(res.data || null);
+    } catch (e) {
+      flash('Could not load the dashboard.', 'error');
+    } finally { setDashboardLoading(false); }
+  }, [authHdr, flash]);
+
   const loadToday = React.useCallback(async () => {
     setTodayLoading(true);
     try {
@@ -165,6 +183,7 @@ export default function CrmTab({ token, onBack }) {
   }, [authHdr, flash]);
 
   // ── Effects: load each view's data lazily on first entry, refetch on deps ──
+  React.useEffect(() => { loadDashboard(); }, [loadDashboard]);
   React.useEffect(() => { loadToday(); }, [loadToday]);
   React.useEffect(() => { loadCalendar(calCursor); }, [calCursor, loadCalendar]);
 
@@ -189,12 +208,13 @@ export default function CrmTab({ token, onBack }) {
   // After any write, refresh whatever's currently visible + the open detail so
   // counts/badges/timelines stay truthful without a blanket refetch of all views.
   const refreshAffected = React.useCallback(() => {
+    loadDashboard();
     loadToday();
     loadCalendar(calCursor);
     loadCompanies(query, stageFilter, tagFilter);
     loadPipeline(pipeQuery, pipeTag);
     if (openKey) loadDetail(openKey);
-  }, [loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, tagFilter,
+  }, [loadDashboard, loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, tagFilter,
       loadPipeline, pipeQuery, pipeTag, openKey, loadDetail]);
 
   // ── Write transport ───────────────────────────────────────────────────────
@@ -360,6 +380,15 @@ export default function CrmTab({ token, onBack }) {
       );
     }
     switch (view) {
+      case 'dashboard':
+        return (
+          <DashboardView
+            data={dashboard} loading={dashboardLoading}
+            onOpen={openCompany}
+            onLog={(item) => openLog({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
+            onReschedule={(item) => openResched({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
+          />
+        );
       case 'today':
         return (
           <TodayView

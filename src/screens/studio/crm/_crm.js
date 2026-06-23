@@ -13,6 +13,10 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { D, mono } from '../_shared';
 
 // ── Stage vocabulary ──────────────────────────────────────────────────────────
@@ -51,6 +55,26 @@ export const SECONDARY_STAGES  = ['lost', 'dormant'];
 export const INTEREST_TYPES = ['', 'promos', 'apparel', 'both'];
 export const INTEREST_LABEL = { '': '—', promos: 'Promos', apparel: 'Apparel', both: 'Promos + Apparel' };
 export const interestLabel = (i) => INTEREST_LABEL[i || ''] || '—';
+
+// ── Heads-up vocabulary — the dashboard "needs your attention" feed ───────────
+// MIRRORS the types controllers/crm.js classifyHeadsUp emits. Each carries an
+// icon + label + the color the row accent / icon paints. Keep in sync with the
+// backend's type strings.
+export const HEADSUP_META = {
+  overdue_followup: { label: 'Overdue',      Icon: EventBusyOutlinedIcon,             color: '#f87171' },
+  hot_quiet:        { label: 'Hot & quiet',  Icon: LocalFireDepartmentOutlinedIcon,   color: '#fb923c' },
+  stale:            { label: 'Stale',        Icon: HourglassEmptyOutlinedIcon,        color: '#fbbf24' },
+  no_next_step:     { label: 'No next step', Icon: HelpOutlineOutlinedIcon,           color: '#60a5fa' },
+};
+export const headsUpMeta = (t) => HEADSUP_META[t] || { label: t || 'Attention', Icon: HelpOutlineOutlinedIcon, color: D.muted };
+
+// Severity → the tone its pill/border carries. high = red, med = amber, low = blue.
+export const SEVERITY_META = {
+  high: { label: 'High', color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
+  med:  { label: 'Med',  color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  low:  { label: 'Low',  color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+};
+export const severityMeta = (s) => SEVERITY_META[s] || SEVERITY_META.low;
 
 // ── Log "kind" vocabulary — icon + label per touch type ───────────────────────
 export const LOG_KINDS = ['note', 'call', 'text', 'email', 'visit'];
