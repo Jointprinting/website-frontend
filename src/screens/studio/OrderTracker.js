@@ -1132,8 +1132,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
             PICKED ✓
           </Box>
         )}
-        {/* Payment badge: PAID > PROCESSING > nothing. Set via the manual
-            paid checkbox in the drawer. (PROCESSING is legacy data only.) */}
+        {/* Payment badge: PAID when the manual paid checkbox is set, else nothing. */}
         {project.paid ? (
           <Box sx={{
             position: 'absolute', bottom: 8, right: 8,
@@ -1142,15 +1141,6 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
             fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
           }}>
             PAID
-          </Box>
-        ) : project.paymentInProgress ? (
-          <Box sx={{
-            position: 'absolute', bottom: 8, right: 8,
-            bgcolor: 'rgba(251,191,36,0.18)', color: '#fbbf24',
-            px: 1, py: 0.3, borderRadius: 1,
-            fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-          }}>
-            PROCESSING
           </Box>
         ) : null}
         {/* Client logo (corner) */}
