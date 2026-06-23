@@ -19,6 +19,7 @@ import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
 import {
@@ -26,7 +27,7 @@ import {
 } from '../_shared';
 import {
   StageChip, Eyebrow, TagChips, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
-  kindMeta, dateInputValue, followUpStatus, telHref,
+  kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0,
 } from './_crm';
 
 // Labeled inline field — a compact dropInput with an eyebrow caption above it.
@@ -181,10 +182,58 @@ function OrderRow({ o }) {
   );
 }
 
+// One figure in the finance metric row — tiny uppercase label over a big
+// monospace number, optional sub-hint. Mirrors DashboardView's MetricCard so the
+// company page reads the same as the dashboard.
+function Metric({ label, value, accent, hint }) {
+  return (
+    <Box sx={{
+      flex: '1 1 120px', minWidth: 108, px: { xs: 1.25, sm: 1.5 }, py: 1.25,
+      borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}`,
+    }}>
+      <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ ...mono, color: accent || D.text, fontSize: { xs: 18, sm: 20 }, fontWeight: 800, lineHeight: 1.15, mt: 0.35 }}>
+        {value}
+      </Typography>
+      {hint ? (
+        <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, mt: 0.2 }}>{hint}</Typography>
+      ) : null}
+    </Box>
+  );
+}
+
+// One linked PO — number · vendor on the left, grand total (monospace) on the
+// right. Same row rhythm as OrderRow.
+function PoRow({ p }) {
+  return (
+    <Box sx={{
+      display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25,
+      borderBottom: `1px solid ${D.line}`,
+    }}>
+      <DescriptionOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {p.poNumber ? (String(p.poNumber).startsWith('#') ? p.poNumber : `#${p.poNumber}`) : 'PO'}
+          {p.vendorName ? <Box component="span" sx={{ color: D.faint, fontWeight: 600, ...mono }}> · {p.vendorName}</Box> : null}
+        </Typography>
+        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{p.date ? fmtDate(p.date) : '—'}</Typography>
+      </Box>
+      <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 13, ...mono, minWidth: 72, textAlign: 'right', flexShrink: 0 }}>
+        {fmt(p.grandTotal)}
+      </Typography>
+    </Box>
+  );
+}
+
 export default function CompanyDetail({ data, loading, onBack, onPatch, onLog }) {
-  // data = { client, orders }
+  // data = { client, orders, pos, finance }
   const client = data?.client || null;
   const orders = data?.orders || [];
+  const pos = data?.pos || [];
+  // Finance summary computed server-side by reusing the /api/finances math.
+  const finance = data?.finance || null;
 
   // Local editable copies for text fields so typing doesn't fight the round-trip.
   const [name, setName] = React.useState('');
@@ -313,6 +362,65 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
           )}
         </Field>
       </Box>
+
+      {/* Business with this company — the money story: lifetime finance (reusing
+          the same revenue/COGS/margin math as /api/finances) + linked POs. Only
+          shown once we have something real to report. */}
+      {(finance || pos.length > 0) && (
+        <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+            <Eyebrow>Business with this company</Eyebrow>
+            {finance && finance.orderCount > 0 && (
+              <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>
+                {finance.orderCount} order{finance.orderCount === 1 ? '' : 's'}
+                {finance.paidCount ? ` · ${finance.paidCount} paid` : ''}
+              </Typography>
+            )}
+          </Stack>
+
+          {finance ? (
+            <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: pos.length > 0 ? 2 : 0 }}>
+              <Metric
+                label="Revenue"
+                value={fmt(finance.revenue)}
+                accent={D.text}
+                hint={client.dealValue ? `${fmtMoney0(client.dealValue)} open est.` : null}
+              />
+              <Metric
+                label="Profit"
+                value={fmt(finance.profit)}
+                accent={finance.profit < 0 ? D.amber : D.green}
+                hint={`${fmtMoney0(finance.cogs)} COGS`}
+              />
+              <Metric
+                label="Margin"
+                value={`${finance.margin}%`}
+                accent={finance.margin < 0 ? D.amber : D.text}
+              />
+              <Metric
+                label="Outstanding"
+                value={fmt(finance.outstanding)}
+                accent={finance.outstanding > 0 ? D.amber : D.faint}
+                hint="invoiced · unpaid"
+              />
+            </Stack>
+          ) : null}
+
+          {pos.length > 0 && (
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  Purchase orders
+                </Typography>
+                <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>{pos.length}</Typography>
+              </Stack>
+              <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>
+                {pos.map((p) => <PoRow key={p._id} p={p} />)}
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Two-column body: contacts + orders on the side, log timeline as the spine */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1.4fr 1fr' } }}>
