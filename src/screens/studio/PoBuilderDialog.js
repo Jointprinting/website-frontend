@@ -18,9 +18,10 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import PictureAsPdfIcon        from '@mui/icons-material/PictureAsPdf';
 import ArrowBackIcon           from '@mui/icons-material/ArrowBack';
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline';
+import BoltIcon                from '@mui/icons-material/Bolt';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar, dropPrimaryBtn, hasConfirmation } from './_shared';
 
 const base = `${config.backendUrl}/api`;
 
@@ -33,6 +34,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (!open || !project) return;
@@ -60,9 +62,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
   const createPo = async () => {
     setCreating(true);
     try {
-      const d = new Date();
-      const localDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const r = await axios.post(`${base}/orders/${project._id}/pos`, { date: localDay }, authHdr);
+      const r = await axios.post(`${base}/orders/${project._id}/pos`, { date: localDay() }, authHdr);
       setPos(prev => [r.data, ...prev]);
       setEditing({ ...r.data });
       setDirty(false);
@@ -70,6 +70,39 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
       alert(`Couldn't create PO: ${e.response?.data?.message || e.message}`);
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Build one PO per supplier straight from the approved confirmation — the
+  // doc the client actually signed off, priced at the vendor's internal cost.
+  // The backend skips suppliers that already have a PO on this order, so this
+  // is safe to re-run; we surface exactly what it created (or why it didn't).
+  const localDay = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const generateFromConfirmation = async () => {
+    setGenerating(true);
+    try {
+      const r = await axios.post(`${base}/orders/${project._id}/pos/from-confirmation`, { date: localDay() }, authHdr);
+      const made = r.data.pos || [];
+      const s = r.data.summary || {};
+      setPos(prev => [...made, ...prev]);   // dialog already lists newest-first
+      if (made.length) {
+        const names = (s.vendors || made.map(p => p.vendorName)).filter(Boolean).join(', ');
+        const skipNote = (s.skipped && s.skipped.length)
+          ? ` Skipped ${s.skipped.length} already-built: ${s.skipped.join(', ')}.` : '';
+        alert(`Created ${made.length} PO${made.length === 1 ? '' : 's'}${names ? ` — ${names}` : ''}.${skipNote}`);
+      } else {
+        const skipped = (s.skipped || []).filter(Boolean);
+        alert(skipped.length
+          ? `No new POs — every supplier already has one (${skipped.join(', ')}). Open or delete those to rebuild.`
+          : 'No POs were generated from the confirmation.');
+      }
+    } catch (e) {
+      alert(`Couldn't generate POs: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -229,7 +262,23 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                 ))}
               </Stack>
             )}
-            <Button onClick={createPo} disabled={creating}
+            {/* Primary path: build real vendor POs straight from the APPROVED
+                confirmation, auto-split one-per-supplier. Only offered once a
+                confirmation exists — otherwise there's nothing approved to
+                build from and the manual seed below is the only option. */}
+            {hasConfirmation(project.confirmation) && (
+              <Box sx={{ mb: 1.5 }}>
+                <Button onClick={generateFromConfirmation} disabled={generating || creating}
+                  startIcon={generating ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <BoltIcon sx={{ fontSize: 18 }} />}
+                  sx={{ ...dropPrimaryBtn, px: 2.25, py: 0.85 }}>
+                  {generating ? 'Generating…' : 'Generate POs from confirmation'}
+                </Button>
+                <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.6 }}>
+                  One PO per supplier, priced at vendor cost from the approved confirmation. Re-running skips suppliers that already have a PO.
+                </Typography>
+              </Box>
+            )}
+            <Button onClick={createPo} disabled={creating || generating}
               startIcon={creating ? <CircularProgress size={14} sx={{ color: D.green }} /> : <AddCircleOutlineIcon />}
               sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
                 '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
