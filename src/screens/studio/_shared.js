@@ -14,6 +14,80 @@ export const B = {
   faint:   'rgba(255,255,255,0.06)',
 };
 
+// ── "Drop" tokens ─────────────────────────────────────────────────────────────
+// The refined dark palette the client approval page (ApprovalView) is built on.
+// Richer, deeper, more tactile than the base `B` set above — use these to bring
+// the owner-side builders up to the same premium feel. Additive on purpose: `B`
+// stays as-is so existing surfaces (OrderTracker, tabs) are untouched.
+export const D = {
+  bg:      '#070b09',                 // near-black canvas
+  panel:   '#0e1613',                 // elevated, green-tinted dark panel
+  panelHi: '#13201a',                 // hover / selected panel
+  inset:   '#0a110d',                 // recessed (tables, totals, controls)
+  line:    'rgba(255,255,255,0.08)',  // hairline
+  lineHi:  'rgba(74,222,128,0.45)',   // active green border
+  green:   '#4ade80',                 // lime accent
+  greenDk: '#0e3b22',                 // deep green
+  glow:    'rgba(74,222,128,0.22)',
+  text:    '#f3f7f4',
+  muted:   'rgba(255,255,255,0.56)',
+  faint:   'rgba(255,255,255,0.34)',
+  amber:   '#fbbf24',
+  ink:     '#06140c',                 // dark text that rides on a green fill
+};
+
+// Accent gradient bar painted across the top of a header — the brand "glow".
+export const accentBar = {
+  position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 3,
+  background: `linear-gradient(90deg, ${D.greenDk}, ${D.green}, ${D.greenDk})`,
+};
+
+// Section eyebrow: tiny uppercase green label that opens a block.
+export const eyebrow = {
+  fontSize: 11, fontWeight: 800, letterSpacing: 2,
+  textTransform: 'uppercase', color: D.green,
+};
+
+// Tabular monospace for money / counts so figures line up column-to-column.
+export const mono = {
+  fontFamily: '"SF Mono", ui-monospace, Menlo, monospace',
+  fontVariantNumeric: 'tabular-nums',
+};
+
+// Inputs on the drop canvas: recessed fill, hairline border that warms on hover
+// and turns green on focus. Spread over a TextField/Select `sx`.
+export const dropInput = {
+  '& .MuiOutlinedInput-root': {
+    bgcolor: D.inset, color: D.text, borderRadius: 2,
+    transition: 'border-color 0.18s ease, background-color 0.18s ease',
+    '& fieldset': { borderColor: D.line, transition: 'border-color 0.18s ease' },
+    '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.22)' },
+    '&.Mui-focused fieldset': { borderColor: D.green },
+  },
+  '& .MuiInputLabel-root': { color: D.muted },
+  '& .MuiInputLabel-root.Mui-focused': { color: D.green },
+  '& .MuiInputBase-input': { color: D.text },
+  '& .MuiInputBase-input::placeholder': { color: D.faint, opacity: 1 },
+  '& .MuiSelect-icon': { color: D.muted },
+  input: { color: D.text },
+};
+
+// Primary action — green pill with a soft glow that lifts on hover.
+export const dropPrimaryBtn = {
+  bgcolor: D.green, color: D.ink, fontWeight: 800, textTransform: 'none',
+  borderRadius: 999, boxShadow: `0 6px 18px ${D.glow}`,
+  transition: 'transform 0.15s ease, box-shadow 0.2s ease, background-color 0.15s ease',
+  '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 26px ${D.glow}` },
+  '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.25)', color: 'rgba(6,20,12,0.5)', boxShadow: 'none' },
+};
+
+// Quiet ghost action — hairline outline that warms on hover.
+export const dropGhostBtn = {
+  color: D.text, border: `1px solid ${D.line}`, fontWeight: 700, textTransform: 'none',
+  borderRadius: 999, transition: 'border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease',
+  '&:hover': { borderColor: 'rgba(255,255,255,0.3)', bgcolor: 'rgba(255,255,255,0.04)' },
+};
+
 export const HEADER_H = 56;
 
 export const STATUS_META = {

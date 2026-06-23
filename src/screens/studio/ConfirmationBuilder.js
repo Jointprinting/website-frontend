@@ -22,7 +22,7 @@ import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import VisibilityOutlinedIcon  from '@mui/icons-material/VisibilityOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { B, scrollbar, darkInput, fmt } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
 import jpLogoColored from '../../modules/images/logo_colored.webp';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -328,48 +328,59 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         closeWithSave();
       }}
       maxWidth={false} fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3,
+        boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.35,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <Box sx={accentBar} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, letterSpacing: 0.2,
+          display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           Confirmation page
-          <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
-            Project #{project.projectNumber || '—'}{saving ? ' · saving…' : (dirty ? ' · saving soon' : ' · saved ✓')}
-          </Typography>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              bgcolor: saving ? D.amber : (dirty ? D.faint : D.green),
+              boxShadow: saving || !dirty ? `0 0 8px ${saving ? 'rgba(251,191,36,0.6)' : D.glow}` : 'none',
+              transition: 'background-color 0.2s ease' }} />
+            <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500 }}>
+              Project #{project.projectNumber || '—'}{saving ? ' · saving…' : (dirty ? ' · saving soon' : ' · saved')}
+            </Typography>
+          </Box>
         </Typography>
         <Button size="small" disabled={previewBusy}
           startIcon={previewBusy
-            ? <CircularProgress size={12} sx={{ color: B.muted }} />
+            ? <CircularProgress size={12} sx={{ color: D.muted }} />
             : <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={previewAsClient}
-          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.muted,
-            '&:hover': { color: B.white } }}>
+          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.muted, borderRadius: 999,
+            transition: 'color 0.18s ease', '&:hover': { color: D.text } }}>
           Preview
         </Button>
         {onShareApproval && (
           <Button size="small" disabled={shareBusy}
             startIcon={shareBusy
-              ? <CircularProgress size={12} sx={{ color: B.green }} />
+              ? <CircularProgress size={12} sx={{ color: D.green }} />
               : <ShareIcon sx={{ fontSize: 16 }} />}
             onClick={shareApproval}
-            sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.green,
-              '&:hover': { color: '#3bd070' } }}>
+            sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.green, borderRadius: 999,
+              transition: 'color 0.18s ease', '&:hover': { color: '#5cec8e' } }}>
             Share for approval
           </Button>
         )}
         <Button size="small" disabled={pdfBusy}
           startIcon={pdfBusy
-            ? <CircularProgress size={12} sx={{ color: B.greenDk }} />
+            ? <CircularProgress size={12} sx={{ color: D.ink }} />
             : <PictureAsPdfIcon sx={{ fontSize: 16 }} />}
           onClick={downloadPdf}
-          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700,
-            bgcolor: B.green, color: B.greenDk, px: 1.5,
-            '&:hover': { bgcolor: '#3bd070' } }}>
+          sx={{ fontSize: 12, fontWeight: 800, px: 1.75, py: 0.5,
+            bgcolor: D.green, color: D.ink, textTransform: 'none', borderRadius: 999,
+            boxShadow: `0 6px 18px ${D.glow}`,
+            transition: 'transform 0.15s ease, box-shadow 0.2s ease, background-color 0.15s ease',
+            '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 26px ${D.glow}` } }}>
           Download PDF
         </Button>
-        <IconButton size="small" onClick={closeWithSave}>
+        <IconButton size="small" onClick={closeWithSave} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
@@ -386,7 +397,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '420px 1fr' },
           minHeight: '78vh' }}>
           {/* Editor */}
-          <Box sx={{ borderRight: { md: `1px solid ${B.border}` }, p: 2, overflow: 'auto', ...scrollbar,
+          <Box sx={{ borderRight: { md: `1px solid ${D.line}` }, bgcolor: D.bg, p: 2, overflow: 'auto', ...scrollbar,
             maxHeight: { md: '85vh' } }}>
             <Editor local={local} update={update} project={project} mockups={mockups} mockupMap={mockupMap} />
           </Box>
@@ -457,8 +468,8 @@ function Editor({ local, update, project, mockups, mockupMap }) {
 
       {/* Items */}
       <Box>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-          <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.6}>
+          <Typography sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase' }}>
             Items · {local.items.length}
           </Typography>
           <Box>
@@ -473,14 +484,16 @@ function Editor({ local, update, project, mockups, mockupMap }) {
                     if (next.length === 0) return;
                     update({ items: [...local.items, ...next] });
                   }}
-                  sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                  sx={{ color: D.muted, fontSize: 11, textTransform: 'none', borderRadius: 999,
+                    '&:hover': { color: D.text } }}>
                   + From quote
                 </Button>
               </Tooltip>
             )}
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
               onClick={() => addItem()}
-              sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add item
             </Button>
           </Box>
@@ -494,7 +507,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               project={project} noSpinner={noSpinner} />
           ))}
           {local.items.length === 0 && (
-            <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 2, textAlign: 'center', color: B.muted, fontSize: 12 }}>
+            <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 2, p: 2, textAlign: 'center', color: D.muted, fontSize: 12, bgcolor: D.inset }}>
               No items yet. Add one for each garment/product the client wants.
             </Box>
           )}
@@ -509,17 +522,22 @@ function Editor({ local, update, project, mockups, mockupMap }) {
                 lines, so they apply to the running subtotal in order. */}
             <Button size="small"
               onClick={() => update({ customLines: [...(local.customLines || []), { label: 'Credit card fee', amount: 2.99, isPercent: true }] })}
-              sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.6, '&:hover': { color: B.green } }}>
+              sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                '&:hover': { color: D.green, borderColor: D.lineHi } }}>
               + Card&nbsp;fee
             </Button>
             <Button size="small"
               onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true }] })}
-              sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.6, '&:hover': { color: B.green } }}>
+              sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                '&:hover': { color: D.green, borderColor: D.lineHi } }}>
               + NJ&nbsp;tax
             </Button>
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
               onClick={() => update({ customLines: [...(local.customLines || []), { label: '', amount: 0, isPercent: false }] })}
-              sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add line
             </Button>
           </Stack>
@@ -531,27 +549,29 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               <TextField size="small" placeholder="Label (e.g. Shipping reserve)"
                 value={cl.label}
                 onChange={e => update({ customLines: local.customLines.map((x, j) => j === i ? { ...x, label: e.target.value } : x) })}
-                sx={{ ...darkInput, '& .MuiInputBase-input': { fontSize: 12 } }} />
+                sx={{ ...dropInput, '& .MuiInputBase-input': { fontSize: 12 } }} />
               <TextField size="small" type="number" placeholder="0.00"
                 value={cl.amount || ''}
                 onChange={e => update({ customLines: local.customLines.map((x, j) => j === i ? { ...x, amount: Number(e.target.value) || 0 } : x) })}
-                sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { fontSize: 12, textAlign: 'right' } }} />
+                sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { fontSize: 12, textAlign: 'right', ...mono } }} />
               <Tooltip title="Toggle percent vs flat amount">
                 <Box onClick={() => update({ customLines: local.customLines.map((x, j) => j === i ? { ...x, isPercent: !x.isPercent } : x) })}
-                  sx={{ cursor: 'pointer', textAlign: 'center', color: cl.isPercent ? B.green : B.muted, fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
-                    border: `1px solid ${cl.isPercent ? B.green : B.faint}`, borderRadius: 0.5, py: 0.4 }}>
+                  sx={{ cursor: 'pointer', textAlign: 'center', color: cl.isPercent ? D.ink : D.muted, fontSize: 12, fontWeight: 800, ...mono,
+                    bgcolor: cl.isPercent ? D.green : 'transparent',
+                    border: `1px solid ${cl.isPercent ? D.green : D.line}`, borderRadius: 1, py: 0.4,
+                    transition: 'background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease' }}>
                   {cl.isPercent ? '%' : '$'}
                 </Box>
               </Tooltip>
               <IconButton size="small"
                 onClick={() => update({ customLines: local.customLines.filter((_, j) => j !== i) })}
-                sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
                 <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Box>
           ))}
           {(local.customLines || []).length === 0 && (
-            <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic' }}>
+            <Typography sx={{ color: D.muted, fontSize: 11, fontStyle: 'italic' }}>
               No add-ons. Use these for shipping reserve, CC fee (2.99%), discounts, taxes…
             </Typography>
           )}
@@ -625,30 +645,32 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
   const snapshots = item.mockupSnapshots || [];
 
   return (
-    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.2, bgcolor: 'rgba(255,255,255,0.02)' }}>
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: 1.4, bgcolor: D.panel,
+      transition: 'background-color 0.18s ease, border-color 0.18s ease',
+      '&:hover': { bgcolor: D.panelHi, borderColor: 'rgba(255,255,255,0.14)' } }}>
       <Stack direction="row" alignItems="center" gap={0.5} mb={1}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }}>
+        <Typography sx={{ color: D.green, fontSize: 10, fontWeight: 800, ...mono, letterSpacing: 1 }}>
           ITEM {idx + 1}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <IconButton size="small" onClick={() => onMove(-1)} sx={{ color: B.muted, p: 0.3, fontSize: 14 }}>↑</IconButton>
-        <IconButton size="small" onClick={() => onMove(1)}  sx={{ color: B.muted, p: 0.3, fontSize: 14 }}>↓</IconButton>
-        <IconButton size="small" onClick={onRemove} sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+        <IconButton size="small" onClick={() => onMove(-1)} sx={{ color: D.muted, p: 0.3, fontSize: 14, '&:hover': { color: D.text } }}>↑</IconButton>
+        <IconButton size="small" onClick={() => onMove(1)}  sx={{ color: D.muted, p: 0.3, fontSize: 14, '&:hover': { color: D.text } }}>↓</IconButton>
+        <IconButton size="small" onClick={onRemove} sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
           <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
         </IconButton>
       </Stack>
 
       {/* Mockup picker */}
       <Box sx={{ mb: 1 }}>
-        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.3 }}>
+        <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.3 }}>
           Mockup snapshot
         </Typography>
         <Stack direction="row" gap={1} alignItems="center">
           <Select size="small" displayEmpty fullWidth
             value={normMockupKey(item.mockupNum || '')}
             onChange={e => onUpdate({ mockupNum: e.target.value, customMockupDataUrl: '' })}
-            sx={{ ...darkInput['& .MuiOutlinedInput-root'], color: B.white, fontSize: 12,
-              '& .MuiSelect-icon': { color: B.muted } }}>
+            sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 12, borderRadius: 2,
+              '& .MuiSelect-icon': { color: D.muted } }}>
             <MenuItem value=""><em>— pick one —</em></MenuItem>
             {projectMockups.map(m => (
               <MenuItem key={m._id} value={normMockupKey(m.pageState?.mockupNum || m.name)}>
@@ -659,7 +681,9 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
           <input ref={singleFileRef} type="file" accept="image/*" hidden onChange={onUpload} />
           <Tooltip title="Upload a custom mockup image (replaces primary)">
             <IconButton size="small" onClick={() => singleFileRef.current?.click()}
-              sx={{ color: item.customMockupDataUrl ? B.green : B.muted, border: `1px solid ${B.faint}`, borderRadius: 1 }}>
+              sx={{ color: item.customMockupDataUrl ? D.green : D.muted, border: `1px solid ${item.customMockupDataUrl ? D.lineHi : D.line}`, borderRadius: 1.5,
+                transition: 'color 0.18s ease, border-color 0.18s ease',
+                '&:hover': { color: D.green, borderColor: D.lineHi } }}>
               <FileUploadOutlinedIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
@@ -668,7 +692,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
           <FormControlLabel
             control={<Switch size="small" checked={!!item.showBack}
               onChange={e => onUpdate({ showBack: e.target.checked })} />}
-            label={<Typography sx={{ color: B.muted, fontSize: 11 }}>Show back too</Typography>}
+            label={<Typography sx={{ color: D.muted, fontSize: 11 }}>Show back too</Typography>}
             sx={{ mt: 0.3 }}
           />
         )}
@@ -676,13 +700,14 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
         {/* Variant snapshots — for multi-color items like headbands */}
         <Box sx={{ mt: 0.8 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.3}>
-            <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
               Variants · {snapshots.length}
             </Typography>
             <input ref={multiFileRef} type="file" accept="image/*" multiple hidden onChange={onUploadMulti} />
             <Button size="small" onClick={() => multiFileRef.current?.click()}
               startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 13 }} />}
-              sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add variants
             </Button>
           </Stack>
@@ -692,19 +717,19 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
                 <Box key={i} sx={{ position: 'relative', width: 64 }}>
                   <Box component="img" src={s.dataUrl} alt=""
                     sx={{ width: 64, height: 64, objectFit: 'contain', bgcolor: '#fff',
-                      borderRadius: 1, border: `1px solid ${B.faint}` }} />
+                      borderRadius: 1.5, border: `1px solid ${D.line}` }} />
                   <TextField size="small" value={s.label || ''}
                     placeholder="label"
                     onChange={e => onUpdate({
                       mockupSnapshots: snapshots.map((x, j) => j === i ? { ...x, label: e.target.value } : x),
                     })}
-                    sx={{ ...darkInput, mt: 0.3,
-                      '& .MuiInputBase-input': { color: B.white, fontSize: 10, py: 0.2, textAlign: 'center' } }} />
+                    sx={{ ...dropInput, mt: 0.3,
+                      '& .MuiInputBase-input': { color: D.text, fontSize: 10, py: 0.2, textAlign: 'center' } }} />
                   <IconButton size="small" onClick={() => removeSnapshot(i)}
                     sx={{
-                      position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: B.bg,
-                      color: '#f87171', border: `1px solid ${B.border}`,
-                      '&:hover': { bgcolor: B.bg },
+                      position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: D.bg,
+                      color: '#f87171', border: `1px solid ${D.line}`,
+                      '&:hover': { bgcolor: D.panelHi },
                     }}>
                     <CloseIcon sx={{ fontSize: 11 }} />
                   </IconButton>
@@ -726,14 +751,14 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
         <SmallField label="Brand"      value={item.brandName} onChange={v => onUpdate({ brandName: v })} />
         <SmallField label="Style code" value={item.styleCode} onChange={v => onUpdate({ styleCode: v })} />
         <Box>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
+          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
             Print type
           </Typography>
           <Select size="small" value={item.printType || ''}
             onChange={e => onUpdate({ printType: e.target.value })}
             displayEmpty fullWidth
-            sx={{ ...darkInput['& .MuiOutlinedInput-root'], color: B.white, fontSize: 12,
-              '& .MuiSelect-icon': { color: B.muted } }}>
+            sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 12, borderRadius: 2,
+              '& .MuiSelect-icon': { color: D.muted } }}>
             <MenuItem value=""><em>—</em></MenuItem>
             {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
           </Select>
@@ -748,7 +773,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
       {/* Sizes */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.3}>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             Sizes · {item.sizes.length}
           </Typography>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -760,20 +785,21 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
                     if (!first) { alert('Type a unit price in any size first, then click "$ to all" to copy it across.'); return; }
                     onUpdate({ sizes: item.sizes.map(s => ({ ...s, unitPrice: first.unitPrice })) });
                   }}
-                  sx={{ color: B.muted, fontSize: 10, textTransform: 'none', '&:hover': { color: B.green } }}>
+                  sx={{ color: D.muted, fontSize: 10, textTransform: 'none', borderRadius: 999, '&:hover': { color: D.green } }}>
                   $ to all
                 </Button>
               </span>
             </Tooltip>
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 13 }} />}
-              onClick={addSize} sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              onClick={addSize} sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Size
             </Button>
           </Box>
         </Stack>
         <Box sx={{ display: 'grid', gridTemplateColumns: '54px 76px 86px 26px',
           gap: 0.4, alignItems: 'center', mb: 0.2,
-          fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+          fontSize: 9, fontWeight: 700, color: D.faint, letterSpacing: 0.4, textTransform: 'uppercase' }}>
           <Box>Size</Box><Box sx={{ textAlign: 'right' }}>Qty</Box>
           <Box sx={{ textAlign: 'right' }}>Unit $</Box><Box />
         </Box>
@@ -782,15 +808,15 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
             gap: 0.4, alignItems: 'center', mb: 0.3 }}>
             <TextField size="small" value={s.label} placeholder="M"
               onChange={e => updateSize(sIdx, { label: e.target.value })}
-              sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 11, py: 0.3, textAlign: 'center' } }} />
+              sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 11, py: 0.3, textAlign: 'center' } }} />
             <TextField size="small" type="number" value={s.qty || ''}
               onChange={e => updateSize(sIdx, { qty: Number(e.target.value) || 0 })}
-              sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 11, py: 0.3, textAlign: 'right' } }} />
+              sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { color: D.text, fontSize: 11, py: 0.3, textAlign: 'right', ...mono } }} />
             <TextField size="small" type="number" value={s.unitPrice || ''}
               onChange={e => updateSize(sIdx, { unitPrice: Number(e.target.value) || 0 })}
-              sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 11, py: 0.3, textAlign: 'right' } }} />
+              sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { color: D.text, fontSize: 11, py: 0.3, textAlign: 'right', ...mono } }} />
             <IconButton size="small" onClick={() => removeSize(sIdx)}
-              sx={{ color: B.muted, p: 0.2, '&:hover': { color: '#f87171' } }}>
+              sx={{ color: D.muted, p: 0.2, '&:hover': { color: '#f87171' } }}>
               <RemoveCircleOutlineIcon sx={{ fontSize: 12 }} />
             </IconButton>
           </Box>
@@ -803,8 +829,8 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
 function Section({ title, action, children }) {
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.6}>
+        <Typography sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase' }}>
           {title}
         </Typography>
         {action}
@@ -817,12 +843,12 @@ function Section({ title, action, children }) {
 function SmallField({ label, value, onChange, type = 'text' }) {
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.25 }}>
         {label}
       </Typography>
       <TextField size="small" fullWidth type={type} value={value || ''}
         onChange={e => onChange(e.target.value)}
-        sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } }}
+        sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 12, py: 0.5 } }}
         InputLabelProps={type === 'date' ? { shrink: true } : undefined} />
     </Box>
   );
