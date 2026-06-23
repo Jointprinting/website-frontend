@@ -37,6 +37,7 @@ import {
   Grow,
   Slide,
   Snackbar,
+  Collapse,
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
@@ -58,7 +59,11 @@ import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import config from '../config.json';
+import { D, accentBar, eyebrow, mono } from './studio/_shared';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
@@ -1929,6 +1934,7 @@ function ColdCallTab({ token }) {
 const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
+    tagline: 'Run the shop',
     tools: [
       { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
@@ -1941,6 +1947,11 @@ const HUB_GROUPS = [
   },
   {
     brand: 'JP Webworks',
+    // Paused business — kept fully functional but visually demoted into a
+    // muted, collapsed-by-default section. Nothing about the tools changes;
+    // only how the hub presents them.
+    paused: true,
+    tagline: 'Web services — on hold',
     tools: [
       { id: 'coldcall',  label: 'Cold Call Tree', desc: 'On-the-fly call script',     Icon: PhoneInTalkIcon },
       { id: 'jpwrecon',  label: 'Lead Recon',     desc: 'Daily lead sweep + queue',   Icon: TrackChangesOutlinedIcon },
@@ -1951,7 +1962,7 @@ const HUB_GROUPS = [
 // Flat list of all tools, with brand attached, for header lookups
 const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
 
-function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
+function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
   const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   return (
@@ -1959,48 +1970,62 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
       <Paper
         elevation={0}
         onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
         sx={{
           cursor: 'pointer',
-          bgcolor: BRAND.panel,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 2.5,
-          minHeight: 168,
-          transition: 'border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease',
+          bgcolor: D.panel,
+          border: `1px solid ${D.line}`,
+          borderRadius: 3,
+          minHeight: muted ? 132 : 168,
+          transition: 'border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease',
           position: 'relative',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
           justifyContent: 'flex-start',
-          gap: 1.5,
-          p: { xs: 2, sm: 2.5 },
-          background: 'linear-gradient(160deg, rgba(74,222,128,0.05) 0%, rgba(255,255,255,0.01) 60%, transparent 100%)',
+          gap: muted ? 1.25 : 1.5,
+          p: { xs: 2, sm: muted ? 2.25 : 2.5 },
+          // Muted (paused) cards drop the green wash so they read quieter; live
+          // cards get the soft top-left brand glow.
+          opacity: muted ? 0.78 : 1,
+          backgroundImage: muted
+            ? 'none'
+            : 'linear-gradient(155deg, rgba(74,222,128,0.06) 0%, rgba(255,255,255,0.012) 55%, transparent 100%)',
           '&:hover': {
-            borderColor: BRAND.green,
+            borderColor: D.lineHi,
             transform: 'translateY(-3px)',
-            boxShadow: '0 12px 32px -16px rgba(74,222,128,0.45)',
-            '& .hub-icon': { color: BRAND.greenDk, bgcolor: BRAND.green },
-            '& .hub-label': { color: BRAND.green },
-            '& .hub-chev': { transform: 'translateX(3px)', color: BRAND.green },
+            opacity: 1,
+            boxShadow: `0 16px 38px -18px ${D.glow}`,
+            '& .hub-accent': { opacity: 1 },
+            '& .hub-icon': { color: D.ink, bgcolor: D.green, boxShadow: `0 0 0 5px rgba(74,222,128,0.12)` },
+            '& .hub-label': { color: D.green },
+            '& .hub-chev': { transform: 'translateX(3px)', color: D.green },
           },
+          '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
         }}
       >
+        {/* Top accent hairline — invisible until hover, the brand "glow" cue. */}
+        <Box className="hub-accent" sx={{ ...accentBar, opacity: 0, transition: 'opacity 0.2s ease' }} />
         <Box
           className="hub-icon"
           sx={{
-            width: 48, height: 48, borderRadius: 2,
-            bgcolor: BRAND.greenDk, color: BRAND.green,
+            width: muted ? 42 : 48, height: muted ? 42 : 48, borderRadius: 2,
+            bgcolor: D.greenDk, color: D.green,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.18s ease',
+            transition: 'all 0.2s ease',
             position: 'relative',
           }}
         >
-          <Icon sx={{ fontSize: 24 }} />
+          <Icon sx={{ fontSize: muted ? 21 : 24 }} />
           {notice && !badge && (
             <Box sx={{
               position: 'absolute', top: -3, right: -3,
               width: 10, height: 10, borderRadius: '50%',
-              bgcolor: BRAND.green,
-              boxShadow: '0 0 6px rgba(74,222,128,0.6)',
+              bgcolor: D.green,
+              boxShadow: `0 0 6px ${D.glow}`,
             }} />
           )}
           {badge > 0 && (
@@ -2012,7 +2037,7 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
               fontSize: 11, fontWeight: 800,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               lineHeight: 1,
-              boxShadow: '0 0 0 2px ' + BRAND.panel + ', 0 2px 6px rgba(255,59,48,0.45)',
+              boxShadow: '0 0 0 2px ' + D.panel + ', 0 2px 6px rgba(255,59,48,0.45)',
             }}>
               {badgeText}
             </Box>
@@ -2020,23 +2045,22 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
         </Box>
         <Box sx={{ flexGrow: 1, minHeight: 0 }}>
           <MuiTypography className="hub-label" sx={{
-            color: BRAND.white, fontWeight: 700, fontSize: 15, letterSpacing: 0.2,
-            transition: 'color 0.18s ease', lineHeight: 1.25, mb: 0.25,
+            color: D.text, fontWeight: 800, fontSize: muted ? 14.5 : 15.5, letterSpacing: 0.2,
+            transition: 'color 0.2s ease', lineHeight: 1.25, mb: 0.4,
           }}>
             {label}
           </MuiTypography>
           {desc && (
             <MuiTypography sx={{
-              color: BRAND.muted, fontSize: 11.5, lineHeight: 1.35,
+              color: D.muted, fontSize: 11.5, lineHeight: 1.4,
             }}>
               {desc}
             </MuiTypography>
           )}
           {countdown && (
             <MuiTypography sx={{
-              color: BRAND.green, fontSize: 10.5, fontWeight: 700,
-              letterSpacing: 0.3, mt: 0.6,
-              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              color: D.green, fontSize: 10.5, fontWeight: 700,
+              letterSpacing: 0.3, mt: 0.6, ...mono,
             }}>
               {countdown}
             </MuiTypography>
@@ -2044,8 +2068,8 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge }) {
         </Box>
         <ChevronRightIcon className="hub-chev" sx={{
           position: 'absolute', top: 14, right: 12,
-          fontSize: 18, color: 'rgba(255,255,255,0.25)',
-          transition: 'transform 0.18s ease, color 0.18s ease',
+          fontSize: 18, color: D.faint,
+          transition: 'transform 0.2s ease, color 0.2s ease',
         }} />
       </Paper>
     </Grow>
@@ -2066,60 +2090,216 @@ function _fmtCountdown(iso) {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+// Section header — accent bar + eyebrow brand label + a quiet tagline, hung
+// on a hairline rule. Shared by the live and paused groups so the two read as
+// the same family, just at different volumes. `right` slots optional trailing
+// content (the Paused chip / collapse affordance).
+function SectionHeader({ brand, tagline, dim, right }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+      <Box sx={{
+        width: 3, alignSelf: 'stretch', minHeight: 28, borderRadius: 2,
+        background: dim
+          ? 'rgba(255,255,255,0.18)'
+          : `linear-gradient(180deg, ${D.green}, ${D.greenDk})`,
+        opacity: dim ? 1 : 0.9, flexShrink: 0,
+      }} />
+      <Box sx={{ minWidth: 0 }}>
+        <MuiTypography sx={{
+          ...eyebrow,
+          color: dim ? D.faint : D.green,
+          fontSize: 11, letterSpacing: 2.4, lineHeight: 1.1,
+        }}>
+          {brand}
+        </MuiTypography>
+        {tagline && (
+          <MuiTypography sx={{ color: D.muted, fontSize: 12, mt: 0.35, lineHeight: 1.2 }}>
+            {tagline}
+          </MuiTypography>
+        )}
+      </Box>
+      <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'rgba(255,255,255,0.07)' }} />
+      {right}
+    </Stack>
+  );
+}
+
+function ToolGrid({ tools, twoUp, muted, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+  return (
+    <Box sx={{
+      display: 'grid',
+      gap: { xs: 1.25, sm: 1.5 },
+      // Wider grid on desktop fills the empty horizontal space the previous
+      // 3-col layout left behind. 4 across on lg keeps the common tiles on one
+      // comfortable row; the paused (2-tool) group stays a tidy pair.
+      gridTemplateColumns: {
+        xs: 'repeat(2, 1fr)',
+        sm: twoUp ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        md: twoUp ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        lg: twoUp ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+      },
+    }}>
+      {tools.map((t, i) => {
+        const showNotice = t.id === 'jpwrecon' && sweepNeeded;
+        const showResetCountdown = t.id === 'jpwrecon' && !sweepNeeded && sweepBlocked && nextResetAt;
+        const badge = t.id === 'submissions' ? (unseenInquiries || 0) : 0;
+        return (
+          <HubCard
+            key={t.id}
+            tool={t}
+            muted={muted}
+            delay={(startIdx + i) * 50}
+            onClick={() => onPick(t.id)}
+            notice={showNotice ? "Today's sweep not run yet" : null}
+            countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
+            badge={badge}
+          />
+        );
+      })}
+    </Box>
+  );
+}
+
+// Future-phase placeholder. Intentionally inert — a calm, labeled slot on the
+// hub reserved for smart alerts. No data, no logic; just reserves the space
+// and signals intent so the layout doesn't jump when alerts land later.
+function AlertsPlaceholder() {
+  return (
+    <Box sx={{
+      borderRadius: 3, p: { xs: 2, sm: 2.25 },
+      border: `1px dashed ${D.line}`, bgcolor: D.inset,
+      display: 'flex', alignItems: 'center', gap: 1.75,
+    }}>
+      <Box sx={{
+        width: 38, height: 38, borderRadius: 2, flexShrink: 0,
+        bgcolor: 'rgba(255,255,255,0.04)', color: D.faint,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <NotificationsNoneOutlinedIcon sx={{ fontSize: 20 }} />
+      </Box>
+      <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+        <MuiTypography sx={{ color: D.muted, fontWeight: 700, fontSize: 13, lineHeight: 1.25 }}>
+          Alerts
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.faint, fontSize: 11.5, lineHeight: 1.35 }}>
+          Smart notifications will surface here. Nothing needs your attention right now.
+        </MuiTypography>
+      </Box>
+      <Chip label="Coming soon" size="small" sx={{
+        bgcolor: 'rgba(255,255,255,0.05)', color: D.faint, fontWeight: 700,
+        fontSize: 10, height: 20, border: `1px solid ${D.line}`, flexShrink: 0,
+      }} />
+    </Box>
+  );
+}
+
 function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+  // Paused groups collapse by default — present but out of the way. State keyed
+  // by brand so each remembers its own open/closed for this session.
+  const [openPaused, setOpenPaused] = React.useState({});
+  const live = HUB_GROUPS.filter((g) => !g.paused);
+  const paused = HUB_GROUPS.filter((g) => g.paused);
   let cardIdx = 0;
+
   return (
     <Stack spacing={4}>
-      {HUB_GROUPS.map((group) => (
-        <Box key={group.brand}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.75 }}>
-            <Box sx={{ height: 1, flexGrow: 0, width: 24, bgcolor: BRAND.green, opacity: 0.5 }} />
-            <MuiTypography
-              variant="overline"
+      {live.map((group) => {
+        const startIdx = cardIdx;
+        cardIdx += group.tools.length;
+        return (
+          <Box key={group.brand}>
+            <SectionHeader brand={group.brand} tagline={group.tagline} />
+            <ToolGrid
+              tools={group.tools}
+              twoUp={group.tools.length <= 2}
+              startIdx={startIdx}
+              onPick={onPick}
+              sweepNeeded={sweepNeeded}
+              sweepBlocked={sweepBlocked}
+              nextResetAt={nextResetAt}
+              unseenInquiries={unseenInquiries}
+            />
+          </Box>
+        );
+      })}
+
+      {/* Reserved, logic-free slot for the future smart-alerts phase. */}
+      <Box>
+        <SectionHeader brand="Signals" tagline="Heads-up at a glance" dim />
+        <AlertsPlaceholder />
+      </Box>
+
+      {/* Paused businesses — kept, but visually tucked: muted header, a Paused
+          chip, and collapsed by default. Every tool inside stays fully
+          functional; this only changes presentation. */}
+      {paused.map((group) => {
+        const isOpen = !!openPaused[group.brand];
+        const startIdx = cardIdx;
+        cardIdx += group.tools.length;
+        const toggle = () => setOpenPaused((m) => ({ ...m, [group.brand]: !m[group.brand] }));
+        return (
+          <Box key={group.brand} sx={{ opacity: 0.92 }}>
+            <Box
+              onClick={toggle}
+              role="button"
+              tabIndex={0}
+              aria-expanded={isOpen}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
               sx={{
-                color: BRAND.green, fontWeight: 800, letterSpacing: 2.5,
-                fontSize: 10, lineHeight: 1,
+                cursor: 'pointer', borderRadius: 2, mx: -1, px: 1, py: 0.5,
+                transition: 'background-color 0.15s ease',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
+                '&:focus-visible': { outline: `2px solid ${D.line}`, outlineOffset: 2 },
               }}
             >
-              {group.brand}
-            </MuiTypography>
-            <Box sx={{ height: 1, flexGrow: 1, bgcolor: BRAND.faint }} />
-          </Stack>
-          <Box sx={{
-            display: 'grid',
-            gap: { xs: 1.25, sm: 1.5 },
-            // Wider grid on desktop fills the empty horizontal space the
-            // previous 3-col layout left behind. 4 across on lg keeps the
-            // common tiles (Order Tracker, Mockup Studio, Inquiries, Catalogs)
-            // on one comfortable row.
-            gridTemplateColumns: {
-              xs: 'repeat(2, 1fr)',
-              sm: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-              md: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-              lg: group.tools.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-            },
-          }}>
-            {group.tools.map((t) => {
-              const showNotice = t.id === 'jpwrecon' && sweepNeeded;
-              const showResetCountdown = t.id === 'jpwrecon' && !sweepNeeded && sweepBlocked && nextResetAt;
-              const badge = t.id === 'submissions' ? (unseenInquiries || 0) : 0;
-              const card = (
-                <HubCard
-                  key={t.id}
-                  tool={t}
-                  delay={cardIdx * 50}
-                  onClick={() => onPick(t.id)}
-                  notice={showNotice ? "Today's sweep not run yet" : null}
-                  countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
-                  badge={badge}
+              <SectionHeader
+                brand={group.brand}
+                tagline={group.tagline}
+                dim
+                right={
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
+                    <Chip
+                      icon={<PauseCircleOutlineIcon sx={{ fontSize: 14, ml: 0.5 }} />}
+                      label="Paused"
+                      size="small"
+                      sx={{
+                        bgcolor: 'rgba(251,191,36,0.10)', color: D.amber, fontWeight: 700,
+                        fontSize: 10.5, height: 22, border: '1px solid rgba(251,191,36,0.28)',
+                        '& .MuiChip-icon': { color: D.amber },
+                      }}
+                    />
+                    <ExpandMoreIcon sx={{
+                      color: D.faint, fontSize: 20,
+                      transition: 'transform 0.2s ease',
+                      transform: isOpen ? 'rotate(180deg)' : 'none',
+                    }} />
+                  </Stack>
+                }
+              />
+            </Box>
+            {!isOpen && (
+              <MuiTypography sx={{ color: D.faint, fontSize: 11.5, mt: -1, mb: 0.5, ml: 0.25 }}>
+                {group.tools.length} tool{group.tools.length === 1 ? '' : 's'} kept on hold — tap to open.
+              </MuiTypography>
+            )}
+            <Collapse in={isOpen} timeout={260} unmountOnExit>
+              <Box sx={{ pt: 0.5 }}>
+                <ToolGrid
+                  tools={group.tools}
+                  twoUp={group.tools.length <= 2}
+                  muted
+                  startIdx={startIdx}
+                  onPick={onPick}
+                  sweepNeeded={sweepNeeded}
+                  sweepBlocked={sweepBlocked}
+                  nextResetAt={nextResetAt}
+                  unseenInquiries={unseenInquiries}
                 />
-              );
-              cardIdx += 1;
-              return card;
-            })}
+              </Box>
+            </Collapse>
           </Box>
-        </Box>
-      ))}
+        );
+      })}
     </Stack>
   );
 }
@@ -2204,31 +2384,33 @@ function StudioBody({ token, onLogout }) {
   // Studio chrome. Returning early keeps the rest of the function untouched.
   if (view === 'roadtrip') {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: '#05080a' }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: D.bg }}>
         <Stack
           direction="row" alignItems="center" spacing={2}
           sx={{
-            height: 56, px: 2, borderBottom: '1px solid #1a3d2b',
-            bgcolor: '#0a0e10', color: BRAND.green,
+            height: 56, px: 2, position: 'relative',
+            borderBottom: `1px solid ${D.line}`,
+            bgcolor: D.panel, color: D.green,
           }}
         >
+          <Box sx={accentBar} />
           <Button
             onClick={() => setView('hub')}
             startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />}
             size="small"
             sx={{
-              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              ...mono,
               fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
-              color: BRAND.muted, textTransform: 'none', minWidth: 0,
-              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.08)' },
+              color: D.muted, textTransform: 'none', minWidth: 0, borderRadius: 999,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' },
             }}
           >
             Studio
           </Button>
-          <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.2)' }} />
+          <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
           <MuiTypography sx={{
-            fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-            fontSize: 12, color: BRAND.green, fontWeight: 700,
+            ...mono,
+            fontSize: 12, color: D.green, fontWeight: 700,
           }}>
             Field Map
           </MuiTypography>
@@ -2237,10 +2419,10 @@ function StudioBody({ token, onLogout }) {
             onClick={onLogout}
             size="small"
             sx={{
-              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              ...mono,
               fontSize: 11, fontWeight: 700, letterSpacing: 1,
-              color: 'rgba(212,244,221,0.6)', textTransform: 'none',
-              '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.08)' },
+              color: D.muted, textTransform: 'none', borderRadius: 999,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' },
             }}
           >
             SIGN OUT
@@ -2265,7 +2447,12 @@ function StudioBody({ token, onLogout }) {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: BRAND.bg, py: { xs: 3, md: 5 } }}>
+    <Box sx={{
+      minHeight: '100vh', bgcolor: D.bg, py: { xs: 3, md: 5 },
+      // Soft brand glow anchored top-center — the same "drop" cue the client
+      // approval page and builders use, so the hub feels part of the family.
+      backgroundImage: 'radial-gradient(120% 60% at 50% -10%, rgba(74,222,128,0.06), rgba(11,20,16,0) 60%)',
+    }}>
       <BackupNagBanner token={token} onClick={() => setView('backup')} />
       {/* On the hub we want the wider 4-up grid; once you enter a tool, the
           existing tools were designed against the narrower md container so we
@@ -2277,21 +2464,40 @@ function StudioBody({ token, onLogout }) {
             alignItems="center" justifyContent="space-between"
             sx={{ mb: { xs: 2.5, md: 3.5 } }}
           >
-            <MuiTypography
-              sx={{
-                fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-                fontSize: { xs: 15, md: 17 }, fontWeight: 800,
-                color: BRAND.white, letterSpacing: 1,
-              }}
-            >
-              JP <Box component="span" sx={{ color: BRAND.green }}>STUDIO</Box>
-            </MuiTypography>
+            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
+              <Box sx={{
+                width: 34, height: 34, borderRadius: 1.75, flexShrink: 0,
+                bgcolor: D.greenDk, color: D.green,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: `0 0 0 4px rgba(74,222,128,0.06)`,
+              }}>
+                <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  sx={{ width: 22, height: 22, objectFit: 'contain' }} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <MuiTypography
+                  sx={{
+                    ...mono,
+                    fontSize: { xs: 15, md: 17 }, fontWeight: 800,
+                    color: D.text, letterSpacing: 1, lineHeight: 1.1,
+                  }}
+                >
+                  JP <Box component="span" sx={{ color: D.green }}>STUDIO</Box>
+                </MuiTypography>
+                {isHub && (
+                  <MuiTypography sx={{ ...eyebrow, color: D.faint, fontSize: 9.5, letterSpacing: 2, mt: 0.2 }}>
+                    Command center
+                  </MuiTypography>
+                )}
+              </Box>
+            </Stack>
             <Button
               onClick={onLogout} size="small"
               sx={{
                 textTransform: 'none', fontWeight: 600, fontSize: 12,
-                color: BRAND.muted,
-                '&:hover': { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
+                color: D.muted, borderRadius: 999,
+                '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.04)' },
               }}
             >Sign out</Button>
           </Stack>
@@ -2302,14 +2508,18 @@ function StudioBody({ token, onLogout }) {
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
-              borderRadius: 3, overflow: 'hidden',
-              bgcolor: BRAND.panel, border: `1px solid ${BRAND.border}`,
+              borderRadius: 3, overflow: 'hidden', position: 'relative',
+              bgcolor: D.panel, border: `1px solid ${D.line}`,
             }}>
+              {/* Brand accent across the top of the tool shell — the same cue
+                  the builders + approval page share, so moving between tools
+                  feels like one cohesive surface. */}
+              <Box sx={accentBar} />
               <Stack
                 direction="row" alignItems="center" spacing={1.5}
                 sx={{
                   px: { xs: 2, sm: 2.5 }, py: 1.5,
-                  borderBottom: `1px solid ${BRAND.faint}`,
+                  borderBottom: `1px solid ${D.line}`,
                 }}
               >
                 <Button
@@ -2317,15 +2527,27 @@ function StudioBody({ token, onLogout }) {
                   startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />}
                   size="small"
                   sx={{
-                    textTransform: 'none', color: BRAND.muted, fontWeight: 600,
-                    minWidth: 'auto', px: 1, fontSize: 12,
-                    '&:hover': { color: BRAND.green, bgcolor: 'rgba(74,222,128,0.06)' },
+                    textTransform: 'none', color: D.muted, fontWeight: 600,
+                    minWidth: 'auto', px: 1, fontSize: 12, borderRadius: 999,
+                    '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' },
                   }}
                 >Studio</Button>
-                <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.2)' }} />
-                <MuiTypography sx={{ color: BRAND.green, fontWeight: 700, fontSize: 13 }}>
+                <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
+                <MuiTypography sx={{ color: D.green, fontWeight: 700, fontSize: 13, ...mono }}>
                   {currentTool?.label}
                 </MuiTypography>
+                {currentTool?.brand === 'JP Webworks' && (
+                  <Chip
+                    icon={<PauseCircleOutlineIcon sx={{ fontSize: 13, ml: 0.5 }} />}
+                    label="Paused"
+                    size="small"
+                    sx={{
+                      bgcolor: 'rgba(251,191,36,0.10)', color: D.amber, fontWeight: 700,
+                      fontSize: 10, height: 20, border: '1px solid rgba(251,191,36,0.28)',
+                      '& .MuiChip-icon': { color: D.amber },
+                    }}
+                  />
+                )}
               </Stack>
 
               <Fade in key={view} timeout={300}>
