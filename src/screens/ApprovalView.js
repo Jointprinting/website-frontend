@@ -1,7 +1,12 @@
 // src/screens/ApprovalView.js
 // Public, token-gated approval surface that clients open from a link sent
-// by the Order Tracker. They see mockups + the quote, then either approve
-// or request changes with a note. Backend logs the event.
+// by the Order Tracker. They pick their options, watch their confirmation get
+// built, then approve or request changes. Backend logs every event.
+//
+// Design: a dark, branded "drop" experience that matches jointprinting.com
+// (near-black canvas, big confident type, lime-green accents, real motion) —
+// not the calm white document it used to be. A 3-step progress rail ties the
+// pick → review → approve flow into one cohesive ecosystem.
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -9,42 +14,44 @@ import {
   Box, Stack, Typography, Button, TextField, CircularProgress, Dialog,
   DialogTitle, DialogContent, DialogActions, Modal, IconButton,
 } from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CheckIcon from '@mui/icons-material/Check';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import CloseIcon from '@mui/icons-material/Close';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import axios from 'axios';
 import config from '../config.json';
-import jpLogoColored from '../modules/images/logo_colored.webp';
 import JpLoader from '../common/JpLoader';
 
-const COLORS = {
-  bg:     '#f6f6f4',
-  panel:  '#ffffff',
-  text:   '#111111',
-  muted:  '#666666',
-  border: '#e6e6e0',
-  brand:  '#1a3d2b',
-  brandH: '#4ade80',
+// ── Brand tokens (dark) ──────────────────────────────────────────────────────
+const T = {
+  bg:       '#070b09',                    // near-black canvas (site = #050806)
+  panel:    '#0e1613',                    // elevated, green-tinted dark panel
+  panelHi:  '#13201a',                    // hover / selected panel
+  inset:    '#0a110d',                    // recessed (tables, totals)
+  line:     'rgba(255,255,255,0.08)',     // hairline
+  lineHi:   'rgba(74,222,128,0.45)',      // active green border
+  green:    '#4ade80',                    // lime accent
+  greenDk:  '#0e3b22',                    // deep green
+  glow:     'rgba(74,222,128,0.22)',
+  text:     '#f3f7f4',
+  muted:    'rgba(255,255,255,0.56)',
+  faint:    'rgba(255,255,255,0.34)',
+  amber:    '#fbbf24',
 };
 
-// Shared card styling so every panel reads with the same soft border, radius
-// and shadow — keeps the page feeling like one calm document.
-const CARD = {
-  bgcolor: COLORS.panel,
+const card = {
+  bgcolor: T.panel,
+  border: `1px solid ${T.line}`,
   borderRadius: 3,
-  border: `1px solid ${COLORS.border}`,
-  boxShadow: '0 1px 2px rgba(17,17,17,0.04), 0 6px 20px rgba(17,17,17,0.05)',
 };
-
-const SECTION_LABEL = {
-  fontSize: 11,
-  color: COLORS.muted,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: 0.8,
+const eyebrow = {
+  fontSize: 11, fontWeight: 800, letterSpacing: 2,
+  textTransform: 'uppercase', color: T.green,
 };
+const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
 
 function money(n) {
   return `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -77,53 +84,81 @@ function confItemTitle(it, idx) {
 }
 
 // Clickable image that opens the lightbox. Adds a zoom cursor + a soft hover
-// lift and a small magnifier badge so it reads as "tap to enlarge". onZoom is
-// the page-level lightbox opener; sizing/extra styles come through sx.
+// lift and a small magnifier badge so it reads as "tap to enlarge".
 function ZoomImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
   if (!src) return null;
   return (
     <Box
       sx={{
-        position: 'relative',
-        flexShrink: 0,
-        cursor: 'zoom-in',
-        borderRadius: 'inherit',
-        overflow: 'hidden',
-        ...sx,
+        position: 'relative', flexShrink: 0, cursor: 'zoom-in',
+        borderRadius: 'inherit', overflow: 'hidden', ...sx,
         '& img': { display: 'block', width: '100%', height: '100%', objectFit: 'inherit' },
         '&:hover .zoom-badge': { opacity: 1 },
-        '&:hover img': { transform: 'scale(1.04)' },
-        '& img.zimg': { transition: 'transform 200ms ease' },
+        '&:hover img': { transform: 'scale(1.05)' },
+        '& img.zimg': { transition: 'transform 260ms ease' },
       }}
       onClick={(e) => { e.stopPropagation(); onZoom && onZoom(src); }}
-      role="button"
-      tabIndex={0}
-      aria-label="Enlarge image"
+      role="button" tabIndex={0} aria-label="Enlarge image"
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onZoom && onZoom(src); } }}
     >
-      <Box
-        component="img"
-        className="zimg"
-        src={src}
-        alt={alt}
-        loading="lazy"
+      <Box component="img" className="zimg" src={src} alt={alt} loading="lazy"
         onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        sx={{ width: '100%', height: '100%' }}
-      />
+        sx={{ width: '100%', height: '100%' }} />
       {badge && (
-        <Box
-          className="zoom-badge"
-          sx={{
-            position: 'absolute', bottom: 6, right: 6,
-            width: 24, height: 24, borderRadius: '50%',
-            bgcolor: 'rgba(17,17,17,0.6)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: 0, transition: 'opacity 180ms ease', pointerEvents: 'none',
-          }}
-        >
+        <Box className="zoom-badge" sx={{
+          position: 'absolute', bottom: 6, right: 6, width: 24, height: 24, borderRadius: '50%',
+          bgcolor: 'rgba(0,0,0,0.66)', color: '#fff', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', opacity: 0, transition: 'opacity 180ms ease', pointerEvents: 'none',
+        }}>
           <ZoomInIcon sx={{ fontSize: 15 }} />
         </Box>
       )}
+    </Box>
+  );
+}
+
+// ── 3-step progress rail (Choose → Review → Approve) ─────────────────────────
+// One glance tells the client where they are in the flow. `states` is a
+// 3-tuple of 'done' | 'current' | 'building' | 'todo'.
+function ProgressRail({ states }) {
+  const labels = ['Choose', 'Review', 'Approve'];
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: { xs: 0.5, sm: 1.5 }, px: 1 }}>
+      {labels.map((label, i) => {
+        const st = states[i] || 'todo';
+        const done = st === 'done';
+        const active = st === 'current' || st === 'building';
+        const connDone = states[i - 1] === 'done' && (states[i] === 'done' || states[i] === 'current' || states[i] === 'building');
+        return (
+          <React.Fragment key={label}>
+            {i > 0 && (
+              <Box sx={{ flex: 1, height: 2, mt: 1.4, maxWidth: 80, borderRadius: 1,
+                background: connDone ? `linear-gradient(90deg, ${T.green}, ${T.greenDk})` : T.line,
+                transition: 'background 400ms ease' }} />
+            )}
+            <Stack alignItems="center" gap={0.6} sx={{ minWidth: 56 }}>
+              <Box sx={{
+                width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, fontSize: 12, fontWeight: 800, ...mono,
+                color: done ? '#06140c' : (active ? T.green : T.faint),
+                bgcolor: done ? T.green : 'transparent',
+                border: `2px solid ${done || active ? T.green : T.line}`,
+                boxShadow: active ? `0 0 0 0 ${T.green}` : 'none',
+                animation: st === 'current' || st === 'building' ? 'railPulse 2s ease-in-out infinite' : 'none',
+              }}>
+                {done ? <CheckIcon sx={{ fontSize: 16 }} /> : (st === 'building'
+                  ? <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: T.green, animation: 'railBlink 1s ease-in-out infinite' }} />
+                  : i + 1)}
+              </Box>
+              <Typography sx={{ fontSize: 10.5, fontWeight: done || active ? 800 : 600, letterSpacing: 0.4,
+                textTransform: 'uppercase', color: done ? T.text : (active ? T.green : T.faint),
+                whiteSpace: 'nowrap' }}>
+                {st === 'building' ? 'Building' : label}
+              </Typography>
+            </Stack>
+          </React.Fragment>
+        );
+      })}
     </Box>
   );
 }
@@ -258,20 +293,20 @@ export default function ApprovalView() {
 
   if (loading) {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <JpLoader size={72} label="Loading…" tone="light" />
+      <Box sx={{ minHeight: '100vh', bgcolor: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <JpLoader size={76} label="Loading…" tone="dark" />
       </Box>
     );
   }
   if (err || !data) {
     const isExpired = errReason === 'expired';
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
-        <Box sx={{ ...CARD, p: 4, maxWidth: 480, textAlign: 'center' }}>
-          <Typography sx={{ color: isExpired ? '#b45309' : COLORS.text, fontWeight: 800, fontSize: 20, mb: 1 }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+        <Box sx={{ ...card, p: 4, maxWidth: 480, textAlign: 'center' }}>
+          <Typography sx={{ color: isExpired ? T.amber : T.text, fontWeight: 800, fontSize: 20, mb: 1 }}>
             {isExpired ? 'This approval link has expired' : 'Link unavailable'}
           </Typography>
-          <Typography sx={{ color: COLORS.muted, fontSize: 13, lineHeight: 1.55 }}>
+          <Typography sx={{ color: T.muted, fontSize: 13, lineHeight: 1.55 }}>
             {isExpired
               ? "Reach out and we'll send you a fresh one — prices and details may need a quick refresh."
               : (err || "This approval link couldn't be loaded.")}
@@ -372,65 +407,86 @@ export default function ApprovalView() {
 
   const openLightbox = (src) => setLightbox(src);
 
+  // Progress rail state per stage.
+  const railStates =
+    approvalStatus === 'approved'         ? ['done', 'done', 'done']
+    : approvalStatus === 'requested_changes' ? ['done', 'current', 'todo']
+    : stage === 'picker'                  ? ['current', 'todo', 'todo']
+    : stage === 'picked'                  ? ['done', 'building', 'todo']
+    : /* confirmation / legacy, pending */  ['done', 'current', 'todo'];
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: COLORS.bg, color: COLORS.text, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-      <Box sx={{ maxWidth: 820, mx: 'auto', p: { xs: 2, md: 4 } }}>
-        {/* Header */}
-        <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 } }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            alignItems={{ xs: 'flex-start', sm: 'center' }}
-            gap={2}
-          >
+    <Box sx={{
+      minHeight: '100vh', bgcolor: T.bg, color: T.text,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      // Subtle green aura at the top — the page glows like the brand, not flat.
+      backgroundImage: `radial-gradient(120% 60% at 50% -10%, rgba(74,222,128,0.10), rgba(7,11,9,0) 60%)`,
+      '@keyframes rise':      { from: { opacity: 0, transform: 'translateY(12px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+      '@keyframes railPulse': { '0%,100%': { boxShadow: `0 0 0 0 ${T.glow}` }, '50%': { boxShadow: `0 0 0 6px rgba(74,222,128,0)` } },
+      '@keyframes railBlink': { '0%,100%': { opacity: 0.35 }, '50%': { opacity: 1 } },
+      '@keyframes indet':     { '0%': { left: '-40%' }, '100%': { left: '100%' } },
+      '@keyframes popCheck':  { '0%': { transform: 'scale(0)' }, '60%': { transform: 'scale(1.18)' }, '100%': { transform: 'scale(1)' } },
+      '@media (prefers-reduced-motion: reduce)': { '*': { animation: 'none !important', transition: 'none !important' } },
+    }}>
+      {/* Owner preview ribbon — only on ?preview=1 */}
+      {isPreview && (
+        <Box sx={{ bgcolor: T.amber, color: '#1a1206', textAlign: 'center', py: 0.6, px: 2,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, position: 'sticky', top: 0, zIndex: 5 }}>
+          <VisibilityOutlinedIcon sx={{ fontSize: 15 }} />
+          <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.3 }}>
+            Preview — this is exactly what your client sees. Buttons are inactive here.
+          </Typography>
+        </Box>
+      )}
+
+      <Box sx={{ maxWidth: 780, mx: 'auto', p: { xs: 2, md: 4 } }}>
+        {/* Header — branded lockup + client / invoice / date */}
+        <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, position: 'relative', overflow: 'hidden', animation: 'rise 500ms ease both' }}>
+          <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+            background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
+          <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+            <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
+              sx={{ width: 46, height: 46, flexShrink: 0, objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 7px rgba(0,0,0,0.45))' }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 900, fontSize: 17, letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1 }}>
+                Joint Printing
+              </Typography>
+            </Box>
             {logo && (
-              <Box sx={{ width: 56, height: 56, p: 0.5, bgcolor: '#fff', border: `1px solid ${COLORS.border}`,
-                borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              <Box sx={{ width: 48, height: 48, p: 0.5, bgcolor: '#fff', borderRadius: 1.5, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 <Box component="img" src={logo} alt="" loading="lazy"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
               </Box>
             )}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box component="img" src={jpLogoColored} alt="Joint Printing"
-                sx={{ maxHeight: 52, maxWidth: 240, display: 'block' }} />
-            </Box>
           </Stack>
 
-          {/* Clean info row: client on the left, invoice/date on the right.
-              Project # stays hidden (internal handle); invoice # + order date
-              are the things the client actually references with questions. */}
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'flex-start', sm: 'flex-end' }}
-            gap={1.5}
-            sx={{ mt: 2.5, pt: 2.5, borderTop: `1px solid ${COLORS.border}` }}
-          >
+          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', sm: 'flex-end' }} gap={1.5}
+            sx={{ mt: 2.5, pt: 2.5, borderTop: `1px solid ${T.line}` }}>
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ ...SECTION_LABEL, mb: 0.4 }}>Client</Typography>
-              <Typography sx={{ fontSize: 17, fontWeight: 700, lineHeight: 1.25 }}>
+              <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.5 }}>Prepared for</Typography>
+              <Typography sx={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2 }}>
                 {p.companyName || p.clientName || 'Untitled'}
               </Typography>
               {p.clientName && p.companyName && p.clientName !== p.companyName && (
-                <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.2 }}>{p.clientName}</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.2 }}>{p.clientName}</Typography>
               )}
             </Box>
             {(p.orderNumber || p.orderDate) && (
-              <Stack
-                direction="row"
-                gap={3}
-                sx={{ textAlign: { xs: 'left', sm: 'right' } }}
-              >
+              <Stack direction="row" gap={3} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
                 {p.orderNumber && (
                   <Box>
-                    <Typography sx={{ ...SECTION_LABEL, mb: 0.4 }}>Invoice</Typography>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700 }}>#{p.orderNumber}</Typography>
+                    <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.5 }}>Invoice</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>#{p.orderNumber}</Typography>
                   </Box>
                 )}
                 {p.orderDate && (
                   <Box>
-                    <Typography sx={{ ...SECTION_LABEL, mb: 0.4 }}>Date</Typography>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+                    <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.5 }}>Date</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 800 }}>
                       {new Date(p.orderDate).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                     </Typography>
                   </Box>
@@ -438,53 +494,54 @@ export default function ApprovalView() {
               </Stack>
             )}
           </Stack>
-
-          {p.confirmationMessage && (
-            <Box sx={{ mt: 2.5, p: 1.75, borderLeft: `3px solid ${COLORS.brandH}`, bgcolor: '#f6fef9', borderRadius: '0 6px 6px 0' }}>
-              <Typography sx={{ color: '#333', fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                {p.confirmationMessage}
-              </Typography>
-            </Box>
-          )}
         </Box>
+
+        {/* Progress rail */}
+        <Box sx={{ mt: 2.5, mb: 0.5, animation: 'rise 500ms ease both', animationDelay: '60ms' }}>
+          <ProgressRail states={railStates} />
+        </Box>
+
+        {p.confirmationMessage && (
+          <Box sx={{ ...card, mt: 2, p: 2, borderLeft: `3px solid ${T.green}` }}>
+            <Typography sx={{ color: T.text, fontSize: 13.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {p.confirmationMessage}
+            </Typography>
+          </Box>
+        )}
 
         {/* Mockups — only when there's no full confirmation; otherwise each
             item below shows its own photo (one per colorway), matching the PDF. */}
         {!hasConf && mockups.length > 0 && (
-          <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 }, mt: 2.5 }}>
-            <Typography sx={{ ...SECTION_LABEL, mb: 1.5 }}>Mockups</Typography>
+          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '120ms' }}>
+            <Typography sx={{ ...eyebrow, mb: 1.5 }}>Your mockups</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               {mockups.map((m, i) => (
-                <ZoomImg
-                  key={i}
-                  src={m.thumbnail}
-                  alt={m.name}
-                  onZoom={openLightbox}
-                  sx={{
-                    aspectRatio: '4/3', bgcolor: '#f4f4f4', borderRadius: 2,
-                    border: `1px solid ${COLORS.border}`, objectFit: 'cover',
-                    transition: 'box-shadow 180ms ease',
-                    '&:hover': { boxShadow: '0 6px 18px rgba(17,17,17,0.10)' },
-                  }}
-                />
+                <ZoomImg key={i} src={m.thumbnail} alt={m.name} onZoom={openLightbox}
+                  sx={{ aspectRatio: '4/3', bgcolor: T.inset, borderRadius: 2, border: `1px solid ${T.line}`,
+                    objectFit: 'cover', transition: 'box-shadow 200ms ease, border-color 200ms ease',
+                    '&:hover': { boxShadow: `0 10px 30px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
               ))}
             </Box>
           </Box>
         )}
 
-        {/* Order details — the full confirmation (matches the downloadable PDF)
-            when one's been built; otherwise the simpler quote table. */}
+        {/* ── Stage body ─────────────────────────────────────────────────── */}
         {stage === 'picker' ? (
-          <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 }, mt: 2.5 }}>
-            <Typography sx={SECTION_LABEL}>Your options</Typography>
-            <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2.5, lineHeight: 1.55 }}>
-              Pick one option for each product below — all pricing includes printing and shipping.
-              Locking in your picks also signs off the designs shown; if anything needs a tweak first,
-              use &ldquo;Ask a question&rdquo; below.
+          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+            <Typography sx={eyebrow}>Your options</Typography>
+            <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 0.75, mb: 3, lineHeight: 1.6 }}>
+              Pick one for each product — every price already includes printing and shipping. Locking in your
+              picks also signs off the designs shown; if anything needs a tweak first, hit &ldquo;Ask a question&rdquo;.
             </Typography>
-            {groupNames.map((g) => (
-              <Box key={g} sx={{ mb: 3 }}>
-                <Typography sx={{ fontWeight: 800, fontSize: 15, mb: 1 }}>{g}</Typography>
+            {groupNames.map((g, gi) => (
+              <Box key={g} sx={{ mb: 3.5 }}>
+                <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }}>
+                  <Box sx={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${T.green}`, color: T.green,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, ...mono }}>
+                    {gi + 1}
+                  </Box>
+                  <Typography sx={{ fontWeight: 800, fontSize: 16 }}>{g}</Typography>
+                </Stack>
                 <Stack gap={1.25}>
                   {quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g).map((l) => {
                     const sel = pickFor(g) === l.idx;
@@ -493,34 +550,32 @@ export default function ApprovalView() {
                     const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
                     return (
                       <Box key={l.idx} onClick={() => setPicks(prev => ({ ...prev, [g]: l.idx }))}
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2,
-                          cursor: 'pointer', border: `2px solid ${sel ? COLORS.brandH : COLORS.border}`,
-                          bgcolor: sel ? '#f4fdf7' : '#fff',
-                          transition: 'border-color 180ms ease, background 180ms ease, box-shadow 180ms ease',
-                          '&:hover': { borderColor: sel ? COLORS.brandH : '#cfcfc7', boxShadow: '0 2px 10px rgba(17,17,17,0.05)' } }}>
-                        {sel
-                          ? <CheckCircleOutlineIcon sx={{ color: COLORS.brand, fontSize: 22, flexShrink: 0 }} />
-                          : <RadioButtonUncheckedIcon sx={{ color: '#c9c9c2', fontSize: 22, flexShrink: 0 }} />}
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2.5, cursor: 'pointer',
+                          position: 'relative', border: `1.5px solid ${sel ? T.green : T.line}`,
+                          bgcolor: sel ? T.panelHi : T.inset,
+                          boxShadow: sel ? `0 0 0 3px ${T.glow}, 0 8px 24px rgba(0,0,0,0.35)` : 'none',
+                          transition: 'border-color 180ms ease, background 180ms ease, box-shadow 220ms ease, transform 160ms ease',
+                          '&:hover': { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)', transform: 'translateY(-1px)' } }}>
+                        <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}`,
+                          transition: 'all 160ms ease' }}>
+                          {sel && <CheckIcon sx={{ fontSize: 15, color: '#06140c', animation: 'popCheck 240ms ease' }} />}
+                        </Box>
                         {l.image && (
-                          <ZoomImg
-                            src={l.image}
-                            onZoom={openLightbox}
-                            badge={false}
-                            sx={{
-                              width: 56, height: 56, objectFit: 'cover', borderRadius: 1.5,
-                              border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4',
-                            }}
-                          />
+                          <ZoomImg src={l.image} onZoom={openLightbox} badge={false}
+                            sx={{ width: 58, height: 58, objectFit: 'cover', borderRadius: 1.5,
+                              border: `1px solid ${T.line}`, bgcolor: T.inset }} />
                         )}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{desc || 'Option'}</Typography>
-                          {detail && <Typography sx={{ color: COLORS.muted, fontSize: 12 }}>{detail}</Typography>}
+                          <Typography sx={{ fontWeight: 700, fontSize: 14.5 }}>{desc || 'Option'}</Typography>
+                          {detail && <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2 }}>{detail}</Typography>}
                         </Box>
                         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                          <Typography sx={{ fontWeight: 800, fontSize: 14, color: COLORS.brand }}>
-                            {money(unit)}<Typography component="span" sx={{ color: COLORS.muted, fontSize: 11, fontWeight: 500 }}>/unit</Typography>
+                          <Typography sx={{ fontWeight: 800, fontSize: 15, color: sel ? T.green : T.text, ...mono }}>
+                            {money(unit)}<Typography component="span" sx={{ color: T.faint, fontSize: 11, fontWeight: 600 }}>/unit</Typography>
                           </Typography>
-                          <Typography sx={{ color: COLORS.muted, fontSize: 11 }}>
+                          <Typography sx={{ color: T.muted, fontSize: 11, ...mono }}>
                             {Number(l.qty) || 0} units · {money((Number(l.qty) || 0) * unit)}
                           </Typography>
                         </Box>
@@ -531,135 +586,118 @@ export default function ApprovalView() {
               </Box>
             ))}
             {standaloneLines.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography sx={{ fontWeight: 800, fontSize: 15, mb: 1 }}>Also in your order</Typography>
+              <Box sx={{ mb: 2.5 }}>
+                <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>Also in your order</Typography>
                 {standaloneLines.map((l) => (
-                  <Stack key={l.idx} direction="row" alignItems="center" gap={1.5} justifyContent="space-between" sx={{ py: 1, borderBottom: `1px solid ${COLORS.border}` }}>
+                  <Stack key={l.idx} direction="row" alignItems="center" gap={1.5} justifyContent="space-between"
+                    sx={{ py: 1.1, borderBottom: `1px solid ${T.line}` }}>
                     {l.image && (
-                      <ZoomImg
-                        src={l.image}
-                        onZoom={openLightbox}
-                        badge={false}
-                        sx={{
-                          width: 44, height: 44, objectFit: 'cover', borderRadius: 1.5,
-                          border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4',
-                        }}
-                      />
+                      <ZoomImg src={l.image} onZoom={openLightbox} badge={false}
+                        sx={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${T.line}`, bgcolor: T.inset }} />
                     )}
                     <Typography sx={{ fontSize: 13, flex: 1, minWidth: 0 }}>
                       {[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
                     </Typography>
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, flexShrink: 0, ...mono }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
                   </Stack>
                 ))}
               </Box>
             )}
-            {lockedNote && (
-              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#fff8e1', border: '1px solid #fde68a' }}>
-                <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
-              </Box>
-            )}
-            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
-              <Button fullWidth disabled={pickBusy || !allPicked} onClick={submitPicks} variant="contained"
-                sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 800, textTransform: 'none',
-                  px: 3, py: 1.2, fontSize: 14, flex: 2, borderRadius: 2, transition: 'background 180ms ease', '&:hover': { bgcolor: '#16352a' } }}>
-                {pickBusy ? <CircularProgress size={18} sx={{ color: '#fff' }} />
+            {lockedNote && <LockedNote text={lockedNote} />}
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mt: 1 }}>
+              <Button fullWidth disabled={pickBusy || !allPicked} onClick={submitPicks}
+                endIcon={!pickBusy && allPicked ? <ArrowForwardIcon /> : null}
+                sx={{ ...primaryBtn, flex: 2 }}>
+                {pickBusy ? <CircularProgress size={18} sx={{ color: '#06140c' }} />
                   : allPicked ? 'Lock in picks & approve designs' : 'Pick one option per product'}
               </Button>
-              <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy}
-                sx={{ color: COLORS.text, border: `1px solid ${COLORS.border}`, fontWeight: 700,
-                  textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1, borderRadius: 2,
-                  transition: 'border-color 180ms ease, background 180ms ease',
-                  '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
+              <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy} sx={{ ...ghostBtn, flex: 1 }}>
                 Ask a question
               </Button>
             </Stack>
           </Box>
         ) : stage === 'picked' ? (
-          <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 }, mt: 2.5, textAlign: 'center' }}>
-            <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
-            <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Got your picks — thank you!</Typography>
-            <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5, mb: 2.5, lineHeight: 1.55 }}>
-              We&apos;re putting your confirmation page together now. You&apos;ll get an email when it&apos;s ready to review and approve right here.
+          // ── The signature "building your confirmation" moment ──────────────
+          <Box sx={{ ...card, p: { xs: 3, md: 4.5 }, mt: 2.5, textAlign: 'center', position: 'relative', overflow: 'hidden',
+            animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+            <JpLoader size={72} tone="dark" />
+            <Typography sx={{ fontWeight: 900, fontSize: 22, mt: 1.5, letterSpacing: 0.2 }}>
+              Locked in — building your confirmation
             </Typography>
-            <Box sx={{ maxWidth: 440, mx: 'auto', textAlign: 'left', mb: 2 }}>
+            <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 1, mb: 2.5, lineHeight: 1.6, maxWidth: 460, mx: 'auto' }}>
+              Nice picks. We&apos;re putting your final confirmation together right now — you&apos;ll get an email
+              the moment it&apos;s ready to review and approve, right here on this page.
+            </Typography>
+            {/* Indeterminate progress shimmer — makes the wait feel intentional */}
+            <Box sx={{ position: 'relative', height: 4, borderRadius: 999, bgcolor: T.line, overflow: 'hidden', maxWidth: 320, mx: 'auto', mb: 3 }}>
+              <Box sx={{ position: 'absolute', top: 0, bottom: 0, width: '40%', borderRadius: 999,
+                background: `linear-gradient(90deg, transparent, ${T.green}, transparent)`, animation: 'indet 1.5s ease-in-out infinite' }} />
+            </Box>
+            <Box sx={{ maxWidth: 460, mx: 'auto', textAlign: 'left', bgcolor: T.inset, border: `1px solid ${T.line}`, borderRadius: 2, p: 2 }}>
+              <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>What you chose</Typography>
               {quoteLines.filter(l => l.accepted || !l.group).map((l, i) => (
-                <Stack key={i} direction="row" justifyContent="space-between" gap={2} sx={{ py: 1, borderBottom: `1px solid ${COLORS.border}` }}>
+                <Stack key={i} direction="row" justifyContent="space-between" gap={2} sx={{ py: 0.9, borderBottom: i < quoteLines.filter(x => x.accepted || !x.group).length - 1 ? `1px solid ${T.line}` : 'none' }}>
                   <Typography sx={{ fontSize: 13 }}>
-                    {l.group ? `${l.group}: ` : ''}{[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
+                    {l.group ? <Box component="span" sx={{ color: T.green, fontWeight: 700 }}>{l.group}: </Box> : ''}
+                    {[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
                   </Typography>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, flexShrink: 0, ...mono }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
                 </Stack>
               ))}
             </Box>
             <Button size="small" onClick={() => setRepicking(true)}
-              sx={{ color: COLORS.muted, textTransform: 'none', fontSize: 12, textDecoration: 'underline' }}>
-              Change my picks
+              sx={{ color: T.muted, textTransform: 'none', fontSize: 12.5, mt: 2, '&:hover': { color: T.green, bgcolor: 'transparent' } }}>
+              ← Change my picks
             </Button>
           </Box>
         ) : stage === 'confirmation' ? (
-          <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 }, mt: 2.5 }}>
-            <Typography sx={{ ...SECTION_LABEL, mb: 2 }}>Order details</Typography>
+          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+            <Typography sx={{ ...eyebrow, mb: 2 }}>Your order</Typography>
             <Stack gap={2}>
               {confItems.map((it, idx) => {
                 const sizes = (it.sizes || []).filter(sz => Number(sz.qty) > 0);
                 const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
                 const imgs = confItemImages(it);
                 return (
-                  <Box
-                    key={idx}
-                    sx={{
-                      border: `1px solid ${COLORS.border}`,
-                      borderRadius: 2.5,
-                      p: { xs: 2, md: 2.5 },
-                      bgcolor: '#fcfcfb',
-                    }}
-                  >
-                    {/* image(s) left, details right; stacks under ~600px */}
+                  <Box key={idx} sx={{ border: `1px solid ${T.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: T.inset }}>
                     <Stack direction={{ xs: 'column', sm: 'row' }} gap={{ xs: 2, sm: 2.5 }} alignItems="flex-start">
                       {imgs.length > 0 && (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>
                           {imgs.map((src, i) => (
-                            <ZoomImg
-                              key={i}
-                              src={src}
-                              onZoom={openLightbox}
-                              sx={{
-                                width: { xs: 120, sm: 140 }, height: { xs: 120, sm: 140 },
-                                objectFit: 'cover', borderRadius: 2,
-                                border: `1px solid ${COLORS.border}`, bgcolor: '#f4f4f4',
-                                transition: 'box-shadow 180ms ease',
-                                '&:hover': { boxShadow: '0 6px 16px rgba(17,17,17,0.10)' },
-                              }}
-                            />
+                            <ZoomImg key={i} src={src} onZoom={openLightbox}
+                              sx={{ width: { xs: 120, sm: 140 }, height: { xs: 120, sm: 140 }, objectFit: 'cover', borderRadius: 2,
+                                border: `1px solid ${T.line}`, bgcolor: T.panel,
+                                transition: 'box-shadow 200ms ease, border-color 200ms ease',
+                                '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.45)', borderColor: T.lineHi } }} />
                           ))}
                         </Box>
                       )}
                       <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-                        <Typography sx={{ fontWeight: 700, fontSize: 15, mb: 1.25 }}>{confItemTitle(it, idx)}</Typography>
+                        <Typography sx={{ fontWeight: 800, fontSize: 15.5, mb: 1.25 }}>{confItemTitle(it, idx)}</Typography>
                         {sizes.length > 0 && (
                           <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
                             <thead>
                               <tr>
-                                <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Size</th>
-                                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
-                                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '5px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Unit price</th>
+                                {['Size', 'Qty', 'Unit price'].map((h, hi) => (
+                                  <th key={h} style={{ textAlign: hi === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase',
+                                    letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '5px 8px', borderBottom: `1px solid ${T.line}` }}>{h}</th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody>
                               {sizes.map((sz, i) => (
                                 <tr key={i}>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>{sz.label || '—'}</td>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{Number(sz.qty) || 0}</td>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
+                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, color: T.text }}>{sz.label || '—'}</td>
+                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{Number(sz.qty) || 0}</td>
+                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </Box>
                         )}
                         <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2} sx={{ mt: 1.25 }}>
-                          <Typography sx={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Item subtotal</Typography>
-                          <Typography sx={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{money(itemSubtotal)}</Typography>
+                          <Typography sx={{ ...eyebrow, color: T.faint }}>Item subtotal</Typography>
+                          <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>{money(itemSubtotal)}</Typography>
                         </Stack>
                       </Box>
                     </Stack>
@@ -668,203 +706,166 @@ export default function ApprovalView() {
               })}
             </Stack>
 
-            {/* Totals block — calm, clearly hierarchized, big final number. */}
-            <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: '#f6f6f4', border: `1px solid ${COLORS.border}` }}>
-              <Stack direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.75 }}>
-                <Box sx={{ color: COLORS.muted }}>Subtotal</Box>
-                <Box sx={{ minWidth: 96, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(confTotals.itemsSubtotal)}</Box>
+            {/* Totals — recessed panel, big green grand total */}
+            <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: T.inset, border: `1px solid ${T.line}` }}>
+              <Stack direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
+                <Box sx={{ color: T.muted }}>Subtotal</Box>
+                <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(confTotals.itemsSubtotal)}</Box>
               </Stack>
               {confTotals.lines.map((l, i) => (
-                <Stack key={i} direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.75 }}>
-                  <Box sx={{ color: COLORS.muted }}>{l.label}</Box>
-                  <Box sx={{ minWidth: 96, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(l.value)}</Box>
+                <Stack key={i} direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
+                  <Box sx={{ color: T.muted }}>{l.label}</Box>
+                  <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(l.value)}</Box>
                 </Stack>
               ))}
-              <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${COLORS.brand}` }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${T.green}` }}>
                 <Box sx={{ fontWeight: 800, fontSize: 17 }}>Total</Box>
-                <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 800, fontSize: 22, color: COLORS.brand, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>{money(confTotals.grandTotal)}</Box>
+                <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: 24, color: T.green, letterSpacing: -0.5, ...mono }}>{money(confTotals.grandTotal)}</Box>
               </Stack>
             </Box>
 
             {p.confirmationTerms && (
-              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${COLORS.border}` }}>
-                <Typography sx={{ ...SECTION_LABEL, mb: 0.75 }}>Terms</Typography>
-                <Typography sx={{ color: COLORS.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{p.confirmationTerms}</Typography>
+              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${T.line}` }}>
+                <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.75 }}>Terms</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{p.confirmationTerms}</Typography>
               </Box>
             )}
           </Box>
         ) : (
-          <Box sx={{ ...CARD, p: { xs: 2.5, md: 4 }, mt: 2.5 }}>
-            <Typography sx={{ ...SECTION_LABEL, mb: 1.5 }}>Items</Typography>
+          // Legacy / simple table fallback
+          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+            <Typography sx={{ ...eyebrow, mb: 1.5 }}>Items</Typography>
             <Box sx={{ overflowX: 'auto' }}>
               <Box component="table" sx={{ width: '100%', minWidth: 360, borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Qty</th>
-                    <th style={{ textAlign: 'left',  fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Description</th>
-                    <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Unit $</th>
-                    <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: COLORS.muted, padding: '6px 8px', borderBottom: `1px solid ${COLORS.border}` }}>Line $</th>
+                    {['Qty', 'Description', 'Unit $', 'Line $'].map((h, hi) => (
+                      <th key={h} style={{ textAlign: hi >= 2 ? 'right' : 'left', fontSize: 10, textTransform: 'uppercase',
+                        letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '6px 8px', borderBottom: `1px solid ${T.line}` }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {itemRows.length === 0 ? (
-                    <tr><td colSpan={4} style={{ padding: '14px 8px', color: '#999', fontStyle: 'italic' }}>
-                      No line items
-                    </td></tr>
+                    <tr><td colSpan={4} style={{ padding: '14px 8px', color: T.faint, fontStyle: 'italic' }}>No line items</td></tr>
                   ) : itemRows.map((r, i) => (
                     <tr key={i}>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, fontVariantNumeric: 'tabular-nums' }}>{r.qty || ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}` }}>{r.description || ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${COLORS.border}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
+                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.qty || ''}</td>
+                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, color: T.text }}>{r.description || ''}</td>
+                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
+                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
                     </tr>
                   ))}
                   <tr>
-                    <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: `2px solid ${COLORS.brand}`, fontSize: 16 }}>Total</td>
-                    <td          style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: `2px solid ${COLORS.brand}`, fontSize: 16, color: COLORS.brand, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</td>
+                    <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: `2px solid ${T.green}`, fontSize: 16 }}>Total</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 900, borderTop: `2px solid ${T.green}`, fontSize: 18, color: T.green, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</td>
                   </tr>
                 </tbody>
               </Box>
             </Box>
             {p.confirmationTerms && (
-              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${COLORS.border}` }}>
-                <Typography sx={{ ...SECTION_LABEL, mb: 0.75 }}>Terms</Typography>
-                <Typography sx={{ color: COLORS.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
-                  {p.confirmationTerms}
-                </Typography>
+              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${T.line}` }}>
+                <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.75 }}>Terms</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{p.confirmationTerms}</Typography>
               </Box>
             )}
           </Box>
         )}
 
-        {/* Action panel — locked once the client has either approved OR
-            requested changes, so the link stays consistent on every reload.
-            Hidden during the pick stage (the picker has its own actions). */}
+        {/* Action panel — locked once the client has decided. Hidden during the
+            pick stage (the picker has its own actions). */}
         {(stage === 'confirmation' || stage === 'legacy' || approvalStatus !== 'pending') && (
-        <Box sx={{ ...CARD, p: { xs: 2.5, md: 3 }, mt: 2.5 }}>
-          {approvalStatus === 'requested_changes' ? (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <EditNoteIcon sx={{ color: '#fbbf24', fontSize: 40, mb: 1 }} />
-              <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Thanks — we&apos;re on it.</Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                Your notes are with our team, and we&apos;ll get a fresh proof over to you soon.
-              </Typography>
-              {(p.approvalBy || p.approvalAt) && (
-                <Typography sx={{ color: COLORS.muted, fontSize: 11, mt: 1.5 }}>
-                  {p.approvalBy ? `Sent by ${p.approvalBy}` : 'Sent'}{p.approvalAt ? ` · ${new Date(p.approvalAt).toLocaleString()}` : ''}
-                </Typography>
-              )}
-            </Box>
-          ) : approvalStatus === 'approved' ? (
-            <Box sx={{ py: 1 }}>
-              <Box sx={{ textAlign: 'center', mb: 3 }}>
-                <CheckCircleOutlineIcon sx={{ color: COLORS.brandH, fontSize: 36, mb: 0.5 }} />
-                <Typography sx={{ fontWeight: 800, fontSize: 18 }}>You&apos;re all set — thank you!</Typography>
-                <Typography sx={{ color: COLORS.muted, fontSize: 13, mt: 0.5 }}>
-                  {p.approvalBy ? `Approved by ${p.approvalBy}. ` : ''}We&apos;ll move through the steps below and keep this page updated as each one happens.
-                </Typography>
-              </Box>
-              <TrackingTimeline steps={p.tracking?.steps || []} colors={COLORS} />
-            </Box>
-          ) : (
-            <>
-              <Typography sx={{ fontWeight: 800, fontSize: 16, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
-              <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 2, lineHeight: 1.55 }}>
-                If everything looks good, hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
-              </Typography>
-              {lockedNote && (
-                <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: '#fff8e1', border: '1px solid #fde68a' }}>
-                  <Typography sx={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>{lockedNote}</Typography>
+          <Box sx={{ ...card, p: { xs: 2.5, md: 3 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '240ms' }}>
+            {approvalStatus === 'requested_changes' ? (
+              <Box sx={{ textAlign: 'center', py: 2 }}>
+                <Box sx={{ width: 56, height: 56, mx: 'auto', mb: 1.5, borderRadius: '50%', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', bgcolor: 'rgba(251,191,36,0.14)', border: `1px solid rgba(251,191,36,0.4)` }}>
+                  <EditNoteIcon sx={{ color: T.amber, fontSize: 28 }} />
                 </Box>
-              )}
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
-                <Button onClick={handleApprove} disabled={actionBusy}
-                  startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <CheckCircleOutlineIcon />}
-                  sx={{ bgcolor: COLORS.brand, color: '#fff', fontWeight: 700, textTransform: 'none',
-                    px: 3, py: 1.2, fontSize: 14, flex: 1, borderRadius: 2, transition: 'background 180ms ease',
-                    '&:hover': { bgcolor: '#16352a' } }}>
-                  Approve & proceed
-                </Button>
-                <Button onClick={() => setChangesOpen(true)} disabled={actionBusy}
-                  startIcon={<EditNoteIcon />}
-                  variant="outlined"
-                  sx={{ borderColor: COLORS.border, color: COLORS.text, fontWeight: 700,
-                    textTransform: 'none', px: 3, py: 1.2, fontSize: 14, flex: 1, borderRadius: 2,
-                    transition: 'border-color 180ms ease, background 180ms ease',
-                    '&:hover': { borderColor: COLORS.text, bgcolor: '#fafaf8' } }}>
-                  Request edits
-                </Button>
-              </Stack>
-            </>
-          )}
-        </Box>
+                <Typography sx={{ fontWeight: 800, fontSize: 19 }}>Thanks — we&apos;re on it.</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 0.75, lineHeight: 1.55 }}>
+                  Your notes are with our team, and we&apos;ll get a fresh proof over to you soon.
+                </Typography>
+                {(p.approvalBy || p.approvalAt) && (
+                  <Typography sx={{ color: T.faint, fontSize: 11, mt: 1.5 }}>
+                    {p.approvalBy ? `Sent by ${p.approvalBy}` : 'Sent'}{p.approvalAt ? ` · ${new Date(p.approvalAt).toLocaleString()}` : ''}
+                  </Typography>
+                )}
+              </Box>
+            ) : approvalStatus === 'approved' ? (
+              <Box sx={{ py: 1 }}>
+                <Box sx={{ textAlign: 'center', mb: 3 }}>
+                  <Box sx={{ width: 60, height: 60, mx: 'auto', mb: 1.5, borderRadius: '50%', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', bgcolor: T.green, animation: 'popCheck 360ms ease both' }}>
+                    <CheckIcon sx={{ color: '#06140c', fontSize: 34 }} />
+                  </Box>
+                  <Typography sx={{ fontWeight: 900, fontSize: 21 }}>You&apos;re all set — thank you!</Typography>
+                  <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 0.75, lineHeight: 1.55 }}>
+                    {p.approvalBy ? `Approved by ${p.approvalBy}. ` : ''}We&apos;ll move through the steps below and keep this page updated as each one happens.
+                  </Typography>
+                </Box>
+                <TrackingTimeline steps={p.tracking?.steps || []} />
+              </Box>
+            ) : (
+              <>
+                <Typography sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 13.5, mb: 2, lineHeight: 1.6 }}>
+                  If everything looks good, hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
+                </Typography>
+                {lockedNote && <LockedNote text={lockedNote} />}
+                <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
+                  <Button onClick={handleApprove} disabled={actionBusy} endIcon={!actionBusy ? <ArrowForwardIcon /> : null}
+                    startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#06140c' }} /> : null}
+                    sx={{ ...primaryBtn, flex: 1 }}>
+                    Approve &amp; proceed
+                  </Button>
+                  <Button onClick={() => setChangesOpen(true)} disabled={actionBusy} startIcon={<EditNoteIcon />} sx={{ ...ghostBtn, flex: 1 }}>
+                    Request edits
+                  </Button>
+                </Stack>
+              </>
+            )}
+          </Box>
         )}
+
+        <Typography sx={{ textAlign: 'center', color: T.faint, fontSize: 11, mt: 3, letterSpacing: 0.3 }}>
+          Powered by Joint Printing · Questions? Just reply to our email.
+        </Typography>
       </Box>
 
-      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { bgcolor: T.panel, color: T.text, border: `1px solid ${T.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
         <DialogTitle sx={{ fontWeight: 800 }}>Request edits</DialogTitle>
         <DialogContent>
-          <Typography sx={{ color: COLORS.muted, fontSize: 13, mb: 1.5 }}>
+          <Typography sx={{ color: T.muted, fontSize: 13, mb: 1.5 }}>
             What would you like changed? Be as specific as you like — colors, sizes, copy, anything at all.
           </Typography>
-          <TextField fullWidth multiline minRows={4} autoFocus
-            value={changesText} onChange={e => setChangesText(e.target.value)}
-            placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L." />
+          <TextField fullWidth multiline minRows={4} autoFocus value={changesText} onChange={e => setChangesText(e.target.value)}
+            placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L."
+            sx={darkField} />
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setChangesOpen(false)} sx={{ color: COLORS.muted, textTransform: 'none' }}>Cancel</Button>
-          <Button onClick={handleRequestChanges} disabled={actionBusy || !changesText.trim()}
-            variant="contained"
-            sx={{ bgcolor: COLORS.brand, color: '#fff', textTransform: 'none', fontWeight: 700,
-              '&:hover': { bgcolor: '#16352a' } }}>
-            {actionBusy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Send to team'}
+          <Button onClick={() => setChangesOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={handleRequestChanges} disabled={actionBusy || !changesText.trim()} sx={primaryBtn}>
+            {actionBusy ? <CircularProgress size={16} sx={{ color: '#06140c' }} /> : 'Send to team'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Image lightbox — full-screen dimmed backdrop with the enlarged image
-          centered. Closes on backdrop click, the X, or Esc (Modal handles Esc
-          + focus trapping). No external library. */}
-      <Modal
-        open={!!lightbox}
-        onClose={() => setLightbox(null)}
-        aria-label="Enlarged image"
+      {/* Image lightbox */}
+      <Modal open={!!lightbox} onClose={() => setLightbox(null)} aria-label="Enlarged image"
         sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(17,17,17,0.88)' } } }}
-      >
-        <Box
-          onClick={() => setLightbox(null)}
-          sx={{
-            position: 'fixed', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            p: { xs: 2, md: 5 }, outline: 'none',
-          }}
-        >
-          <IconButton
-            onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
-            aria-label="Close"
-            sx={{
-              position: 'fixed', top: { xs: 12, md: 20 }, right: { xs: 12, md: 20 },
-              color: '#fff', bgcolor: 'rgba(255,255,255,0.12)',
-              transition: 'background 150ms ease',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.24)' },
-            }}
-          >
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(3,6,4,0.92)' } } }}>
+        <Box onClick={() => setLightbox(null)}
+          sx={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', p: { xs: 2, md: 5 }, outline: 'none' }}>
+          <IconButton onClick={(e) => { e.stopPropagation(); setLightbox(null); }} aria-label="Close"
+            sx={{ position: 'fixed', top: { xs: 12, md: 20 }, right: { xs: 12, md: 20 }, color: '#fff',
+              bgcolor: 'rgba(255,255,255,0.12)', transition: 'background 150ms ease', '&:hover': { bgcolor: 'rgba(255,255,255,0.24)' } }}>
             <CloseIcon />
           </IconButton>
           {lightbox && (
-            <Box
-              component="img"
-              src={lightbox}
-              alt="Enlarged image"
-              onClick={(e) => e.stopPropagation()}
-              sx={{
-                maxWidth: '100%', maxHeight: '100%',
-                objectFit: 'contain', borderRadius: 2,
-                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-                bgcolor: '#fff',
-              }}
-            />
+            <Box component="img" src={lightbox} alt="Enlarged image" onClick={(e) => e.stopPropagation()}
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 2, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', bgcolor: '#fff' }} />
           )}
         </Box>
       </Modal>
@@ -872,17 +873,41 @@ export default function ApprovalView() {
   );
 }
 
+// ── Shared button + field styles ─────────────────────────────────────────────
+const primaryBtn = {
+  bgcolor: T.green, color: '#06140c', fontWeight: 800, textTransform: 'none', px: 3, py: 1.25, fontSize: 14.5,
+  borderRadius: 999, boxShadow: `0 6px 20px ${T.glow}`, transition: 'transform 150ms ease, box-shadow 200ms ease, background 150ms ease',
+  '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 28px ${T.glow}` },
+  '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.25)', color: 'rgba(6,20,12,0.5)', boxShadow: 'none' },
+};
+const ghostBtn = {
+  color: T.text, border: `1px solid ${T.line}`, fontWeight: 700, textTransform: 'none', px: 3, py: 1.25, fontSize: 14, borderRadius: 999,
+  transition: 'border-color 180ms ease, background 180ms ease',
+  '&:hover': { borderColor: 'rgba(255,255,255,0.3)', bgcolor: 'rgba(255,255,255,0.04)' },
+};
+const darkField = {
+  '& .MuiOutlinedInput-root': { bgcolor: T.inset, color: T.text, borderRadius: 2,
+    '& fieldset': { borderColor: T.line }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.25)' },
+    '&.Mui-focused fieldset': { borderColor: T.green } },
+  '& .MuiInputBase-input::placeholder': { color: T.faint, opacity: 1 },
+};
+
+// Small amber "someone already decided" note.
+function LockedNote({ text }) {
+  return (
+    <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)' }}>
+      <Typography sx={{ color: T.amber, fontSize: 13, lineHeight: 1.5 }}>{text}</Typography>
+    </Box>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// TrackingTimeline — post-approval client view of where the project is.
-// Renders inside a styled card with the JP brand mark at the top so the
-// post-approval page doesn't read as empty. Includes a top progress meter
-// (X of Y steps complete) and a per-step optional carrier link the admin can
-// attach from the Order Tracker (rendered as a "Track shipment →" button).
+// TrackingTimeline — post-approval client view of where the project is. Dark
+// card, green progress meter, per-step optional carrier link.
 // ─────────────────────────────────────────────────────────────────────────────
-function TrackingTimeline({ steps, colors, logo }) {
+function TrackingTimeline({ steps }) {
   if (!Array.isArray(steps) || steps.length === 0) return null;
 
-  // Find the index of the last completed step so the connector colors up to it.
   let lastDoneIdx = -1;
   steps.forEach((s, i) => { if (s.completedAt) lastDoneIdx = i; });
   const doneCount = steps.filter(s => s.completedAt).length;
@@ -892,67 +917,26 @@ function TrackingTimeline({ steps, colors, logo }) {
     if (!iso) return '';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return d.toLocaleString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit',
-    });
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
   return (
-    <Box sx={{
-      mt: 1, p: { xs: 2.5, sm: 3.5 },
-      bgcolor: '#fafaf7',
-      border: `1px solid ${colors.border}`,
-      borderRadius: 2,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Subtle brand stripe at the top so the card has a tiny accent without
-          shouting. */}
-      <Box sx={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-        background: `linear-gradient(90deg, ${colors.brand} 0%, ${colors.brandH} 100%)`,
-      }} />
-
-      {/* Header: small mark + "Project status" label + progress count */}
+    <Box sx={{ mt: 1, p: { xs: 2.5, sm: 3.5 }, bgcolor: T.inset, border: `1px solid ${T.line}`, borderRadius: 2.5, position: 'relative', overflow: 'hidden' }}>
+      <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.greenDk}, ${T.green})` }} />
       <Stack direction="row" alignItems="center" gap={1.25} mb={1.75}>
-        <Box sx={{
-          width: 28, height: 28, borderRadius: 1,
-          bgcolor: colors.brand, color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, fontWeight: 800, fontSize: 13, letterSpacing: 0.5,
-        }}>
-          JP
-        </Box>
+        <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
+          sx={{ width: 30, height: 30, flexShrink: 0, objectFit: 'contain' }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{
-            fontSize: 11, color: colors.muted, fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 1,
-          }}>
-            Project status
-          </Typography>
-          <Typography sx={{ fontSize: 13, color: colors.text, fontWeight: 700, mt: 0.3 }}>
-            {doneCount} of {steps.length} steps complete
-          </Typography>
+          <Typography sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>Project status</Typography>
+          <Typography sx={{ fontSize: 13, color: T.text, fontWeight: 700, mt: 0.3 }}>{doneCount} of {steps.length} steps complete</Typography>
         </Box>
-        <Typography sx={{ fontSize: 18, fontWeight: 800, color: colors.brand, letterSpacing: -0.5 }}>
-          {progressPct}%
-        </Typography>
+        <Typography sx={{ fontSize: 18, fontWeight: 900, color: T.green, letterSpacing: -0.5, ...mono }}>{progressPct}%</Typography>
       </Stack>
 
-      {/* Slim progress bar — visual reinforcement of the % count. */}
-      <Box sx={{
-        height: 4, borderRadius: 999, bgcolor: colors.border,
-        overflow: 'hidden', mb: 2.5,
-      }}>
-        <Box sx={{
-          width: `${progressPct}%`, height: '100%',
-          background: `linear-gradient(90deg, ${colors.brand} 0%, ${colors.brandH} 100%)`,
-          transition: 'width 0.5s ease',
-        }} />
+      <Box sx={{ height: 4, borderRadius: 999, bgcolor: T.line, overflow: 'hidden', mb: 2.5 }}>
+        <Box sx={{ width: `${progressPct}%`, height: '100%', background: `linear-gradient(90deg, ${T.greenDk}, ${T.green})`, transition: 'width 0.5s ease' }} />
       </Box>
 
-      {/* Steps */}
       <Box sx={{ position: 'relative', pl: 0.5 }}>
         {steps.map((s, i) => {
           const done = !!s.completedAt;
@@ -961,64 +945,26 @@ function TrackingTimeline({ steps, colors, logo }) {
           return (
             <Box key={s.id || i} sx={{ display: 'flex', alignItems: 'flex-start', position: 'relative', pb: isLast ? 0 : 2.25 }}>
               {!isLast && (
-                <Box sx={{
-                  position: 'absolute', left: 11, top: 22, bottom: -2, width: 2,
-                  bgcolor: connectorActive ? colors.brandH : colors.border,
-                  transition: 'background 0.4s ease',
-                }} />
+                <Box sx={{ position: 'absolute', left: 11, top: 22, bottom: -2, width: 2,
+                  bgcolor: connectorActive ? T.green : T.line, transition: 'background 0.4s ease' }} />
               )}
-              <Box sx={{
-                width: 24, height: 24, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, zIndex: 1,
-                bgcolor: done ? colors.brandH : '#fff',
-                border: done ? `2px solid ${colors.brandH}` : `2px solid ${colors.border}`,
-                color: done ? '#fff' : colors.muted,
-                transition: 'all 0.3s ease',
-              }}>
-                {done
-                  ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
-                  : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
+              <Box sx={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, zIndex: 1, bgcolor: done ? T.green : T.panel,
+                border: done ? `2px solid ${T.green}` : `2px solid ${T.line}`, color: done ? '#06140c' : T.faint, transition: 'all 0.3s ease' }}>
+                {done ? <CheckIcon sx={{ fontSize: 15 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
               </Box>
               <Box sx={{ ml: 1.75, flex: 1, pt: 0.15, minWidth: 0 }}>
-                <Typography sx={{
-                  fontSize: 14, fontWeight: done ? 700 : 600,
-                  color: done ? colors.text : colors.muted,
-                  lineHeight: 1.3,
-                }}>
-                  {s.label}
-                </Typography>
-                <Typography sx={{
-                  fontSize: 11, mt: 0.25,
-                  color: done ? colors.brand : colors.muted,
-                  fontWeight: done ? 600 : 400,
-                }}>
+                <Typography sx={{ fontSize: 14, fontWeight: done ? 700 : 600, color: done ? T.text : T.muted, lineHeight: 1.3 }}>{s.label}</Typography>
+                <Typography sx={{ fontSize: 11, mt: 0.25, color: done ? T.green : T.faint, fontWeight: done ? 600 : 400 }}>
                   {done ? fmtWhen(s.completedAt) : 'Pending'}
                 </Typography>
-                {done && s.note && (
-                  <Typography sx={{ fontSize: 11.5, color: colors.muted, mt: 0.3, lineHeight: 1.4 }}>
-                    {s.note}
-                  </Typography>
-                )}
-                {/* Optional carrier / tracking link — admin attaches a URL on
-                    a step (typically "Blanks shipping" or "On the way to you")
-                    and we surface it as a clear, clickable pill here. */}
+                {done && s.note && <Typography sx={{ fontSize: 11.5, color: T.muted, mt: 0.3, lineHeight: 1.4 }}>{s.note}</Typography>}
                 {s.link && /^https?:\/\//i.test(s.link) && (
-                  <Box
-                    component="a" href={s.link} target="_blank" rel="noopener noreferrer"
-                    sx={{
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      mt: 0.6, px: 1.2, py: 0.35, borderRadius: 999,
-                      bgcolor: 'rgba(74,222,128,0.12)',
-                      color: colors.brand, textDecoration: 'none',
-                      fontSize: 11, fontWeight: 700,
-                      border: `1px solid ${colors.brandH}`,
-                      transition: 'background 0.15s ease, transform 0.15s ease',
-                      '&:hover': {
-                        bgcolor: 'rgba(74,222,128,0.22)',
-                        transform: 'translateY(-1px)',
-                      },
-                    }}>
+                  <Box component="a" href={s.link} target="_blank" rel="noopener noreferrer"
+                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 0.6, px: 1.2, py: 0.35, borderRadius: 999,
+                      bgcolor: 'rgba(74,222,128,0.12)', color: T.green, textDecoration: 'none', fontSize: 11, fontWeight: 700,
+                      border: `1px solid ${T.lineHi}`, transition: 'background 0.15s ease, transform 0.15s ease',
+                      '&:hover': { bgcolor: 'rgba(74,222,128,0.22)', transform: 'translateY(-1px)' } }}>
                     Track shipment →
                   </Box>
                 )}
@@ -1028,14 +974,9 @@ function TrackingTimeline({ steps, colors, logo }) {
         })}
       </Box>
 
-      {/* Tiny footer reassurance — only when there's still work to do */}
       {doneCount < steps.length && (
-        <Typography sx={{
-          mt: 2.5, pt: 1.5, borderTop: `1px solid ${colors.border}`,
-          fontSize: 11, color: colors.muted, textAlign: 'center', lineHeight: 1.5,
-        }}>
+        <Typography sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${T.line}`, fontSize: 11, color: T.faint, textAlign: 'center', lineHeight: 1.5 }}>
           We update this page as each step happens — usually within a day of the milestone.
-          {logo ? '' : ' Questions? Reply to the email we sent you.'}
         </Typography>
       )}
     </Box>

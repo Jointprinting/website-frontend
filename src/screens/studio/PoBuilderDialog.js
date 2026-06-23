@@ -20,7 +20,7 @@ import ArrowBackIcon           from '@mui/icons-material/ArrowBack';
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline';
 import axios from 'axios';
 import config from '../../config.json';
-import { B, scrollbar, darkInput, fmt } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
 
 const base = `${config.backendUrl}/api`;
 
@@ -141,24 +141,26 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
     onClose();
   };
 
-  const inkInput = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.85 } };
+  const inkInput = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.85 } };
 
   return (
     <Dialog open={open}
       onClose={(_, reason) => { if (reason === 'backdropClick') return; closeGuard(); }}
       maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3,
+        boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         m: { xs: 1, md: 3 }, maxHeight: '94vh' } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.35,
         display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={accentBar} />
         {editing && (
           <IconButton size="small" onClick={() => { if (!dirty || window.confirm('Unsaved changes — go back anyway?')) { setEditing(null); setDirty(false); } }}
-            sx={{ color: B.muted }}><ArrowBackIcon fontSize="small" /></IconButton>
+            sx={{ color: D.muted, '&:hover': { color: D.text } }}><ArrowBackIcon fontSize="small" /></IconButton>
         )}
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, letterSpacing: 0.2 }}>
           Purchase orders
-          <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
+          <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
             Project #{project.projectNumber || '—'}
             {editing ? ` · ${editing.poNumber || 'new'}${dirty ? ' · unsaved' : ''}` : ''}
           </Typography>
@@ -166,27 +168,31 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
         {editing && (
           <>
             <Button size="small" disabled={pdfBusy} onClick={downloadPdf}
-              startIcon={pdfBusy ? <CircularProgress size={12} sx={{ color: B.green }} /> : <PictureAsPdfIcon sx={{ fontSize: 15 }} />}
-              sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.green }}>
+              startIcon={pdfBusy ? <CircularProgress size={12} sx={{ color: D.green }} /> : <PictureAsPdfIcon sx={{ fontSize: 15 }} />}
+              sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.green, borderRadius: 999,
+                transition: 'color 0.18s ease', '&:hover': { color: '#5cec8e' } }}>
               PDF
             </Button>
             <Button size="small" disabled={saving || !dirty} onClick={savePo}
-              sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, px: 1.5,
-                bgcolor: dirty ? B.green : 'transparent', color: dirty ? B.greenDk : B.muted }}>
-              {saving ? <CircularProgress size={12} sx={{ color: B.greenDk }} /> : (dirty ? 'Save' : 'Saved')}
+              sx={{ fontSize: 12, textTransform: 'none', fontWeight: 800, px: 1.75, py: 0.5, borderRadius: 999,
+                bgcolor: dirty ? D.green : 'transparent', color: dirty ? D.ink : D.muted,
+                boxShadow: dirty ? `0 6px 18px ${D.glow}` : 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.2s ease, background-color 0.15s ease',
+                '&:hover': dirty ? { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 26px ${D.glow}` } : {} }}>
+              {saving ? <CircularProgress size={12} sx={{ color: D.ink }} /> : (dirty ? 'Save' : 'Saved')}
             </Button>
           </>
         )}
-        <IconButton size="small" onClick={closeGuard}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={closeGuard} sx={{ color: D.muted, '&:hover': { color: D.text } }}><CloseIcon fontSize="small" /></IconButton>
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
         {loading ? (
-          <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={24} sx={{ color: B.green }} /></Box>
+          <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={24} sx={{ color: D.green }} /></Box>
         ) : !editing ? (
           <>
             {pos.length === 0 ? (
-              <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 5, textAlign: 'center', color: B.muted }}>
+              <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 2.5, py: 5, textAlign: 'center', color: D.muted, bgcolor: D.inset }}>
                 <Typography sx={{ fontSize: 13, mb: 1.5 }}>
                   No POs yet. A new one seeds itself from the chosen quote lines at cost.
                 </Typography>
@@ -196,24 +202,26 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                 {pos.map(po => (
                   <Stack key={po._id} direction="row" alignItems="center" gap={1.5}
                     onClick={() => { setEditing({ ...po }); setDirty(false); }}
-                    sx={{ p: 1.5, border: `1px solid ${B.border}`, borderRadius: 1.5, cursor: 'pointer',
-                      '&:hover': { borderColor: B.green } }}>
-                    <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, color: B.green }}>
+                    sx={{ p: 1.5, border: `1px solid ${D.line}`, borderRadius: 2.5, cursor: 'pointer', bgcolor: D.panel,
+                      transition: 'background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease, transform 0.15s ease',
+                      '&:hover': { borderColor: D.lineHi, bgcolor: D.panelHi, transform: 'translateY(-1px)',
+                        boxShadow: '0 10px 28px rgba(0,0,0,0.34)' } }}>
+                    <Typography sx={{ ...mono, fontWeight: 800, fontSize: 13, color: D.green }}>
                       {po.poNumber || '—'}
                     </Typography>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: B.white }}>{po.vendorName || 'Unnamed vendor'}</Typography>
-                      <Typography sx={{ fontSize: 11, color: B.muted }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: D.text }}>{po.vendorName || 'Unnamed vendor'}</Typography>
+                      <Typography sx={{ fontSize: 11, color: D.muted }}>
                         {po.date ? new Date(po.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''}
                         {(po.items || []).length ? ` · ${(po.items || []).length} item${(po.items || []).length === 1 ? '' : 's'}` : ''}
                       </Typography>
                     </Box>
-                    <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, color: B.white }}>
+                    <Typography sx={{ ...mono, fontWeight: 800, fontSize: 13, color: D.text }}>
                       {fmt(po.grandTotal)}
                     </Typography>
                     <Tooltip title="Delete PO">
                       <IconButton size="small" onClick={(e) => { e.stopPropagation(); deletePo(po); }}
-                        sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                        sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
                         <DeleteOutlineIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Tooltip>
@@ -222,8 +230,9 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
               </Stack>
             )}
             <Button onClick={createPo} disabled={creating}
-              startIcon={creating ? <CircularProgress size={14} sx={{ color: B.green }} /> : <AddCircleOutlineIcon />}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>
+              startIcon={creating ? <CircularProgress size={14} sx={{ color: D.green }} /> : <AddCircleOutlineIcon />}
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               New PO (seeded from this project)
             </Button>
           </>
@@ -277,7 +286,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
               <FormControlLabel sx={{ ml: 0.5, mb: 0.4 }}
                 control={<Switch size="small" checked={!!editing.proofRequired}
                   onChange={e => update({ proofRequired: e.target.checked })} />}
-                label={<Typography sx={{ color: B.muted, fontSize: 12 }}>
+                label={<Typography sx={{ color: D.muted, fontSize: 12 }}>
                   Proof required before production
                 </Typography>} />
             </Box>
@@ -296,7 +305,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
             <FormControlLabel sx={{ mb: 1 }}
               control={<Switch size="small" checked={!!editing.blanksProvided}
                 onChange={e => update({ blanksProvided: e.target.checked })} />}
-              label={<Typography sx={{ color: B.muted, fontSize: 12 }}>
+              label={<Typography sx={{ color: D.muted, fontSize: 12 }}>
                 Blanks provided (apparel — JP supplies the garments)
               </Typography>} />
 
@@ -304,9 +313,11 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
             <SectionLabel>Product / print items</SectionLabel>
             <Stack gap={1} mb={1}>
               {(editing.items || []).map((it, i) => (
-                <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.2 }}>
+                <Box key={i} sx={{ border: `1px solid ${D.line}`, borderRadius: 2, p: 1.3, bgcolor: D.panel,
+                  transition: 'background-color 0.18s ease, border-color 0.18s ease',
+                  '&:hover': { bgcolor: D.panelHi, borderColor: 'rgba(255,255,255,0.14)' } }}>
                   <Stack direction="row" gap={1} alignItems="center" mb={0.7}>
-                    <Typography sx={{ color: B.green, fontFamily: 'monospace', fontWeight: 800, fontSize: 12 }}>
+                    <Typography sx={{ color: D.green, ...mono, fontWeight: 800, fontSize: 12 }}>
                       {String.fromCharCode(65 + (i % 26))})
                     </Typography>
                     <TextField size="small" fullWidth value={it.title || ''} placeholder="OAD OAD117 Tote Bags, Black — 25 units"
@@ -314,20 +325,21 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                       sx={inkInput} />
                     <IconButton size="small"
                       onClick={() => update({ items: editing.items.filter((_, j) => j !== i) })}
-                      sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                      sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
                       <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Stack>
                   <TextField size="small" fullWidth multiline minRows={1} placeholder={'One detail per line, e.g.\n1 location 1 color screen printing\n$2.40/unit * 25 units = $60'}
                     value={(it.details || []).join('\n')}
                     onChange={e => update({ items: editing.items.map((x, j) => j === i ? { ...x, details: e.target.value.split('\n') } : x) })}
-                    sx={{ ...inkInput, '& .MuiInputBase-input': { color: B.muted, fontSize: 12 } }} />
+                    sx={{ ...inkInput, '& .MuiInputBase-input': { color: D.muted, fontSize: 12 } }} />
                 </Box>
               ))}
             </Stack>
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
               onClick={() => update({ items: [...(editing.items || []), { title: '', details: [] }] })}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mb: 2 }}>
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mb: 2, borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add item
             </Button>
 
@@ -341,10 +353,10 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                     sx={inkInput} />
                   <TextField size="small" type="number" value={c.amount ?? ''} placeholder="60"
                     onChange={e => update({ charges: editing.charges.map((x, j) => j === i ? { ...x, amount: e.target.value } : x) })}
-                    sx={{ ...inkInput, width: 120 }} />
+                    sx={{ ...inkInput, width: 120, '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.85, textAlign: 'right', ...mono } }} />
                   <IconButton size="small"
                     onClick={() => update({ charges: editing.charges.filter((_, j) => j !== i) })}
-                    sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                    sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
                     <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </Stack>
@@ -352,7 +364,8 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
             </Stack>
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
               onClick={() => update({ charges: [...(editing.charges || []), { label: '', amount: 0 }] })}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mb: 2 }}>
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mb: 2, borderRadius: 999,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add charge
             </Button>
 
@@ -361,15 +374,17 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                 onChange={e => update({ notes: e.target.value })} sx={inkInput} />
             </PF>
 
-            <Stack direction="row" justifyContent="flex-end" alignItems="baseline" gap={2} mt={2}
-              sx={{ borderTop: `1px solid ${B.border}`, pt: 1.5 }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Grand total
-              </Typography>
-              <Typography sx={{ color: B.white, fontSize: 20, fontWeight: 800, fontFamily: 'monospace' }}>
-                {fmt(grandTotal)}
-              </Typography>
-            </Stack>
+            <Box sx={{ mt: 2, p: { xs: 1.75, md: 2 }, borderRadius: 2.5, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2}
+                sx={{ borderTop: `2px solid ${D.green}`, pt: 1.25 }}>
+                <Typography sx={{ color: D.text, fontSize: 15, fontWeight: 800 }}>
+                  Grand total
+                </Typography>
+                <Typography sx={{ color: D.green, fontSize: 24, fontWeight: 900, letterSpacing: -0.5, ...mono }}>
+                  {fmt(grandTotal)}
+                </Typography>
+              </Stack>
+            </Box>
           </>
         )}
       </DialogContent>
@@ -379,7 +394,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
 
 function SectionLabel({ children }) {
   return (
-    <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+    <Typography sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6,
       textTransform: 'uppercase', mb: 0.8, mt: 0.5 }}>
       {children}
     </Typography>
@@ -389,7 +404,7 @@ function SectionLabel({ children }) {
 function PF({ label, children }) {
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.3 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.3 }}>
         {label}
       </Typography>
       {children}

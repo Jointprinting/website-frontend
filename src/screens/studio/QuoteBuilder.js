@@ -20,7 +20,7 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
-import { B, scrollbar, darkInput, fmt } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
 const TIERS = [];
@@ -178,13 +178,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   };
 
   const inkInput = {
-    ...darkInput,
-    '& .MuiOutlinedInput-root': {
-      ...darkInput['& .MuiOutlinedInput-root'],
-      borderRadius: 2,
-      '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' },
-    },
-    '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 },
+    ...dropInput,
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
   };
 
   // Group accents: only groups shared by 2+ lines get a hue — a lone group
@@ -201,25 +196,34 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     <Dialog open={open}
       onClose={(_, reason) => { if (reason === 'backdropClick') return; closeWithSave(); }}
       maxWidth={false} fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2,
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3,
+        backgroundImage: `radial-gradient(120% 50% at 50% 0%, rgba(74,222,128,0.07), rgba(7,11,9,0) 62%)`,
+        boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
       {/* Header */}
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.35,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <Box sx={accentBar} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, letterSpacing: 0.2 }}>
           Quote builder
-          <Typography component="span" sx={{ color: B.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
+          <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
             Project #{project.projectNumber || '—'}
             {(project.companyName || project.clientName) ? ` · ${project.companyName || project.clientName}` : ''}
           </Typography>
         </Typography>
         {/* Invisible autosave — no Save button. Just a quiet status so the user
             knows their work is being kept without ever having to press a thing. */}
-        <Typography sx={{ fontSize: 11, fontWeight: 600, color: B.muted, mr: 0.5, whiteSpace: 'nowrap' }}>
-          {saving ? 'Saving…' : (dirty ? 'Saving soon…' : 'Saved ✓')}
-        </Typography>
-        <IconButton size="small" onClick={closeWithSave}><CloseIcon fontSize="small" /></IconButton>
+        <Stack direction="row" alignItems="center" gap={0.6} sx={{ mr: 0.5 }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            bgcolor: saving ? D.amber : (dirty ? D.faint : D.green),
+            boxShadow: saving || !dirty ? `0 0 8px ${saving ? 'rgba(251,191,36,0.6)' : D.glow}` : 'none',
+            transition: 'background-color 0.2s ease' }} />
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: D.muted, whiteSpace: 'nowrap' }}>
+            {saving ? 'Saving…' : (dirty ? 'Saving soon…' : 'Saved')}
+          </Typography>
+        </Stack>
+        <IconButton size="small" onClick={closeWithSave} sx={{ color: D.muted, '&:hover': { color: D.text } }}><CloseIcon fontSize="small" /></IconButton>
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
@@ -246,13 +250,13 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           {groupNames.map(g => <option key={g} value={g} />)}
         </datalist>
         {lines.length === 0 ? (
-          <Box sx={{ border: '1px dashed rgba(255,255,255,0.14)', borderRadius: 3, py: 6,
-            textAlign: 'center', color: B.muted, bgcolor: 'rgba(255,255,255,0.015)' }}>
+          <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, py: 6,
+            textAlign: 'center', color: D.muted, bgcolor: D.inset }}>
             <Typography sx={{ fontSize: 13, mb: 1.5 }}>No quote lines yet.</Typography>
             <Button onClick={addLine} startIcon={<AddCircleOutlineIcon />}
-              sx={{ color: B.green, textTransform: 'none', fontWeight: 700, borderRadius: 2,
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
                 px: 2, transition: 'background-color 0.18s',
-                '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add the first line
             </Button>
           </Box>
@@ -269,9 +273,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
 
         {lines.length > 0 && (
           <Button onClick={addLine} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-            sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mt: 1.5,
-              borderRadius: 2, px: 1.5, transition: 'background-color 0.18s',
-              '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mt: 1.5,
+              borderRadius: 999, px: 1.75, transition: 'background-color 0.18s',
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
             Add line
           </Button>
         )}
@@ -326,18 +330,20 @@ function DesignAttach({ line, onPatch, tf }) {
           <Box component="img" src={line.image} alt="" title="Click to replace · the client sees this on the option card"
             onClick={() => fileRef.current?.click()}
             sx={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer',
-              border: '1px solid rgba(255,255,255,0.18)' }} />
+              border: `1px solid ${D.lineHi}`, transition: 'box-shadow 0.18s ease',
+              '&:hover': { boxShadow: `0 0 0 2px ${D.glow}` } }} />
         ) : (
           <IconButton size="small" title="Upload a vendor render (for items with no mockup #)"
             onClick={() => fileRef.current?.click()}
-            sx={{ color: B.muted, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 1.5,
-              '&:hover': { color: B.green, borderColor: B.green } }}>
+            sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
+              transition: 'color 0.18s ease, border-color 0.18s ease',
+              '&:hover': { color: D.green, borderColor: D.green } }}>
             <ImageOutlinedIcon sx={{ fontSize: 17 }} />
           </IconButton>
         )}
         {line.image && (
           <IconButton size="small" title="Remove image" onClick={() => onPatch({ image: '' })}
-            sx={{ color: B.muted, p: 0.3, '&:hover': { color: '#f87171' } }}>
+            sx={{ color: D.muted, p: 0.3, '&:hover': { color: '#f87171' } }}>
             <CloseIcon sx={{ fontSize: 14 }} />
           </IconButton>
         )}
@@ -352,27 +358,21 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
     '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
   };
-  const inputRoot = {
-    ...darkInput['& .MuiOutlinedInput-root'],
-    borderRadius: 2,
-    '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' },
-  };
+  const inputRoot = dropInput['& .MuiOutlinedInput-root'];
   const tf = {
-    ...darkInput, ...noSpinner,
-    '& .MuiOutlinedInput-root': inputRoot,
-    '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 },
+    ...dropInput, ...noSpinner,
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
   };
   // The group field reads as a rounded chip so grouped alternatives feel like
   // a labelled set rather than yet another boxed input.
   const groupChip = {
-    ...darkInput,
+    ...dropInput,
     '& .MuiOutlinedInput-root': {
-      ...darkInput['& .MuiOutlinedInput-root'],
+      ...dropInput['& .MuiOutlinedInput-root'],
       borderRadius: 999,
-      ...(accent ? { '& fieldset': { borderColor: accent, transition: 'border-color 0.18s' } }
-                 : { '& fieldset': { borderColor: 'rgba(255,255,255,0.10)', transition: 'border-color 0.18s' } }),
+      ...(accent ? { '& fieldset': { borderColor: accent, transition: 'border-color 0.18s' } } : {}),
     },
-    '& .MuiInputBase-input': { color: B.white, fontSize: 12.5, py: 0.85, px: 1.75 },
+    '& .MuiInputBase-input': { color: D.text, fontSize: 12.5, py: 0.85, px: 1.75 },
   };
 
   const qty           = num(line.qty);
@@ -390,14 +390,16 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
 
   return (
     <Box sx={{
-      border: '1px solid rgba(255,255,255,0.07)',
+      border: `1px solid ${D.line}`,
       // Lines that share a group wear a per-group hue down the left edge so
       // alternative options are scannable as a set.
-      borderLeft: accent ? `3px solid ${accent}` : '1px solid rgba(255,255,255,0.07)',
+      borderLeft: accent ? `3px solid ${accent}` : `1px solid ${D.line}`,
       borderRadius: 3, overflow: 'hidden',
-      bgcolor: 'rgba(255,255,255,0.03)',
-      transition: 'background-color 0.18s',
-      '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+      bgcolor: D.panel,
+      transition: 'background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease',
+      '&:hover': { bgcolor: D.panelHi, borderColor: accent || 'rgba(255,255,255,0.14)',
+        ...(accent ? { borderLeftColor: accent } : {}),
+        boxShadow: '0 10px 28px rgba(0,0,0,0.34)' },
     }}>
       {/* Line header — what is this option: group chip, product, style, qty */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.75,
@@ -421,7 +423,7 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
         </QF>
         <DesignAttach line={line} onPatch={onPatch} tf={tf} />
         <IconButton size="small" onClick={onRemove} title="Remove line"
-          sx={{ color: B.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
+          sx={{ color: D.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
             '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
           <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
         </IconButton>
@@ -436,10 +438,10 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
           lg: '150px minmax(150px, 1.4fr) repeat(4, minmax(88px, 1fr)) 120px',
         } }}>
         <QF label="Print type">
-          <FormControl size="small" fullWidth sx={{ ...darkInput, '& .MuiOutlinedInput-root': inputRoot }}>
+          <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
             <Select value={line.printType || ''} displayEmpty
               onChange={e => onPatch({ printType: e.target.value })}
-              sx={{ color: B.white, fontSize: 13, borderRadius: 2 }}>
+              sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
               <MenuItem value=""><em>—</em></MenuItem>
               {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
             </Select>
@@ -466,9 +468,9 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
             onChange={e => onPatch({ shippingCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="COGS / unit">
-          <Box sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace', height: 37,
+          <Box sx={{ color: D.text, fontSize: 13, fontWeight: 700, ...mono, height: 37,
             display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1.25,
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, bgcolor: 'rgba(0,0,0,0.22)' }}>
+            border: `1px solid ${D.line}`, borderRadius: 2, bgcolor: D.inset }}>
             {cogsPerUnit > 0 ? fmt(cogsPerUnit) : '—'}
           </Box>
         </QF>
@@ -478,21 +480,21 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
           Only the SELECTED tier wears the brand green; the rest stay neutral. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
-          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
             Markup tiers
           </Typography>
-          <Typography sx={{ color: B.muted, fontSize: 10 }}>
+          <Typography sx={{ color: D.muted, fontSize: 10 }}>
             COGS {fmt(cogsPerUnit)}/unit
             {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click a tier to lock that price
           </Typography>
         </Stack>
         {cogsPerUnit <= 0 ? (
-          <Box sx={{ border: '1px dashed rgba(255,255,255,0.12)', borderRadius: 2.5, py: 1.25,
-            textAlign: 'center', color: B.muted, fontSize: 11 }}>
+          <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 2.5, py: 1.25,
+            textAlign: 'center', color: D.muted, fontSize: 11 }}>
             Enter a blank or print cost to see pricing tiers.
           </Box>
         ) : (
-          <Box sx={{ bgcolor: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.05)',
+          <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
             borderRadius: 2.5, p: 0.5, display: 'flex',
             overflowX: 'auto', scrollSnapType: 'x proximity', ...scrollbar }}>
             {TIERS.map(pct => {
@@ -503,21 +505,21 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
                 <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
                   cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
                   py: 0.7, px: 0.5, borderRadius: 1.75, scrollSnapAlign: 'start',
-                  bgcolor: sel ? B.green : 'transparent',
-                  boxShadow: sel ? '0 1px 8px rgba(74,222,128,0.35)' : 'none',
-                  transition: 'background-color 0.18s, box-shadow 0.18s',
-                  '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)' },
+                  bgcolor: sel ? D.green : 'transparent',
+                  boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
+                  transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
+                  '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
                 }}>
-                  <Typography sx={{ color: sel ? 'rgba(12,20,16,0.75)' : B.muted, fontSize: 10, fontWeight: 700,
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700,
                     transition: 'color 0.18s' }}>
                     +{pct}%
                   </Typography>
-                  <Typography sx={{ color: sel ? '#0c1410' : B.white, fontSize: 12, fontWeight: 800,
-                    fontFamily: 'monospace', transition: 'color 0.18s' }}>
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12, fontWeight: 800,
+                    ...mono, transition: 'color 0.18s' }}>
                     {fmt(price)}
                   </Typography>
-                  <Typography sx={{ color: sel ? 'rgba(12,20,16,0.75)' : B.muted, fontSize: 9, fontWeight: 600,
-                    fontFamily: 'monospace', mt: 0.1, transition: 'color 0.18s' }}
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9, fontWeight: 600,
+                    ...mono, mt: 0.1, transition: 'color 0.18s' }}
                     title="Profit per unit at this margin">
                     {fmt(tierProfit)}/u
                   </Typography>
@@ -529,41 +531,41 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
       </Box>
 
       {/* Committed price footer — unit price, profit/margin chips, line total */}
-      <Box sx={{ px: { xs: 1.5, md: 2 }, py: 1.5, borderTop: '1px solid rgba(255,255,255,0.06)',
-        bgcolor: 'rgba(0,0,0,0.15)',
+      <Box sx={{ px: { xs: 1.5, md: 2 }, py: 1.5, borderTop: `1px solid ${D.line}`,
+        bgcolor: D.inset,
         display: 'flex', alignItems: 'flex-end', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap' }}>
         <QF label="Unit price">
           <TextField size="small" type="number" value={line.unitPrice ?? ''}
             onChange={e => onPatch({ unitPrice: e.target.value })} sx={{ ...tf, width: 130 }} />
         </QF>
         <Box>
-          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
+          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
             Profit / unit
           </Typography>
           <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', px: 1.25, py: 0.4,
             borderRadius: 999, bgcolor: marginBg(marginPct), color: marginCol,
-            fontSize: 12, fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.4,
+            fontSize: 12, fontWeight: 700, ...mono, lineHeight: 1.4,
             transition: 'background-color 0.18s, color 0.18s' }}>
             {fmt(profit)} · {marginPct.toFixed(0)}%
           </Box>
         </Box>
         <Box>
-          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
+          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
             Total profit · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
           <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', px: 1.25, py: 0.4,
             borderRadius: 999, bgcolor: marginBg(marginPct), color: marginCol,
-            fontSize: 12, fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.4,
+            fontSize: 12, fontWeight: 700, ...mono, lineHeight: 1.4,
             transition: 'background-color 0.18s, color 0.18s' }}>
             {fmt(profit * qty)}
           </Box>
         </Box>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase' }}>
             Total revenue · {qty} unit{qty === 1 ? '' : 's'}
           </Typography>
-          <Typography sx={{ color: B.white, fontSize: 21, fontWeight: 700, letterSpacing: -0.3, fontFamily: 'monospace', lineHeight: 1.3 }}>
+          <Typography sx={{ color: D.text, fontSize: 21, fontWeight: 700, letterSpacing: -0.3, ...mono, lineHeight: 1.3 }}>
             {fmt(lineTotal)}
           </Typography>
         </Box>
@@ -576,7 +578,7 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
 function QF({ label, children, sx }) {
   return (
     <Box sx={sx}>
-      <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.4 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.4 }}>
         {label}
       </Typography>
       {children}
