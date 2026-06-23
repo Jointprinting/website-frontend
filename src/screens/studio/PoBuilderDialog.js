@@ -164,8 +164,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
       ? { vendorName: name,
           contactName: editing.contactName || v.contactName || '',
           vendorAddress: editing.vendorAddress || v.address || '',
-          shipMethod: editing.shipMethod || v.shipMethod || '',
-          blanksProvided: !!v.blanksProvided }
+          shipMethod: editing.shipMethod || v.shipMethod || '' }
       : { vendorName: name });
   };
 
