@@ -115,7 +115,9 @@ export default function FinancesTab({ token, onBack }) {
   const bannerState = losers.length > 0 ? 'red' : (summary && summary.net < 0 ? 'amber' : 'green');
   const bannerSig = `${year}|${bannerState}|${losers.map((o) => o.orderNumber).join(',')}`;
   const today = new Date().toISOString().slice(0, 10);
-  const bannerHidden = bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
+  // A lost-money order is critical — it can't be dismissed away (no ✕, never
+  // hidden). Amber/green are dismissable for the day, then they come back.
+  const bannerHidden = bannerState !== 'red' && bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
   const dismissBanner = () => {
     const d = { sig: bannerSig, date: today };
     try { localStorage.setItem('jpFinBanner', JSON.stringify(d)); } catch (_) {}
@@ -171,10 +173,12 @@ export default function FinancesTab({ token, onBack }) {
                 ✕ clears it for the day; it returns tomorrow or if the state changes. */}
             {!bannerHidden && (
             <Box sx={{ position: 'relative' }}>
-              <IconButton size="small" onClick={dismissBanner} title="Dismiss"
-                sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted, '&:hover': { color: B.white } }}>
-                <CloseIcon sx={{ fontSize: 15 }} />
-              </IconButton>
+              {bannerState !== 'red' && (
+                <IconButton size="small" onClick={dismissBanner} title="Dismiss for today"
+                  sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted, '&:hover': { color: B.white } }}>
+                  <CloseIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              )}
             {losers.length > 0 ? (
               <Box sx={{ border: '1px solid rgba(248,113,113,0.4)', bgcolor: 'rgba(248,113,113,0.07)', borderRadius: 2, px: 2, py: 1.25 }}>
                 <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.75 }}>
@@ -204,8 +208,7 @@ export default function FinancesTab({ token, onBack }) {
                     Merch is in the red — −{money(Math.abs(summary.net))} {year ? `in ${year}` : 'overall'}
                   </Typography>
                   <Typography sx={{ color: B.muted, fontSize: 12 }}>
-                    No single order lost money, but costs are outpacing real merch sales.
-                    {summary.nonMerch && summary.nonMerch.income > 0 && ' VT3D is what was hiding it.'}
+                    No single order lost money, but costs are outpacing sales this period.
                   </Typography>
                 </Box>
               </Box>
@@ -236,12 +239,6 @@ export default function FinancesTab({ token, onBack }) {
                 {summary.ownerContribution > 0 && summary.ownerDraw > 0 && ' · '}
                 {summary.ownerDraw > 0 && <>− {money(summary.ownerDraw)} owner draw (you paid yourself)</>}
                 {' '}— equity, not counted in profit
-              </Typography>
-            )}
-            {summary.nonMerch && summary.nonMerch.income > 0 && (
-              <Typography sx={{ color: B.muted, fontSize: 11, mt: -1 }}>
-                {money(summary.nonMerch.income)} from {summary.nonMerch.label || 'non-merch'} kept separate — counted in your
-                tax export, left out of these merch numbers so the picture's honest.
               </Typography>
             )}
 
