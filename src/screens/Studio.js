@@ -59,6 +59,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
+import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
@@ -68,6 +69,7 @@ import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
+import CrmTab from './studio/crm/CrmTab';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
@@ -1936,6 +1938,7 @@ const HUB_GROUPS = [
     brand: 'Joint Printing',
     tagline: 'Run the shop',
     tools: [
+      { id: 'crm',         label: 'CRM',           desc: 'Call list, follow-ups, companies',       Icon: ContactPhoneOutlinedIcon },
       { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
       { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
       { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
@@ -2436,6 +2439,10 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'clients') {
     return <OrderTracker token={token} onBack={() => setView('hub')} />;
+  }
+
+  if (view === 'crm') {
+    return <CrmTab token={token} onBack={() => setView('hub')} />;
   }
 
   if (view === 'backup') {
