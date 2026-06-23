@@ -16,7 +16,6 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import axios from 'axios';
@@ -51,6 +50,7 @@ export default function FinancesTab({ token, onBack }) {
   const [bannerDismiss, setBannerDismiss] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
   });
+  const [bannerLeaving, setBannerLeaving] = useState(false);
   const fileRef = useRef(null);
 
   const load = useMemo(() => async () => {
@@ -110,13 +110,13 @@ export default function FinancesTab({ token, onBack }) {
   // Orders with no recorded sale yet (revenue 0) aren't losses — they're pending.
   const losers = (orders || []).filter((o) => o.revenue > 0 && o.profit < 0);
   const lossTotal = losers.reduce((s, o) => s + Math.abs(o.profit), 0);
-  // Dismissable status banner: hidden only for the exact same state on the same
-  // day — so it clears when you ack it, but returns tomorrow or if it changes.
-  const bannerState = losers.length > 0 ? 'red' : (summary && summary.net < 0 ? 'amber' : 'green');
+  // Banner shows ONLY when something needs you — pristine (no banner) when all's
+  // well. RED = a sold order lost money; AMBER = merch net negative.
+  const showBanner = losers.length > 0 || (summary && summary.net < 0);
+  const bannerState = losers.length > 0 ? 'red' : 'amber';
   const bannerSig = `${year}|${bannerState}|${losers.map((o) => o.orderNumber).join(',')}`;
   const today = new Date().toISOString().slice(0, 10);
-  // A lost-money order is critical — it can't be dismissed away (no ✕, never
-  // hidden). Amber/green are dismissable for the day, then they come back.
+  // RED is critical — never dismissable (no ✕). AMBER clears for the day, returns.
   const bannerHidden = bannerState !== 'red' && bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
   const dismissBanner = () => {
     const d = { sig: bannerSig, date: today };
@@ -125,7 +125,12 @@ export default function FinancesTab({ token, onBack }) {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white,
+      '@keyframes jpBannerIn':  { from: { opacity: 0, transform: 'translateY(-8px)' },  to: { opacity: 1, transform: 'translateY(0)' } },
+      '@keyframes jpBannerOut': { from: { opacity: 1, transform: 'translateY(0)' },     to: { opacity: 0, transform: 'translateY(-12px)' } },
+      '@keyframes jpRise':      { from: { opacity: 0, transform: 'translateY(10px)' },   to: { opacity: 1, transform: 'translateY(0)' } },
+      '@keyframes jpGrowX':     { from: { transform: 'scaleX(0)' }, to: { transform: 'scaleX(1)' } },
+      '@keyframes jpGrowY':     { from: { transform: 'scaleY(0)' }, to: { transform: 'scaleY(1)' } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: B.panel, borderBottom: `1px solid ${B.border}`,
         px: { xs: 2, md: 3 }, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
         <Button onClick={onBack} startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />} size="small"
@@ -166,16 +171,19 @@ export default function FinancesTab({ token, onBack }) {
           </Box>
         ) : (
           <Stack gap={2.5}>
-            {/* Calm-control status — three honest states:
-                RED   any sold order lost money (your #1 alarm)
-                AMBER orders are fine but merch net is in the red (overhead/timing — what VT3D was hiding)
-                GREEN orders profitable AND merch is in the black
-                ✕ clears it for the day; it returns tomorrow or if the state changes. */}
-            {!bannerHidden && (
-            <Box sx={{ position: 'relative' }}>
+            {/* Status banner — shows ONLY when something needs you (pristine when fine):
+                RED   a sold order lost money (critical — no ✕, always shows)
+                AMBER merch net negative (dismissable for the day; returns next day / on change)
+                Animated in/out; the ✕ spins on hover for a satisfying dismiss. */}
+            {showBanner && !bannerHidden && (
+            <Box sx={{ position: 'relative',
+              animation: bannerLeaving ? 'jpBannerOut 260ms ease forwards' : 'jpBannerIn 360ms cubic-bezier(.2,.7,.3,1) both' }}>
               {bannerState !== 'red' && (
-                <IconButton size="small" onClick={dismissBanner} title="Dismiss for today"
-                  sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted, '&:hover': { color: B.white } }}>
+                <IconButton size="small" title="Dismiss for today"
+                  onClick={() => { setBannerLeaving(true); setTimeout(() => { dismissBanner(); setBannerLeaving(false); }, 250); }}
+                  sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted,
+                    transition: 'transform 220ms ease, color 220ms ease',
+                    '&:hover': { color: B.white, transform: 'rotate(90deg) scale(1.12)' } }}>
                   <CloseIcon sx={{ fontSize: 15 }} />
                 </IconButton>
               )}
@@ -199,7 +207,7 @@ export default function FinancesTab({ token, onBack }) {
                   ))}
                 </Stack>
               </Box>
-            ) : summary.net < 0 ? (
+            ) : (
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, border: '1px solid rgba(251,191,36,0.4)',
                 bgcolor: 'rgba(251,191,36,0.06)', borderRadius: 2, px: 2, py: 1.25 }}>
                 <ErrorOutlineIcon sx={{ color: '#fbbf24', mt: 0.2 }} />
@@ -212,22 +220,15 @@ export default function FinancesTab({ token, onBack }) {
                   </Typography>
                 </Box>
               </Box>
-            ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, border: '1px solid rgba(74,222,128,0.3)',
-                bgcolor: 'rgba(74,222,128,0.06)', borderRadius: 2, px: 2, py: 1.25 }}>
-                <CheckCircleOutlineIcon sx={{ color: B.green }} />
-                <Box>
-                  <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14 }}>All clear</Typography>
-                  <Typography sx={{ color: B.muted, fontSize: 12 }}>
-                    Every order {year || 'on record'} made money and merch is in the black. Nothing needs you.
-                  </Typography>
-                </Box>
-              </Box>
             )}
             </Box>
             )}
 
-            <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
+            <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' },
+              '& > *': { animation: 'jpRise 460ms ease both' },
+              '& > *:nth-of-type(2)': { animationDelay: '70ms' },
+              '& > *:nth-of-type(3)': { animationDelay: '140ms' },
+              '& > *:nth-of-type(4)': { animationDelay: '210ms' } }}>
               <Stat label="Revenue" value={money(summary.income)} color={B.white} />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
@@ -256,7 +257,8 @@ export default function FinancesTab({ token, onBack }) {
                         <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {pct}%</Typography>
                       </Stack>
                       <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                        <Box sx={{ width: `${Math.min(100, pct)}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green }} />
+                        <Box sx={{ width: `${Math.min(100, pct)}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
+                          transformOrigin: 'left', animation: 'jpGrowX 700ms cubic-bezier(.2,.7,.3,1) both' }} />
                       </Box>
                     </Box>
                   );
@@ -412,15 +414,17 @@ function MonthlyTrend({ months }) {
         </Stack>
       </Stack>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', overflowX: 'auto', ...scrollbar, pb: 0.5 }}>
-        {months.map((m) => {
+        {months.map((m, mi) => {
           const [y, mo] = m.month.split('-');
           const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short' });
           return (
             <Box key={m.month} sx={{ minWidth: 36, flexShrink: 0, textAlign: 'center' }}
               title={`${label} ${y} · revenue ${money(m.income)} · profit ${money(m.net)}`}>
               <Box sx={{ height: 92, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 0.5 }}>
-                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (m.income / max) * 100)}%` }} />
-                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: m.net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(m.net) / max) * 100)}%` }} />
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (m.income / max) * 100)}%`,
+                  transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45}ms` }} />
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: m.net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(m.net) / max) * 100)}%`,
+                  transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45 + 60}ms` }} />
               </Box>
               <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4 }}>{label}</Typography>
             </Box>
