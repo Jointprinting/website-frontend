@@ -18,6 +18,7 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckIcon from '@mui/icons-material/Check';
 import axios from 'axios';
 import config from '../../config.json';
 import { B, darkInput, scrollbar } from './_shared';
@@ -33,6 +34,10 @@ const CAT_COLOR = {
   'Commission': '#fbbf24', 'Software': '#f97316', 'Owner Draw': '#9ca3af', 'Sales Tax': '#ef4444',
   'Refund': '#fb7185', 'Other': '#6b7280',
 };
+// Is this row money coming IN to the business? Income is normally in; a credit
+// flips it — an income credit (customer refund) is money OUT, an expense credit
+// (supplier credit) is money IN. Drives the +/− sign and colour in the ledger.
+const isInflow = (t) => (t.type === 'income') !== !!t.isCredit;
 
 export default function FinancesTab({ token, onBack }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -257,7 +262,7 @@ export default function FinancesTab({ token, onBack }) {
                         <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {pct}%</Typography>
                       </Stack>
                       <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                        <Box sx={{ width: `${Math.min(100, pct)}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
+                        <Box sx={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
                           transformOrigin: 'left', animation: 'jpGrowX 700ms cubic-bezier(.2,.7,.3,1) both' }} />
                       </Box>
                     </Box>
@@ -306,17 +311,18 @@ export default function FinancesTab({ token, onBack }) {
                       <Box component="tr" key={t._id} onClick={() => setEditTxn(t)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
                         <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{new Date(t.date).toISOString().slice(0, 10)}</Box>
-                        <Box component="td" sx={{ py: 0.6, px: 0.5 }}>
+                        <Box component="td" sx={{ py: 0.6, px: 0.5, whiteSpace: 'nowrap' }}>
                           <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
                             color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
                             {t.category}
                           </Box>
+                          {t.isCredit && <CreditBadge />}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, color: B.white, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.party || t.description}{t.orderNumber ? <Box component="span" sx={{ color: B.muted }}> · #{t.orderNumber}</Box> : null}
                         </Box>
-                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', color: t.type === 'income' ? B.green : '#f87171' }}>
-                          {t.type === 'income' ? '+' : '−'}{money(t.amount)}
+                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', color: isInflow(t) ? B.green : '#f87171' }}>
+                          {isInflow(t) ? '+' : '−'}{money(t.amount)}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, width: 28, textAlign: 'center' }}>
                           {t.receiptUrl
@@ -347,8 +353,10 @@ export default function FinancesTab({ token, onBack }) {
 function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
   const rows = (txns || []).filter((t) => String(t.orderNumber) === String(orderNumber))
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date));
-  const income  = rows.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = rows.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  // Credit-aware cash view: a supplier credit counts as money IN, a customer
+  // refund as money OUT — so In/Out/Net read true even with returns mixed in.
+  const income  = rows.filter((t) => isInflow(t)).reduce((s, t) => s + t.amount, 0);
+  const expense = rows.filter((t) => !isInflow(t)).reduce((s, t) => s + t.amount, 0);
   const net = income - expense;
   const client = (rows.find((t) => t.type === 'income' && t.party) || rows.find((t) => t.party) || {}).party || '—';
   return (
@@ -372,18 +380,19 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
                   <Box component="td" sx={{ py: 0.7, px: 1.5, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
                     {new Date(t.date).toISOString().slice(0, 10)}
                   </Box>
-                  <Box component="td" sx={{ py: 0.7, px: 0.5 }}>
+                  <Box component="td" sx={{ py: 0.7, px: 0.5, whiteSpace: 'nowrap' }}>
                     <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
                       color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
                       {t.category}
                     </Box>
+                    {t.isCredit && <CreditBadge />}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 1, color: B.white, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.party || t.description || ''}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap',
-                    color: t.type === 'income' ? B.green : '#f87171' }}>
-                    {t.type === 'income' ? '+' : '−'}{money(t.amount)}
+                    color: isInflow(t) ? B.green : '#f87171' }}>
+                    {isInflow(t) ? '+' : '−'}{money(t.amount)}
                   </Box>
                 </Box>
               ))}
@@ -483,6 +492,7 @@ function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
   const [orderNumber, setOrderNumber] = useState(txn?.orderNumber || '');
   const [party, setParty] = useState(txn?.party || '');
   const [description, setDescription] = useState(txn?.description || '');
+  const [isCredit, setIsCredit] = useState(!!txn?.isCredit);
   const [receiptName, setReceiptName] = useState('');
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -519,7 +529,10 @@ function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
       if (f.date) setDate(f.date);
       if (f.orderNumber) setOrderNumber(f.orderNumber);
       if (f.description) setDescription(f.description);
-      setScanNote('Auto-filled from the receipt — double-check it before saving.');
+      if (typeof f.isCredit === 'boolean') setIsCredit(f.isCredit);
+      setScanNote(f.isCredit
+        ? 'Looks like a credit / return — I marked it as a credit. Double-check the direction before saving.'
+        : 'Auto-filled from the receipt — double-check it before saving.');
     } catch (_) {
       // leave fields as-is; the receipt is still attached for manual entry
     } finally { setScanning(false); }
@@ -527,7 +540,7 @@ function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
   const save = async () => {
     if (!amount || Number(amount) <= 0) { setErr('Enter an amount'); return; }
     setSaving(true); setErr('');
-    const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description };
+    const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit };
     if (receiptDataUrl) form.receiptDataUrl = receiptDataUrl;
     try { await onSave(form); } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
   };
@@ -567,6 +580,29 @@ function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
             <TextField size="small" placeholder="Order #" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} sx={fld} />
           </Box>
           <TextField size="small" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} sx={fld} />
+          {/* Credit / return toggle — books a positive amount that flows the
+              opposite way, so a refund or supplier credit nets correctly instead
+              of looking like a charge/sale. */}
+          <Box onClick={() => setIsCredit((v) => !v)}
+            sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, cursor: 'pointer', userSelect: 'none',
+              border: `1px solid ${isCredit ? 'rgba(251,191,36,0.55)' : B.border}`, borderRadius: 1.5, px: 1.25, py: 0.85,
+              bgcolor: isCredit ? 'rgba(251,191,36,0.08)' : 'transparent', transition: 'border-color 160ms ease, background 160ms ease' }}>
+            <Box sx={{ width: 16, height: 16, mt: 0.15, borderRadius: 0.5, flexShrink: 0,
+              border: `2px solid ${isCredit ? '#fbbf24' : B.muted}`, bgcolor: isCredit ? '#fbbf24' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 160ms ease' }}>
+              {isCredit && <CheckIcon sx={{ fontSize: 12, color: '#1a1206' }} />}
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: isCredit ? '#fbbf24' : B.white }}>Credit / return</Typography>
+              <Typography sx={{ fontSize: 10.5, color: B.muted, lineHeight: 1.35 }}>
+                {isCredit
+                  ? (type === 'income'
+                      ? 'Customer refund — money back to a client (lowers this order’s revenue).'
+                      : 'Supplier credit — money back from a vendor (lowers this order’s cost).')
+                  : 'Tick if this is money flowing back — a refund or a credit memo.'}
+              </Typography>
+            </Box>
+          </Box>
           {hasReceipt && !receiptDataUrl && (
             <a href={txn.receiptUrl} target="_blank" rel="noreferrer" style={{ color: B.green, fontSize: 12, textDecoration: 'none' }}>
               View attached receipt ↗
@@ -606,6 +642,18 @@ function Stat({ label, value, color, big }) {
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
       <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</Typography>
       <Typography sx={{ color, fontSize: big ? 24 : 19, fontWeight: 800, fontFamily: 'monospace', mt: 0.25 }}>{value}</Typography>
+    </Box>
+  );
+}
+
+// Little amber pill marking a row as a credit / return (a refund or supplier
+// credit) — so a reversed-direction entry is obvious at a glance in the ledger.
+function CreditBadge() {
+  return (
+    <Box component="span" sx={{ ml: 0.5, px: 0.55, py: 0.15, borderRadius: 1, fontSize: 8.5, fontWeight: 800,
+      letterSpacing: 0.4, textTransform: 'uppercase', color: '#fbbf24',
+      bgcolor: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.32)' }}>
+      Credit
     </Box>
   );
 }
