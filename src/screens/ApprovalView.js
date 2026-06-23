@@ -445,16 +445,13 @@ export default function ApprovalView() {
           <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
             background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
           <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-            <Box sx={{ width: 40, height: 40, borderRadius: 1.5, flexShrink: 0, display: 'flex',
-              alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, letterSpacing: 0.5,
-              color: '#06140c', background: `linear-gradient(135deg, ${T.green}, #29b765)` }}>
-              JP
-            </Box>
+            <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
+              sx={{ width: 46, height: 46, flexShrink: 0, objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 7px rgba(0,0,0,0.45))' }} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ fontWeight: 900, fontSize: 17, letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1 }}>
                 Joint Printing
               </Typography>
-              <Typography sx={{ ...eyebrow, color: T.muted, fontSize: 9.5, mt: 0.5 }}>Custom merch your brand will keep</Typography>
             </Box>
             {logo && (
               <Box sx={{ width: 48, height: 48, p: 0.5, bgcolor: '#fff', borderRadius: 1.5, display: 'flex',
@@ -927,10 +924,8 @@ function TrackingTimeline({ steps }) {
     <Box sx={{ mt: 1, p: { xs: 2.5, sm: 3.5 }, bgcolor: T.inset, border: `1px solid ${T.line}`, borderRadius: 2.5, position: 'relative', overflow: 'hidden' }}>
       <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.greenDk}, ${T.green})` }} />
       <Stack direction="row" alignItems="center" gap={1.25} mb={1.75}>
-        <Box sx={{ width: 28, height: 28, borderRadius: 1, color: '#06140c', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 12, background: `linear-gradient(135deg, ${T.green}, #29b765)` }}>
-          JP
-        </Box>
+        <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
+          sx={{ width: 30, height: 30, flexShrink: 0, objectFit: 'contain' }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>Project status</Typography>
           <Typography sx={{ fontSize: 13, color: T.text, fontWeight: 700, mt: 0.3 }}>{doneCount} of {steps.length} steps complete</Typography>

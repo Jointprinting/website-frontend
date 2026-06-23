@@ -20,18 +20,18 @@ export const B = {
 // the owner-side builders up to the same premium feel. Additive on purpose: `B`
 // stays as-is so existing surfaces (OrderTracker, tabs) are untouched.
 export const D = {
-  bg:      '#070b09',                 // near-black canvas
-  panel:   '#0e1613',                 // elevated, green-tinted dark panel
-  panelHi: '#13201a',                 // hover / selected panel
-  inset:   '#0a110d',                 // recessed (tables, totals, controls)
-  line:    'rgba(255,255,255,0.08)',  // hairline
-  lineHi:  'rgba(74,222,128,0.45)',   // active green border
+  bg:      '#0b1410',                 // dark canvas — lifted off pure black so panels read
+  panel:   '#19241f',                 // elevated panel — a clear step above the canvas
+  panelHi: '#22302a',                 // hover / selected panel
+  inset:   '#141e19',                 // recessed (tables, totals, inputs) — still clearly visible
+  line:    'rgba(255,255,255,0.15)',  // hairline — visible, defines every field & card edge
+  lineHi:  'rgba(74,222,128,0.55)',   // active green border
   green:   '#4ade80',                 // lime accent
   greenDk: '#0e3b22',                 // deep green
   glow:    'rgba(74,222,128,0.22)',
-  text:    '#f3f7f4',
-  muted:   'rgba(255,255,255,0.56)',
-  faint:   'rgba(255,255,255,0.34)',
+  text:    '#f4f8f5',
+  muted:   'rgba(255,255,255,0.72)',  // secondary text — readable, not a whisper
+  faint:   'rgba(255,255,255,0.50)',  // tertiary / placeholders — still legible
   amber:   '#fbbf24',
   ink:     '#06140c',                 // dark text that rides on a green fill
 };
