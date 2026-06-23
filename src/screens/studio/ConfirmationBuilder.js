@@ -19,6 +19,7 @@ import AddCircleOutlineIcon   from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DesignServicesIcon     from '@mui/icons-material/DesignServices';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
+import VisibilityOutlinedIcon  from '@mui/icons-material/VisibilityOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { B, scrollbar, darkInput, fmt } from './_shared';
@@ -121,6 +122,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   // Load the draft on open. Order of precedence:
   //   1. A localStorage draft for this project (always wins — if you typed
@@ -293,6 +295,21 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     } finally { setShareBusy(false); }
   };
 
+  // Open the live client view (read-only) in a new tab so you can see exactly
+  // what they'll see before sending. Saves first so the preview is current.
+  const previewAsClient = async () => {
+    setPreviewBusy(true);
+    try {
+      if (dirty) await persist();
+      const r = await axios.post(`${config.backendUrl}/api/orders/${project._id}/approval-link`,
+        { rotate: false }, { headers: { Authorization: `Bearer ${token}` } });
+      const url = `${window.location.origin}/approve/${project._id}?token=${r.data.token}&preview=1`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      alert(e.response?.data?.message || 'Could not open the preview.');
+    } finally { setPreviewBusy(false); }
+  };
+
   // Closing the dialog now auto-saves dirty changes instead of asking. The
   // localStorage draft was the safety net before; now we just commit on close.
   const closeWithSave = async () => {
@@ -322,6 +339,15 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
             Project #{project.projectNumber || '—'}{saving ? ' · saving…' : (dirty ? ' · saving soon' : ' · saved ✓')}
           </Typography>
         </Typography>
+        <Button size="small" disabled={previewBusy}
+          startIcon={previewBusy
+            ? <CircularProgress size={12} sx={{ color: B.muted }} />
+            : <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
+          onClick={previewAsClient}
+          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: B.muted,
+            '&:hover': { color: B.white } }}>
+          Preview
+        </Button>
         {onShareApproval && (
           <Button size="small" disabled={shareBusy}
             startIcon={shareBusy
@@ -478,11 +504,25 @@ function Editor({ local, update, project, mockups, mockupMap }) {
       {/* Custom lines */}
       <Section title="Add-on lines"
         action={
-          <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
-            onClick={() => update({ customLines: [...(local.customLines || []), { label: '', amount: 0, isPercent: false }] })}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-            Add line
-          </Button>
+          <Stack direction="row" gap={0.25} alignItems="center">
+            {/* One-tap presets for the two add-ons used most. Both are percent
+                lines, so they apply to the running subtotal in order. */}
+            <Button size="small"
+              onClick={() => update({ customLines: [...(local.customLines || []), { label: 'Credit card fee', amount: 2.99, isPercent: true }] })}
+              sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.6, '&:hover': { color: B.green } }}>
+              + Card&nbsp;fee
+            </Button>
+            <Button size="small"
+              onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true }] })}
+              sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.6, '&:hover': { color: B.green } }}>
+              + NJ&nbsp;tax
+            </Button>
+            <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+              onClick={() => update({ customLines: [...(local.customLines || []), { label: '', amount: 0, isPercent: false }] })}
+              sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+              Add line
+            </Button>
+          </Stack>
         }>
         <Stack gap={0.6}>
           {(local.customLines || []).map((cl, i) => (
