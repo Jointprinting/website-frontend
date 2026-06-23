@@ -12,7 +12,8 @@ import SmsOutlinedIcon from '@mui/icons-material/SmsOutlined';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
-import { D } from '../_shared';
+import CloseIcon from '@mui/icons-material/Close';
+import { D, mono } from '../_shared';
 
 // ── Stage vocabulary ──────────────────────────────────────────────────────────
 // Mirrors models/Client.js CRM_STAGES — keep the order + values in sync. Each
@@ -31,6 +32,20 @@ export const STAGE_META = {
   dormant:   { label: 'Dormant',   color: '#6b7280', bg: 'rgba(107,114,128,0.14)' },
 };
 export const stageMeta = (s) => STAGE_META[s] || STAGE_META.lead;
+
+// Close-probability per stage — MIRRORS controllers/crm.js STAGE_PROBABILITY.
+// The board's weighted forecast comes from /pipeline (server-computed); this
+// fallback map lets the UI label per-stage odds without a round-trip and keeps a
+// single visible source of truth on the client. Keep in sync with the backend.
+export const STAGE_PROBABILITY = {
+  lead: 0.1, contacted: 0.25, quoting: 0.5, sampling: 0.7,
+  won: 1, customer: 1, lost: 0, dormant: 0,
+};
+
+// Board column order. The "active" lane runs lead → … → won/customer; lost and
+// dormant are parked in a secondary lane the board shows collapsed by default.
+export const PIPELINE_STAGES   = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer'];
+export const SECONDARY_STAGES  = ['lost', 'dormant'];
 
 // ── Interest vocabulary ───────────────────────────────────────────────────────
 export const INTEREST_TYPES = ['', 'promos', 'apparel', 'both'];
@@ -100,6 +115,18 @@ export function followUpStatus(iso) {
   };
 }
 
+// Compact whole-dollar money for dense surfaces (cards, column headers): no
+// cents, thousands separators, and k/M shorthand past a threshold so big deal
+// values don't blow out a narrow Kanban card. "$0" stays "$0".
+export const fmtMoney0 = (n) => {
+  const v = Number(n) || 0;
+  const sign = v < 0 ? '-' : '';
+  const abs = Math.abs(v);
+  if (abs >= 1000000) return `${sign}$${(abs / 1000000).toLocaleString('en-US', { maximumFractionDigits: 1 })}M`;
+  if (abs >= 10000)   return `${sign}$${Math.round(abs / 1000).toLocaleString('en-US')}k`;
+  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+};
+
 // Clean a phone string down to diallable digits for a tel: href (keeps a
 // leading + for international, drops everything else).
 export const telHref = (phone) => {
@@ -153,6 +180,43 @@ export function EmptyState({ icon, title, hint }) {
       <Box sx={{ color: 'rgba(255,255,255,0.18)', mb: 1.5, '& svg': { fontSize: 52 } }}>{icon}</Box>
       <Typography sx={{ color: D.muted, fontWeight: 700, fontSize: 15 }}>{title}</Typography>
       {hint && <Typography sx={{ color: D.faint, fontSize: 12.5, mt: 0.5 }}>{hint}</Typography>}
+    </Box>
+  );
+}
+
+// Tag chips — the one place tags are painted, so cards / rows / detail all read
+// the same. Read-only by default; pass `onDelete(tag)` to make each chip
+// removable (used on the detail editor). `size="tiny"` packs them onto cards.
+export function TagChips({ tags, onDelete, size = 'small', max, sx = {} }) {
+  const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
+  if (list.length === 0) return null;
+  const shown = max && list.length > max ? list.slice(0, max) : list;
+  const overflow = max && list.length > max ? list.length - max : 0;
+  const tiny = size === 'tiny';
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', ...sx }}>
+      {shown.map((t) => (
+        <Chip
+          key={t}
+          label={t}
+          size="small"
+          onDelete={onDelete ? () => onDelete(t) : undefined}
+          deleteIcon={onDelete ? <CloseIcon /> : undefined}
+          sx={{
+            height: tiny ? 18 : 22,
+            bgcolor: 'rgba(45,212,191,0.12)', color: '#5eead4',
+            border: '1px solid rgba(45,212,191,0.35)',
+            fontWeight: 700, fontSize: tiny ? 10 : 11, letterSpacing: 0.2,
+            '& .MuiChip-label': { px: tiny ? 0.75 : 1 },
+            '& .MuiChip-deleteIcon': { color: 'rgba(94,234,212,0.7)', fontSize: 14, '&:hover': { color: '#5eead4' } },
+          }}
+        />
+      ))}
+      {overflow > 0 && (
+        <Typography component="span" sx={{ ...mono, color: D.faint, fontSize: tiny ? 10 : 11, fontWeight: 700 }}>
+          +{overflow}
+        </Typography>
+      )}
     </Box>
   );
 }

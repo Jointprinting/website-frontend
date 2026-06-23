@@ -20,11 +20,12 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import AddIcon from '@mui/icons-material/Add';
 import {
   D, mono, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
 import {
-  StageChip, Eyebrow, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
+  StageChip, Eyebrow, TagChips, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
   kindMeta, dateInputValue, followUpStatus, telHref,
 } from './_crm';
 
@@ -74,6 +75,53 @@ function ContactCard({ c }) {
             <MailOutlineIcon sx={{ fontSize: 17 }} />
           </IconButton>
         )}
+      </Stack>
+    </Box>
+  );
+}
+
+// Tags editor — removable chips + an inline "add" input. Each change rewrites
+// the whole tags[] and PATCHes via the parent (onChange). De-dupes
+// case-insensitively to match the server's normalization, so the UI and stored
+// value never disagree.
+function TagEditor({ tags, onChange, saving }) {
+  const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
+  const [draft, setDraft] = React.useState('');
+
+  const add = () => {
+    const t = draft.trim();
+    if (!t) return;
+    if (list.some((x) => x.toLowerCase() === t.toLowerCase())) { setDraft(''); return; }
+    setDraft('');
+    onChange([...list, t]);
+  };
+  const remove = (t) => onChange(list.filter((x) => x !== t));
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Eyebrow>Tags{saving ? ' · saving…' : ''}</Eyebrow>
+      </Stack>
+      {list.length > 0 ? (
+        <TagChips tags={list} onDelete={remove} sx={{ mb: 1.25 }} />
+      ) : (
+        <Typography sx={{ color: D.faint, fontSize: 12.5, mb: 1.25 }}>No tags yet.</Typography>
+      )}
+      <Stack direction="row" spacing={1}>
+        <TextField
+          value={draft} onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          size="small" fullWidth placeholder="Add a tag" sx={fieldSx}
+        />
+        <Button
+          onClick={add} disabled={!draft.trim()} startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: D.green, border: `1px solid ${D.line}`, fontWeight: 700, textTransform: 'none',
+            borderRadius: 2, px: 1.5, whiteSpace: 'nowrap', flexShrink: 0,
+            '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' },
+            '&.Mui-disabled': { color: D.faint, borderColor: D.line } }}
+        >
+          Add
+        </Button>
       </Stack>
     </Box>
   );
@@ -202,6 +250,11 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
               <StageChip stage={client.stage} />
               <Typography sx={{ color: D.faint, fontSize: 12, ...mono }}>{client.companyKey}</Typography>
             </Stack>
+            {client.stage === 'lost' && client.lostReason && (
+              <Typography sx={{ color: '#fca5a5', fontSize: 12, mt: 0.75 }}>
+                Lost: {client.lostReason}
+              </Typography>
+            )}
           </Box>
           <Stack direction="row" spacing={1} flexShrink={0}>
             {phone && (
@@ -314,6 +367,15 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
                 </Stack>
               </>
             )}
+          </Box>
+
+          {/* Tags — add / remove, each change PATCHes the whole tags[] */}
+          <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+            <TagEditor
+              tags={client.tags}
+              saving={savingField === 'tags'}
+              onChange={(next) => commit('tags', next)}
+            />
           </Box>
 
           <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
