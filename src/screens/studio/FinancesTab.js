@@ -47,6 +47,10 @@ export default function FinancesTab({ token, onBack }) {
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editTxn, setEditTxn] = useState(null);
+  const [openOrder, setOpenOrder] = useState(null);
+  const [bannerDismiss, setBannerDismiss] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
+  });
   const fileRef = useRef(null);
 
   const load = useMemo(() => async () => {
@@ -106,6 +110,17 @@ export default function FinancesTab({ token, onBack }) {
   // Orders with no recorded sale yet (revenue 0) aren't losses — they're pending.
   const losers = (orders || []).filter((o) => o.revenue > 0 && o.profit < 0);
   const lossTotal = losers.reduce((s, o) => s + Math.abs(o.profit), 0);
+  // Dismissable status banner: hidden only for the exact same state on the same
+  // day — so it clears when you ack it, but returns tomorrow or if it changes.
+  const bannerState = losers.length > 0 ? 'red' : (summary && summary.net < 0 ? 'amber' : 'green');
+  const bannerSig = `${year}|${bannerState}|${losers.map((o) => o.orderNumber).join(',')}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const bannerHidden = bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
+  const dismissBanner = () => {
+    const d = { sig: bannerSig, date: today };
+    try { localStorage.setItem('jpFinBanner', JSON.stringify(d)); } catch (_) {}
+    setBannerDismiss(d);
+  };
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
@@ -152,7 +167,14 @@ export default function FinancesTab({ token, onBack }) {
             {/* Calm-control status — three honest states:
                 RED   any sold order lost money (your #1 alarm)
                 AMBER orders are fine but merch net is in the red (overhead/timing — what VT3D was hiding)
-                GREEN orders profitable AND merch is in the black */}
+                GREEN orders profitable AND merch is in the black
+                ✕ clears it for the day; it returns tomorrow or if the state changes. */}
+            {!bannerHidden && (
+            <Box sx={{ position: 'relative' }}>
+              <IconButton size="small" onClick={dismissBanner} title="Dismiss"
+                sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted, '&:hover': { color: B.white } }}>
+                <CloseIcon sx={{ fontSize: 15 }} />
+              </IconButton>
             {losers.length > 0 ? (
               <Box sx={{ border: '1px solid rgba(248,113,113,0.4)', bgcolor: 'rgba(248,113,113,0.07)', borderRadius: 2, px: 2, py: 1.25 }}>
                 <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.75 }}>
@@ -163,8 +185,10 @@ export default function FinancesTab({ token, onBack }) {
                 </Stack>
                 <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ pl: 4 }}>
                   {losers.map((o) => (
-                    <Box key={o.orderNumber} sx={{ fontSize: 11, color: B.muted, bgcolor: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 1, px: 0.75, py: 0.25 }}>
+                    <Box key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
+                      sx={{ fontSize: 11, color: B.muted, bgcolor: 'rgba(255,255,255,0.04)', cursor: 'pointer',
+                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 1, px: 0.75, py: 0.25,
+                      '&:hover': { borderColor: 'rgba(248,113,113,0.55)' } }}>
                       #{o.orderNumber}{o.client ? ` · ${o.client}` : ''}{' '}
                       <Box component="span" sx={{ color: '#f87171', fontWeight: 700 }}>{money(o.profit)}</Box>
                     </Box>
@@ -196,6 +220,8 @@ export default function FinancesTab({ token, onBack }) {
                   </Typography>
                 </Box>
               </Box>
+            )}
+            </Box>
             )}
 
             <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
@@ -256,7 +282,8 @@ export default function FinancesTab({ token, onBack }) {
                   </Box>
                   <Box component="tbody">
                     {orders.map((o) => (
-                      <Box component="tr" key={o.orderNumber} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                      <Box component="tr" key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
+                        sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
                         <Box component="td" sx={{ textAlign: 'left !important', color: B.muted }}>#{o.orderNumber}</Box>
                         <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
                         <Box component="td" sx={{ color: B.white }}>{money(o.revenue)}</Box>
@@ -309,7 +336,69 @@ export default function FinancesTab({ token, onBack }) {
 
       {showAdd && <TxnDialog token={token} onClose={() => setShowAdd(false)} onSave={addTxn} />}
       {editTxn && <TxnDialog token={token} txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
+      {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} onClose={() => setOpenOrder(null)}
+        onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }} />}
     </Box>
+  );
+}
+
+// Click any order (Profit-by-order row, or a red "lost money" chip) to see every
+// transaction tagged to it — revenue and every cost — with in/out/net. Tap a line
+// to jump into editing it (e.g. fix a wrong date that parked an order in December).
+function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
+  const rows = (txns || []).filter((t) => String(t.orderNumber) === String(orderNumber))
+    .slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const income  = rows.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const expense = rows.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const net = income - expense;
+  const client = (rows.find((t) => t.type === 'income' && t.party) || rows.find((t) => t.party) || {}).party || '—';
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Order #{orderNumber}{client !== '—' ? ` · ${client}` : ''}
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 0 }}>
+        {rows.length === 0 ? (
+          <Typography sx={{ color: B.muted, fontSize: 12, p: 2.5 }}>No transactions tagged to this order.</Typography>
+        ) : (
+          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <Box component="tbody">
+              {rows.map((t) => (
+                <Box component="tr" key={t._id} onClick={() => onEditTxn && onEditTxn(t)}
+                  sx={{ borderTop: `1px solid ${B.border}`, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
+                  <Box component="td" sx={{ py: 0.7, px: 1.5, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
+                    {new Date(t.date).toISOString().slice(0, 10)}
+                  </Box>
+                  <Box component="td" sx={{ py: 0.7, px: 0.5 }}>
+                    <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
+                      color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
+                      {t.category}
+                    </Box>
+                  </Box>
+                  <Box component="td" sx={{ py: 0.7, px: 1, color: B.white, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.party || t.description || ''}
+                  </Box>
+                  <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap',
+                    color: t.type === 'income' ? B.green : '#f87171' }}>
+                    {t.type === 'income' ? '+' : '−'}{money(t.amount)}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+        <Box sx={{ borderTop: `1px solid ${B.border}`, px: 1.5, py: 1.25, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Typography sx={{ fontSize: 12, color: B.muted }}>In <Box component="span" sx={{ color: B.green, fontFamily: 'monospace' }}>{money(income)}</Box></Typography>
+          <Typography sx={{ fontSize: 12, color: B.muted }}>Out <Box component="span" sx={{ color: '#f87171', fontFamily: 'monospace' }}>{money(expense)}</Box></Typography>
+          <Typography sx={{ fontSize: 12, color: B.muted }}>Net <Box component="span" sx={{ color: net >= 0 ? B.green : '#f87171', fontFamily: 'monospace', fontWeight: 700 }}>{money(net)}</Box></Typography>
+        </Box>
+        {rows.length > 0 && <Typography sx={{ color: B.muted, fontSize: 10.5, px: 1.5, pb: 1.5 }}>Tap a line to edit it (e.g. fix a wrong date).</Typography>}
+      </DialogContent>
+    </Dialog>
   );
 }
 
