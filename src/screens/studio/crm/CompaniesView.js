@@ -14,9 +14,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import { D, mono, dropInput, fmtRelative } from '../_shared';
 import {
-  StageChip, EmptyState, CRM_STAGES, stageMeta, interestLabel, followUpStatus,
+  StageChip, EmptyState, TagChips, CRM_STAGES, stageMeta, interestLabel, followUpStatus,
   primaryPhone,
 } from './_crm';
 
@@ -56,6 +57,7 @@ function CompanyRow({ c, onOpen }) {
               c.lastContact ? `last ${fmtRelative(c.lastContact)}` : null,
             ].filter(Boolean).join(' · ') || 'No details yet'}
           </Typography>
+          <TagChips tags={c.tags} size="tiny" max={5} sx={{ mt: 0.5 }} />
         </Box>
 
         <Stack direction="row" spacing={1} alignItems="center" flexShrink={0}>
@@ -75,7 +77,8 @@ function CompanyRow({ c, onOpen }) {
 }
 
 export default function CompaniesView({
-  clients, loading, query, onQueryChange, stage, onStageChange, onOpen,
+  clients, loading, query, onQueryChange, stage, onStageChange,
+  tag, onTagChange, tagOptions, onOpen,
 }) {
   const [area, setArea] = React.useState('all');
 
@@ -104,18 +107,29 @@ export default function CompaniesView({
         />
         <TextField
           select value={stage} onChange={(e) => onStageChange(e.target.value)}
-          size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Stage"
+          size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Stage"
         >
           <MenuItem value="all">All stages</MenuItem>
           {CRM_STAGES.map((s) => <MenuItem key={s} value={s}>{stageMeta(s).label}</MenuItem>)}
         </TextField>
         <TextField
           select value={area} onChange={(e) => setArea(e.target.value)}
-          size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Area"
+          size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Area"
           disabled={areas.length === 0}
         >
           <MenuItem value="all">All areas</MenuItem>
           {areas.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+        </TextField>
+        <TextField
+          select value={tag} onChange={(e) => onTagChange(e.target.value)}
+          size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Tag"
+          disabled={(tagOptions || []).length === 0}
+          InputProps={{ startAdornment: (
+            <InputAdornment position="start"><LocalOfferOutlinedIcon sx={{ color: D.faint, fontSize: 16 }} /></InputAdornment>
+          ) }}
+        >
+          <MenuItem value="all">All tags</MenuItem>
+          {(tagOptions || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
         </TextField>
       </Stack>
 
@@ -132,8 +146,8 @@ export default function CompaniesView({
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<PeopleAltOutlinedIcon />}
-          title={query || stage !== 'all' || area !== 'all' ? 'No matches' : 'No companies yet'}
-          hint={query || stage !== 'all' || area !== 'all'
+          title={query || stage !== 'all' || area !== 'all' || tag !== 'all' ? 'No matches' : 'No companies yet'}
+          hint={query || stage !== 'all' || area !== 'all' || tag !== 'all'
             ? 'Try clearing a filter or the search.'
             : 'Import your field tracker to load your leads.'}
         />

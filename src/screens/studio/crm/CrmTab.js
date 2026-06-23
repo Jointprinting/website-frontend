@@ -25,20 +25,23 @@ import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
-import { dayKey } from './_crm';
-import { LogTouchDialog, RescheduleDialog } from './CrmDialogs';
+import { dayKey, stageMeta } from './_crm';
+import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
 import TodayView from './TodayView';
 import CalendarView from './CalendarView';
 import CompaniesView from './CompaniesView';
 import CompanyDetail from './CompanyDetail';
 import ImportView from './ImportView';
+import PipelineView from './PipelineView';
 
 const base = `${config.backendUrl}/api/crm`;
 
 const NAV = [
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
+  { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
   { id: 'companies', label: 'Companies', Icon: PeopleAltOutlinedIcon },
   { id: 'import',    label: 'Import',    Icon: UploadFileOutlinedIcon },
@@ -72,6 +75,15 @@ export default function CrmTab({ token, onBack }) {
   const [companiesLoading, setCompaniesLoading] = React.useState(true);
   const [query, setQuery] = React.useState('');
   const [stageFilter, setStageFilter] = React.useState('all');
+  const [tagFilter, setTagFilter] = React.useState('all');
+
+  // Pipeline (Kanban) — its own filter pair so it doesn't fight the Companies
+  // search box, plus the server-computed groups/summary/probability from
+  // /pipeline.
+  const [pipeline, setPipeline] = React.useState({ groups: [], summary: {}, probability: null });
+  const [pipelineLoading, setPipelineLoading] = React.useState(true);
+  const [pipeQuery, setPipeQuery] = React.useState('');
+  const [pipeTag, setPipeTag] = React.useState('all');
 
   const [detail, setDetail] = React.useState(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
@@ -80,6 +92,10 @@ export default function CrmTab({ token, onBack }) {
   // current nextFollowUp so the dialogs can prefill / label without a refetch.
   const [logDlg, setLogDlg] = React.useState({ open: false, target: null });
   const [reschedDlg, setReschedDlg] = React.useState({ open: false, target: null });
+  // Lost-reason prompt — opened when a card is dragged into the Lost column.
+  // `target` carries the companyKey + name + the card's previous stage so we can
+  // revert the optimistic move if the prompt is cancelled.
+  const [lostDlg, setLostDlg] = React.useState({ open: false, target: null });
 
   const [toast, setToast] = React.useState({ open: false, msg: '', sev: 'success' });
   const flash = React.useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
@@ -106,17 +122,35 @@ export default function CrmTab({ token, onBack }) {
     } finally { setCalLoading(false); }
   }, [authHdr, flash]);
 
-  const loadCompanies = React.useCallback(async (q, stage) => {
+  const loadCompanies = React.useCallback(async (q, stage, tag) => {
     setCompaniesLoading(true);
     try {
       const params = {};
       if (q && q.trim()) params.q = q.trim();
       if (stage && stage !== 'all') params.stage = stage;
+      if (tag && tag !== 'all') params.tag = tag;
       const res = await axios.get(base, { ...authHdr, params });
       setClients(res.data?.clients || []);
     } catch (e) {
       flash('Could not load companies.', 'error');
     } finally { setCompaniesLoading(false); }
+  }, [authHdr, flash]);
+
+  const loadPipeline = React.useCallback(async (q, tag) => {
+    setPipelineLoading(true);
+    try {
+      const params = {};
+      if (q && q.trim()) params.q = q.trim();
+      if (tag && tag !== 'all') params.tag = tag;
+      const res = await axios.get(`${base}/pipeline`, { ...authHdr, params });
+      setPipeline({
+        groups: res.data?.groups || [],
+        summary: res.data?.summary || {},
+        probability: res.data?.probability || null,
+      });
+    } catch (e) {
+      flash('Could not load the pipeline.', 'error');
+    } finally { setPipelineLoading(false); }
   }, [authHdr, flash]);
 
   const loadDetail = React.useCallback(async (key) => {
@@ -136,9 +170,15 @@ export default function CrmTab({ token, onBack }) {
 
   // Companies: debounce the search box so we don't fire a request per keystroke.
   React.useEffect(() => {
-    const id = setTimeout(() => loadCompanies(query, stageFilter), 280);
+    const id = setTimeout(() => loadCompanies(query, stageFilter, tagFilter), 280);
     return () => clearTimeout(id);
-  }, [query, stageFilter, loadCompanies]);
+  }, [query, stageFilter, tagFilter, loadCompanies]);
+
+  // Pipeline: same debounced-search treatment as Companies.
+  React.useEffect(() => {
+    const id = setTimeout(() => loadPipeline(pipeQuery, pipeTag), 280);
+    return () => clearTimeout(id);
+  }, [pipeQuery, pipeTag, loadPipeline]);
 
   // Detail: (re)load whenever the open company changes.
   React.useEffect(() => {
@@ -147,13 +187,15 @@ export default function CrmTab({ token, onBack }) {
   }, [openKey, loadDetail]);
 
   // After any write, refresh whatever's currently visible + the open detail so
-  // counts/badges/timelines stay truthful without a blanket refetch of all four.
+  // counts/badges/timelines stay truthful without a blanket refetch of all views.
   const refreshAffected = React.useCallback(() => {
     loadToday();
     loadCalendar(calCursor);
-    loadCompanies(query, stageFilter);
+    loadCompanies(query, stageFilter, tagFilter);
+    loadPipeline(pipeQuery, pipeTag);
     if (openKey) loadDetail(openKey);
-  }, [loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, openKey, loadDetail]);
+  }, [loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, tagFilter,
+      loadPipeline, pipeQuery, pipeTag, openKey, loadDetail]);
 
   // ── Write transport ───────────────────────────────────────────────────────
   // One PATCH path for everything: field edits, log-a-touch, reschedule. The
@@ -224,6 +266,69 @@ export default function CrmTab({ token, onBack }) {
     refreshAffected();
   };
 
+  // Optimistically move a card from one stage column to another in the board
+  // state — pull it out of its old group, drop it into the new one, and fix both
+  // columns' count + totalValue. The summary band is reconciled by the /pipeline
+  // refetch that follows the PATCH (keeps the weighted math server-authoritative).
+  const optimisticMove = React.useCallback((key, toStage) => {
+    setPipeline((prev) => {
+      let moved = null;
+      const groups = (prev.groups || []).map((g) => {
+        const idx = (g.clients || []).findIndex((c) => c.companyKey === key);
+        if (idx === -1) return g;
+        moved = g.clients[idx];
+        const clients = g.clients.filter((_, i) => i !== idx);
+        return { ...g, clients, count: clients.length, totalValue: Math.max(0, (g.totalValue || 0) - (moved.dealValue || 0)) };
+      });
+      if (!moved) return prev;
+      const card = { ...moved, stage: toStage };
+      const next = groups.map((g) => (
+        g.stage === toStage
+          ? { ...g, clients: [card, ...(g.clients || [])], count: (g.count || 0) + 1, totalValue: (g.totalValue || 0) + (card.dealValue || 0) }
+          : g
+      ));
+      return { ...prev, groups: next };
+    });
+  }, []);
+
+  // Pipeline drag-drop: move a card to a new stage. Dropping into Lost is special
+  // — we move the card optimistically, then open the reason prompt; submitting
+  // PATCHes { stage:'lost', lostReason }, cancelling reverts via refetch. Every
+  // other stage is a straight optimistic move + PATCH { stage } (CalendarView's
+  // pattern), reconciled by refreshAffected().
+  const pipelineMoveStage = async (key, toStage, card) => {
+    optimisticMove(key, toStage);
+    if (toStage === 'lost') {
+      // Card is already optimistically in Lost; the prompt confirms (PATCH) or
+      // cancels (revert via refetch), so we don't need the prior stage here.
+      setLostDlg({ open: true, target: { companyKey: key, name: card?.name || key } });
+      return;
+    }
+    try {
+      await patchCompany(key, { stage: toStage });
+      flash(`${card?.name || 'Deal'} → ${stageMeta(toStage).label}`);
+    } catch (_) {
+      loadPipeline(pipeQuery, pipeTag); // revert the optimistic move
+      return;
+    }
+    refreshAffected();
+  };
+
+  const submitLost = async (body) => {
+    const t = lostDlg.target;
+    if (!t) return;
+    await patchCompany(t.companyKey, body); // { stage: 'lost', lostReason }
+    setLostDlg({ open: false, target: null }); // success → close without reverting
+    flash(`${t.name} marked lost.`);
+    refreshAffected();
+  };
+
+  // Cancelling the lost prompt aborts the move — revert the optimistic shuffle.
+  const cancelLost = () => {
+    setLostDlg({ open: false, target: null });
+    loadPipeline(pipeQuery, pipeTag);
+  };
+
   // Detail field edit → PATCH a single whitelisted field, then refresh detail
   // (and lists, since stage/area/etc. change list rows).
   const patchDetailField = async (patch) => {
@@ -231,6 +336,15 @@ export default function CrmTab({ token, onBack }) {
     await patchCompany(detail.client.companyKey, patch);
     refreshAffected();
   };
+
+  // Distinct tags across the loaded company set — feeds the tag-filter selects on
+  // both Companies and Pipeline so the owner picks from tags that actually exist.
+  const tagOptions = React.useMemo(() => {
+    const set = new Set();
+    (clients || []).forEach((c) => (c.tags || []).forEach((t) => { if (t) set.add(t); }));
+    (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => (c.tags || []).forEach((t) => { if (t) set.add(t); })));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [clients, pipeline]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const renderView = () => {
@@ -255,6 +369,17 @@ export default function CrmTab({ token, onBack }) {
             onReschedule={(row) => openResched({ companyKey: row.companyKey, name: row.name, nextFollowUp: row.nextFollowUp })}
           />
         );
+      case 'pipeline':
+        return (
+          <PipelineView
+            groups={pipeline.groups} summary={pipeline.summary} probability={pipeline.probability}
+            loading={pipelineLoading}
+            query={pipeQuery} onQueryChange={setPipeQuery}
+            tag={pipeTag} onTagChange={setPipeTag} tagOptions={tagOptions}
+            onOpen={openCompany}
+            onMoveStage={pipelineMoveStage}
+          />
+        );
       case 'calendar':
         return (
           <CalendarView
@@ -270,6 +395,7 @@ export default function CrmTab({ token, onBack }) {
             clients={clients} loading={companiesLoading}
             query={query} onQueryChange={setQuery}
             stage={stageFilter} onStageChange={setStageFilter}
+            tag={tagFilter} onTagChange={setTagFilter} tagOptions={tagOptions}
             onOpen={openCompany}
           />
         );
@@ -326,8 +452,12 @@ export default function CrmTab({ token, onBack }) {
         )}
       </Box>
 
-      {/* Body */}
-      <Box sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 1.5, sm: 2.5 }, py: { xs: 2, sm: 3 } }}>
+      {/* Body — the Kanban board gets a wider canvas (its columns scroll
+          horizontally); every other view keeps the comfortable reading column. */}
+      <Box sx={{
+        maxWidth: (view === 'pipeline' && !openKey) ? 1440 : 1080,
+        mx: 'auto', px: { xs: 1.5, sm: 2.5 }, py: { xs: 2, sm: 3 },
+      }}>
         {renderView()}
       </Box>
 
@@ -344,6 +474,12 @@ export default function CrmTab({ token, onBack }) {
         onSubmit={submitReschedule}
         companyName={reschedDlg.target?.name}
         current={reschedDlg.target?.nextFollowUp}
+      />
+      <LostReasonDialog
+        open={lostDlg.open}
+        onClose={cancelLost}
+        onSubmit={submitLost}
+        companyName={lostDlg.target?.name}
       />
 
       <Snackbar

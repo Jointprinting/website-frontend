@@ -123,6 +123,82 @@ function plusDays(days) {
   return dateInputValue(d);
 }
 
+// ── Mark lost ─────────────────────────────────────────────────────────────────
+// Fired when a card is dragged into the Lost column (or stage set to lost).
+// Captures an optional reason and submits { stage: 'lost', lostReason }. Cancel
+// aborts the whole move (the board reverts), so closing without saving is safe.
+const LOST_REASONS = ['Price', 'Went with competitor', 'No response', 'Bad timing', 'Not a fit'];
+
+export function LostReasonDialog({ open, onClose, onSubmit, companyName }) {
+  const [reason, setReason] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) { setReason(''); setBusy(false); }
+  }, [open]);
+
+  // On success the PARENT closes the dialog (and reconciles the board); we don't
+  // call onClose here, because onClose means "dismissed without saving" → the
+  // parent reverts the optimistic move. Only release busy on failure so they can
+  // retry.
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await onSubmit({ stage: 'lost', lostReason: reason.trim() });
+    } catch (_) {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth PaperProps={dialogPaper}>
+      <DialogTitle sx={{ fontWeight: 800, pb: 0.5 }}>
+        Mark as lost
+        {companyName && (
+          <Typography sx={{ color: D.muted, fontSize: 12.5, fontWeight: 600, mt: 0.25 }}>{companyName}</Typography>
+        )}
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <Box>
+            <Typography sx={{ color: D.faint, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, mb: 1, textTransform: 'uppercase' }}>
+              Why? (optional)
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1}>
+              {LOST_REASONS.map((r) => {
+                const active = reason === r;
+                return (
+                  <Button
+                    key={r} size="small" disabled={busy}
+                    onClick={() => setReason(active ? '' : r)}
+                    sx={{
+                      ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12.5,
+                      ...(active ? { bgcolor: 'rgba(248,113,113,0.14)', borderColor: '#f87171', color: '#fca5a5' } : {}),
+                    }}
+                  >
+                    {r}
+                  </Button>
+                );
+              })}
+            </Stack>
+          </Box>
+          <TextField
+            label="Reason" value={reason} onChange={(e) => setReason(e.target.value)}
+            fullWidth multiline minRows={2} sx={dropInput}
+            placeholder="Add a note for the record (optional)."
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy} sx={dropGhostBtn}>Cancel</Button>
+        <Button onClick={submit} disabled={busy} sx={dropPrimaryBtn}>
+          {busy ? <CircularProgress size={18} sx={{ color: D.ink }} /> : 'Mark lost'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export function RescheduleDialog({ open, onClose, onSubmit, companyName, current }) {
   const [date, setDate] = React.useState('');
   const [busy, setBusy] = React.useState(false);
