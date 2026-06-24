@@ -83,6 +83,18 @@ function confItemTitle(it, idx) {
   return [head, it.color, it.printType].filter(Boolean).join(' · ') || `Item ${idx + 1}`;
 }
 
+// Short display name for a confirmation item, used in the per-location list.
+function confItemShortName(it, idx) {
+  return it.productName || it.brandName || it.styleCode || `Item ${idx + 1}`;
+}
+
+// Units of an item allocated to a given ship-to key (0 when unset). Additive
+// overlay — present only when the owner split the order across locations.
+function allocQtyFor(it, key) {
+  const a = (it.allocations || []).find(x => x && x.key === key);
+  return a ? (Number(a.qty) || 0) : 0;
+}
+
 // Clickable image that opens the lightbox. Adds a zoom cursor + a soft hover
 // lift and a small magnifier badge so it reads as "tap to enlarge".
 function ZoomImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
@@ -705,6 +717,47 @@ export default function ApprovalView() {
                 );
               })}
             </Stack>
+
+            {/* Shipping to multiple locations — only when the order is split */}
+            {Array.isArray(conf.shipTos) && conf.shipTos.length > 0 && (
+              <Box sx={{ mt: 2.5 }}>
+                <Typography sx={{ ...eyebrow, mb: 1.5 }}>
+                  Shipping to {conf.shipTos.length} locations
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                  {conf.shipTos.map((st, si) => {
+                    const rows = confItems
+                      .map((it, ii) => ({ name: confItemShortName(it, ii), qty: allocQtyFor(it, st.key) }))
+                      .filter(r => r.qty > 0);
+                    return (
+                      <Box key={st.key || si} sx={{ border: `1px solid ${T.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.25 }, bgcolor: T.inset }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: 14 }}>
+                          {st.label || st.name || `Location ${si + 1}`}
+                        </Typography>
+                        {(st.name && st.label) && (
+                          <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2 }}>{st.name}</Typography>
+                        )}
+                        {(st.street || st.cityStateZip) && (
+                          <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2, lineHeight: 1.45 }}>
+                            {[st.street, st.cityStateZip].filter(Boolean).join(', ')}
+                          </Typography>
+                        )}
+                        {rows.length > 0 && (
+                          <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${T.line}` }}>
+                            {rows.map((r, ri) => (
+                              <Stack key={ri} direction="row" justifyContent="space-between" gap={2} sx={{ py: 0.4 }}>
+                                <Typography sx={{ fontSize: 12.5, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
+                                <Typography sx={{ fontSize: 12.5, fontWeight: 700, flexShrink: 0, ...mono }}>{r.qty}</Typography>
+                              </Stack>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
 
             {/* Totals — recessed panel, big green grand total */}
             <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: T.inset, border: `1px solid ${T.line}` }}>

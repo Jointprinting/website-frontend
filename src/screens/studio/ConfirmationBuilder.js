@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControlLabel, Switch, CircularProgress, MenuItem, Select, Tooltip,
+  Dialog, DialogContent, FormControlLabel, Switch, CircularProgress, MenuItem, Select, Tooltip, Collapse,
 } from '@mui/material';
 import CloseIcon              from '@mui/icons-material/Close';
 import PictureAsPdfIcon       from '@mui/icons-material/PictureAsPdf';
@@ -20,6 +20,8 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import DesignServicesIcon     from '@mui/icons-material/DesignServices';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import VisibilityOutlinedIcon  from '@mui/icons-material/VisibilityOutlined';
+import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
+import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
@@ -92,6 +94,32 @@ const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer'
 
 function normMockupKey(n) {
   return String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+}
+
+// Stable, collision-resistant key for a new ship-to destination. allocations on
+// items reference shipTos by this key, so it must never change once assigned.
+function newShipToKey() {
+  return `loc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Total units of an item across its sizes — the number the per-location
+// allocation should sum to.
+function itemTotalQty(item) {
+  return (item.sizes || []).reduce((s, sz) => s + (Number(sz.qty) || 0), 0);
+}
+
+// Sum of an item's allocations across only the destinations that still exist.
+function allocatedQty(item, shipTos) {
+  const keys = new Set((shipTos || []).map(s => s.key));
+  return (item.allocations || [])
+    .filter(a => keys.has(a.key))
+    .reduce((s, a) => s + (Number(a.qty) || 0), 0);
+}
+
+// Read an item's allocation to one destination key (0 when unset).
+function allocFor(item, key) {
+  const a = (item.allocations || []).find(x => x.key === key);
+  return a ? (Number(a.qty) || 0) : 0;
 }
 
 function emptyItem() {
@@ -175,6 +203,9 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     safeSeed.shipping = safeSeed.shipping || { name: '', attention: '', streetAddress: '', cityStateZip: '' };
     safeSeed.items = Array.isArray(safeSeed.items) ? safeSeed.items : [];
     safeSeed.customLines = Array.isArray(safeSeed.customLines) ? safeSeed.customLines : [];
+    // Multi-location ship-to is opt-in: default to an empty list so existing
+    // single-location confirmations carry no shipTos and render exactly as before.
+    safeSeed.shipTos = Array.isArray(safeSeed.shipTos) ? safeSeed.shipTos : [];
     setLocal(safeSeed);
     setDirty(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -466,6 +497,9 @@ function Editor({ local, update, project, mockups, mockupMap }) {
         </Box>
       </Section>
 
+      {/* Multiple ship-to locations (opt-in) */}
+      <MultiShipTo local={local} update={update} />
+
       {/* Items */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.6}>
@@ -504,6 +538,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               onUpdate={(p) => updateItem(i, p)}
               onRemove={() => removeItem(i)}
               onMove={(d) => moveItem(i, d)}
+              shipTos={local.shipTos || []}
               project={project} noSpinner={noSpinner} />
           ))}
           {local.items.length === 0 && (
@@ -581,7 +616,100 @@ function Editor({ local, update, project, mockups, mockupMap }) {
   );
 }
 
-function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, project, noSpinner }) {
+// ── Multiple ship-to destinations ────────────────────────────────────────────
+// Opt-in section: collapsed and empty by default so single-location orders are
+// untouched. Adding a destination here reveals the per-item allocator on every
+// item card. shipTos are referenced by `key`, never by index, so removing one
+// only drops its own allocations.
+function MultiShipTo({ local, update }) {
+  const shipTos = local.shipTos || [];
+  // Auto-open when destinations already exist (e.g. reopening a saved doc);
+  // otherwise stay collapsed so the common single-location flow is unchanged.
+  const [open, setOpen] = useState(shipTos.length > 0);
+
+  const addShipTo = () => {
+    setOpen(true);
+    update({ shipTos: [...shipTos, { key: newShipToKey(), label: '', name: '', street: '', cityStateZip: '', state: '' }] });
+  };
+  const updateShipTo = (idx, patch) =>
+    update({ shipTos: shipTos.map((s, i) => i === idx ? { ...s, ...patch } : s) });
+  const removeShipTo = (idx) => {
+    const goneKey = shipTos[idx] && shipTos[idx].key;
+    // Drop the destination AND prune its allocations off every item so no
+    // orphaned per-location quantities linger in the saved doc.
+    update({
+      shipTos: shipTos.filter((_, i) => i !== idx),
+      items: (local.items || []).map(it => Array.isArray(it.allocations)
+        ? { ...it, allocations: it.allocations.filter(a => a.key !== goneKey) }
+        : it),
+    });
+  };
+
+  return (
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, bgcolor: D.inset }}>
+      <Stack direction="row" alignItems="center" sx={{ px: 1.25, py: 0.9, cursor: 'pointer' }}
+        onClick={() => setOpen(o => !o)}>
+        <PlaceOutlinedIcon sx={{ fontSize: 15, color: D.green, mr: 0.75 }} />
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ color: D.text, fontSize: 12, fontWeight: 700 }}>
+            Ship to multiple locations
+          </Typography>
+          <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+            {shipTos.length === 0
+              ? 'Optional — split this order across the client’s locations'
+              : `${shipTos.length} location${shipTos.length === 1 ? '' : 's'} · set per-item quantities below`}
+          </Typography>
+        </Box>
+        <KeyboardArrowDownIcon sx={{ color: D.muted, fontSize: 20,
+          transition: 'transform 0.2s ease', transform: open ? 'rotate(180deg)' : 'none' }} />
+      </Stack>
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ px: 1.25, pb: 1.25, pt: 0.25 }}>
+          <Stack gap={1}>
+            {shipTos.map((st, i) => (
+              <Box key={st.key || i} sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, p: 1, bgcolor: D.panel }}>
+                <Stack direction="row" alignItems="center" mb={0.5}>
+                  <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, ...mono, letterSpacing: 1 }}>
+                    LOCATION {i + 1}
+                  </Typography>
+                  <Box sx={{ flex: 1 }} />
+                  <IconButton size="small" onClick={() => removeShipTo(i)}
+                    sx={{ color: D.muted, p: 0.3, '&:hover': { color: '#f87171' } }}>
+                    <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Stack>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6 }}>
+                  <SmallField label="Label (e.g. Brooklyn HQ)" value={st.label}
+                    onChange={v => updateShipTo(i, { label: v })} />
+                  <SmallField label="Ship-to name" value={st.name}
+                    onChange={v => updateShipTo(i, { name: v })} />
+                  <Box sx={{ gridColumn: '1 / -1' }}>
+                    <SmallField label="Street address" value={st.street}
+                      onChange={v => updateShipTo(i, { street: v })} />
+                  </Box>
+                  <Box sx={{ gridColumn: '1 / -1' }}>
+                    <SmallField label="City, State, Zip" value={st.cityStateZip}
+                      onChange={v => updateShipTo(i, { cityStateZip: v })} />
+                  </Box>
+                  <SmallField label="State (for tax)" value={st.state}
+                    onChange={v => updateShipTo(i, { state: v })} />
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+          <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+            onClick={addShipTo}
+            sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999, mt: shipTos.length ? 1 : 0.5,
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+            Add location
+          </Button>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, shipTos, project, noSpinner }) {
   const singleFileRef = React.useRef(null);
   const multiFileRef  = React.useRef(null);
   const updateSize = (sIdx, patch) => onUpdate({
@@ -822,6 +950,65 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, p
           </Box>
         ))}
       </Box>
+
+      {/* Per-location quantity allocator — only when destinations exist */}
+      {(shipTos || []).length > 0 && (
+        <ItemAllocator item={item} shipTos={shipTos} onUpdate={onUpdate} noSpinner={noSpinner} />
+      )}
+    </Box>
+  );
+}
+
+// Per-location quantity allocator for one item. Renders a small qty input per
+// destination plus a live check that the allocations sum to the item's total
+// size quantity. The check WARNS (amber) but never blocks saving — partial
+// splits are valid while the owner is still distributing.
+function ItemAllocator({ item, shipTos, onUpdate, noSpinner }) {
+  const total = itemTotalQty(item);
+  const allocated = allocatedQty(item, shipTos);
+  const remaining = total - allocated;
+  const balanced = total > 0 && remaining === 0;
+
+  const setAlloc = (key, qty) => {
+    const existing = Array.isArray(item.allocations) ? item.allocations : [];
+    const has = existing.some(a => a.key === key);
+    const next = has
+      ? existing.map(a => a.key === key ? { ...a, qty } : a)
+      : [...existing, { key, qty }];
+    onUpdate({ allocations: next });
+  };
+
+  return (
+    <Box sx={{ mt: 1, pt: 1, borderTop: `1px dashed ${D.line}` }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.4}>
+        <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+          Ship to · per location
+        </Typography>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 700, ...mono,
+          color: balanced ? D.green : (allocated === 0 ? D.faint : D.amber) }}>
+          {allocated}/{total}{balanced ? ' ✓' : (remaining > 0 ? ` · ${remaining} left` : ` · ${-remaining} over`)}
+        </Typography>
+      </Stack>
+      <Stack gap={0.3}>
+        {shipTos.map((st, i) => (
+          <Box key={st.key || i} sx={{ display: 'grid', gridTemplateColumns: '1fr 66px', gap: 0.5, alignItems: 'center' }}>
+            <Typography sx={{ color: D.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {st.label || st.name || st.cityStateZip || `Location ${i + 1}`}
+            </Typography>
+            <TextField size="small" type="number" value={allocFor(item, st.key) || ''}
+              placeholder="0"
+              onChange={e => setAlloc(st.key, Number(e.target.value) || 0)}
+              sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { color: D.text, fontSize: 11, py: 0.3, textAlign: 'right', ...mono } }} />
+          </Box>
+        ))}
+      </Stack>
+      {total > 0 && !balanced && allocated > 0 && (
+        <Typography sx={{ color: D.amber, fontSize: 9.5, mt: 0.4 }}>
+          {remaining > 0
+            ? `${remaining} unit${remaining === 1 ? '' : 's'} not assigned to a location yet.`
+            : `${-remaining} unit${-remaining === 1 ? '' : 's'} more than this item’s total.`}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -904,6 +1091,35 @@ function Preview({ conf, project, mockupMap, clientLogo, totals }) {
           <InfoRow label="City, State, Zip" value={conf.shipping.cityStateZip} />
         </Box>
       </Box>
+
+      {/* Multi-location ship-to summary — only when destinations are set */}
+      {Array.isArray(conf.shipTos) && conf.shipTos.length > 0 && (
+        <Box sx={{ mb: 3, border: '1px solid #e6e6e0', borderRadius: 1, p: 1.5, bgcolor: '#fafaf7' }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.75 }}>
+            Shipping to {conf.shipTos.length} locations
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
+            {conf.shipTos.map((st, i) => (
+              <Box key={st.key || i} sx={{ fontSize: 12 }}>
+                <Box sx={{ fontWeight: 700, color: '#111' }}>{st.label || st.name || `Location ${i + 1}`}</Box>
+                {st.name && st.label && <Box sx={{ color: '#444' }}>{st.name}</Box>}
+                {st.street && <Box sx={{ color: '#444' }}>{st.street}</Box>}
+                {st.cityStateZip && <Box sx={{ color: '#444' }}>{st.cityStateZip}</Box>}
+                {(() => {
+                  const rows = (conf.items || [])
+                    .map(it => ({ name: (it.productName || it.brandName || it.styleCode || 'Item'), qty: allocFor(it, st.key) }))
+                    .filter(r => r.qty > 0);
+                  return rows.length > 0 ? (
+                    <Box sx={{ mt: 0.4, color: '#666', fontSize: 11.5 }}>
+                      {rows.map((r, ri) => <Box key={ri}>{r.name}: {r.qty}</Box>)}
+                    </Box>
+                  ) : null;
+                })()}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.5 }}>
         Order Info
