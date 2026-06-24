@@ -24,12 +24,13 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import {
   D, mono, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
 import {
-  StageChip, Eyebrow, TagChips, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
-  kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0,
+  StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
+  kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
 } from './_crm';
 
 // Labeled inline field — a compact dropInput with an eyebrow caption above it.
@@ -83,22 +84,40 @@ function ContactCard({ c }) {
   );
 }
 
-// Tags editor — removable chips + an inline "add" input. Each change rewrites
-// the whole tags[] and PATCHes via the parent (onChange). De-dupes
-// case-insensitively to match the server's normalization, so the UI and stored
-// value never disagree.
-function TagEditor({ tags, onChange, saving }) {
-  const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
+// Tags editor — removable chips + an inline "add" input. The input is ALWAYS
+// live (the owner reported it greyed-out/unusable): we keep an OPTIMISTIC local
+// copy so chips update the instant you add/remove, never waiting on the PATCH
+// round-trip (which would otherwise blank the field while the parent refetches).
+// De-dupes case-insensitively to match the server's normalization. The incoming
+// `tags` prop reconciles the local copy once the save lands.
+function TagEditor({ tags, companyKey, onChange, saving }) {
+  const incoming = React.useMemo(
+    () => (Array.isArray(tags) ? tags.filter(Boolean) : []),
+    [tags],
+  );
+  const [list, setList] = React.useState(incoming);
   const [draft, setDraft] = React.useState('');
+
+  // Re-sync from the server ONLY when the company changes (open a different card)
+  // — NOT on every tags change. Resetting on each tags prop would clobber a fast
+  // second add while the first PATCH's refetch is still in flight (the optimistic
+  // copy is authoritative during edits; both PATCHes still land server-side).
+  React.useEffect(() => { setList(incoming); }, [companyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const add = () => {
     const t = draft.trim();
     if (!t) return;
-    if (list.some((x) => x.toLowerCase() === t.toLowerCase())) { setDraft(''); return; }
     setDraft('');
-    onChange([...list, t]);
+    if (list.some((x) => x.toLowerCase() === t.toLowerCase())) return;
+    const next = [...list, t];
+    setList(next);          // optimistic — chip appears immediately
+    onChange(next);
   };
-  const remove = (t) => onChange(list.filter((x) => x !== t));
+  const remove = (t) => {
+    const next = list.filter((x) => x !== t);
+    setList(next);          // optimistic
+    onChange(next);
+  };
 
   return (
     <Box>
@@ -108,13 +127,15 @@ function TagEditor({ tags, onChange, saving }) {
       {list.length > 0 ? (
         <TagChips tags={list} onDelete={remove} sx={{ mb: 1.25 }} />
       ) : (
-        <Typography sx={{ color: D.faint, fontSize: 12.5, mb: 1.25 }}>No tags yet.</Typography>
+        <Typography sx={{ color: D.faint, fontSize: 12.5, mb: 1.25 }}>
+          No tags yet — add one to group, filter, and mark temperature (hot / warm / cold).
+        </Typography>
       )}
       <Stack direction="row" spacing={1}>
         <TextField
           value={draft} onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          size="small" fullWidth placeholder="Add a tag" sx={fieldSx}
+          size="small" fullWidth placeholder="Add a tag — press Enter" sx={fieldSx}
         />
         <Button
           onClick={add} disabled={!draft.trim()} startIcon={<AddIcon sx={{ fontSize: 16 }} />}
@@ -247,6 +268,54 @@ function PoRow({ p }) {
   );
 }
 
+// ── Progress / level card (the dopamine moment) ───────────────────────────────
+// A segmented funnel rail with a contextual headline. Climbing the stages fills
+// the bar in the stage color; reaching Won/Customer flips it to a celebratory
+// green banner so closing a deal feels earned. lost/dormant read dimmed + factual.
+function ProgressCard({ stage, isCustomer }) {
+  const m = stageMeta(stage);
+  const won = isWonStage(stage) || isCustomer;
+  const lost = stage === 'lost';
+  const dormant = stage === 'dormant';
+  const headline = won
+    ? (isCustomer ? 'Customer — they’ve ordered. 🎉' : 'Won — nice close. 🎉')
+    : lost ? 'Marked lost'
+    : dormant ? 'Dormant — parked for now'
+    : `${m.label} — keep it moving`;
+  const sub = won
+    ? 'This account is live. Keep them warm for the next run.'
+    : lost ? 'Off the active board. Revisit if anything changes.'
+    : dormant ? 'No active pursuit. Re-engage when the timing is right.'
+    : 'Each stage advances the deal toward a close.';
+
+  return (
+    <Box sx={{
+      position: 'relative', overflow: 'hidden',
+      bgcolor: won ? 'rgba(74,222,128,0.06)' : D.panel,
+      border: `1px solid ${won ? 'rgba(74,222,128,0.4)' : D.line}`, borderRadius: 2.5,
+      p: { xs: 1.75, sm: 2 },
+      boxShadow: won ? `0 10px 30px -12px ${stageMeta('won').color}66` : 'none',
+    }}>
+      {won && (
+        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+          background: `linear-gradient(90deg, ${stageMeta('won').color}00, ${stageMeta('won').color}, ${stageMeta('won').color}00)` }} />
+      )}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.25 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+          {won && <StarRateRoundedIcon sx={{ fontSize: 19, color: stageMeta('won').color }} />}
+          <Typography sx={{ color: won ? stageMeta('won').color : D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {headline}
+          </Typography>
+        </Stack>
+        <StageChip stage={stage} glow />
+      </Stack>
+      <StageProgress stage={stage} height={7} showLabel />
+      <Typography sx={{ color: D.faint, fontSize: 12, mt: 1.25 }}>{sub}</Typography>
+    </Box>
+  );
+}
+
 export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive }) {
   // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
@@ -320,15 +389,17 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
               }}
               fullWidth
             />
-            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mt: 0.5 }}>
-              <StageChip stage={client.stage} />
+            <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+              <StageChip stage={client.stage} glow />
               {/* Order reality: a company with ≥1 order is a Customer, shown even
-                  if the stored stage hasn't caught up. */}
-              {isCustomer && client.stage !== 'customer' && client.stage !== 'won' && (
-                <Box sx={{ px: 1, py: 0.3, borderRadius: 999, bgcolor: 'rgba(45,212,191,0.14)',
+                  if the stored stage hasn't caught up. Never call an order-having
+                  company a Lead. */}
+              {isCustomer && !isWonStage(client.stage) && (
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
+                  px: 1, py: 0.3, borderRadius: 999, bgcolor: 'rgba(45,212,191,0.14)',
                   color: '#2dd4bf', border: '1px solid rgba(45,212,191,0.4)',
                   fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>
-                  CUSTOMER
+                  <StarRateRoundedIcon sx={{ fontSize: 13 }} /> CUSTOMER
                 </Box>
               )}
               <Typography sx={{ color: D.faint, fontSize: 12, ...mono }}>{client.companyKey}</Typography>
@@ -397,10 +468,15 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
         </Field>
       </Box>
 
+      {/* Progress / level — the dopamine spine. Lights up as the deal climbs the
+          funnel; a Customer/Won earns the full green bar + a celebratory banner. */}
+      <ProgressCard stage={client.stage} isCustomer={isCustomer} />
+
       {/* Business with this company — the money story: lifetime finance (reusing
-          the same revenue/COGS/margin math as /api/finances) + linked POs. Only
-          shown once we have something real to report. */}
-      {(finance || pos.length > 0) && (
+          the same revenue/COGS/margin math as /api/finances) + linked POs. ONLY
+          for a real customer (≥1 order) — a pure lead shouldn't show $0.00
+          everywhere; we surface stage/follow-up/contacts/notes for them instead. */}
+      {isCustomer && (finance || pos.length > 0) && (
         <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
             <Eyebrow>Business with this company</Eyebrow>
@@ -524,26 +600,31 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
           <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
             <TagEditor
               tags={client.tags}
+              companyKey={client.companyKey}
               saving={savingField === 'tags'}
               onChange={(next) => commit('tags', next)}
             />
           </Box>
 
-          <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-              <Eyebrow>Orders</Eyebrow>
-              {orders.length > 0 && (
-                <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>{orders.length}</Typography>
+          {/* Orders — only for a real customer. A pure lead has no orders by
+              definition; showing an empty "Orders" panel just adds $0 noise. */}
+          {isCustomer && (
+            <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Eyebrow>Orders</Eyebrow>
+                {orders.length > 0 && (
+                  <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>{orders.length}</Typography>
+                )}
+              </Stack>
+              {orders.length === 0 ? (
+                <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No linked orders yet.</Typography>
+              ) : (
+                <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>
+                  {orders.map((o) => <OrderRow key={o._id || o.projectNumber || o.orderNumber} o={o} />)}
+                </Box>
               )}
-            </Stack>
-            {orders.length === 0 ? (
-              <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No linked orders yet.</Typography>
-            ) : (
-              <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>
-                {orders.map((o) => <OrderRow key={o._id || o.projectNumber || o.orderNumber} o={o} />)}
-              </Box>
-            )}
-          </Box>
+            </Box>
+          )}
 
           {client.notes && (
             <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>

@@ -113,7 +113,7 @@ function DeadRow({ c, checked, onToggle }) {
           <StageChip stage={c.stage} />
         </Stack>
         <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.2 }}>
-          {c.nextFollowUp ? fu.label : 'No follow-up scheduled'}{c.area ? ` · ${c.area}` : ''}
+          {c.nextFollowUp ? fu.label : 'No follow-up scheduled'}{(c.address || c.area) ? ` · ${c.address || c.area}` : ''}
         </Typography>
       </Box>
     </Box>

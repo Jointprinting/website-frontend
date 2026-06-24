@@ -1,9 +1,17 @@
 // src/screens/studio/crm/CalendarView.js
-// A month grid of follow-ups (/api/crm/calendar), with Notion-style drag-and-
-// drop: grab a company chip and drop it on any day to move its nextFollowUp
-// there → PATCH { nextFollowUp }. Built on native HTML5 drag events (no library)
-// — the interaction is a simple chip→cell move, so a dependency would be dead
-// weight. Prev/next month nav; click a chip to open the company.
+// A month grid of follow-ups (/api/crm/calendar) that works like a real planner.
+// Notion-style drag-and-drop: grab a company chip and drop it on any day to move
+// its nextFollowUp there → PATCH { nextFollowUp }. Native HTML5 drag (no library).
+//
+// CROSS-MONTH rescheduling (the owner's ask — "can't drag to a different month"):
+//   1) While dragging, HOVERING the prev/next month arrows (now enlarged into
+//      drop-rails) auto-navigates after a short dwell, so you can scroll to any
+//      month mid-drag and drop on the target day — the chip stays armed across
+//      the month change (the drag ref survives re-render).
+//   2) A per-chip "reschedule" button + right-click both open a date picker
+//      dialog (onPickReschedule) — a fallback that ALWAYS reaches any date, no
+//      dragging required.
+// Today is highlighted in the owner's local (ET) day; chips are stage-colored.
 //
 // Fetch window: we always pull the FULL visible grid (the Sunday before the 1st
 // through the Saturday after the last day), so chips on the leading/trailing
@@ -14,8 +22,9 @@ import { Box, Stack, Typography, IconButton, CircularProgress, Tooltip } from '@
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import { D, mono } from '../_shared';
-import { stageMeta, dayKey, todayLocalKey } from './_crm';
+import { stageMeta, dayKey, todayLocalKey, isWonStage } from './_crm';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -37,20 +46,25 @@ function buildGrid(year, month) {
 }
 
 // A draggable company chip living in a day cell.
-function EventChip({ ev, onOpen, onDragStart, onDragEnd, dragging }) {
+function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragging }) {
   const m = stageMeta(ev.stage);
+  const won = isWonStage(ev.stage);
+  const [hover, setHover] = React.useState(false);
   return (
     <Box
       draggable
       onDragStart={(e) => onDragStart(e, ev)}
       onDragEnd={onDragEnd}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={(e) => { e.stopPropagation(); onOpen(ev.companyKey); }}
-      title={`${ev.name}${ev.area ? ` · ${ev.area}` : ''} — drag to reschedule`}
+      onContextMenu={(e) => { if (onPickReschedule) { e.preventDefault(); e.stopPropagation(); onPickReschedule(ev); } }}
+      title={`${ev.name}${ev.area ? ` · ${ev.area}` : ''} — drag to a day, or use ⟳ to reschedule to any date`}
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.5,
         px: 0.75, py: '3px', mb: 0.5, borderRadius: 1.25, cursor: 'grab',
-        bgcolor: m.bg, border: `1px solid ${m.color}55`,
+        bgcolor: m.bg, border: `1px solid ${m.color}${won ? '88' : '55'}`,
         opacity: dragging ? 0.35 : 1,
+        boxShadow: won ? `0 0 8px -3px ${m.color}` : 'none',
         transition: 'opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease',
         '&:hover': { transform: 'translateY(-1px)', boxShadow: `0 4px 12px -4px ${m.color}66` },
         '&:active': { cursor: 'grabbing' },
@@ -58,16 +72,29 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, dragging }) {
     >
       <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
       <Typography sx={{
-        color: D.text, fontSize: 11.5, fontWeight: 700, minWidth: 0,
+        color: D.text, fontSize: 11.5, fontWeight: 700, minWidth: 0, flexGrow: 1,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {ev.name}
       </Typography>
+      {onPickReschedule && (
+        <Tooltip title="Reschedule to any date">
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); onPickReschedule(ev); }}
+            sx={{ p: 0.1, ml: -0.25, color: D.faint, opacity: { xs: 1, sm: hover ? 1 : 0 },
+              transition: 'opacity 0.12s ease, color 0.12s ease',
+              '&:hover': { color: D.green } }}
+          >
+            <EventRepeatOutlinedIcon sx={{ fontSize: 13 }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }
 
-function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell }) {
+function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell, onPickReschedule }) {
   const key = dayKey(date);
   const isDropTarget = dragState.overKey === key && dragState.activeKey;
 
@@ -112,6 +139,7 @@ function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStar
             onOpen={onOpen}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onPickReschedule={onPickReschedule}
             dragging={dragState.activeKey === ev.companyKey}
           />
         ))}
@@ -120,7 +148,30 @@ function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStar
   );
 }
 
-export default function CalendarView({ events, loading, cursor, onCursorChange, onOpen, onReschedule }) {
+// A month-nav arrow that doubles, mid-drag, as a "carry the card to the prev/next
+// month" rail (see railDragOver). Top-level (not nested in CalendarView) so it
+// keeps a stable component identity across the frequent drag-state re-renders —
+// otherwise its IconButton subtree would remount mid-drag.
+function NavRail({ delta, title, dragging, onClick, onDragOver, onDragLeave, children }) {
+  return (
+    <Tooltip title={dragging ? `Hold here to move to the ${delta < 0 ? 'previous' : 'next'} month` : title}>
+      <IconButton
+        onClick={onClick} size="small"
+        onDragOver={onDragOver} onDragLeave={onDragLeave}
+        sx={{
+          color: D.muted, border: `1px solid ${dragging ? D.lineHi : D.line}`,
+          bgcolor: dragging ? 'rgba(74,222,128,0.06)' : 'transparent',
+          transition: 'border-color 0.12s ease, background 0.12s ease',
+          '&:hover': { color: D.green, borderColor: D.lineHi },
+        }}
+      >
+        {children}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+export default function CalendarView({ events, loading, cursor, onCursorChange, onOpen, onReschedule, onPickReschedule }) {
   // cursor = { year, month } of the displayed month (owned by parent so the
   // fetch + view stay in sync).
   const { year, month } = cursor;
@@ -145,6 +196,12 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
   // Drag state: which company is in flight (activeKey) + the cell we're over.
   const [dragState, setDragState] = React.useState({ activeKey: null, overKey: null });
   const draggedRef = React.useRef(null);
+  // Dwell timer for auto-navigating months while hovering a nav rail mid-drag.
+  const dwellRef = React.useRef(null);
+
+  const clearDwell = () => { if (dwellRef.current) { clearTimeout(dwellRef.current); dwellRef.current = null; } };
+  // Never leak the dwell timer if the view unmounts mid-drag.
+  React.useEffect(() => () => { if (dwellRef.current) clearTimeout(dwellRef.current); }, []);
 
   const handleDragStart = (e, ev) => {
     draggedRef.current = ev;
@@ -154,11 +211,12 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     } catch (_) { /* some browsers restrict dataTransfer; ref is the source of truth */ }
     setDragState({ activeKey: ev.companyKey, overKey: null });
   };
-  const handleDragEnd = () => { draggedRef.current = null; setDragState({ activeKey: null, overKey: null }); };
-  const handleDragOverCell = (key) => setDragState((s) => (s.overKey === key ? s : { ...s, overKey: key }));
+  const handleDragEnd = () => { clearDwell(); draggedRef.current = null; setDragState({ activeKey: null, overKey: null }); };
+  const handleDragOverCell = (key) => { clearDwell(); setDragState((s) => (s.overKey === key ? s : { ...s, overKey: key })); };
   const handleDragLeaveCell = (key) => setDragState((s) => (s.overKey === key ? { ...s, overKey: null } : s));
 
   const handleDrop = (key) => {
+    clearDwell();
     const ev = draggedRef.current;
     draggedRef.current = null;
     setDragState({ activeKey: null, overKey: null });
@@ -167,24 +225,35 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     onReschedule(ev.companyKey, key, ev);
   };
 
-  const go = (delta) => {
+  const go = React.useCallback((delta) => {
     const d = new Date(year, month + delta, 1);
     onCursorChange({ year: d.getFullYear(), month: d.getMonth() });
-  };
+  }, [year, month, onCursorChange]);
   const goToday = () => { const n = new Date(); onCursorChange({ year: n.getFullYear(), month: n.getMonth() }); };
+
+  const dragging = !!dragState.activeKey;
+  // Hover-dwell handlers for the nav rails — start a 450ms timer that flips the
+  // month while a chip is in flight, so the owner can carry a card across months.
+  const railDragOver = (delta) => (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    if (!dwellRef.current) {
+      dwellRef.current = setTimeout(() => { dwellRef.current = null; go(delta); }, 450);
+    }
+  };
 
   return (
     <Stack spacing={2}>
       {/* Month nav */}
       <Stack direction="row" alignItems="center" spacing={1}>
-        <IconButton onClick={() => go(-1)} size="small"
-          sx={{ color: D.muted, border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+        <NavRail delta={-1} title="Previous month" dragging={dragging}
+          onClick={() => go(-1)} onDragOver={railDragOver(-1)} onDragLeave={clearDwell}>
           <ChevronLeftIcon />
-        </IconButton>
-        <IconButton onClick={() => go(1)} size="small"
-          sx={{ color: D.muted, border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+        </NavRail>
+        <NavRail delta={1} title="Next month" dragging={dragging}
+          onClick={() => go(1)} onDragOver={railDragOver(1)} onDragLeave={clearDwell}>
           <ChevronRightIcon />
-        </IconButton>
+        </NavRail>
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, ml: 0.5, minWidth: 0 }}>
           {MONTHS[month]} <Box component="span" sx={{ color: D.muted, fontWeight: 600 }}>{year}</Box>
         </Typography>
@@ -234,15 +303,19 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
                 onDrop={handleDrop}
                 onDragOverCell={handleDragOverCell}
                 onDragLeaveCell={handleDragLeaveCell}
+                onPickReschedule={onPickReschedule}
               />
             );
           })}
         </Box>
       </Box>
 
-      <Typography sx={{ color: D.faint, fontSize: 11.5, textAlign: 'center' }}>
-        Drag a company onto a different day to reschedule its follow-up · tap a chip to open it.
-      </Typography>
+      {/* Legend / hint */}
+      <Stack direction="row" alignItems="center" justifyContent="center" flexWrap="wrap" useFlexGap spacing={1.5}>
+        <Typography sx={{ color: D.faint, fontSize: 11.5, textAlign: 'center' }}>
+          Drag a chip to a day to reschedule · hover ‹ › while dragging to cross months · ⟳ (or right-click) for any date.
+        </Typography>
+      </Stack>
     </Stack>
   );
 }
