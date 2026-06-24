@@ -249,12 +249,36 @@ export default function FinancesTab({ token, onBack }) {
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
               <Stat label="Margin" value={`${summary.margin}%`} color={summary.margin >= 0 ? B.green : '#f87171'} />
             </Box>
-            {(summary.ownerContribution > 0 || summary.ownerDraw > 0) && (
+            {/* Owner cash lens — what the business EARNED (profit, above) vs what
+                you TOOK HOME (draws) vs what was LEFT IN the business. Profit
+                stays draw-excluded (correct for taxes); this is the additive
+                "where did the money go" answer. Shown whenever there's a draw —
+                the figure people actually want to see. */}
+            {summary.ownerDraw > 0 && (
+              <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Your money</Typography>
+                  <Typography sx={{ color: B.muted, fontSize: 10.5 }}>Profit is what the business earned · draws aren’t a cost</Typography>
+                </Stack>
+                <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(3,1fr)' } }}>
+                  <Stat label="Profit (earned)" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} />
+                  <Stat label="Take-home (draws)" value={money(summary.takeHome)} color={B.white} />
+                  <Stat label="Left in business"
+                    value={money(summary.leftInBusiness)}
+                    color={summary.leftInBusiness >= 0 ? B.green : '#fbbf24'} />
+                </Box>
+                <Typography sx={{ color: B.muted, fontSize: 11, mt: 1 }}>
+                  The business earned <Box component="span" sx={{ color: B.white }}>{money(summary.net)}</Box>;
+                  you took home <Box component="span" sx={{ color: B.white }}>{money(summary.takeHome)}</Box> in owner draws,
+                  leaving <Box component="span" sx={{ color: summary.leftInBusiness >= 0 ? B.green : '#fbbf24' }}>{money(summary.leftInBusiness)}</Box> in the business.
+                  {summary.leftInBusiness < 0 && ' You drew more than the business earned this period.'}
+                  {summary.ownerContribution > 0 && <> {' '}(+ {money(summary.ownerContribution)} you put in — equity, not income.)</>}
+                </Typography>
+              </Box>
+            )}
+            {summary.ownerDraw === 0 && summary.ownerContribution > 0 && (
               <Typography sx={{ color: B.muted, fontSize: 11, mt: -1 }}>
-                {summary.ownerContribution > 0 && <>+ {money(summary.ownerContribution)} owner contribution</>}
-                {summary.ownerContribution > 0 && summary.ownerDraw > 0 && ' · '}
-                {summary.ownerDraw > 0 && <>− {money(summary.ownerDraw)} owner draw (you paid yourself)</>}
-                {' '}— equity, not counted in profit
+                + {money(summary.ownerContribution)} owner contribution — equity, not counted in profit
               </Typography>
             )}
 
