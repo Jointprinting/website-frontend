@@ -88,13 +88,15 @@ export default function ImportView({ onPreview, onCommit, onImported }) {
   return (
     <Stack spacing={2.5} sx={{ maxWidth: 580 }}>
       <Box>
-        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18 }}>Import field tracker / CSV</Typography>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18 }}>Import CRM / field tracker / CSV</Typography>
         <Typography sx={{ color: D.muted, fontSize: 13.5, mt: 0.5, lineHeight: 1.55 }}>
-          Pick the CSV export of your tracker. We match your column headers
-          (Company Name, Owner / Contact, Phone, Area, Status, Next Contact, Notes…)
-          and merge into existing companies. You&apos;ll always see a preview
-          before anything is written, and re-importing only fills blanks — it
-          never overwrites your reschedules, notes, or stage changes.
+          Pick a CSV export — your field-visit tracker, your Notion CRM, or your
+          Google &quot;CRM&quot; sheet. We auto-detect the layout from its headers
+          (Company Name, Contact Person/Best POC, Status, Next Follow-up, Order
+          Number…), map warm/hot/cold statuses to stages, and treat anything with
+          an order as a customer. You&apos;ll always see a preview before anything
+          is written, and re-importing only fills blanks — it never overwrites your
+          reschedules, notes, or stage changes.
         </Typography>
       </Box>
 

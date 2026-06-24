@@ -22,6 +22,8 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import {
   D, mono, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
@@ -128,10 +130,14 @@ function TagEditor({ tags, onChange, saving }) {
   );
 }
 
-function LogEntry({ entry, last }) {
+function LogEntry({ entry, last, onDelete }) {
   const { Icon, color, label } = kindMeta(entry.kind);
+  const [hover, setHover] = React.useState(false);
   return (
-    <Box sx={{ display: 'flex', gap: 1.25, position: 'relative', pb: last ? 0 : 2 }}>
+    <Box
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      sx={{ display: 'flex', gap: 1.25, position: 'relative', pb: last ? 0 : 2 }}
+    >
       {/* timeline rail */}
       {!last && <Box sx={{ position: 'absolute', left: 13, top: 28, bottom: -4, width: 2, bgcolor: D.line }} />}
       <Box sx={{
@@ -150,6 +156,20 @@ function LogEntry({ entry, last }) {
         </Stack>
         <Typography sx={{ color: D.text, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{entry.text}</Typography>
       </Box>
+      {/* Delete this single entry. Visible on hover (always visible on touch via
+          the tap target). Owner asked to be able to remove a note from the card. */}
+      {onDelete && (
+        <IconButton
+          onClick={onDelete} size="small" aria-label="Delete note"
+          sx={{
+            flexShrink: 0, color: D.faint, opacity: { xs: 1, sm: hover ? 1 : 0 },
+            transition: 'opacity 0.15s ease, color 0.15s ease',
+            '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.1)' },
+          }}
+        >
+          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      )}
     </Box>
   );
 }
@@ -227,25 +247,30 @@ function PoRow({ p }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog }) {
-  // data = { client, orders, pos, finance }
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive }) {
+  // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
   const orders = data?.orders || [];
   const pos = data?.pos || [];
   // Finance summary computed server-side by reusing the /api/finances math.
   const finance = data?.finance || null;
+  // Authoritative "is a customer" from order reality (≥1 linked order), even if
+  // the stored stage is stale. Server returns it at the top level and on client.
+  const isCustomer = data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0);
 
   // Local editable copies for text fields so typing doesn't fight the round-trip.
   const [name, setName] = React.useState('');
   const [dealValue, setDealValue] = React.useState('');
-  const [areaText, setAreaText] = React.useState('');
+  const [addressText, setAddressText] = React.useState('');
   const [savingField, setSavingField] = React.useState('');
 
   React.useEffect(() => {
     if (!client) return;
     setName(client.companyName || client.clientName || '');
     setDealValue(client.dealValue != null && client.dealValue !== 0 ? String(client.dealValue) : '');
-    setAreaText(client.area || '');
+    // Prefer the exact address; fall back to the legacy area so an existing
+    // region still shows (the owner can overwrite it with a real address).
+    setAddressText(client.address || client.area || '');
   }, [client]);
 
   if (loading || !client) {
@@ -297,6 +322,15 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
             />
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mt: 0.5 }}>
               <StageChip stage={client.stage} />
+              {/* Order reality: a company with ≥1 order is a Customer, shown even
+                  if the stored stage hasn't caught up. */}
+              {isCustomer && client.stage !== 'customer' && client.stage !== 'won' && (
+                <Box sx={{ px: 1, py: 0.3, borderRadius: 999, bgcolor: 'rgba(45,212,191,0.14)',
+                  color: '#2dd4bf', border: '1px solid rgba(45,212,191,0.4)',
+                  fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>
+                  CUSTOMER
+                </Box>
+              )}
               <Typography sx={{ color: D.faint, fontSize: 12, ...mono }}>{client.companyKey}</Typography>
             </Stack>
             {client.stage === 'lost' && client.lostReason && (
@@ -339,10 +373,10 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
             {INTEREST_TYPES.map((i) => <MenuItem key={i || 'none'} value={i}>{interestLabel(i)}</MenuItem>)}
           </TextField>
         </Field>
-        <Field label={savingField === 'area' ? 'Area · saving…' : 'Area'}>
-          <TextField value={areaText} onChange={(e) => setAreaText(e.target.value)}
-            onBlur={() => { if ((client.area || '') !== areaText) commit('area', areaText); }}
-            size="small" fullWidth sx={fieldSx} placeholder="e.g. South Jersey" />
+        <Field label={savingField === 'address' ? 'Address · saving…' : 'Address'}>
+          <TextField value={addressText} onChange={(e) => setAddressText(e.target.value)}
+            onBlur={() => { if ((client.address || '') !== addressText) commit('address', addressText); }}
+            size="small" fullWidth sx={fieldSx} placeholder="e.g. 123 Main St, Newark NJ" />
         </Field>
         <Field label={savingField === 'dealValue' ? 'Deal value · saving…' : 'Deal value'}>
           <TextField value={dealValue} onChange={(e) => setDealValue(e.target.value.replace(/[^\d.]/g, ''))}
@@ -439,7 +473,16 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
               No activity yet. Log your first touch.
             </Typography>
           ) : (
-            <Box>{log.map((e, i) => <LogEntry key={i} entry={e} last={i === log.length - 1} />)}</Box>
+            <Box>{log.map((e, i) => (
+              <LogEntry
+                key={e._id || i}
+                entry={e}
+                last={i === log.length - 1}
+                // Delete by stable _id when present; legacy entries (no id) delete
+                // by their position in the ORIGINAL (unsorted) log array.
+                onDelete={onDeleteLog ? () => onDeleteLog(e._id != null ? e._id : (client.log || []).indexOf(e)) : undefined}
+              />
+            ))}</Box>
           )}
         </Box>
 
@@ -510,6 +553,23 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog })
           )}
         </Stack>
       </Box>
+
+      {/* Archive this card — soft / reversible (recover from Companies → Archived).
+          The record + its order links + history are all preserved; it just drops
+          out of the working surfaces. */}
+      {onArchive && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1 }}>
+          <Button
+            onClick={() => { if (window.confirm('Archive this card? It drops out of your lists but stays recoverable (nothing is deleted).')) onArchive(); }}
+            startIcon={<ArchiveOutlinedIcon sx={{ fontSize: 17 }} />}
+            sx={{ textTransform: 'none', color: D.faint, fontWeight: 700, fontSize: 12.5,
+              border: `1px solid ${D.line}`, borderRadius: 999, px: 2,
+              '&:hover': { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)', bgcolor: 'rgba(248,113,113,0.06)' } }}
+          >
+            Archive card
+          </Button>
+        </Box>
+      )}
 
       <Box sx={{ height: 8 }} />
     </Stack>
