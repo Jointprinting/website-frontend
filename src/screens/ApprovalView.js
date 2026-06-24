@@ -59,8 +59,34 @@ function money(n) {
 
 const _norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
+// Per-location sales tax for a multi-ship-to confirmation. Mirrors the backend
+// models/Order.js computeLocationTax and studio/_shared.js confLocationTax:
+// active only when a shipTo carries taxRate > 0; each item's merchandise
+// revenue is allocated to a location proportionally by its unit share, summed,
+// then × taxRate%. Tax is on merchandise only (not the add-on lines).
+function confLocationTax(conf) {
+  const n = (v) => Number(v) || 0;
+  const shipTos = Array.isArray(conf?.shipTos) ? conf.shipTos : [];
+  const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
+  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
+  const items = Array.isArray(conf?.items) ? conf.items : [];
+  const lines = taxed.map((st) => {
+    const subtotal = items.reduce((sum, it) => {
+      const itemRevenue = (it.sizes || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
+      const itemQty = (it.sizes || []).reduce((q, sz) => q + n(sz.qty), 0);
+      if (itemQty <= 0) return sum;
+      const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
+      return sum + itemRevenue * (allocQty / itemQty);
+    }, 0);
+    const rate = n(st.taxRate);
+    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, value: subtotal * rate / 100 };
+  });
+  return { active: true, total: lines.reduce((s, l) => s + l.value, 0), lines };
+}
+
 // Mirror the server PDF's confirmation totals: percent custom-lines apply to
-// the running subtotal, in order.
+// the running subtotal, in order; then per-location sales tax (multi-ship-to)
+// is added last. With no taxed shipTos this is byte-identical to before.
 function computeConfTotals(conf) {
   const items = Array.isArray(conf?.items) ? conf.items : [];
   const itemsSubtotal = items.reduce((s, it) =>
@@ -73,6 +99,10 @@ function computeConfTotals(conf) {
     running += value;
     const base = l.label || (isPct ? 'Adjustment' : 'Add-on');
     return { label: isPct ? `${base} - ${amt}%` : base, value };
+  });
+  confLocationTax(conf).lines.forEach(t => {
+    running += t.value;
+    lines.push({ label: t.label, value: t.value });
   });
   return { itemsSubtotal, lines, grandTotal: running };
 }
