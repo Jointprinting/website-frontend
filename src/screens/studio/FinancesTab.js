@@ -29,6 +29,16 @@ const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
+// COGS categories that net against an order's revenue — MUST match the backend
+// Transaction.COGS_CATEGORIES so the drill-in profit reconciles with by-order.
+const COGS_CATEGORIES = ['Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission'];
+// Canonical order-number key — strips non-digits AND leading zeros, mirroring the
+// backend controllers/finances.js normalizeOrderNumber so the drill-in groups a
+// "0000021" row and a "21" row into the one order the by-order list keys by.
+const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+// Signed amount within a row's type bucket (credit reverses direction) — matches
+// backend signed(): an income credit nets revenue down, an expense credit nets cost down.
+const signedAmt = (t) => (t && t.isCredit ? -(Number(t.amount) || 0) : (Number(t.amount) || 0));
 const CAT_COLOR = {
   'Blank COGS': '#60a5fa', 'Printer COGS': '#a78bfa', 'Shipping': '#2dd4bf', 'Art': '#f472b6',
   'Commission': '#fbbf24', 'Software': '#f97316', 'Owner Draw': '#9ca3af', 'Sales Tax': '#ef4444',
@@ -351,13 +361,24 @@ export default function FinancesTab({ token, onBack }) {
 // transaction tagged to it — revenue and every cost — with in/out/net. Tap a line
 // to jump into editing it (e.g. fix a wrong date that parked an order in December).
 function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
-  const rows = (txns || []).filter((t) => String(t.orderNumber) === String(orderNumber))
+  // Match on the CANONICAL number (leading zeros stripped, both sides) so the
+  // drill-in shows the same rows the by-order grouping rolled up — a "0000021"
+  // ledger row lines up with the "21" order the user clicked. (C2)
+  const key = normOrderNo(orderNumber);
+  const rows = (txns || []).filter((t) => normOrderNo(t.orderNumber) === key)
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date));
   // Credit-aware cash view: a supplier credit counts as money IN, a customer
-  // refund as money OUT — so In/Out/Net read true even with returns mixed in.
+  // refund as money OUT — so In/Out read true even with returns mixed in.
   const income  = rows.filter((t) => isInflow(t)).reduce((s, t) => s + t.amount, 0);
   const expense = rows.filter((t) => !isInflow(t)).reduce((s, t) => s + t.amount, 0);
-  const net = income - expense;
+  // Profit reconciles EXACTLY with the by-order list (M6): the SAME definition —
+  // signed Customer-Sales revenue minus signed COGS — not the all-categories cash
+  // Net. (Cash In/Out above stays a separate lens; profit is the margin number.)
+  const revenue = rows.filter((t) => t.type === 'income' && t.category === 'Customer Sales')
+    .reduce((s, t) => s + signedAmt(t), 0);
+  const cost = rows.filter((t) => t.type === 'expense' && COGS_CATEGORIES.includes(t.category))
+    .reduce((s, t) => s + signedAmt(t), 0);
+  const profit = revenue - cost;
   const client = (rows.find((t) => t.type === 'income' && t.party) || rows.find((t) => t.party) || {}).party || '—';
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth
@@ -402,7 +423,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
         <Box sx={{ borderTop: `1px solid ${B.border}`, px: 1.5, py: 1.25, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Typography sx={{ fontSize: 12, color: B.muted }}>In <Box component="span" sx={{ color: B.green, fontFamily: 'monospace' }}>{money(income)}</Box></Typography>
           <Typography sx={{ fontSize: 12, color: B.muted }}>Out <Box component="span" sx={{ color: '#f87171', fontFamily: 'monospace' }}>{money(expense)}</Box></Typography>
-          <Typography sx={{ fontSize: 12, color: B.muted }}>Net <Box component="span" sx={{ color: net >= 0 ? B.green : '#f87171', fontFamily: 'monospace', fontWeight: 700 }}>{money(net)}</Box></Typography>
+          <Typography sx={{ fontSize: 12, color: B.muted }}>Profit <Box component="span" sx={{ color: profit >= 0 ? B.green : '#f87171', fontFamily: 'monospace', fontWeight: 700 }}>{money(profit)}</Box></Typography>
         </Box>
         {rows.length > 0 && <Typography sx={{ color: B.muted, fontSize: 10.5, px: 1.5, pb: 1.5 }}>Tap a line to edit it (e.g. fix a wrong date).</Typography>}
       </DialogContent>
