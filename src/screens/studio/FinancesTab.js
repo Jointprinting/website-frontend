@@ -25,6 +25,7 @@ import { B, darkInput, scrollbar } from './_shared';
 
 const base = `${config.backendUrl}/api`;
 const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
@@ -57,9 +58,13 @@ export default function FinancesTab({ token, onBack }) {
   const [txns, setTxns]       = useState([]);
   const [months, setMonths]   = useState([]);
   const [clients, setClients] = useState([]);
+  const [gaps, setGaps]       = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  // Prefill for "record payment for this order" — opens the Add-transaction
+  // modal already set to Income · Customer Sales · the order's client + amount.
+  const [prefill, setPrefill] = useState(null);
   const [editTxn, setEditTxn] = useState(null);
   const [openOrder, setOpenOrder] = useState(null);
   const [bannerDismiss, setBannerDismiss] = useState(() => {
@@ -71,15 +76,16 @@ export default function FinancesTab({ token, onBack }) {
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t, m, c] = await Promise.all([
+      const [s, o, t, m, c, g] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-month`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-client`, { ...authHdr, params: { year } }),
+        axios.get(`${base}/finances/payment-gaps`, { ...authHdr, params: { year } }),
       ]);
       setSummary(s.data); setOrders(o.data.orders || []); setTxns(t.data.transactions || []);
-      setMonths(m.data.months || []); setClients(c.data.clients || []);
+      setMonths(m.data.months || []); setClients(c.data.clients || []); setGaps(g.data || null);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -282,6 +288,17 @@ export default function FinancesTab({ token, onBack }) {
               </Typography>
             )}
 
+            {/* Money owed to you / Unrecorded payments — the additive lens that
+                EXPLAINS a low net: vendor costs entered without the matching
+                client payment. One tap records the missing income, prefilled. */}
+            <PaymentGaps gaps={gaps} onRecord={(row) => setPrefill({
+              type: 'income', category: 'Customer Sales',
+              party: row.client && row.client !== '—' ? row.client : '',
+              amount: row.outstanding > 0 ? row.outstanding : (row.billed > 0 ? row.billed : ''),
+              orderNumber: row.orderNumber,
+              description: `Payment — order #${row.orderNumber}${row.client && row.client !== '—' ? ` · ${row.client}` : ''}`,
+            })} />
+
             <MonthlyTrend months={months} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
@@ -373,7 +390,11 @@ export default function FinancesTab({ token, onBack }) {
         )}
       </Box>
 
-      {showAdd && <TxnDialog token={token} onClose={() => setShowAdd(false)} onSave={addTxn} />}
+      {(showAdd || prefill) && (
+        <TxnDialog token={token} prefill={prefill}
+          onClose={() => { setShowAdd(false); setPrefill(null); }}
+          onSave={async (form) => { await addTxn(form); setPrefill(null); }} />
+      )}
       {editTxn && <TxnDialog token={token} txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
       {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} onClose={() => setOpenOrder(null)}
         onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }} />}
@@ -455,6 +476,81 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
   );
 }
 
+// "Money owed to you" — surfaces the revenue gap that hides real profit. Two
+// signals from /api/finances/payment-gaps: orders with COST recorded but NO client
+// payment (the loudest — money out, income not yet entered), and orders billed but
+// not yet collected (outstanding). Each row offers a one-tap "Record payment" that
+// opens the Add-transaction modal prefilled with the client + amount, so closing
+// the gap is a single confirm. Renders nothing when there's no gap (pristine).
+function PaymentGaps({ gaps, onRecord }) {
+  const rows = (gaps && gaps.orders) || [];
+  const totals = (gaps && gaps.totals) || {};
+  if (!rows.length) return null;
+  const noPay = round(totals.costWithoutPayment);
+  const noPayN = totals.costWithoutPaymentCount || 0;
+  const owed = round(totals.billedNotCollected);
+  return (
+    <Box sx={{ border: '1px solid rgba(251,191,36,0.4)', bgcolor: 'rgba(251,191,36,0.05)', borderRadius: 2, overflow: 'hidden',
+      animation: 'jpRise 460ms ease both' }}>
+      <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+        <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.5 }}>
+          <ErrorOutlineIcon sx={{ color: '#fbbf24' }} />
+          <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 14, flex: 1 }}>Money owed to you</Typography>
+        </Stack>
+        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+          {noPayN > 0 && (
+            <>
+              <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money(noPay)}</Box> in costs across {noPayN} order{noPayN > 1 ? 's' : ''} have no recorded client payment
+              {owed > 0 ? '; ' : '.'}
+            </>
+          )}
+          {owed > 0 && (
+            <>
+              <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money(owed)}</Box> billed but not yet collected.
+            </>
+          )}
+          {' '}This isn’t in your profit yet — record the payments to close the gap.
+        </Typography>
+      </Box>
+      <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+              <Box component="th" sx={{ textAlign: 'left !important' }}>Order</Box>
+              <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
+              <Box component="th">Billed</Box><Box component="th">Collected</Box><Box component="th">Cost</Box>
+              <Box component="th" sx={{ textAlign: 'left !important' }}>Gap</Box>
+              <Box component="th" />
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {rows.map((o) => (
+              <Box component="tr" key={o.orderNumber}
+                sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                <Box component="td" sx={{ textAlign: 'left !important', color: B.muted }}>#{o.orderNumber}</Box>
+                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
+                <Box component="td" sx={{ color: B.white }}>{o.billed ? money(o.billed) : '—'}</Box>
+                <Box component="td" sx={{ color: o.collected > 0 ? B.green : B.muted }}>{money(o.collected)}</Box>
+                <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
+                <Box component="td" sx={{ textAlign: 'left !important' }}>
+                  {o.costWithoutPayment
+                    ? <Box component="span" sx={{ fontSize: 9.5, fontWeight: 800, color: '#fbbf24', bgcolor: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.32)', borderRadius: 1, px: 0.55, py: 0.15, letterSpacing: 0.3, textTransform: 'uppercase', fontFamily: 'inherit' }}>No payment</Box>
+                    : <Box component="span" sx={{ color: '#fbbf24', fontFamily: 'inherit' }}>{money(o.outstanding)} owed</Box>}
+                </Box>
+                <Box component="td">
+                  <Button size="small" onClick={() => onRecord(o)}
+                    sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                      '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Record payment</Button>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 function MonthlyTrend({ months }) {
   if (!months || months.length === 0) return null;
   const max = Math.max(1, ...months.map((m) => Math.max(m.income, Math.abs(m.net))));
@@ -528,15 +624,18 @@ function TopClients({ clients }) {
   );
 }
 
-function TxnDialog({ txn, token, onClose, onSave, onDelete }) {
+function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   const edit = !!txn;
-  const [type, setType] = useState(txn?.type || 'expense');
+  // `prefill` (from "record payment for this order") seeds a NEW entry already set
+  // to the client's payment — Income · Customer Sales · the order's client + amount.
+  const seed = txn || prefill || null;
+  const [type, setType] = useState(seed?.type || 'expense');
   const [date, setDate] = useState(txn ? new Date(txn.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-  const [category, setCategory] = useState(txn?.category || 'Printer COGS');
-  const [amount, setAmount] = useState(txn ? String(txn.amount) : '');
-  const [orderNumber, setOrderNumber] = useState(txn?.orderNumber || '');
-  const [party, setParty] = useState(txn?.party || '');
-  const [description, setDescription] = useState(txn?.description || '');
+  const [category, setCategory] = useState(seed?.category || (seed?.type === 'income' ? 'Customer Sales' : 'Printer COGS'));
+  const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
+  const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
+  const [party, setParty] = useState(seed?.party || '');
+  const [description, setDescription] = useState(seed?.description || '');
   const [isCredit, setIsCredit] = useState(!!txn?.isCredit);
   const [receiptName, setReceiptName] = useState('');
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
