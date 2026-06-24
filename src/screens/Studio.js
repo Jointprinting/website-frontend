@@ -72,8 +72,10 @@ import OrderTracker from './studio/OrderTracker';
 import CrmTab from './studio/crm/CrmTab';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
+import VendorsTab from './studio/VendorsTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
+import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import JpLoader from '../common/JpLoader';
 
 const TOKEN_KEY = 'jpStudioToken';
@@ -1945,6 +1947,7 @@ const HUB_GROUPS = [
       { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
       { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
       { id: 'finances',    label: 'Finances',      desc: 'P&L, margins, expenses',                 Icon: PaidOutlinedIcon },
+      { id: 'vendors',     label: 'Vendors',       desc: 'Printers & suppliers — POs, spend',      Icon: StorefrontOutlinedIcon },
       { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
     ],
   },
@@ -2451,6 +2454,10 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} />;
+  }
+
+  if (view === 'vendors') {
+    return <VendorsTab token={token} onBack={() => setView('hub')} />;
   }
 
   return (
