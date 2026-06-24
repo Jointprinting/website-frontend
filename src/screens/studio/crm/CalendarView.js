@@ -46,10 +46,16 @@ function buildGrid(year, month) {
 }
 
 // A draggable company chip living in a day cell.
-function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragging }) {
+function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragging, bindCompany }) {
   const m = stageMeta(ev.stage);
   const won = isWonStage(ev.stage);
   const [hover, setHover] = React.useState(false);
+  // The custom right-click menu (Call / Log / Reschedule / Set stage / …) when a
+  // binder is provided; otherwise fall back to the legacy reschedule-on-right-
+  // click so the chip is never without its quick reschedule.
+  const ctxProps = bindCompany
+    ? bindCompany(ev)
+    : { onContextMenu: (e) => { if (onPickReschedule) { e.preventDefault(); e.stopPropagation(); onPickReschedule(ev); } } };
   return (
     <Box
       draggable
@@ -57,7 +63,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
       onDragEnd={onDragEnd}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={(e) => { e.stopPropagation(); onOpen(ev.companyKey); }}
-      onContextMenu={(e) => { if (onPickReschedule) { e.preventDefault(); e.stopPropagation(); onPickReschedule(ev); } }}
+      {...ctxProps}
       title={`${ev.name}${ev.area ? ` · ${ev.area}` : ''} — drag to a day, or use ⟳ to reschedule to any date`}
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.5,
@@ -94,7 +100,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
   );
 }
 
-function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell, onPickReschedule }) {
+function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell, onPickReschedule, bindCompany }) {
   const key = dayKey(date);
   const isDropTarget = dragState.overKey === key && dragState.activeKey;
 
@@ -141,6 +147,7 @@ function DayCell({ date, inMonth, isToday, events, onOpen, dragState, onDragStar
             onDragEnd={onDragEnd}
             onPickReschedule={onPickReschedule}
             dragging={dragState.activeKey === ev.companyKey}
+            bindCompany={bindCompany}
           />
         ))}
       </Box>
@@ -171,7 +178,7 @@ function NavRail({ delta, title, dragging, onClick, onDragOver, onDragLeave, chi
   );
 }
 
-export default function CalendarView({ events, loading, cursor, onCursorChange, onOpen, onReschedule, onPickReschedule }) {
+export default function CalendarView({ events, loading, cursor, onCursorChange, onOpen, onReschedule, onPickReschedule, bindCompany }) {
   // cursor = { year, month } of the displayed month (owned by parent so the
   // fetch + view stay in sync).
   const { year, month } = cursor;
@@ -304,6 +311,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
                 onDragOverCell={handleDragOverCell}
                 onDragLeaveCell={handleDragLeaveCell}
                 onPickReschedule={onPickReschedule}
+                bindCompany={bindCompany}
               />
             );
           })}

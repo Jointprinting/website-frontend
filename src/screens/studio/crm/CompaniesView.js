@@ -26,7 +26,7 @@ import {
   primaryPhone, isWonStage,
 } from './_crm';
 
-function CompanyRow({ c, onOpen, onUnarchive }) {
+function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
   const name = c.companyName || c.clientName || c.companyKey;
   const phone = primaryPhone(c);
   const fu = followUpStatus(c.nextFollowUp);
@@ -36,6 +36,7 @@ function CompanyRow({ c, onOpen, onUnarchive }) {
   return (
     <Box
       onClick={() => onOpen(c.companyKey)}
+      {...(bindCompany ? bindCompany(c) : {})}
       role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(c.companyKey); }}
       sx={{
@@ -100,7 +101,7 @@ function CompanyRow({ c, onOpen, onUnarchive }) {
 
 export default function CompaniesView({
   clients, loading, query, onQueryChange, stage, onStageChange,
-  tag, onTagChange, tagOptions, onOpen, archived = false, onUnarchive,
+  tag, onTagChange, tagOptions, onOpen, archived = false, onUnarchive, bindCompany,
 }) {
   // Archived mode runs its own client-side search (the archived set is fetched
   // separately and isn't wired to the live ?q= companies fetch).
@@ -220,7 +221,7 @@ export default function CompaniesView({
         />
       ) : (
         <Stack spacing={1}>
-          {list.map((c) => <CompanyRow key={c.companyKey} c={c} onOpen={onOpen} />)}
+          {list.map((c) => <CompanyRow key={c.companyKey} c={c} onOpen={onOpen} bindCompany={bindCompany} />)}
         </Stack>
       )}
     </Stack>

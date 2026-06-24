@@ -36,7 +36,7 @@ function StatPill({ value, label, tone }) {
   );
 }
 
-function CallRow({ row, onOpen, onLog, onReschedule }) {
+function CallRow({ row, onOpen, onLog, onReschedule, bindCompany }) {
   const fu = followUpStatus(row.nextFollowUp);
   const phone = primaryPhone(row);
   const last = row.lastLog;
@@ -47,6 +47,7 @@ function CallRow({ row, onOpen, onLog, onReschedule }) {
   return (
     <Box
       onClick={() => onOpen(row.companyKey)}
+      {...(bindCompany ? bindCompany(row) : {})}
       role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(row.companyKey); }}
       sx={{
@@ -134,7 +135,7 @@ function CallRow({ row, onOpen, onLog, onReschedule }) {
   );
 }
 
-export default function TodayView({ summary, rows, loading, onOpen, onLog, onReschedule }) {
+export default function TodayView({ summary, rows, loading, onOpen, onLog, onReschedule, bindCompany }) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -170,6 +171,7 @@ export default function TodayView({ summary, rows, loading, onOpen, onLog, onRes
               onOpen={onOpen}
               onLog={onLog}
               onReschedule={onReschedule}
+              bindCompany={bindCompany}
             />
           ))}
         </Stack>

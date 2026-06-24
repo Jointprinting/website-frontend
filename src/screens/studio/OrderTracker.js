@@ -40,6 +40,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
+import { useContextMenu } from './ContextMenu';
+import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import PoBuilderDialog from './PoBuilderDialog';
@@ -68,6 +70,7 @@ const SECONDARY_FILTERS = [
 
 export default function OrderTracker({ token, onBack }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const { bind: bindMenu, registerFallback } = useContextMenu();
 
   const [projects,      setProjects]      = useState([]);
   const [mockups,       setMockups]       = useState([]);
@@ -349,6 +352,34 @@ export default function OrderTracker({ token, onBack }) {
       return null;
     }
   };
+
+  // ── Right-click menu wiring ───────────────────────────────────────────────
+  // Set an order's status straight from its card menu — reuses handleSave, the
+  // exact path the drawer's Status select uses (PUT /orders/:id { status }).
+  const setOrderStatus = useCallback((p, status) => {
+    if (!p || !p._id || p.status === status) return;
+    handleSave(p._id, { status });
+  // handleSave closes over current state via setProjects; safe to omit here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // bindOrder(project) → props an order card spreads onto its container. Built at
+  // right-click time so the menu reflects the live quote/confirmation state.
+  const bindOrder = useCallback((p) => bindMenu(() => buildOrderMenu(p, {
+    onOpen: (proj) => setActiveProject(proj),
+    onOpenQuote: (proj) => setQuote(proj),
+    onOpenConfirmation: (proj) => setConfirmation(proj),
+    onSetStatus: setOrderStatus,
+    flash: undefined,
+  })), [bindMenu, setOrderStatus]);
+
+  // Right-click on empty Order Tracker chrome → search (focus the box) + hub.
+  useEffect(() => registerFallback(() => buildFallbackMenu({
+    onSearch: () => searchInputRef.current?.focus(),
+    onBackToHub: onBack,
+    searchLabel: 'Search projects',
+    searchHint: '/',
+  })), [registerFallback, onBack]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this project? This cannot be undone.')) return;
@@ -750,6 +781,7 @@ export default function OrderTracker({ token, onBack }) {
                 logo={logoFor(p)}
                 selectMode={selectMode}
                 selected={selectedIds.includes(p._id)}
+                bindProps={selectMode ? null : bindOrder(p)}
                 onClick={() => (selectMode ? toggleSelect(p._id) : setActiveProject(p))} />
             ))}
           </Box>
@@ -988,7 +1020,7 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, selectMode, selected }) {
+function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, selectMode, selected, bindProps }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
 
@@ -1011,7 +1043,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   }
 
   return (
-    <Box onClick={onClick} sx={{
+    <Box onClick={onClick} {...(bindProps || {})} sx={{
       bgcolor: B.panel,
       border: `1px solid ${selected ? B.green : B.border}`,
       borderRadius: 2,
