@@ -135,19 +135,44 @@ export default function BackupTab({ token, onBack }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+
+    // Default restore is the SAFE one: merge/upsert by record id. It adds and
+    // updates from the backup but never deletes anything already on the server,
+    // so re-importing a backup can't lose newer data and a stray click can't
+    // wipe the database. (The backend validates the whole archive before it
+    // writes a single record — a wrong file is rejected with the data intact.)
     if (!window.confirm(
       `Restore from "${file.name}"?\n\n` +
-      'THIS WILL REPLACE ALL DATA. Every project, mockup, client logo, ' +
-      'setting, and file currently on the server gets wiped and replaced ' +
-      'with what\'s in this backup ZIP. Make sure you really want to do ' +
-      'this — there\'s no undo.'
+      'This MERGES the backup into the current data: every record in the ZIP ' +
+      'is added or updated (matched by its id). Nothing currently on the ' +
+      'server is deleted, so this is safe to run.\n\n' +
+      'OK to restore (merge)?'
     )) return;
+
+    // Optional, deliberately separate, destructive path. Only reached if the
+    // owner asks for it AND types the confirmation — so it can never happen by
+    // accident. This is the "wipe and replace with exactly this backup" mode.
+    let mode = 'merge';
+    const wantsReplace = window.confirm(
+      'Advanced: do a FULL REPLACE instead?\n\n' +
+      'Click Cancel to keep the safe merge above (recommended).\n\n' +
+      'Click OK only if you want to WIPE all current data and replace it with ' +
+      'exactly what is in this backup — every project, client, vendor, PO, ' +
+      'finance record, and file not in the ZIP is permanently deleted. No undo.'
+    );
+    if (wantsReplace) {
+      const typed = window.prompt('Type REPLACE to confirm a full destructive replace, or Cancel to keep merge:');
+      if (typed === 'REPLACE') mode = 'replace';
+      else if (typed !== null) { alert('Confirmation did not match — keeping the safe merge.'); }
+    }
 
     setRestoring(true);
     setRestoreResult(null);
     try {
       const form = new FormData();
       form.append('file', file);
+      form.append('mode', mode);
+      if (mode === 'replace') form.append('confirm', 'REPLACE');
       const res = await fetch(`${base}/admin/backup/restore`, {
         method: 'POST', headers: authHdr.headers, body: form,
       });
@@ -246,7 +271,8 @@ export default function BackupTab({ token, onBack }) {
                 mb: 2,
               }}>
               {restoreResult.ok
-                ? `Restored ${restoreResult.totalDocs} records and ${restoreResult.fileCount} files.`
+                ? `Restored ${restoreResult.totalDocs} records and ${restoreResult.fileCount} files` +
+                  `${restoreResult.mode === 'replace' ? ' (full replace)' : ' (safe merge)'}.`
                 : `Restore failed: ${restoreResult.error}`}
             </Alert>
           )}
@@ -331,6 +357,8 @@ export default function BackupTab({ token, onBack }) {
             <Stack gap={0.6}>
               {[
                 ['Order Tracker', 'Every project — quotes, items, mockup links, confirmations, activity, approval events'],
+                ['Clients + CRM',  'Customer records, contacts, cold-call state'],
+                ['Vendors + POs',  'Printer/supplier cards and every purchase order'],
                 ['Mockup Studio',  'Saved mockups, blanks, logos — full pageState + thumbnails'],
                 ['Client logos',   'Per-company brand logos'],
                 ['Inquiries',      'Contact form submissions with status + admin notes'],
@@ -338,6 +366,7 @@ export default function BackupTab({ token, onBack }) {
                 ['Catalogs + products', 'Product catalog + custom catalog overrides'],
                 ['Finances',       'The full income/expense ledger — every transaction'],
                 ['Receipt images', 'Receipt/invoice files attached to finances (pulled from R2)'],
+                ['Numbering',      'Order / PO counters, so restored numbers never collide'],
                 ['Admin users',    'Login records (passwords already hashed)'],
                 ['Files',          'Every uploaded project file in /uploads'],
               ].map(([label, desc]) => (
@@ -367,9 +396,10 @@ export default function BackupTab({ token, onBack }) {
           {/* Practice tips */}
           <Typography sx={{ color: B.muted, fontSize: 11, mt: 2.5, lineHeight: 1.6 }}>
             <strong>Tip:</strong> Save your weekly backups to at least two places — an external hard
-            drive and a cloud folder (Drive, Dropbox, S3). The ZIP is everything you need to rebuild
-            from scratch. Restore wipes the current database and replaces it with the archive contents,
-            so use it carefully.
+            drive and a cloud folder (Drive, Dropbox, S3). The ZIP is <em>every</em> collection in the
+            database, so it's everything you need to rebuild from scratch. Restore <strong>merges</strong> a
+            backup in by default (adds &amp; updates, never deletes) — safe to run anytime; a full
+            destructive replace is available behind an explicit typed confirmation.
           </Typography>
         </Box>
       )}

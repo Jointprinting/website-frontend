@@ -2623,11 +2623,33 @@ export default function Studio() {
 }
 
 // ── BackupNagBanner ──────────────────────────────────────────────────────────
-// Sits at the top of the Studio hub. Pings /admin/backup/status on mount;
-// shows a soft amber banner if a weekly backup is overdue. Click to jump to
-// the Backup tab. Auto-hides if up to date.
+// Sits at the top of the Studio hub. Two independent, dismissible nudges:
+//
+//   1. OVERDUE backup — driven by the backend (/admin/backup/status isDue): the
+//      weekly archive hasn't been taken in a while. Dismiss snoozes it a week.
+//   2. MONTHLY hard-drive reminder — a separate, gentle heads-up to copy the
+//      latest archive onto an external drive (the third, fully-offline basket
+//      beyond the site DB and Google Drive). Purely client-side: it reappears
+//      ~30 days after it was last dismissed. Non-naggy by design.
+//
+// Both store their last-dismissed time in localStorage so they don't re-nag on
+// every page load. Click the body to jump to the Backup tab; click ✕ to dismiss.
+const SNOOZE_OVERDUE_MS = 7  * 24 * 60 * 60 * 1000;   // a week
+const REMIND_HDD_MS     = 30 * 24 * 60 * 60 * 1000;   // ~monthly
+const K_OVERDUE_SNOOZE  = 'jpBackupOverdueSnoozedAt';
+const K_HDD_REMINDER    = 'jpHddReminderDismissedAt';
+
+function readTs(key) {
+  try { const v = parseInt(localStorage.getItem(key), 10); return Number.isFinite(v) ? v : 0; }
+  catch (_) { return 0; }
+}
+
 function BackupNagBanner({ token, onClick }) {
   const [info, setInfo] = React.useState(null);
+  // Re-read on mount so a fresh dismissal in a prior session is respected.
+  const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
+  const [hddDismissedAt, setHddDismissedAt]     = React.useState(() => readTs(K_HDD_REMINDER));
+
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -2644,20 +2666,60 @@ function BackupNagBanner({ token, onClick }) {
     return () => { cancelled = true; };
   }, [token]);
 
-  if (!info || !info.isDue) return null;
-  const msg = info.lastBackupAt
+  const now = Date.now();
+  const dismiss = (key, setter) => (e) => {
+    e.stopPropagation();
+    try { localStorage.setItem(key, String(Date.now())); } catch (_) {}
+    setter(Date.now());
+  };
+
+  const Banner = ({ tone, children, onDismiss }) => {
+    const c = tone === 'overdue' ? '#fbbf24' : '#60a5fa';
+    const bg = tone === 'overdue' ? 'rgba(251,191,36,0.10)' : 'rgba(96,165,250,0.10)';
+    const bgHover = tone === 'overdue' ? 'rgba(251,191,36,0.16)' : 'rgba(96,165,250,0.16)';
+    const bd = tone === 'overdue' ? 'rgba(251,191,36,0.25)' : 'rgba(96,165,250,0.25)';
+    return (
+      <Box onClick={onClick} sx={{
+        cursor: 'pointer', mx: 'auto', mt: -1, mb: 2, position: 'relative',
+        bgcolor: bg, borderTop: `1px solid ${bd}`, borderBottom: `1px solid ${bd}`,
+        color: c, textAlign: 'center', py: 1.1, px: 5, fontSize: 13, fontWeight: 600,
+        '&:hover': { bgcolor: bgHover },
+      }}>
+        {children}
+        <Box component="span" onClick={onDismiss} title="Dismiss"
+          sx={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            opacity: 0.6, px: 0.8, '&:hover': { opacity: 1 } }}>
+          ✕
+        </Box>
+      </Box>
+    );
+  };
+
+  // 1. Overdue backup (backend-driven), unless snoozed in the last week.
+  const showOverdue = info && info.isDue && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
+  // 2. Monthly hard-drive reminder, unless dismissed in the last ~30 days.
+  //    First-run (never dismissed) shows it so the habit gets established.
+  const showHdd = (now - hddDismissedAt > REMIND_HDD_MS);
+
+  if (!showOverdue && !showHdd) return null;
+
+  const overdueMsg = info && info.lastBackupAt
     ? `Backup is ${info.lastBackupDays} days old — overdue.`
     : `You haven't backed up yet. Take 30 seconds to download an archive.`;
 
   return (
-    <Box onClick={onClick} sx={{
-      cursor: 'pointer', mx: 'auto', mt: -1, mb: 2,
-      bgcolor: 'rgba(251,191,36,0.10)', borderTop: '1px solid rgba(251,191,36,0.25)',
-      borderBottom: '1px solid rgba(251,191,36,0.25)',
-      color: '#fbbf24', textAlign: 'center', py: 1.1, px: 2, fontSize: 13, fontWeight: 600,
-      '&:hover': { bgcolor: 'rgba(251,191,36,0.16)' },
-    }}>
-      ⚠ {msg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
-    </Box>
+    <>
+      {showOverdue && (
+        <Banner tone="overdue" onDismiss={dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt)}>
+          ⚠ {overdueMsg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
+        </Banner>
+      )}
+      {showHdd && (
+        <Banner tone="hdd" onDismiss={dismiss(K_HDD_REMINDER, setHddDismissedAt)}>
+          🗄 Monthly reminder: download the latest backup and copy it to an external hard drive.
+          {' '}<Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
+        </Banner>
+      )}
+    </>
   );
 }
