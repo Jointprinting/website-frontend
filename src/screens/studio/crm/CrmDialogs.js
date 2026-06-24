@@ -9,7 +9,7 @@ import {
   DialogContent, DialogActions, CircularProgress, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import { D, dropInput, dropPrimaryBtn, dropGhostBtn } from '../_shared';
-import { LOG_KINDS, kindMeta, dateInputValue } from './_crm';
+import { LOG_KINDS, kindMeta, dateInputValue, localDayKeyPlus } from './_crm';
 
 const dialogPaper = {
   sx: {
@@ -116,11 +116,10 @@ const PRESETS = [
   { label: '+1 month', days: 30 },
 ];
 
+// A preset offset from the owner's local today, as a YYYY-MM-DD picker value
+// (Eastern for the owner — see localDayKeyPlus).
 function plusDays(days) {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + days);
-  return dateInputValue(d);
+  return localDayKeyPlus(days);
 }
 
 // ── Mark lost ─────────────────────────────────────────────────────────────────
