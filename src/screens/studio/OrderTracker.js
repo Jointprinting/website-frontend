@@ -1198,6 +1198,10 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [uploading, setUploading] = useState(false);
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
+  // Receipt-derived ACTUAL cost for this order — the real source of truth (the
+  // expense receipts linked by order #), as opposed to the quote/confirmation
+  // ESTIMATE in local.cogs. { actualCost, receiptCount, hasReceipts }.
+  const [actual, setActual] = useState(null);
   // Which drawer tab is showing. Overview is the everyday editing surface, so
   // each open lands there; the choice is plain component state — nothing
   // persists across opens and the URL never changes.
@@ -1266,6 +1270,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       .catch(() => {});
     return () => { cancelled = true; };
   }, [project, authHdr]);
+
+  // Pull the ACTUAL cost from the receipts/expense ledger for THIS order — the
+  // figure Nate treats as the source of truth. Keyed on the order number (invoice
+  // #); reuses the shared backend math so it equals the finance by-order cost to
+  // the cent. Best-effort: a failure just hides the actual and we show the estimate.
+  useEffect(() => {
+    const ord = project && project.orderNumber;
+    if (!ord) { setActual(null); return; }
+    let cancelled = false;
+    setActual(null);
+    axios.get(`${base}/finances/order-actuals`, { ...authHdr, params: { orderNumbers: ord } })
+      .then((r) => {
+        if (cancelled) return;
+        const key = String(ord).replace(/[^0-9]/g, '').replace(/^0+/, '');
+        setActual((r.data && r.data.actuals && r.data.actuals[key]) || { actualCost: 0, receiptCount: 0, hasReceipts: false });
+      })
+      .catch(() => { if (!cancelled) setActual(null); });
+    return () => { cancelled = true; };
+  }, [project?.orderNumber, authHdr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveClient = async (field, value) => {
     if (!client) return;
@@ -1402,17 +1425,24 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         <Box sx={{ flex: 1 }} />
         {(() => {
           const total = Number(local.totalValue) || 0;
-          const cogs  = Number(local.cogs) || 0;
+          const estCogs = Number(local.cogs) || 0;
+          // The receipts are the source of truth: when any COGS receipt is linked,
+          // the margin headline uses the ACTUAL cost; otherwise it falls back to
+          // the estimate (and we flag that no receipts are in yet). hasActual gates
+          // both the number shown and the "Actual/Est" label.
+          const hasActual = !!(actual && actual.hasReceipts);
+          const cogs = hasActual ? Number(actual.actualCost) || 0 : estCogs;
           const margin = total - cogs;
           const pct = total > 0 ? (margin / total) * 100 : 0;
-          if (total === 0 && cogs === 0) return null;
+          if (total === 0 && estCogs === 0 && !hasActual) return null;
           const ok = pct >= 30;
+          const title = hasActual
+            ? `Profit margin (ACTUAL) · total ${fmt(total)} − ${fmt(cogs)} from ${actual.receiptCount} receipt${actual.receiptCount === 1 ? '' : 's'} · est cost ${fmt(estCogs)}`
+            : `Profit margin (ESTIMATE) · total ${fmt(total)} − est cost ${fmt(estCogs)} · no receipts linked yet`;
           return (
-            <Box title={`Profit margin · total ${fmt(total)} − cogs ${fmt(cogs)}`} sx={{
-              textAlign: 'right', mr: 0.4,
-            }}>
-              <Typography sx={{ color: B.muted, fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                Margin
+            <Box title={title} sx={{ textAlign: 'right', mr: 0.4 }}>
+              <Typography sx={{ color: hasActual ? B.green : '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Margin · {hasActual ? 'actual' : 'est'}
               </Typography>
               <Typography sx={{ color: ok ? B.green : '#fbbf24', fontSize: 12, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
                 {fmt(margin)}
@@ -1633,18 +1663,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             {/* Money is the approved confirmation's, not hand-typed — the quoter
                 is pre-approval options; the confirmation is the real order. */}
             <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="From confirmation" />
-            <ReadonlyField label="COGS $"  value={fmt(confCogs(local.confirmation))}  hint="From confirmation" />
+            <ReadonlyField label="Est COGS $"  value={fmt(confCogs(local.confirmation))}  hint="From confirmation" />
           </>
         ) : (
           <>
             <InlineField label="Total $" type="number" value={local.totalValue || ''} savingHint={savingField === 'totalValue'}
               onChange={v => { updateLocal({ totalValue: Number(v) || 0 }); queueField('totalValue', Number(v) || 0); }}
               onBlur={v => saveField('totalValue', Number(v) || 0)} />
-            <InlineField label="COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
+            <InlineField label="Est COGS $" type="number" value={local.cogs || ''} savingHint={savingField === 'cogs'}
               onChange={v => { updateLocal({ cogs: Number(v) || 0 }); queueField('cogs', Number(v) || 0); }}
               onBlur={v => saveField('cogs', Number(v) || 0)} />
           </>
         )}
+
+        {/* ACTUAL cost from the receipts linked to this order — the real money,
+            shown next to the estimate so a gap (or a missing receipt) is obvious.
+            The receipts ARE the source of truth; the estimate is the plan. */}
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <ActualCostStrip actual={actual} estCogs={hasConfirmation(local.confirmation) ? confCogs(local.confirmation) : Number(local.cogs) || 0} orderNumber={local.orderNumber} />
+        </Box>
 
         <InlineField label="Printer"  value={local.printerName} savingHint={savingField === 'printerName'}
           onChange={v => { updateLocal({ printerName: v }); queueField('printerName', v); }} onBlur={v => saveField('printerName', v)} />
@@ -2100,6 +2137,60 @@ function ReadonlyField({ label, value, hint }) {
         <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{value}</Typography>
       </Box>
       {hint && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, fontStyle: 'italic' }}>{hint}</Typography>}
+    </Box>
+  );
+}
+
+// ── ActualCostStrip ──────────────────────────────────────────────────────────
+// The receipts Nate uploads are the real source of truth for what an order COST;
+// the estimate (quote/confirmation) is the plan. This strip surfaces the ACTUAL
+// (Σ of the order's linked COGS expense receipts, from the finance ledger) as the
+// headline next to the estimate, so the real number — and any variance, or a
+// missing receipt — is visible right on the order. Reads the per-order actuals the
+// backend computes with the shared finance math (so it equals the finance tab's
+// by-order cost). When no receipts are linked yet, it says so plainly instead of
+// implying the cost is $0.
+function ActualCostStrip({ actual, estCogs, orderNumber }) {
+  const est = Number(estCogs) || 0;
+  const loading = actual === null;       // fetch in flight (or no order # yet)
+  const has = !!(actual && actual.hasReceipts);
+  const actualCost = has ? Number(actual.actualCost) || 0 : 0;
+  const variance = actualCost - est;     // + over the estimate, − under
+  // No order number → can't link receipts at all; keep the strip quiet.
+  if (!orderNumber) return null;
+  return (
+    <Box sx={{ borderRadius: 1.5, px: 1.5, py: 1, border: `1px solid ${has ? 'rgba(74,222,128,0.35)' : B.faint}`,
+      bgcolor: has ? 'rgba(74,222,128,0.05)' : 'rgba(255,255,255,0.02)' }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
+        <Box>
+          <Typography sx={{ color: has ? B.green : B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            Actual cost · from receipts
+          </Typography>
+          {loading ? (
+            <Typography sx={{ color: B.muted, fontSize: 13, mt: 0.2 }}>Checking receipts…</Typography>
+          ) : has ? (
+            <Typography sx={{ color: B.white, fontSize: 16, fontWeight: 800, fontFamily: 'monospace', mt: 0.1 }}>
+              {fmt(actualCost)}
+              <Typography component="span" sx={{ color: B.muted, fontSize: 10.5, fontWeight: 600, ml: 0.6 }}>
+                from {actual.receiptCount} receipt{actual.receiptCount === 1 ? '' : 's'}
+              </Typography>
+            </Typography>
+          ) : (
+            <Typography sx={{ color: '#fbbf24', fontSize: 12.5, fontWeight: 700, mt: 0.1 }}>
+              No receipts linked yet — showing the estimate
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>Est</Typography>
+          <Typography sx={{ color: B.muted, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(est)}</Typography>
+        </Box>
+      </Stack>
+      {has && est > 0 && Math.abs(variance) >= 0.005 && (
+        <Typography sx={{ fontSize: 10.5, mt: 0.5, color: variance > 0 ? '#fbbf24' : B.green }}>
+          {variance > 0 ? `${fmt(variance)} over estimate` : `${fmt(-variance)} under estimate`}
+        </Typography>
+      )}
     </Box>
   );
 }

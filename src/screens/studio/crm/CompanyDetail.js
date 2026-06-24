@@ -33,6 +33,24 @@ import {
   kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
 } from './_crm';
 
+// The COGS sub-hint under the Profit metric. The headline cost is the ACTUAL one
+// from the receipts linked to this company's orders (finance.cogs — what the
+// receipts say it really cost). When the confirmation/quote ESTIMATE
+// (finance.estimatedCogs) differs by more than a cent, we show it alongside so the
+// variance is visible; when there are no receipts behind the cost yet, we say so
+// rather than implying the receipts confirm a $0 / estimate-only number.
+function financeCogsHint(finance) {
+  if (!finance) return null;
+  const actual = Number(finance.cogs) || 0;
+  const est = Number(finance.estimatedCogs) || 0;
+  const hasReceipts = (Number(finance.receiptCount) || 0) > 0;
+  if (!hasReceipts) {
+    return est > 0 ? `${fmtMoney0(est)} est · no receipts yet` : `${fmtMoney0(actual)} COGS`;
+  }
+  const base = `${fmtMoney0(actual)} COGS · receipts`;
+  return Math.abs(actual - est) >= 1 ? `${base} · ${fmtMoney0(est)} est` : base;
+}
+
 // Labeled inline field — a compact dropInput with an eyebrow caption above it.
 function Field({ label, children }) {
   return (
@@ -500,7 +518,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 label="Profit"
                 value={fmt(finance.profit)}
                 accent={finance.profit < 0 ? D.amber : D.green}
-                hint={`${fmtMoney0(finance.cogs)} COGS`}
+                hint={financeCogsHint(finance)}
               />
               <Metric
                 label="Margin"
