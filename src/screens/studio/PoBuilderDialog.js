@@ -80,6 +80,8 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
       setPos(prev => [r.data, ...prev]);
       setEditing({ ...r.data });
       setDirty(false);
+      // Surface zero-cost lines (C3) so a silent $0 line gets filled in.
+      if (r.data && r.data.warning) alert(r.data.warning);
     } catch (e) {
       alert(`Couldn't create PO: ${e.response?.data?.message || e.message}`);
     } finally {
@@ -102,16 +104,27 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
       const made = r.data.pos || [];
       const s = r.data.summary || {};
       setPos(prev => [...made, ...prev]);   // dialog already lists newest-first
+      // Advisory notes the response now carries (H1/H3/C3):
+      //   skipped  — supplier already had a PO (held back; open/delete to rebuild)
+      //   held     — Unassigned/blank supplier: no number minted until a vendor is set
+      //   warnings — zero-cost lines that need a price filled in
+      const skipNote = (s.skipped && s.skipped.length)
+        ? ` Skipped ${s.skipped.length} already-built: ${s.skipped.join(', ')}.` : '';
+      const heldNote = (s.held && s.held.length)
+        ? ` Held ${s.held.length} with no vendor set — assign a supplier on those items, then re-run.` : '';
+      const warnNote = (s.warnings && s.warnings.length)
+        ? `\n\n⚠ ${s.warnings.join('\n')}` : '';
       if (made.length) {
         const names = (s.vendors || made.map(p => p.vendorName)).filter(Boolean).join(', ');
-        const skipNote = (s.skipped && s.skipped.length)
-          ? ` Skipped ${s.skipped.length} already-built: ${s.skipped.join(', ')}.` : '';
-        alert(`Created ${made.length} PO${made.length === 1 ? '' : 's'}${names ? ` — ${names}` : ''}.${skipNote}`);
+        alert(`Created ${made.length} PO${made.length === 1 ? '' : 's'}${names ? ` — ${names}` : ''}.${skipNote}${heldNote}${warnNote}`);
       } else {
         const skipped = (s.skipped || []).filter(Boolean);
-        alert(skipped.length
+        const base = skipped.length
           ? `No new POs — every supplier already has one (${skipped.join(', ')}). Open or delete those to rebuild.`
-          : 'No POs were generated from the confirmation.');
+          : (s.held && s.held.length)
+            ? 'No POs — the confirmation items have no supplier set. Assign a printer per item, then re-run.'
+            : 'No POs were generated from the confirmation.';
+        alert(`${base}${heldNote && !skipped.length ? '' : heldNote}${warnNote}`);
       }
     } catch (e) {
       alert(`Couldn't generate POs: ${e.response?.data?.message || e.message}`);
@@ -471,6 +484,7 @@ function RecentCosts({ vendorName, authHdr, onAdd }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [rows, setRows] = useState([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Only hit the network once the panel is open. Debounce the search box so we
@@ -484,8 +498,8 @@ function RecentCosts({ vendorName, authHdr, onAdd }) {
         ...authHdr,
         params: { vendor: vendorName, q: q.trim() || undefined },
       })
-        .then(r => { if (!cancelled) setRows(r.data.rows || []); })
-        .catch(() => { if (!cancelled) setRows([]); })
+        .then(r => { if (!cancelled) { setRows(r.data.rows || []); setTruncated(!!r.data.truncated); } })
+        .catch(() => { if (!cancelled) { setRows([]); setTruncated(false); } })
         .finally(() => { if (!cancelled) setLoading(false); });
     }, 280);
     return () => { cancelled = true; clearTimeout(id); };
@@ -553,6 +567,11 @@ function RecentCosts({ vendorName, authHdr, onAdd }) {
                 </Stack>
               ))}
             </Stack>
+          )}
+          {truncated && !loading && (
+            <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.8, textAlign: 'center' }}>
+              Showing the most recent charges — refine the filter to narrow older ones.
+            </Typography>
           )}
         </Box>
       </Collapse>

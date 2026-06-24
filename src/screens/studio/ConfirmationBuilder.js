@@ -448,6 +448,16 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
 
 function Editor({ local, update, project, mockups, mockupMap }) {
   const updateShipping = (patch) => update({ shipping: { ...local.shipping, ...patch } });
+  // One-tap presets are IDEMPOTENT (M5): re-clicking "+ Card fee" (or "+ NJ tax")
+  // must NOT stack a second identical line — that quietly double-charged the
+  // client and the result depended on click order. `exists` tests whether an
+  // equivalent line is already present; if so the click is a no-op.
+  const addPresetLine = (line, exists) => {
+    const lines = local.customLines || [];
+    if (lines.some(exists)) return;
+    update({ customLines: [...lines, line] });
+  };
+  const isCardFeeLine = (l) => !!l && !l.isTax && /card/i.test(String(l.label || ''));
   const updateItem = (idx, patch) =>
     update({ items: local.items.map((it, i) => i === idx ? { ...it, ...patch } : it) });
   const removeItem = (idx) =>
@@ -511,9 +521,14 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               <Tooltip title="Add a quote line as an item">
                 <Button size="small"
                   onClick={() => {
-                    const used = new Set(local.items.map(i => i.styleCode + '|' + i.color));
+                    // Dedupe on the full print VARIANT (style|color|printType|
+                    // printDetails), not just style|color (H4) — otherwise two
+                    // lines that differ only by decoration (e.g. screen-print vs
+                    // embroidery, or 1-color vs 2-color) collapse into one and a
+                    // variant silently vanishes from the confirmation.
+                    const used = new Set(local.items.map(quoteVariantKey));
                     const next = chosenQuoteLines(project.quoteLines)
-                      .filter(l => !used.has((l.styleCode || '') + '|' + (l.color || '')))
+                      .filter(l => !used.has(quoteVariantKey(l)))
                       .map(seedItemFromQuote);
                     if (next.length === 0) return;
                     update({ items: [...local.items, ...next] });
@@ -556,7 +571,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
             {/* One-tap presets for the two add-ons used most. Both are percent
                 lines, so they apply to the running subtotal in order. */}
             <Button size="small"
-              onClick={() => update({ customLines: [...(local.customLines || []), { label: 'Credit card fee', amount: 2.99, isPercent: true }] })}
+              onClick={() => addPresetLine({ label: 'Credit card fee', amount: 2.99, isPercent: true }, isCardFeeLine)}
               sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
                 border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
                 '&:hover': { color: D.green, borderColor: D.lineHi } }}>
@@ -569,7 +584,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               : 'Add NJ sales tax (6.625%)'}>
               <span>
                 <Button size="small" disabled={hasLocationTax(local)}
-                  onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true, isTax: true }] })}
+                  onClick={() => addPresetLine({ label: 'NJ sales tax', amount: 6.625, isPercent: true, isTax: true }, isTaxCustomLine)}
                   sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
                     border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
                     '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 },
@@ -1362,6 +1377,16 @@ function chosenQuoteLines(lines) {
   return arr.filter(l => l && (l.accepted || !l.group || !decided.has(l.group)));
 }
 
+// Stable dedupe key for the "+From quote" import (H4): style + color + the print
+// VARIANT (type + details), so two lines differing only by decoration stay
+// distinct. Works for both a quote line and a seeded confirmation item (both
+// carry styleCode/color/printType/printDetails). Mirrors backend utils/poCost
+// lineKey.
+function quoteVariantKey(o) {
+  return [o && (o.styleCode || ''), o && (o.color || ''), o && (o.printType || ''), o && (o.printDetails || '')]
+    .map(s => String(s || '').trim().toLowerCase()).join('|');
+}
+
 function seedItemFromQuote(line) {
   // Sensible default: pull style / brand / color / print from quote, leave
   // qty unset so the admin distributes across sizes manually.
@@ -1379,6 +1404,11 @@ function seedItemFromQuote(line) {
     brandName: brandGuess,
     styleCode: line.styleCode || '',
     printType: line.printType || '',
+    // Carry the decoration detail (e.g. "1 color front") so a print VARIANT
+    // (same style/color/printType, different details) survives onto the item and
+    // the "+From quote" dedupe stays variant-accurate across reloads (H4). Also
+    // sharpens the PO cost-recovery match on the backend (utils/poCost lineKey).
+    printDetails: line.printDetails || '',
     color:     line.color || '',
     printerName: line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
