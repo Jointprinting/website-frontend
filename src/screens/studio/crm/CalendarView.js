@@ -15,7 +15,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { D, mono } from '../_shared';
-import { stageMeta, dayKey } from './_crm';
+import { stageMeta, dayKey, todayLocalKey } from './_crm';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -125,7 +125,11 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
   // fetch + view stay in sync).
   const { year, month } = cursor;
   const cells = React.useMemo(() => buildGrid(year, month), [year, month]);
-  const todayKey = dayKey(new Date());
+  // "Today" cell uses the viewer's LOCAL calendar day (Eastern for the owner), so
+  // the highlight lands on the owner's today — not UTC's, which is a day ahead in
+  // the evening. (Cells/events are still keyed in UTC: their UTC day equals the
+  // intended calendar day for the UTC-midnight values they bucket.)
+  const todayKey = todayLocalKey();
 
   // Bucket events by local day key for O(1) cell lookups.
   const byDay = React.useMemo(() => {

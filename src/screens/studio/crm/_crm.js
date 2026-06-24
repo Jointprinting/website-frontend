@@ -107,10 +107,27 @@ export const dayKey = (d) => {
 // Value for <input type="date">: the stored UTC calendar day. Empty when absent.
 export const dateInputValue = (iso) => (iso ? dayKey(iso) : '');
 
-// Today's UTC day key — the reference point for "due" math on whole-day dates.
-const todayUtcKey = () => {
+// Today's key in the VIEWER'S LOCAL calendar day — the reference point for
+// "due / overdue / today" math. The shop is run from New Jersey (US Eastern), so
+// the owner's browser local day IS Eastern; using it (instead of UTC) keeps
+// "today" correct in the evening, when UTC has already rolled to tomorrow but it's
+// still today for the owner. (Whole-day VALUES are still read with dayKey()/UTC —
+// they're stored at UTC midnight, so their UTC day is their intended calendar day.
+// We only changed which "today" they're measured against.)
+export const todayLocalKey = () => {
   const n = new Date();
-  return `${n.getUTCFullYear()}-${String(n.getUTCMonth() + 1).padStart(2, '0')}-${String(n.getUTCDate()).padStart(2, '0')}`;
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+};
+
+// A YYYY-MM-DD that is `days` after the viewer's local today — for the reschedule
+// presets ("Tomorrow", "+1 week", …). Computed from local calendar parts so the
+// picker value is the owner's intended day (no UTC round-trip that could land on
+// the wrong date near midnight). The API stores it as that day's UTC midnight.
+export const localDayKeyPlus = (days) => {
+  const n = new Date();
+  n.setHours(0, 0, 0, 0);
+  n.setDate(n.getDate() + days);
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 };
 
 // Days between two YYYY-MM-DD keys (b - a), date-only, no timezone in play.
@@ -122,13 +139,15 @@ function dayDiff(aKey, bKey) {
 
 // Human "due" phrasing for a follow-up date relative to today: "Overdue 3d",
 // "Today", "Tomorrow", "in 4d", or an absolute date further out. `tone` is the
-// color the caller should paint it. Computed in UTC so it agrees with how the
-// date is stored + displayed.
+// color the caller should paint it. The follow-up's day is read in UTC (it's
+// stored at UTC midnight, so that's its intended calendar day); "today" is the
+// viewer's LOCAL day (Eastern for the owner) so the comparison matches the
+// owner's clock — agreeing with the backend's America/New_York boundary.
 export function followUpStatus(iso) {
   if (!iso) return { label: 'No follow-up', tone: D.faint, overdue: false };
   const dueKey = dayKey(iso);
   if (!dueKey) return { label: 'No follow-up', tone: D.faint, overdue: false };
-  const days = dayDiff(todayUtcKey(), dueKey);
+  const days = dayDiff(todayLocalKey(), dueKey);
   if (days < 0)  return { label: days === -1 ? 'Overdue 1d' : `Overdue ${-days}d`, tone: '#f87171', overdue: true };
   if (days === 0) return { label: 'Today',    tone: D.amber, overdue: false };
   if (days === 1) return { label: 'Tomorrow', tone: D.green, overdue: false };
