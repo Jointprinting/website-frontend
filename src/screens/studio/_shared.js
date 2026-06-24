@@ -142,6 +142,40 @@ export const fmt = (n) =>
 export const hasConfirmation = (conf) =>
   !!(conf && Array.isArray(conf.items) && conf.items.length > 0);
 
+// Default sales-tax rates (percent) for the owner's territory. Choosing a state
+// on a confirmation shipTo PRE-FILLS that location's taxRate; the owner can
+// override per location. Keyed by USPS code. MUST match the backend
+// models/Order.js STATE_TAX_RATES.
+export const STATE_TAX_RATES = { NJ: 6.625, NY: 8, CT: 6.35, MA: 6.25, VT: 6, PA: 6 };
+
+// Per-location sales tax for a multi-ship-to confirmation. ACTIVE only when at
+// least one shipTo carries a taxRate > 0 — otherwise a no-op, so totals stay
+// byte-identical to a single-location order. Each item's merchandise revenue
+// (Σ qty×unitPrice) is allocated to a location PROPORTIONALLY by its share of
+// the item's units (locationItemRevenue = itemRevenue × allocQty / itemTotalQty),
+// summed into the location's taxable subtotal, then × taxRate%. Tax is on
+// MERCHANDISE only (not the add-on customLines), the correct sales-tax base.
+// MUST mirror the backend models/Order.js computeLocationTax exactly.
+export function confLocationTax(conf) {
+  const n = (v) => Number(v) || 0;
+  const shipTos = (conf && Array.isArray(conf.shipTos)) ? conf.shipTos : [];
+  const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
+  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
+  const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
+  const lines = taxed.map((st) => {
+    const subtotal = items.reduce((sum, it) => {
+      const itemRevenue = ((it && it.sizes) || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
+      const itemQty = ((it && it.sizes) || []).reduce((q, sz) => q + n(sz.qty), 0);
+      if (itemQty <= 0) return sum;
+      const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
+      return sum + itemRevenue * (allocQty / itemQty);
+    }, 0);
+    const rate = n(st.taxRate);
+    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, subtotal, rate, value: subtotal * rate / 100 };
+  });
+  return { active: true, total: lines.reduce((s, l) => s + l.value, 0), lines };
+}
+
 export function confRevenue(conf) {
   if (!conf || !Array.isArray(conf.items)) return 0;
   let rev = conf.items.reduce((s, it) =>
@@ -149,6 +183,9 @@ export function confRevenue(conf) {
   (conf.customLines || []).forEach((l) => {
     rev += l.isPercent ? rev * (Number(l.amount) || 0) / 100 : (Number(l.amount) || 0);
   });
+  // Per-location sales tax (added last, like the grand total in the backend).
+  // No-op unless a shipTo carries taxRate > 0, so single-location is unchanged.
+  rev += confLocationTax(conf).total;
   return rev;
 }
 

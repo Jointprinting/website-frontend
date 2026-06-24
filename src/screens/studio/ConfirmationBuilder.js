@@ -24,7 +24,7 @@ import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
 import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar, confLocationTax, STATE_TAX_RATES } from './_shared';
 import jpLogoColored from '../../modules/images/logo_colored.webp';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -562,13 +562,22 @@ function Editor({ local, update, project, mockups, mockupMap }) {
                 '&:hover': { color: D.green, borderColor: D.lineHi } }}>
               + Card&nbsp;fee
             </Button>
-            <Button size="small"
-              onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true }] })}
-              sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
-                border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
-                '&:hover': { color: D.green, borderColor: D.lineHi } }}>
-              + NJ&nbsp;tax
-            </Button>
+            {/* Suppress the single tax preset whenever per-location tax is in
+                play, so a job can never be taxed both ways. */}
+            <Tooltip title={hasLocationTax(local)
+              ? 'Per-location tax is active — set rates per location instead'
+              : 'Add NJ sales tax (6.625%)'}>
+              <span>
+                <Button size="small" disabled={hasLocationTax(local)}
+                  onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true }] })}
+                  sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                    border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                    '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 },
+                    '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+                  + NJ&nbsp;tax
+                </Button>
+              </span>
+            </Tooltip>
             <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
               onClick={() => update({ customLines: [...(local.customLines || []), { label: '', amount: 0, isPercent: false }] })}
               sx={{ color: D.green, fontSize: 11, textTransform: 'none', borderRadius: 999,
@@ -629,10 +638,21 @@ function MultiShipTo({ local, update }) {
 
   const addShipTo = () => {
     setOpen(true);
-    update({ shipTos: [...shipTos, { key: newShipToKey(), label: '', name: '', street: '', cityStateZip: '', state: '' }] });
+    update({ shipTos: [...shipTos, { key: newShipToKey(), label: '', name: '', street: '', cityStateZip: '', state: '', taxRate: 0 }] });
   };
   const updateShipTo = (idx, patch) =>
     update({ shipTos: shipTos.map((s, i) => i === idx ? { ...s, ...patch } : s) });
+  // Picking a state pre-fills the location's tax rate from the owner-territory
+  // map — but only when the owner hasn't already typed a rate, so a manual
+  // override is never clobbered by re-selecting the same/another state.
+  const updateShipToState = (idx, state) => {
+    const code = String(state || '').trim().toUpperCase();
+    const preset = STATE_TAX_RATES[code];
+    const cur = shipTos[idx] || {};
+    const patch = { state };
+    if (preset != null && !(Number(cur.taxRate) > 0)) patch.taxRate = preset;
+    updateShipTo(idx, patch);
+  };
   const removeShipTo = (idx) => {
     const goneKey = shipTos[idx] && shipTos[idx].key;
     // Drop the destination AND prune its allocations off every item so no
@@ -692,10 +712,18 @@ function MultiShipTo({ local, update }) {
                       onChange={v => updateShipTo(i, { cityStateZip: v })} />
                   </Box>
                   <SmallField label="State (for tax)" value={st.state}
-                    onChange={v => updateShipTo(i, { state: v })} />
+                    onChange={v => updateShipToState(i, v)} />
+                  <SmallField label="Tax rate %" type="number" value={st.taxRate || ''}
+                    onChange={v => updateShipTo(i, { taxRate: Number(v) || 0 })} />
                 </Box>
               </Box>
             ))}
+            {shipTos.some(st => Number(st.taxRate) > 0) && (
+              <Typography sx={{ color: D.green, fontSize: 10, mt: 0.75, lineHeight: 1.4 }}>
+                Per-location sales tax is on. Each location’s allocated merchandise is taxed at
+                its rate; the single “NJ tax” add-on is disabled to avoid double-taxing.
+              </Typography>
+            )}
           </Stack>
           <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
             onClick={addShipTo}
@@ -1370,5 +1398,18 @@ function computeTotals(conf) {
     running += value;
     return { label: l.label || (l.isPercent ? 'Adjustment' : 'Add-on'), amount: l.amount, isPercent: l.isPercent, value };
   });
+  // Per-location sales tax (multi-ship-to) — appended as its own lines after
+  // the add-ons and added to the total, mirroring the backend grand total and
+  // the client approval page. No-op unless a shipTo carries taxRate > 0.
+  confLocationTax(conf).lines.forEach(t => {
+    running += t.value;
+    lines.push({ label: t.label, amount: t.rate, isPercent: false, value: t.value, isLocationTax: true });
+  });
   return { itemsSubtotal, lines, grandTotal: running };
+}
+
+// Whether per-location tax is in play — used to suppress the single "NJ tax"
+// preset so a job is never taxed twice.
+function hasLocationTax(conf) {
+  return confLocationTax(conf).active;
 }
