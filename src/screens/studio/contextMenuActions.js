@@ -83,7 +83,12 @@ export function buildCompanyMenu(c, handlers = {}) {
   const name = c.companyName || c.clientName || c.name || key;
   const phone = primaryPhone(c);
   const email = primaryEmail(c);
-  const tags = Array.isArray(c.tags) ? c.tags : [];
+  // Only offer "Add tag" when the record actually carries its tags array. The
+  // calendar payload omits tags (it's undefined there), and appending onto an
+  // assumed-empty list would CLOBBER the record's real server-side tags — so we
+  // hide the action on surfaces that don't carry the full tag set.
+  const hasTags = Array.isArray(c.tags);
+  const tags = hasTags ? c.tags : [];
   const target = { companyKey: key, name, nextFollowUp: c.nextFollowUp };
 
   const items = [
@@ -105,7 +110,7 @@ export function buildCompanyMenu(c, handlers = {}) {
         onClick: () => handlers.onSetStage(key, s, { name }),
       })),
     },
-    handlers.onAddTag && { key: 'tag', label: 'Add tag…', icon: LocalOfferOutlinedIcon, onClick: () => handlers.onAddTag(key, tags) },
+    (handlers.onAddTag && hasTags) && { key: 'tag', label: 'Add tag…', icon: LocalOfferOutlinedIcon, onClick: () => handlers.onAddTag(key, tags) },
     (phone || email) && { divider: true },
     copyItem({ key: 'copy-phone', label: 'Copy phone', value: phone, flash: handlers.flash, toastLabel: 'Phone', icon: ContentCopyOutlinedIcon }),
     copyItem({ key: 'copy-email', label: 'Copy email', value: email, flash: handlers.flash, toastLabel: 'Email', icon: MailOutlineIcon }),

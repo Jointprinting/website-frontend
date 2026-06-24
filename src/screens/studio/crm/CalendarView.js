@@ -48,7 +48,11 @@ function buildGrid(year, month) {
 // A draggable company chip living in a day cell.
 function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragging, bindCompany }) {
   const m = stageMeta(ev.stage);
-  const won = isWonStage(ev.stage);
+  // A real customer (order on file) earns the same celebratory chip treatment as
+  // a won/customer stage — `ev.isCustomer` is the order-reality flag the server
+  // sends (matches TodayView / CompaniesView), so an order-bearing record that's
+  // still stored as 'lead' reads as a customer here too, not a plain lead.
+  const won = isWonStage(ev.stage) || ev.isCustomer;
   const [hover, setHover] = React.useState(false);
   // The custom right-click menu (Call / Log / Reschedule / Set stage / …) when a
   // binder is provided; otherwise fall back to the legacy reschedule-on-right-

@@ -13,6 +13,8 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon    from '@mui/icons-material/ErrorOutline';
 import CloudSyncIcon       from '@mui/icons-material/CloudSync';
 import { B, fmtDate, fmtRelative } from './_shared';
+import { useContextMenu } from './ContextMenu';
+import { buildFallbackMenu } from './contextMenuActions';
 import config from '../../config.json';
 import JpLoader from '../../common/JpLoader';
 
@@ -52,6 +54,14 @@ export default function BackupTab({ token, onBack }) {
   }, []);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  // Right-click on empty chrome offers "Back to hub" — parity with the other
+  // Studio screens (Finances / Vendors / CRM / Orders) so no surface is a
+  // dead-end on right-click.
+  const { registerFallback } = useContextMenu();
+  useEffect(() => registerFallback(() => buildFallbackMenu({
+    onBackToHub: onBack,
+  })), [registerFallback, onBack]);
 
   const loadDrive = useCallback(async () => {
     try {
@@ -191,7 +201,7 @@ export default function BackupTab({ token, onBack }) {
   const days  = stat ? stat.lastBackupDays : null;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white, p: { xs: 2, md: 4 } }}>
+    <Box data-ctx-chrome sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white, p: { xs: 2, md: 4 } }}>
       <Stack direction="row" alignItems="center" gap={1.5} mb={3}>
         <Button startIcon={<ArrowBackIcon />} onClick={onBack}
           sx={{ color: B.muted, textTransform: 'none', '&:hover': { color: B.white } }}>
