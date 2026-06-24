@@ -6,7 +6,7 @@
 // presentational pieces every CRM view leans on.
 
 import * as React from 'react';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Chip, Stack, Typography } from '@mui/material';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import SmsOutlinedIcon from '@mui/icons-material/SmsOutlined';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
@@ -50,6 +50,57 @@ export const STAGE_PROBABILITY = {
 // dormant are parked in a secondary lane the board shows collapsed by default.
 export const PIPELINE_STAGES   = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer'];
 export const SECONDARY_STAGES  = ['lost', 'dormant'];
+
+// ── Funnel / level progression (the "dopamine" spine) ─────────────────────────
+// The forward sales journey as ordered LEVELS — what the progress indicator
+// climbs. Won and Customer are the same victory rung (Customer = Won + has an
+// order), so the bar fills completely for either. lost/dormant aren't on the
+// ladder (they're off-ramps), so they read as 0 progress with a muted treatment.
+export const FUNNEL_STEPS = ['lead', 'contacted', 'quoting', 'sampling', 'won'];
+
+// 0-based level of a stage on the ladder; customer collapses onto won's rung.
+export const stageLevel = (s) => {
+  if (s === 'customer') return FUNNEL_STEPS.indexOf('won');
+  const i = FUNNEL_STEPS.indexOf(s);
+  return i; // -1 for lost/dormant/unknown → treated as off-ladder
+};
+
+// Fraction [0..1] of the journey a stage represents — drives the progress fill.
+// Won/Customer = full (1). lost/dormant = 0 (off-ramp).
+export const stageProgress = (s) => {
+  const lvl = stageLevel(s);
+  if (lvl < 0) return 0;
+  return lvl / (FUNNEL_STEPS.length - 1);
+};
+
+// A stage that means "we have a real customer" — earns the celebratory accent.
+export const isWonStage = (s) => s === 'won' || s === 'customer';
+// A stage that's parked off the active ladder.
+export const isClosedStage = (s) => s === 'lost' || s === 'dormant';
+
+// ── Temperature / lifecycle tags ──────────────────────────────────────────────
+// The importer tags records with a temperature (hot/warm/room-temp/cold/lost/
+// in-progress/won/meta-ad) and engagement (eng-high/eng-med/eng-low). These are
+// just normal tags[] under the hood; this map gives the KNOWN ones a legible
+// color + glyph so they read as status, not noise. Unknown tags fall back to the
+// neutral teal TagChips treatment. Keyed lowercase; matched case-insensitively.
+export const TEMP_META = {
+  hot:           { label: 'Hot',          color: '#fb7185', dot: '#fb7185', emoji: '🔥' },
+  warm:          { label: 'Warm',         color: '#fbbf24', dot: '#fbbf24' },
+  'room-temp':   { label: 'Room temp',    color: '#a3a3a3', dot: '#a3a3a3' },
+  'room temp':   { label: 'Room temp',    color: '#a3a3a3', dot: '#a3a3a3' },
+  cold:          { label: 'Cold',         color: '#60a5fa', dot: '#60a5fa' },
+  lost:          { label: 'Lost',         color: '#9ca3af', dot: '#9ca3af' },
+  'in-progress': { label: 'In progress',  color: '#2dd4bf', dot: '#2dd4bf' },
+  'in progress': { label: 'In progress',  color: '#2dd4bf', dot: '#2dd4bf' },
+  won:           { label: 'Won',          color: '#4ade80', dot: '#4ade80' },
+  'meta-ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
+  'meta ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
+  'eng-high':    { label: 'Eng · high',   color: '#4ade80', dot: '#4ade80' },
+  'eng-med':     { label: 'Eng · med',    color: '#fbbf24', dot: '#fbbf24' },
+  'eng-low':     { label: 'Eng · low',    color: '#9ca3af', dot: '#9ca3af' },
+};
+export const tempMeta = (t) => TEMP_META[String(t || '').toLowerCase().trim()] || null;
 
 // ── Interest vocabulary ───────────────────────────────────────────────────────
 export const INTEREST_TYPES = ['', 'promos', 'apparel', 'both'];
@@ -189,16 +240,91 @@ export const primaryPhone = (rec) => {
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 
-// Stage pill — consistent across every view.
-export function StageChip({ stage, size = 'small', sx = {} }) {
+// Stage pill — consistent across every view. `glow` adds a soft halo for the
+// won/customer victory rung so a closed deal reads as a reward, not just another
+// chip. `dot` prefixes a tiny level marker.
+export function StageChip({ stage, size = 'small', glow = false, dot = false, sx = {} }) {
   const m = stageMeta(stage);
+  const won = isWonStage(stage);
   return (
     <Chip
       label={m.label}
       size={size}
+      icon={dot ? <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: m.color, ml: 1 }} /> : undefined}
       sx={{
         bgcolor: m.bg, color: m.color, fontWeight: 800, fontSize: 11, height: 22,
-        border: `1px solid ${m.color}40`, letterSpacing: 0.2, ...sx,
+        border: `1px solid ${m.color}${won ? '66' : '40'}`, letterSpacing: 0.2,
+        ...(glow && won ? { boxShadow: `0 0 0 1px ${m.color}33, 0 4px 14px -4px ${m.color}aa` } : {}),
+        '& .MuiChip-icon': { mr: -0.25 },
+        ...sx,
+      }}
+    />
+  );
+}
+
+// ── Stage progress / level indicator (the dopamine bar) ───────────────────────
+// A segmented funnel rail: one pip per FUNNEL_STEP, filled up to (and including)
+// the record's current rung in that rung's color, with a soft running gradient
+// underneath so advancing a stage feels like leveling up. Won/Customer lights
+// the whole bar green; lost/dormant dims it. Pure CSS, animated via width/opacity
+// transitions already in the token set.
+export function StageProgress({ stage, height = 6, showLabel = false, sx = {} }) {
+  const m = stageMeta(stage);
+  const won = isWonStage(stage);
+  const closed = isClosedStage(stage);
+  const lvl = stageLevel(stage); // -1 for off-ladder
+  return (
+    <Box sx={{ ...sx }}>
+      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+        {FUNNEL_STEPS.map((s, i) => {
+          const reached = lvl >= 0 && i <= lvl;
+          const segColor = won ? STAGE_META.won.color : (reached ? m.color : D.line);
+          return (
+            <Box
+              key={s}
+              sx={{
+                flex: 1, height, borderRadius: 999,
+                bgcolor: reached ? segColor : 'rgba(255,255,255,0.07)',
+                opacity: closed ? 0.4 : 1,
+                boxShadow: reached && (won || i === lvl) ? `0 0 8px -1px ${segColor}aa` : 'none',
+                transition: 'background-color 0.35s ease, box-shadow 0.35s ease, opacity 0.25s ease',
+              }}
+            />
+          );
+        })}
+      </Box>
+      {showLabel && (
+        <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
+          <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 700, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            {closed ? stageMeta(stage).label : `Level ${Math.max(0, lvl) + 1} of ${FUNNEL_STEPS.length}`}
+          </Typography>
+          <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 800, color: won ? STAGE_META.won.color : m.color, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            {won ? '★ Customer' : `${Math.round(stageProgress(stage) * 100)}%`}
+          </Typography>
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+// A single temperature/lifecycle chip — colored by TEMP_META when known.
+export function TempChip({ tag, size = 'small', sx = {} }) {
+  const m = tempMeta(tag);
+  if (!m) return null;
+  const tiny = size === 'tiny';
+  return (
+    <Chip
+      size="small"
+      label={(
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+          <Box sx={{ width: tiny ? 5 : 6, height: tiny ? 5 : 6, borderRadius: '50%', bgcolor: m.dot }} />
+          {m.label}
+        </Box>
+      )}
+      sx={{
+        height: tiny ? 18 : 22, bgcolor: `${m.color}1f`, color: m.color,
+        border: `1px solid ${m.color}55`, fontWeight: 800, fontSize: tiny ? 10 : 11,
+        letterSpacing: 0.2, '& .MuiChip-label': { px: tiny ? 0.75 : 1 }, ...sx,
       }}
     />
   );
@@ -228,33 +354,45 @@ export function EmptyState({ icon, title, hint }) {
 }
 
 // Tag chips — the one place tags are painted, so cards / rows / detail all read
-// the same. Read-only by default; pass `onDelete(tag)` to make each chip
+// the same. KNOWN temperature/lifecycle tags (hot/warm/cold/…) render in their
+// signature color (via TempChip) and float to the front; everything else is a
+// neutral teal chip. Read-only by default; pass `onDelete(tag)` to make each chip
 // removable (used on the detail editor). `size="tiny"` packs them onto cards.
 export function TagChips({ tags, onDelete, size = 'small', max, sx = {} }) {
-  const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
-  if (list.length === 0) return null;
+  const raw = Array.isArray(tags) ? tags.filter(Boolean) : [];
+  if (raw.length === 0) return null;
+  // Sort known temperature tags first so the hot/warm signal leads.
+  const list = [...raw].sort((a, b) => (tempMeta(b) ? 1 : 0) - (tempMeta(a) ? 1 : 0));
   const shown = max && list.length > max ? list.slice(0, max) : list;
   const overflow = max && list.length > max ? list.length - max : 0;
   const tiny = size === 'tiny';
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', ...sx }}>
-      {shown.map((t) => (
-        <Chip
-          key={t}
-          label={t}
-          size="small"
-          onDelete={onDelete ? () => onDelete(t) : undefined}
-          deleteIcon={onDelete ? <CloseIcon /> : undefined}
-          sx={{
-            height: tiny ? 18 : 22,
-            bgcolor: 'rgba(45,212,191,0.12)', color: '#5eead4',
-            border: '1px solid rgba(45,212,191,0.35)',
-            fontWeight: 700, fontSize: tiny ? 10 : 11, letterSpacing: 0.2,
-            '& .MuiChip-label': { px: tiny ? 0.75 : 1 },
-            '& .MuiChip-deleteIcon': { color: 'rgba(94,234,212,0.7)', fontSize: 14, '&:hover': { color: '#5eead4' } },
-          }}
-        />
-      ))}
+      {shown.map((t) => {
+        const tm = tempMeta(t);
+        // Known temperature tag: colored TempChip. When removable, wrap it with a
+        // delete affordance by falling through to a colored Chip instead.
+        if (tm && !onDelete) return <TempChip key={t} tag={t} size={size} />;
+        const color = tm ? tm.color : '#5eead4';
+        const bg = tm ? `${tm.color}1f` : 'rgba(45,212,191,0.12)';
+        const border = tm ? `${tm.color}55` : 'rgba(45,212,191,0.35)';
+        return (
+          <Chip
+            key={t}
+            label={tm ? tm.label : t}
+            size="small"
+            onDelete={onDelete ? () => onDelete(t) : undefined}
+            deleteIcon={onDelete ? <CloseIcon /> : undefined}
+            sx={{
+              height: tiny ? 18 : 22,
+              bgcolor: bg, color, border: `1px solid ${border}`,
+              fontWeight: 700, fontSize: tiny ? 10 : 11, letterSpacing: 0.2,
+              '& .MuiChip-label': { px: tiny ? 0.75 : 1 },
+              '& .MuiChip-deleteIcon': { color: `${color}b3`, fontSize: 14, '&:hover': { color } },
+            }}
+          />
+        );
+      })}
       {overflow > 0 && (
         <Typography component="span" sx={{ ...mono, color: D.faint, fontSize: tiny ? 10 : 11, fontWeight: 700 }}>
           +{overflow}

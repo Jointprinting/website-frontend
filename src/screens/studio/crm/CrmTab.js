@@ -19,6 +19,7 @@ import * as React from 'react';
 import axios from 'axios';
 import {
   Box, Stack, Button, Snackbar, Alert, Typography as MuiTypography,
+  IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tooltip,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
@@ -28,10 +29,14 @@ import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import { dayKey, stageMeta } from './_crm';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
+import CrmSearch from './CrmSearch';
 import DashboardView from './DashboardView';
 import TodayView from './TodayView';
 import CalendarView from './CalendarView';
@@ -43,15 +48,24 @@ import CleanupView from './CleanupView';
 
 const base = `${config.backendUrl}/api/crm`;
 
+// Primary tab bar — the five views the owner lives in (J: Import + Clean up moved
+// to the overflow "•••" menu so the main bar stays focused).
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
   { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
   { id: 'companies', label: 'Companies', Icon: PeopleAltOutlinedIcon },
-  { id: 'cleanup',   label: 'Clean up',  Icon: CleaningServicesOutlinedIcon },
-  { id: 'import',    label: 'Import',    Icon: UploadFileOutlinedIcon },
 ];
+
+// Overflow ("•••") menu — still fully reachable, just tucked out of the daily
+// flow: housekeeping tools the owner reaches for occasionally.
+const OVERFLOW_NAV = [
+  { id: 'import',   label: 'Import CSV',    Icon: UploadFileOutlinedIcon },
+  { id: 'cleanup',  label: 'Clean up',      Icon: CleaningServicesOutlinedIcon },
+  { id: 'archived', label: 'Archived',      Icon: Inventory2OutlinedIcon },
+];
+const ALL_NAV = [...NAV, ...OVERFLOW_NAV];
 
 // First & last day (YYYY-MM-DD) of the full Sun→Sat grid that contains `month`
 // of `year` — the exact window the calendar grid renders, so every visible cell
@@ -95,6 +109,7 @@ export default function CrmTab({ token, onBack }) {
   const [pipelineLoading, setPipelineLoading] = React.useState(true);
   const [pipeQuery, setPipeQuery] = React.useState('');
   const [pipeTag, setPipeTag] = React.useState('all');
+  const [pipeArea, setPipeArea] = React.useState('all'); // client-side board filter
 
   // Clean up — duplicate groups (/duplicates) + dead/no-follow-up archive
   // candidates. The dead list is derived from an UNFILTERED company fetch (its
@@ -104,6 +119,15 @@ export default function CrmTab({ token, onBack }) {
   const [duplicatesLoading, setDuplicatesLoading] = React.useState(false);
   const [cleanupClients, setCleanupClients] = React.useState([]);
   const [cleanupClientsLoading, setCleanupClientsLoading] = React.useState(false);
+
+  // Archived records (recover surface) — loaded lazily when the Archived view is
+  // opened, so the soft-delete is genuinely reversible (owner: "nothing deleted").
+  const [archived, setArchived] = React.useState([]);
+  const [archivedLoading, setArchivedLoading] = React.useState(false);
+
+  // Global search (F) — the command palette + the overflow menu anchor (J).
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [overflowAnchor, setOverflowAnchor] = React.useState(null);
 
   const [detail, setDetail] = React.useState(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
@@ -117,8 +141,20 @@ export default function CrmTab({ token, onBack }) {
   // revert the optimistic move if the prompt is cancelled.
   const [lostDlg, setLostDlg] = React.useState({ open: false, target: null });
 
-  const [toast, setToast] = React.useState({ open: false, msg: '', sev: 'success' });
-  const flash = React.useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
+  const [toast, setToast] = React.useState({ open: false, msg: '', sev: 'success', action: null });
+  const flash = React.useCallback((msg, sev = 'success', action = null) => setToast({ open: true, msg, sev, action }), []);
+
+  // ⌘K / Ctrl-K opens global search from anywhere in the CRM — the Notion reflex.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // ── Fetchers ─────────────────────────────────────────────────────────────
   const loadDashboard = React.useCallback(async () => {
@@ -216,6 +252,26 @@ export default function CrmTab({ token, onBack }) {
     } finally { setCleanupClientsLoading(false); }
   }, [authHdr, flash]);
 
+  // Archived records, for the recover surface. ?archived=1 returns ONLY archived.
+  const loadArchived = React.useCallback(async () => {
+    setArchivedLoading(true);
+    try {
+      const res = await axios.get(base, { ...authHdr, params: { archived: '1' } });
+      setArchived(res.data?.clients || []);
+    } catch (e) {
+      flash('Could not load archived companies.', 'error');
+    } finally { setArchivedLoading(false); }
+  }, [authHdr, flash]);
+
+  // Global search transport for the command palette (F). Hits the backend's
+  // ?q= global search (company + client + email + phone + tags + contacts, any
+  // stage) and hands the rows back to the palette. Errors bubble so the palette
+  // can show an empty state without a toast spam.
+  const searchCrm = React.useCallback(async (q) => {
+    const res = await axios.get(base, { ...authHdr, params: { q } });
+    return res.data?.clients || [];
+  }, [authHdr]);
+
   // ── Effects: load each view's data lazily on first entry, refetch on deps ──
   React.useEffect(() => { loadDashboard(); }, [loadDashboard]);
   React.useEffect(() => { loadToday(); }, [loadToday]);
@@ -250,6 +306,11 @@ export default function CrmTab({ token, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, openKey, loadDuplicates, loadCleanupClients]);
 
+  // Archived: load lazily on first entry to the recover surface.
+  React.useEffect(() => {
+    if (view === 'archived' && !openKey) loadArchived();
+  }, [view, openKey, loadArchived]);
+
   // After any write, refresh whatever's currently visible + the open detail so
   // counts/badges/timelines stay truthful without a blanket refetch of all views.
   const refreshAffected = React.useCallback(() => {
@@ -259,9 +320,10 @@ export default function CrmTab({ token, onBack }) {
     loadCompanies(query, stageFilter, tagFilter);
     loadPipeline(pipeQuery, pipeTag);
     if (view === 'cleanup') { loadDuplicates(); loadCleanupClients(); }
+    if (view === 'archived') loadArchived();
     if (openKey) loadDetail(openKey);
   }, [loadDashboard, loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, tagFilter,
-      loadPipeline, pipeQuery, pipeTag, view, loadDuplicates, loadCleanupClients, openKey, loadDetail]);
+      loadPipeline, pipeQuery, pipeTag, view, loadDuplicates, loadCleanupClients, loadArchived, openKey, loadDetail]);
 
   // ── Write transport ───────────────────────────────────────────────────────
   // One PATCH path for everything: field edits, log-a-touch, reschedule. The
@@ -317,20 +379,37 @@ export default function CrmTab({ token, onBack }) {
     }
   }, [authHdr, flash, refreshAffected]);
 
+  // Unarchive (restore) ONE card — the undo for archiveOne + the Archived view's
+  // per-row restore. Brings it straight back into the working surfaces.
+  const unarchiveOne = React.useCallback(async (key, opts = {}) => {
+    try {
+      await axios.post(`${base}/${encodeURIComponent(key)}/unarchive`, {}, authHdr);
+      if (!opts.silent) flash('Restored.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not restore that card.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
   // Archive (soft-delete) THIS one card from its detail page (owner: "fine
-  // removing their card"). Soft / reversible; returns to the list after.
+  // removing their card"). Soft / reversible; returns to the list after, and the
+  // toast carries a one-tap UNDO that unarchives it (reassures it's recoverable).
   const archiveOne = React.useCallback(async (key) => {
     try {
       const res = await axios.post(`${base}/${encodeURIComponent(key)}/archive`, {}, authHdr);
-      flash('Card archived. Recover it from Companies → Archived.');
       setOpenKey(null);
       refreshAffected();
+      flash('Card archived — recoverable.', 'success', {
+        label: 'Undo',
+        run: () => unarchiveOne(key),
+      });
       return res.data;
     } catch (e) {
       flash(e?.response?.data?.message || 'Could not archive that card.', 'error');
       throw e;
     }
-  }, [authHdr, flash, refreshAffected]);
+  }, [authHdr, flash, refreshAffected, unarchiveOne]);
 
   // Archive (soft-delete) a set of records.
   const archiveCompanies = React.useCallback(async (keys) => {
@@ -426,25 +505,39 @@ export default function CrmTab({ token, onBack }) {
     });
   }, []);
 
+  // Per-card PENDING LOCK (race guard): while a card's stage PATCH is in flight,
+  // a second drag of the SAME card is ignored — otherwise a fast double-drag can
+  // fire two PATCHes whose refetches race and clobber each other (the card snaps
+  // back to a stale column). The lock is a ref-backed Set so the guard is
+  // synchronous (state would lag the second drop within the same tick).
+  const pendingMovesRef = React.useRef(new Set());
+
   // Pipeline drag-drop: move a card to a new stage. Dropping into Lost is special
   // — we move the card optimistically, then open the reason prompt; submitting
   // PATCHes { stage:'lost', lostReason }, cancelling reverts via refetch. Every
   // other stage is a straight optimistic move + PATCH { stage } (CalendarView's
   // pattern), reconciled by refreshAffected().
   const pipelineMoveStage = async (key, toStage, card) => {
+    // Guard: ignore a re-drag of a card whose previous move hasn't settled.
+    if (pendingMovesRef.current.has(key)) return;
+
     optimisticMove(key, toStage);
     if (toStage === 'lost') {
       // Card is already optimistically in Lost; the prompt confirms (PATCH) or
-      // cancels (revert via refetch), so we don't need the prior stage here.
+      // cancels (revert via refetch), so we don't need the prior stage here. The
+      // lost dialog owns its own busy state, so no pending lock needed here.
       setLostDlg({ open: true, target: { companyKey: key, name: card?.name || key } });
       return;
     }
+    pendingMovesRef.current.add(key);
     try {
       await patchCompany(key, { stage: toStage });
       flash(`${card?.name || 'Deal'} → ${stageMeta(toStage).label}`);
     } catch (_) {
       loadPipeline(pipeQuery, pipeTag); // revert the optimistic move
       return;
+    } finally {
+      pendingMovesRef.current.delete(key);
     }
     refreshAffected();
   };
@@ -480,6 +573,13 @@ export default function CrmTab({ token, onBack }) {
     (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => (c.tags || []).forEach((t) => { if (t) set.add(t); })));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [clients, pipeline]);
+
+  // Distinct areas present on the loaded board — feeds the pipeline area filter.
+  const pipeAreaOptions = React.useMemo(() => {
+    const set = new Set();
+    (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => { if (c.area) set.add(c.area); }));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [pipeline]);
 
   // Dead / no-follow-up archive candidates, derived from the loaded Companies
   // set. A candidate is a lead that's parked (lost/dormant) OR an early-funnel
@@ -520,6 +620,8 @@ export default function CrmTab({ token, onBack }) {
             onOpen={openCompany}
             onLog={(item) => openLog({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
             onReschedule={(item) => openResched({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
+            onArchive={(item) => archiveOne(item.companyKey)}
+            onGoToday={() => setView('today')}
           />
         );
       case 'today':
@@ -538,6 +640,7 @@ export default function CrmTab({ token, onBack }) {
             loading={pipelineLoading}
             query={pipeQuery} onQueryChange={setPipeQuery}
             tag={pipeTag} onTagChange={setPipeTag} tagOptions={tagOptions}
+            area={pipeArea} onAreaChange={setPipeArea} areaOptions={pipeAreaOptions}
             onOpen={openCompany}
             onMoveStage={pipelineMoveStage}
           />
@@ -549,6 +652,7 @@ export default function CrmTab({ token, onBack }) {
             onCursorChange={setCalCursor}
             onOpen={openCompany}
             onReschedule={calendarReschedule}
+            onPickReschedule={(ev) => openResched({ companyKey: ev.companyKey, name: ev.name, nextFollowUp: ev.nextFollowUp })}
           />
         );
       case 'companies':
@@ -571,6 +675,15 @@ export default function CrmTab({ token, onBack }) {
             onRefresh={() => { loadDuplicates(); loadCleanupClients(); }}
           />
         );
+      case 'archived':
+        return (
+          <CompaniesView
+            archived
+            clients={archived} loading={archivedLoading}
+            onOpen={openCompany}
+            onUnarchive={(key) => unarchiveOne(key)}
+          />
+        );
       case 'import':
         return (
           <ImportView
@@ -583,6 +696,9 @@ export default function CrmTab({ token, onBack }) {
         return null;
     }
   };
+
+  // Label for the current view (header context line) — covers overflow views too.
+  const currentNav = ALL_NAV.find((n) => n.id === view);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: D.bg }}>
@@ -600,13 +716,37 @@ export default function CrmTab({ token, onBack }) {
           </Button>
           <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
           <MuiTypography sx={{ ...mono, fontSize: 12, color: D.green, fontWeight: 700 }}>CRM</MuiTypography>
+          {currentNav && (
+            <>
+              <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint, display: { xs: 'none', sm: 'block' } }} />
+              <MuiTypography sx={{ ...mono, fontSize: 12, color: D.faint, fontWeight: 600, display: { xs: 'none', sm: 'block' } }}>
+                {currentNav.label}
+              </MuiTypography>
+            </>
+          )}
           <Box sx={{ flexGrow: 1 }} />
+          {/* Global search — the Notion-style command palette (⌘K). Reachable from
+              every view, including Calendar (owner's specific ask). */}
+          <Button
+            onClick={() => setSearchOpen(true)} startIcon={<SearchIcon sx={{ fontSize: 16 }} />}
+            sx={{ textTransform: 'none', color: D.muted, fontWeight: 600, fontSize: 12.5,
+              border: `1px solid ${D.line}`, borderRadius: 999, px: { xs: 1.25, sm: 1.75 }, py: 0.5,
+              minWidth: 0,
+              '&:hover': { color: D.green, borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}
+          >
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Search</Box>
+            <Box component="span" sx={{ ...mono, ml: { sm: 1 }, fontSize: 10.5, color: D.faint,
+              border: `1px solid ${D.line}`, borderRadius: 0.75, px: 0.6, py: 0.1,
+              display: { xs: 'none', md: 'inline' } }}>
+              ⌘K
+            </Box>
+          </Button>
         </Stack>
 
         {/* Sub-nav — hidden while a company detail is open (its own back button
             returns to the list it came from). */}
         {!openKey && (
-          <Stack direction="row" spacing={0.5} sx={{ px: { xs: 1, sm: 2 }, pb: 0, overflowX: 'auto',
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ px: { xs: 1, sm: 2 }, pb: 0, overflowX: 'auto',
             '&::-webkit-scrollbar': { height: 0 } }}>
             {NAV.map((n) => {
               const active = view === n.id;
@@ -626,9 +766,54 @@ export default function CrmTab({ token, onBack }) {
                 </Button>
               );
             })}
+            {/* Overflow ("•••") — Import / Clean up / Archived. Highlighted when an
+                overflow view is active so the owner sees where they are. */}
+            <Tooltip title="More — Import, Clean up, Archived">
+              <IconButton
+                onClick={(e) => setOverflowAnchor(e.currentTarget)}
+                size="small"
+                sx={{
+                  ml: 0.25, my: 0.5, borderRadius: 1.5,
+                  color: OVERFLOW_NAV.some((n) => n.id === view) ? D.green : D.muted,
+                  border: `1px solid ${OVERFLOW_NAV.some((n) => n.id === view) ? D.lineHi : 'transparent'}`,
+                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' },
+                }}
+              >
+                <MoreHorizIcon sx={{ fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
           </Stack>
         )}
       </Box>
+
+      {/* Overflow menu — housekeeping views, still one tap away */}
+      <Menu
+        anchorEl={overflowAnchor} open={Boolean(overflowAnchor)} onClose={() => setOverflowAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`,
+          backgroundImage: 'none', borderRadius: 2, minWidth: 200, mt: 0.5 } }}
+      >
+        {OVERFLOW_NAV.map((n) => {
+          const Icon = n.Icon;
+          const active = view === n.id;
+          return (
+            <MenuItem
+              key={n.id}
+              onClick={() => { setView(n.id); setOverflowAnchor(null); }}
+              sx={{ py: 1, color: active ? D.green : D.text,
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.06)' } }}
+            >
+              <ListItemIcon sx={{ color: active ? D.green : D.muted, minWidth: 34 }}>
+                <Icon sx={{ fontSize: 19 }} />
+              </ListItemIcon>
+              <ListItemText primaryTypographyProps={{ fontSize: 13.5, fontWeight: 700 }}>
+                {n.label}
+              </ListItemText>
+            </MenuItem>
+          );
+        })}
+      </Menu>
 
       {/* Body — the Kanban board gets a wider canvas (its columns scroll
           horizontally); every other view keeps the comfortable reading column. */}
@@ -660,13 +845,33 @@ export default function CrmTab({ token, onBack }) {
         companyName={lostDlg.target?.name}
       />
 
+      {/* Global search command palette */}
+      <CrmSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSearch={searchCrm}
+        onOpen={openCompany}
+      />
+
       <Snackbar
-        open={toast.open} autoHideDuration={3200} onClose={() => setToast((t) => ({ ...t, open: false }))}
+        open={toast.open}
+        autoHideDuration={toast.action ? 6000 : 3200}
+        onClose={() => setToast((t) => ({ ...t, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
           severity={toast.sev} variant="filled" onClose={() => setToast((t) => ({ ...t, open: false }))}
-          sx={{ borderRadius: 2, fontWeight: 600 }}
+          sx={{ borderRadius: 2, fontWeight: 600, alignItems: 'center' }}
+          action={toast.action ? (
+            <Button
+              size="small"
+              onClick={() => { toast.action.run(); setToast((t) => ({ ...t, open: false })); }}
+              sx={{ color: 'inherit', fontWeight: 800, textTransform: 'none',
+                border: '1px solid rgba(255,255,255,0.5)', borderRadius: 999, px: 1.5, py: 0.1 }}
+            >
+              {toast.action.label}
+            </Button>
+          ) : undefined}
         >
           {toast.msg}
         </Alert>

@@ -14,9 +14,11 @@ import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
+import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import { D, mono, fmtRelative } from '../_shared';
 import {
   StageChip, EmptyState, interestLabel, followUpStatus, telHref, primaryPhone, kindMeta,
+  isWonStage, stageMeta,
 } from './_crm';
 
 // One stat block in the summary strip.
@@ -39,6 +41,7 @@ function CallRow({ row, onOpen, onLog, onReschedule }) {
   const phone = primaryPhone(row);
   const last = row.lastLog;
   const LastIcon = last ? kindMeta(last.kind).Icon : null;
+  const customer = row.isCustomer || isWonStage(row.stage);
   const accent = fu.overdue ? '#f87171' : (fu.label === 'Today' ? D.amber : D.green);
 
   return (
@@ -61,17 +64,18 @@ function CallRow({ row, onOpen, onLog, onReschedule }) {
         {/* Identity + context */}
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.4 }}>
+            {customer && <StarRateRoundedIcon sx={{ fontSize: 16, color: stageMeta('customer').color }} />}
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, minWidth: 0 }}>
               {row.name}
             </Typography>
-            <StageChip stage={row.stage} />
+            <StageChip stage={row.stage} glow />
             <Typography sx={{ ...mono, color: fu.tone, fontSize: 12, fontWeight: 700 }}>
               {fu.label}
             </Typography>
           </Stack>
 
           <Typography sx={{ color: D.muted, fontSize: 12.5 }}>
-            {[interestLabel(row.interestType) !== '—' ? interestLabel(row.interestType) : null, row.area]
+            {[interestLabel(row.interestType) !== '—' ? interestLabel(row.interestType) : null, row.address || row.area]
               .filter(Boolean).join(' · ') || '—'}
           </Typography>
 

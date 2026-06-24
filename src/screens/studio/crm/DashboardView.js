@@ -16,13 +16,17 @@
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, IconButton, Tooltip, CircularProgress, Button,
+  Box, Stack, Typography, IconButton, Tooltip, CircularProgress, Button, LinearProgress,
 } from '@mui/material';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { D, mono } from '../_shared';
 import {
   StageChip, Eyebrow, EmptyState, stageMeta, interestLabel, telHref, fmtMoney0,
@@ -99,8 +103,10 @@ function StageFunnel({ stages }) {
 
 // ── Heads-up row ─────────────────────────────────────────────────────────────
 // One attention item. Left rail = severity color; type icon + message + name;
-// right side = the same quick actions Today uses. Whole row opens the company.
-function HeadsUpRow({ item, onOpen, onLog, onReschedule }) {
+// right side = the same quick actions Today uses + a one-tap "clear" (archive)
+// so a cold lead can be cleared from attention without deleting (soft/reversible
+// — the toast offers Undo). Whole row opens the company.
+function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive }) {
   const meta = headsUpMeta(item.type);
   const sev = severityMeta(item.severity);
   const Icon = meta.Icon;
@@ -172,6 +178,14 @@ function HeadsUpRow({ item, onOpen, onLog, onReschedule }) {
               <EventRepeatOutlinedIcon sx={{ fontSize: 17 }} />
             </IconButton>
           </Tooltip>
+          {onArchive && (
+            <Tooltip title="Clear from attention (archive — recoverable)">
+              <IconButton onClick={() => onArchive(item)} size="small"
+                sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.1)' } }}>
+                <Inventory2OutlinedIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           <ChevronRightIcon sx={{ color: D.faint, fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
         </Stack>
       </Stack>
@@ -208,7 +222,218 @@ function Breakdown({ title, rows, labelFor }) {
   );
 }
 
-export default function DashboardView({ data, loading, onOpen, onLog, onReschedule }) {
+// A small card shell with an eyebrow header and optional right-side accessory.
+function WidgetCard({ title, right, children, sx = {} }) {
+  return (
+    <Box sx={{ flex: '1 1 320px', minWidth: 280, bgcolor: D.panel, border: `1px solid ${D.line}`,
+      borderRadius: 2.5, p: { xs: 1.75, sm: 2 }, ...sx }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+        <Eyebrow>{title}</Eyebrow>
+        {right}
+      </Stack>
+      {children}
+    </Box>
+  );
+}
+
+// ── This-week agenda ──────────────────────────────────────────────────────────
+// A planner strip: overdue / due today / due this week as three weighted bars
+// with a one-tap jump to the Today list. The owner's "what's on my plate" glance.
+function ThisWeekAgenda({ followUps, onGoToday }) {
+  const overdue = followUps.overdue || 0;
+  const dueToday = followUps.dueToday || 0;
+  const dueWeek = followUps.dueThisWeek || 0;
+  const rows = [
+    { label: 'Overdue', value: overdue, color: '#f87171' },
+    { label: 'Due today', value: dueToday, color: D.amber },
+    { label: 'Due this week', value: dueWeek, color: D.green },
+  ];
+  const max = Math.max(1, overdue, dueToday, dueWeek);
+  const clear = overdue + dueToday + dueWeek === 0;
+  return (
+    <WidgetCard
+      title="This week"
+      right={onGoToday && (
+        <Button onClick={onGoToday} size="small" endIcon={<ChevronRightIcon sx={{ fontSize: 16 }} />}
+          sx={{ textTransform: 'none', color: D.green, fontWeight: 700, fontSize: 12,
+            '&:hover': { bgcolor: 'rgba(74,222,128,0.06)' } }}>
+          Open Today
+        </Button>
+      )}
+    >
+      {clear ? (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 1.5 }}>
+          <TaskAltOutlinedIcon sx={{ color: D.green, fontSize: 22 }} />
+          <Typography sx={{ color: D.muted, fontSize: 13, fontWeight: 600 }}>Nothing due this week. Clear runway.</Typography>
+        </Stack>
+      ) : (
+        <Stack spacing={1.1}>
+          {rows.map((r) => (
+            <Stack key={r.label} direction="row" alignItems="center" spacing={1.25}>
+              <Typography sx={{ width: 92, flexShrink: 0, color: D.muted, fontSize: 12, fontWeight: 700 }}>{r.label}</Typography>
+              <Box sx={{ flexGrow: 1, height: 18, borderRadius: 1, bgcolor: D.inset, position: 'relative', overflow: 'hidden' }}>
+                <Box sx={{ position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 1,
+                  width: `${Math.round((r.value / max) * 100)}%`, minWidth: r.value > 0 ? 4 : 0,
+                  bgcolor: r.color, opacity: 0.85, transition: 'width 0.4s ease' }} />
+              </Box>
+              <Typography sx={{ ...mono, width: 32, textAlign: 'right', color: r.value > 0 ? r.color : D.faint, fontSize: 13, fontWeight: 800 }}>
+                {r.value}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </WidgetCard>
+  );
+}
+
+// ── Conversion snapshot ───────────────────────────────────────────────────────
+// Customers (≥1 order) vs everyone tracked → a conversion ring/bar + headline
+// rate. Plus weighted-vs-open as a "how much of the open pipe is likely to land".
+function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
+  const total = totalCompanies || 0;
+  const customers = customersWithOrders || 0;
+  const rate = total > 0 ? Math.round((customers / total) * 100) : 0;
+  const open = pipeline.totalOpenValue || 0;
+  const weighted = pipeline.weightedValue || 0;
+  const landRate = open > 0 ? Math.round((weighted / open) * 100) : 0;
+  return (
+    <WidgetCard title="Conversion">
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Box sx={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
+          <CircularProgress variant="determinate" value={100} size={84} thickness={4}
+            sx={{ color: D.inset, position: 'absolute', left: 0 }} />
+          <CircularProgress variant="determinate" value={Math.min(100, rate)} size={84} thickness={4}
+            sx={{ color: stageMeta('customer').color, position: 'absolute', left: 0,
+              '& .MuiCircularProgress-circle': { strokeLinecap: 'round' } }} />
+          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <Typography sx={{ ...mono, fontSize: 20, fontWeight: 800, color: D.text, lineHeight: 1 }}>{rate}%</Typography>
+            <Typography sx={{ fontSize: 9, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>won</Typography>
+          </Box>
+        </Box>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack direction="row" spacing={1} alignItems="baseline">
+            <EmojiEventsOutlinedIcon sx={{ fontSize: 18, color: stageMeta('customer').color }} />
+            <Typography sx={{ ...mono, color: D.text, fontSize: 16, fontWeight: 800 }}>{customers}</Typography>
+            <Typography sx={{ color: D.muted, fontSize: 12.5 }}>customers of {total}</Typography>
+          </Stack>
+          <Box sx={{ mt: 1.25 }}>
+            <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.4 }}>
+              <Typography sx={{ color: D.faint, fontSize: 11, fontWeight: 700 }}>Pipeline likely to land</Typography>
+              <Typography sx={{ ...mono, color: D.green, fontSize: 11.5, fontWeight: 800 }}>{landRate}%</Typography>
+            </Stack>
+            <LinearProgress variant="determinate" value={Math.min(100, landRate)}
+              sx={{ height: 6, borderRadius: 999, bgcolor: D.inset,
+                '& .MuiLinearProgress-bar': { bgcolor: D.green, borderRadius: 999 } }} />
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, mt: 0.4 }}>
+              {fmtMoney0(weighted)} weighted of {fmtMoney0(open)} open
+            </Typography>
+          </Box>
+        </Box>
+      </Stack>
+    </WidgetCard>
+  );
+}
+
+// ── Activity pulse ────────────────────────────────────────────────────────────
+// Touches over 7d / 30d as a momentum read, with a simple proportional bar pair
+// + an encouraging streak-style line. Uses the activity figures the dashboard
+// already returns (no extra round-trip).
+function ActivityPulse({ activity }) {
+  const t7 = activity.touches7 || 0;
+  const t30 = activity.touches30 || 0;
+  const perWeekAvg = t30 / 4;
+  const trendUp = t7 >= perWeekAvg && t7 > 0;
+  return (
+    <WidgetCard title="Activity pulse"
+      right={<BoltOutlinedIcon sx={{ fontSize: 18, color: trendUp ? D.green : D.faint }} />}>
+      <Stack direction="row" spacing={2} alignItems="flex-end">
+        <Box>
+          <Typography sx={{ ...mono, color: D.text, fontSize: 30, fontWeight: 800, lineHeight: 1 }}>{t7}</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', mt: 0.3 }}>
+            touches · 7d
+          </Typography>
+        </Box>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack spacing={0.6}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography sx={{ width: 26, color: D.faint, fontSize: 10.5, ...mono }}>7d</Typography>
+              <Box sx={{ flexGrow: 1, height: 8, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
+                <Box sx={{ height: '100%', borderRadius: 999, bgcolor: D.green,
+                  width: `${t30 > 0 ? Math.round((t7 / Math.max(t7, t30)) * 100) : (t7 > 0 ? 100 : 0)}%`,
+                  transition: 'width 0.4s ease' }} />
+              </Box>
+            </Stack>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography sx={{ width: 26, color: D.faint, fontSize: 10.5, ...mono }}>30d</Typography>
+              <Box sx={{ flexGrow: 1, height: 8, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
+                <Box sx={{ height: '100%', borderRadius: 999, bgcolor: 'rgba(74,222,128,0.45)',
+                  width: t30 > 0 ? '100%' : '0%', transition: 'width 0.4s ease' }} />
+              </Box>
+            </Stack>
+          </Stack>
+          <Typography sx={{ color: trendUp ? D.green : D.muted, fontSize: 11.5, fontWeight: 600, mt: 1 }}>
+            {t7 === 0 && t30 === 0 ? 'No touches logged yet — log a call to start a streak.'
+              : trendUp ? 'Ahead of your 30-day pace. Keep it rolling.'
+              : `30-day pace is ${Math.round(perWeekAvg)}/wk — a few more this week stays on track.`}
+          </Typography>
+        </Box>
+      </Stack>
+    </WidgetCard>
+  );
+}
+
+// ── Biggest deals on the radar ────────────────────────────────────────────────
+// The highest-value OPEN deals currently flagged for attention (sourced from the
+// heads-up feed, which carries each company's value). A focused "don't drop these"
+// list with a tap-to-open. Genuinely actionable, unlike a static count table.
+function TopDeals({ items, onOpen }) {
+  const top = [...(items || [])]
+    .filter((i) => (i.value || 0) > 0)
+    // De-dupe by company (a company can throw multiple heads-up flags), keep its
+    // highest-value mention.
+    .reduce((acc, i) => {
+      const prev = acc.get(i.companyKey);
+      if (!prev || (i.value || 0) > (prev.value || 0)) acc.set(i.companyKey, i);
+      return acc;
+    }, new Map());
+  const list = Array.from(top.values()).sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 5);
+  if (list.length === 0) return null;
+  return (
+    <WidgetCard title="Biggest deals on the radar">
+      <Stack spacing={0.75}>
+        {list.map((d) => {
+          const sev = severityMeta(d.severity);
+          return (
+            <Box
+              key={d.companyKey}
+              onClick={() => onOpen(d.companyKey)}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') onOpen(d.companyKey); }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1.5, cursor: 'pointer',
+                bgcolor: D.inset, border: `1px solid ${D.line}`,
+                transition: 'border-color 0.15s ease, background 0.15s ease',
+                '&:hover': { borderColor: D.lineHi, bgcolor: D.panelHi } }}
+            >
+              <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 16, color: sev.color, flexShrink: 0 }} />
+              <Typography sx={{ flexGrow: 1, minWidth: 0, color: D.text, fontWeight: 700, fontSize: 13,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {d.name}
+              </Typography>
+              <Typography sx={{ ...mono, color: D.green, fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
+                {fmtMoney0(d.value)}
+              </Typography>
+              <ChevronRightIcon sx={{ color: D.faint, fontSize: 18, flexShrink: 0 }} />
+            </Box>
+          );
+        })}
+      </Stack>
+    </WidgetCard>
+  );
+}
+
+export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onGoToday }) {
   // Heads-up expander state — declared before any early return so hook order is
   // stable across the loading / loaded renders.
   const [showAll, setShowAll] = React.useState(false);
@@ -226,6 +451,8 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
   const activity = data?.activity || {};
   const breakdowns = data?.breakdowns || {};
   const heads = data?.headsUp || { items: [], counts: {}, total: 0 };
+  const totalCompanies = data?.totalCompanies || 0;
+  const customersWithOrders = data?.customersWithOrders || 0;
 
   const overdue = followUps.overdue || 0;
   const dueToday = followUps.dueToday || 0;
@@ -244,15 +471,17 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         <MetricCard label="Overdue" value={overdue} accent={overdue > 0 ? '#f87171' : D.muted} />
         <MetricCard label="Due today" value={dueToday} accent={dueToday > 0 ? D.amber : D.muted} />
         <MetricCard
-          label="Touches (7d)" value={activity.touches7 || 0} accent={D.text}
-          hint={`30d: ${activity.touches30 || 0}`}
+          label="Customers" value={customersWithOrders} accent={stageMeta('customer').color}
+          hint={`${totalCompanies} tracked`}
         />
       </Box>
 
       {/* 2 — Stage funnel */}
       <StageFunnel stages={pipeline.stages} />
 
-      {/* 3 — Needs your attention (the centerpiece) */}
+      {/* 3 — Needs your attention (the centerpiece). The backend already
+          down-ranks cold/never-worked leads, so this leads with overdue/hot. Each
+          row gets call/log/reschedule + a one-tap clear (archive). */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
           <Eyebrow>Needs your attention</Eyebrow>
@@ -278,6 +507,7 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
                 onOpen={onOpen}
                 onLog={onLog}
                 onReschedule={onReschedule}
+                onArchive={onArchive}
               />
             ))}
             {items.length > 12 && (
@@ -293,7 +523,24 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         )}
       </Box>
 
-      {/* 4 — Breakdowns */}
+      {/* 4 — Working widgets (replaces the old static count tables). A real
+          planner row: this-week agenda, conversion snapshot, activity pulse, the
+          biggest deals on the radar, and the segment breakdowns — elevated. */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
+        <ThisWeekAgenda followUps={followUps} onGoToday={onGoToday} />
+        <ConversionCard
+          totalCompanies={totalCompanies} customersWithOrders={customersWithOrders}
+          pipeline={pipeline}
+        />
+      </Box>
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
+        <ActivityPulse activity={activity} />
+        <TopDeals items={items} onOpen={onOpen} />
+      </Box>
+
+      {/* Segment breakdowns — still here for the owner who slices by area/interest,
+          just no longer the dead-end bottom of the page. */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
         <Breakdown
           title="By area" rows={breakdowns.byArea}

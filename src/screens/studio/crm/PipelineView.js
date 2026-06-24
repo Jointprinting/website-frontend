@@ -17,37 +17,79 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
+import ThermostatOutlinedIcon from '@mui/icons-material/ThermostatOutlined';
+import SortOutlinedIcon from '@mui/icons-material/SortOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { D, mono, dropInput } from '../_shared';
 import {
   StageChip, EmptyState, TagChips, stageMeta, followUpStatus, fmtMoney0,
-  PIPELINE_STAGES, SECONDARY_STAGES, STAGE_PROBABILITY,
+  PIPELINE_STAGES, SECONDARY_STAGES, STAGE_PROBABILITY, tempMeta, isWonStage,
 } from './_crm';
+
+// Temperature filter options (a card matches if it carries the matching tag).
+const TEMP_FILTERS = [
+  { value: 'all', label: 'Any temp' },
+  { value: 'hot', label: 'Hot' },
+  { value: 'warm', label: 'Warm' },
+  { value: 'room-temp', label: 'Room temp' },
+  { value: 'cold', label: 'Cold' },
+];
+
+// Within-column sort options.
+const SORTS = [
+  { value: 'value', label: 'Deal value (high→low)' },
+  { value: 'followup', label: 'Follow-up (soonest)' },
+  { value: 'name', label: 'Name (A→Z)' },
+];
+
+// A YYYY-MM-DD key sorts lexically the same as chronologically; null/empty sink
+// to the bottom for "soonest first".
+const fuSortKey = (c) => (c.nextFollowUp ? new Date(c.nextFollowUp).getTime() : Number.POSITIVE_INFINITY);
+
+function sortCards(cards, sort) {
+  const arr = [...(cards || [])];
+  if (sort === 'name') arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  else if (sort === 'followup') arr.sort((a, b) => fuSortKey(a) - fuSortKey(b));
+  else arr.sort((a, b) => (Number(b.dealValue) || 0) - (Number(a.dealValue) || 0)); // value (default)
+  return arr;
+}
+
+// Does a card carry the chosen temperature tag? (case-insensitive)
+function matchesTemp(card, temp) {
+  if (temp === 'all') return true;
+  return (card.tags || []).some((t) => String(t).toLowerCase().trim() === temp);
+}
 
 // A draggable company card. Mirrors CalendarView's EventChip drag contract:
 // onDragStart/onDragEnd bubble to the board, which owns the in-flight ref.
-function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging }) {
+function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked }) {
   const m = stageMeta(card.stage);
   const fu = followUpStatus(card.nextFollowUp);
+  const won = isWonStage(card.stage);
+  // Surface the hottest temperature tag on the rail as a subtle heat accent.
+  const heat = (card.tags || []).map((t) => tempMeta(t)).find(Boolean);
+  const railColor = won ? stageMeta('won').color : (heat ? heat.color : m.color);
   return (
     <Box
-      draggable
+      draggable={!locked}
       onDragStart={(e) => onDragStart(e, card)}
       onDragEnd={onDragEnd}
       onClick={(e) => { e.stopPropagation(); onOpen(card.companyKey); }}
-      title={`${card.name}${card.area ? ` · ${card.area}` : ''} — drag to change stage`}
+      title={`${card.name}${card.address || card.area ? ` · ${card.address || card.area}` : ''} — drag to change stage`}
       sx={{
-        position: 'relative', overflow: 'hidden', cursor: 'grab',
-        bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, p: 1.25,
-        opacity: dragging ? 0.35 : 1,
+        position: 'relative', overflow: 'hidden', cursor: locked ? 'wait' : 'grab',
+        bgcolor: D.panel, border: `1px solid ${won ? 'rgba(74,222,128,0.4)' : D.line}`, borderRadius: 2, p: 1.25,
+        opacity: dragging ? 0.35 : (locked ? 0.6 : 1),
         transition: 'opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease',
-        '&:hover': { borderColor: D.lineHi, transform: 'translateY(-1px)', boxShadow: `0 6px 16px -6px ${m.color}66` },
-        '&:active': { cursor: 'grabbing' },
+        '&:hover': { borderColor: D.lineHi, transform: 'translateY(-1px)', boxShadow: `0 6px 16px -6px ${railColor}66` },
+        '&:active': { cursor: locked ? 'wait' : 'grabbing' },
         '&::before': {
           content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-          bgcolor: m.color, opacity: 0.8,
+          bgcolor: railColor, opacity: won ? 1 : 0.8,
+          boxShadow: won ? `0 0 10px -1px ${railColor}` : 'none',
         },
       }}
     >
@@ -84,8 +126,9 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging }) {
 
 // A single stage column: header (stage chip + count + total $) and a droppable,
 // scrollable card list. Highlights when a card is dragged over it.
-function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, onDragOverCol, onDragLeaveCol, draggingKey }) {
+function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, onDragOverCol, onDragLeaveCol, draggingKey, lockedKeys }) {
   const m = stageMeta(group.stage);
+  const won = isWonStage(group.stage);
   const cards = group.clients || [];
   return (
     <Box
@@ -103,14 +146,15 @@ function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, on
     >
       {/* Column header */}
       <Box sx={{ p: 1.25, borderBottom: `1px solid ${D.line}`,
-        borderTop: `2px solid ${m.color}`, borderTopLeftRadius: 10, borderTopRightRadius: 10 }}>
+        borderTop: `2px solid ${m.color}`, borderTopLeftRadius: 10, borderTopRightRadius: 10,
+        ...(won ? { boxShadow: `inset 0 1px 0 ${m.color}55` } : {}) }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
           <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
-            <StageChip stage={group.stage} />
+            <StageChip stage={group.stage} glow />
             <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, fontWeight: 700 }}>{group.count}</Typography>
           </Stack>
           {group.totalValue > 0 && (
-            <Typography sx={{ ...mono, color: D.muted, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+            <Typography sx={{ ...mono, color: won ? stageMeta('won').color : D.muted, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
               {fmtMoney0(group.totalValue)}
             </Typography>
           )}
@@ -138,6 +182,7 @@ function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, on
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             dragging={draggingKey === card.companyKey}
+            locked={lockedKeys ? lockedKeys.has(card.companyKey) : false}
           />
         ))}
       </Box>
@@ -162,18 +207,38 @@ function Metric({ label, value, tone }) {
 export default function PipelineView({
   groups, summary, probability, loading,
   query, onQueryChange, tag, onTagChange, tagOptions,
+  area, onAreaChange, areaOptions,
   onOpen, onMoveStage,
 }) {
-  const byStage = React.useMemo(() => {
+  // Within-board controls (client-side; the loaded set already has the fields):
+  // temperature filter + within-column sort. Area + tag + search are wired up
+  // through the parent so the fetch can scope server-side where it helps.
+  const [temp, setTemp] = React.useState('all');
+  const [sort, setSort] = React.useState('value');
+
+  // Apply the client-side temp filter + sort to each group, then recompute its
+  // count + totalValue so the column header reflects what's actually shown.
+  const shapedByStage = React.useMemo(() => {
     const map = {};
-    (groups || []).forEach((g) => { map[g.stage] = g; });
+    (groups || []).forEach((g) => {
+      const filtered = (g.clients || [])
+        .filter((c) => matchesTemp(c, temp))
+        .filter((c) => (area && area !== 'all' ? c.area === area : true));
+      const sorted = sortCards(filtered, sort);
+      map[g.stage] = {
+        ...g,
+        clients: sorted,
+        count: sorted.length,
+        totalValue: sorted.reduce((s, c) => s + (Number(c.dealValue) || 0), 0),
+      };
+    });
     return map;
-  }, [groups]);
+  }, [groups, temp, sort, area]);
 
   // Seed a group for any stage missing from the payload so columns always show.
   const groupFor = React.useCallback(
-    (s) => byStage[s] || { stage: s, count: 0, totalValue: 0, clients: [] },
-    [byStage],
+    (s) => shapedByStage[s] || { stage: s, count: 0, totalValue: 0, clients: [] },
+    [shapedByStage],
   );
 
   const probMap = probability || STAGE_PROBABILITY;
@@ -185,8 +250,24 @@ export default function PipelineView({
   // ── Drag state (same contract as CalendarView) ──────────────────────────────
   const [dragState, setDragState] = React.useState({ activeKey: null, overStage: null });
   const draggedRef = React.useRef(null);
+  // Cards whose move is in flight — locked (un-draggable, dimmed) until the
+  // server-backed refetch settles. A visual companion to the parent's race guard
+  // (pendingMovesRef) so a double-drag is impossible AND looks intentional.
+  // IMPORTANT: we clear on the LOADING edge (refetch finished), NOT on every
+  // `groups` change — the optimistic move itself replaces `groups` synchronously,
+  // so keying the clear on `groups` would release the lock one render after the
+  // drop (before the PATCH resolves) and defeat it. `loading` only drops to false
+  // once the post-PATCH /pipeline refetch lands, which is exactly "move settled".
+  const [lockedKeys, setLockedKeys] = React.useState(() => new Set());
+  const prevLoadingRef = React.useRef(loading);
+  React.useEffect(() => {
+    // Falling edge of loading (true → false) = a refetch just completed.
+    if (prevLoadingRef.current && !loading) setLockedKeys(new Set());
+    prevLoadingRef.current = loading;
+  }, [loading]);
 
   const handleDragStart = (e, card) => {
+    if (lockedKeys.has(card.companyKey)) { e.preventDefault(); return; }
     draggedRef.current = card;
     try {
       e.dataTransfer.effectAllowed = 'move';
@@ -204,6 +285,8 @@ export default function PipelineView({
     setDragState({ activeKey: null, overStage: null });
     if (!card || !stage) return;
     if (card.stage === stage) return; // dropped on its own column — no-op
+    if (lockedKeys.has(card.companyKey)) return; // already moving
+    setLockedKeys((prev) => { const n = new Set(prev); n.add(card.companyKey); return n; });
     onMoveStage(card.companyKey, stage, card);
   };
 
@@ -219,6 +302,7 @@ export default function PipelineView({
       onDragOverCol={handleDragOverCol}
       onDragLeaveCol={handleDragLeaveCol}
       draggingKey={dragState.activeKey}
+      lockedKeys={lockedKeys}
     />
   );
 
@@ -238,18 +322,20 @@ export default function PipelineView({
         {loading && <CircularProgress size={18} sx={{ color: D.green }} />}
       </Box>
 
-      {/* Filters — same pattern as CompaniesView (search + tag select) */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+      {/* Filters — search + tag (server-side) · area + temperature + sort (within
+          the loaded board). Gives the owner the control he asked for without a
+          round-trip per knob. */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25} useFlexGap flexWrap="wrap">
         <TextField
           value={query} onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Search the board…" size="small" fullWidth sx={dropInput}
+          placeholder="Search people & companies…" size="small" sx={{ ...dropInput, flex: '1 1 220px', minWidth: 200 }}
           InputProps={{ startAdornment: (
             <InputAdornment position="start"><SearchIcon sx={{ color: D.faint, fontSize: 20 }} /></InputAdornment>
           ) }}
         />
         <TextField
           select value={tag} onChange={(e) => onTagChange(e.target.value)}
-          size="small" sx={{ ...dropInput, minWidth: { sm: 170 } }} label="Tag"
+          size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Tag"
           disabled={(tagOptions || []).length === 0}
           InputProps={{ startAdornment: (
             <InputAdornment position="start"><LocalOfferOutlinedIcon sx={{ color: D.faint, fontSize: 17 }} /></InputAdornment>
@@ -257,6 +343,37 @@ export default function PipelineView({
         >
           <MenuItem value="all">All tags</MenuItem>
           {(tagOptions || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+        </TextField>
+        {onAreaChange && (
+          <TextField
+            select value={area || 'all'} onChange={(e) => onAreaChange(e.target.value)}
+            size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Area"
+            disabled={(areaOptions || []).length === 0}
+            InputProps={{ startAdornment: (
+              <InputAdornment position="start"><PlaceOutlinedIcon sx={{ color: D.faint, fontSize: 16 }} /></InputAdornment>
+            ) }}
+          >
+            <MenuItem value="all">All areas</MenuItem>
+            {(areaOptions || []).map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+          </TextField>
+        )}
+        <TextField
+          select value={temp} onChange={(e) => setTemp(e.target.value)}
+          size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Temp"
+          InputProps={{ startAdornment: (
+            <InputAdornment position="start"><ThermostatOutlinedIcon sx={{ color: D.faint, fontSize: 17 }} /></InputAdornment>
+          ) }}
+        >
+          {TEMP_FILTERS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+        </TextField>
+        <TextField
+          select value={sort} onChange={(e) => setSort(e.target.value)}
+          size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Sort"
+          InputProps={{ startAdornment: (
+            <InputAdornment position="start"><SortOutlinedIcon sx={{ color: D.faint, fontSize: 17 }} /></InputAdornment>
+          ) }}
+        >
+          {SORTS.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
         </TextField>
       </Stack>
 
@@ -268,8 +385,8 @@ export default function PipelineView({
       ) : totalCards === 0 ? (
         <EmptyState
           icon={<ViewKanbanOutlinedIcon />}
-          title={query || tag !== 'all' ? 'No matches' : 'Your pipeline is empty'}
-          hint={query || tag !== 'all'
+          title={query || tag !== 'all' || temp !== 'all' || (area && area !== 'all') ? 'No matches' : 'Your pipeline is empty'}
+          hint={query || tag !== 'all' || temp !== 'all' || (area && area !== 'all')
             ? 'Try clearing the search or tag filter.'
             : 'Add a deal value + stage on a company to see it here.'}
         />
