@@ -59,11 +59,19 @@ function money(n) {
 
 const _norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
+// Round-half-up to cents — mirrors backend models/Order.js roundCents.
+const roundCents = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
+// Is this add-on customLine a sales-tax line? Mirrors backend isTaxCustomLine:
+// explicit `isTax` flag wins, else a label mentioning "tax".
+const isTaxCustomLine = (line) =>
+  !!line && (line.isTax === true || /tax/i.test(String(line.label || '')));
+
 // Per-location sales tax for a multi-ship-to confirmation. Mirrors the backend
 // models/Order.js computeLocationTax and studio/_shared.js confLocationTax:
 // active only when a shipTo carries taxRate > 0; each item's merchandise
-// revenue is allocated to a location proportionally by its unit share, summed,
-// then × taxRate%. Tax is on merchandise only (not the add-on lines).
+// revenue is allocated to a location proportionally by its unit share (clamped
+// to [0,1] of the item — H5), summed, then × taxRate%, rounded to cents (H4).
+// Tax is on merchandise only (not the add-on lines).
 function confLocationTax(conf) {
   const n = (v) => Number(v) || 0;
   const shipTos = Array.isArray(conf?.shipTos) ? conf.shipTos : [];
@@ -76,35 +84,41 @@ function confLocationTax(conf) {
       const itemQty = (it.sizes || []).reduce((q, sz) => q + n(sz.qty), 0);
       if (itemQty <= 0) return sum;
       const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
-      return sum + itemRevenue * (allocQty / itemQty);
+      const share = allocQty <= 0 ? 0 : (allocQty >= itemQty ? 1 : allocQty / itemQty);
+      return sum + itemRevenue * share;
     }, 0);
     const rate = n(st.taxRate);
-    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, value: subtotal * rate / 100 };
+    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, value: roundCents(subtotal * rate / 100) };
   });
-  return { active: true, total: lines.reduce((s, l) => s + l.value, 0), lines };
+  return { active: true, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
 }
 
 // Mirror the server PDF's confirmation totals: percent custom-lines apply to
 // the running subtotal, in order; then per-location sales tax (multi-ship-to)
-// is added last. With no taxed shipTos this is byte-identical to before.
+// is added last. With no taxed shipTos this is byte-identical to before. When
+// per-location tax is active, a legacy tax customLine is dropped (C3) so a job
+// is taxed exactly once; the grand total snaps to cents (H4).
 function computeConfTotals(conf) {
   const items = Array.isArray(conf?.items) ? conf.items : [];
   const itemsSubtotal = items.reduce((s, it) =>
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
+  const locationTax = confLocationTax(conf);
   let running = itemsSubtotal;
-  const lines = (conf?.customLines || []).map(l => {
+  const lines = [];
+  (conf?.customLines || []).forEach(l => {
+    if (locationTax.active && isTaxCustomLine(l)) return;   // double-tax guard
     const isPct = !!l.isPercent;
     const amt = Number(l.amount) || 0;
     const value = isPct ? running * amt / 100 : amt;
     running += value;
     const base = l.label || (isPct ? 'Adjustment' : 'Add-on');
-    return { label: isPct ? `${base} - ${amt}%` : base, value };
+    lines.push({ label: isPct ? `${base} - ${amt}%` : base, value });
   });
-  confLocationTax(conf).lines.forEach(t => {
+  locationTax.lines.forEach(t => {
     running += t.value;
     lines.push({ label: t.label, value: t.value });
   });
-  return { itemsSubtotal, lines, grandTotal: running };
+  return { itemsSubtotal, lines, grandTotal: roundCents(running) };
 }
 
 function confItemTitle(it, idx) {

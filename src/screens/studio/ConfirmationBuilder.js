@@ -24,7 +24,7 @@ import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
 import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, fmt, mono, accentBar, confLocationTax, STATE_TAX_RATES } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents } from './_shared';
 import jpLogoColored from '../../modules/images/logo_colored.webp';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -569,7 +569,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
               : 'Add NJ sales tax (6.625%)'}>
               <span>
                 <Button size="small" disabled={hasLocationTax(local)}
-                  onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true }] })}
+                  onClick={() => update({ customLines: [...(local.customLines || []), { label: 'NJ sales tax', amount: 6.625, isPercent: true, isTax: true }] })}
                   sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
                     border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
                     '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 },
@@ -1390,22 +1390,29 @@ function computeTotals(conf) {
   const itemsSubtotal = (conf.items || []).reduce((s, it) =>
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0),
     0);
+  const locationTax = confLocationTax(conf);
   let running = itemsSubtotal;
-  const lines = (conf.customLines || []).map(l => {
+  const lines = [];
+  (conf.customLines || []).forEach(l => {
+    // Double-tax guard (C3): drop a legacy tax customLine from BOTH the preview
+    // lines and the running total when per-location tax is active — per-location
+    // tax wins. Mirrors backend computeConfirmationTotals.
+    if (locationTax.active && isTaxCustomLine(l)) return;
     const value = l.isPercent
       ? running * (Number(l.amount) || 0) / 100
       : Number(l.amount) || 0;
     running += value;
-    return { label: l.label || (l.isPercent ? 'Adjustment' : 'Add-on'), amount: l.amount, isPercent: l.isPercent, value };
+    lines.push({ label: l.label || (l.isPercent ? 'Adjustment' : 'Add-on'), amount: l.amount, isPercent: l.isPercent, value });
   });
   // Per-location sales tax (multi-ship-to) — appended as its own lines after
   // the add-ons and added to the total, mirroring the backend grand total and
   // the client approval page. No-op unless a shipTo carries taxRate > 0.
-  confLocationTax(conf).lines.forEach(t => {
+  locationTax.lines.forEach(t => {
     running += t.value;
     lines.push({ label: t.label, amount: t.rate, isPercent: false, value: t.value, isLocationTax: true });
   });
-  return { itemsSubtotal, lines, grandTotal: running };
+  // Snap the grand total to cents (H4) — matches the backend totalValue.
+  return { itemsSubtotal, lines, grandTotal: roundCents(running) };
 }
 
 // Whether per-location tax is in play — used to suppress the single "NJ tax"
