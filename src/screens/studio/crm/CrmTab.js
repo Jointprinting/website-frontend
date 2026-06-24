@@ -35,6 +35,8 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import { dayKey, stageMeta } from './_crm';
+import { useContextMenu } from '../ContextMenu';
+import { buildCompanyMenu, buildFallbackMenu } from '../contextMenuActions';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
 import CrmSearch from './CrmSearch';
 import DashboardView from './DashboardView';
@@ -79,6 +81,7 @@ function gridRange(year, month) {
 
 export default function CrmTab({ token, onBack }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const { bind: bindMenu, registerFallback } = useContextMenu();
 
   const [view, setView] = React.useState('dashboard');
   const [openKey, setOpenKey] = React.useState(null); // company detail overlay (null = closed)
@@ -155,6 +158,14 @@ export default function CrmTab({ token, onBack }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Right-click on empty CRM chrome → the global niceties (search ⌘K, back to
+  // the Studio hub). Registered while this tool is mounted; cleaned up on unmount
+  // so another tool's fallback takes over.
+  React.useEffect(() => registerFallback(() => buildFallbackMenu({
+    onSearch: () => setSearchOpen(true),
+    onBackToHub: onBack,
+  })), [registerFallback, onBack]);
 
   // ── Fetchers ─────────────────────────────────────────────────────────────
   const loadDashboard = React.useCallback(async () => {
@@ -565,6 +576,57 @@ export default function CrmTab({ token, onBack }) {
     refreshAffected();
   };
 
+  // ── Right-click menu wiring ───────────────────────────────────────────────
+  // Quick "Add tag" from a row's context menu — a tiny prompt that appends one
+  // tag (case-insensitive de-dupe) and PATCHes the whole tags array, the same
+  // shape the detail TagEditor commits.
+  const addTagToCompany = React.useCallback(async (key, currentTags) => {
+    const raw = window.prompt('Add a tag');
+    const t = (raw || '').trim();
+    if (!t) return;
+    const existing = Array.isArray(currentTags) ? currentTags : [];
+    if (existing.some((x) => String(x).toLowerCase() === t.toLowerCase())) { flash('Already tagged.'); return; }
+    try {
+      await patchCompany(key, { tags: [...existing, t] });
+      flash(`Tagged “${t}”.`);
+      refreshAffected();
+    } catch (_) { /* patchCompany already flashed */ }
+  }, [patchCompany, flash, refreshAffected]);
+
+  // Set stage straight from a row (any view). Reuses pipelineMoveStage so the
+  // Lost-reason prompt + optimistic board update + PATCH path are identical to a
+  // drag — from non-board views the optimistic shuffle is just a harmless no-op.
+  const setStageQuick = React.useCallback((key, stage, card) => {
+    pipelineMoveStage(key, stage, card);
+  // pipelineMoveStage is a stable closure over refs/setters; intentionally not
+  // listed to avoid re-creating this every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The shared handler bundle every company surface reuses. Memoised so the bound
+  // onContextMenu prop is stable; the item list itself is built lazily per
+  // right-click (so handlers always close over fresh data).
+  const companyMenuHandlers = React.useMemo(() => ({
+    onOpen: openCompany,
+    onLog: openLog,
+    onReschedule: openResched,
+    onSetStage: setStageQuick,
+    onAddTag: addTagToCompany,
+    onArchive: archiveOne,
+    flash,
+  // openCompany/openLog/openResched/archiveOne are recreated each render (plain
+  // fns) but only ever do setState — safe to omit; setStageQuick/addTagToCompany
+  // /flash are stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [setStageQuick, addTagToCompany, flash]);
+
+  // bindCompany(record) → props an actionable company row/card spreads onto its
+  // container. Built at right-click time from the live record.
+  const bindCompany = React.useCallback(
+    (rec) => bindMenu(() => buildCompanyMenu(rec, companyMenuHandlers)),
+    [bindMenu, companyMenuHandlers],
+  );
+
   // Distinct tags across the loaded company set — feeds the tag-filter selects on
   // both Companies and Pipeline so the owner picks from tags that actually exist.
   const tagOptions = React.useMemo(() => {
@@ -631,6 +693,7 @@ export default function CrmTab({ token, onBack }) {
             onOpen={openCompany}
             onLog={(row) => openLog({ companyKey: row.companyKey, name: row.name, nextFollowUp: row.nextFollowUp })}
             onReschedule={(row) => openResched({ companyKey: row.companyKey, name: row.name, nextFollowUp: row.nextFollowUp })}
+            bindCompany={bindCompany}
           />
         );
       case 'pipeline':
@@ -643,6 +706,7 @@ export default function CrmTab({ token, onBack }) {
             area={pipeArea} onAreaChange={setPipeArea} areaOptions={pipeAreaOptions}
             onOpen={openCompany}
             onMoveStage={pipelineMoveStage}
+            bindCompany={bindCompany}
           />
         );
       case 'calendar':
@@ -653,6 +717,7 @@ export default function CrmTab({ token, onBack }) {
             onOpen={openCompany}
             onReschedule={calendarReschedule}
             onPickReschedule={(ev) => openResched({ companyKey: ev.companyKey, name: ev.name, nextFollowUp: ev.nextFollowUp })}
+            bindCompany={bindCompany}
           />
         );
       case 'companies':
@@ -663,6 +728,7 @@ export default function CrmTab({ token, onBack }) {
             stage={stageFilter} onStageChange={setStageFilter}
             tag={tagFilter} onTagChange={setTagFilter} tagOptions={tagOptions}
             onOpen={openCompany}
+            bindCompany={bindCompany}
           />
         );
       case 'cleanup':
@@ -851,6 +917,7 @@ export default function CrmTab({ token, onBack }) {
         onClose={() => setSearchOpen(false)}
         onSearch={searchCrm}
         onOpen={openCompany}
+        bindCompany={bindCompany}
       />
 
       <Snackbar

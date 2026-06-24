@@ -22,6 +22,8 @@ import CheckIcon from '@mui/icons-material/Check';
 import axios from 'axios';
 import config from '../../config.json';
 import { B, darkInput, scrollbar } from './_shared';
+import { useContextMenu } from './ContextMenu';
+import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 
 const base = `${config.backendUrl}/api`;
 const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -52,6 +54,7 @@ const isInflow = (t) => (t.type === 'income') !== !!t.isCredit;
 
 export default function FinancesTab({ token, onBack }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const { bind: bindMenu, registerFallback } = useContextMenu();
   const [year, setYear]       = useState(new Date().getFullYear());
   const [summary, setSummary] = useState(null);
   const [orders, setOrders]   = useState([]);
@@ -123,6 +126,29 @@ export default function FinancesTab({ token, onBack }) {
     await axios.delete(`${base}/finances/transactions/${editTxn._id}`, authHdr);
     setEditTxn(null); await load();
   };
+
+  // Delete a SPECIFIC transaction (used by the right-click menu, which already
+  // confirms). Mirrors deleteTxn but targets the passed row instead of editTxn.
+  const deleteTxnById = async (t) => {
+    if (!t || !t._id) return;
+    try {
+      await axios.delete(`${base}/finances/transactions/${t._id}`, authHdr);
+      if (editTxn && editTxn._id === t._id) setEditTxn(null);
+      await load();
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  };
+
+  // ── Right-click menu wiring ───────────────────────────────────────────────
+  // bindTxn(transaction) → props a ledger row spreads onto its <tr>. Edit reuses
+  // the existing edit dialog; delete uses the row-targeted helper above.
+  const bindTxn = (t) => bindMenu(() => buildTransactionMenu(t, {
+    onEdit: (txn) => setEditTxn(txn),
+    onDelete: deleteTxnById,
+  }));
+
+  useEffect(() => registerFallback(() => buildFallbackMenu({
+    onBackToHub: onBack,
+  })), [registerFallback, onBack]);
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
   const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
@@ -359,7 +385,7 @@ export default function FinancesTab({ token, onBack }) {
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="tbody">
                     {txns.slice().reverse().map((t) => (
-                      <Box component="tr" key={t._id} onClick={() => setEditTxn(t)}
+                      <Box component="tr" key={t._id} onClick={() => setEditTxn(t)} {...bindTxn(t)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
                         <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{new Date(t.date).toISOString().slice(0, 10)}</Box>
                         <Box component="td" sx={{ py: 0.6, px: 0.5, whiteSpace: 'nowrap' }}>

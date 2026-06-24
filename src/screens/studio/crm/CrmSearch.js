@@ -27,7 +27,7 @@ import {
 
 // One result row. Shows the company, its stage, a compact context line, and any
 // matching contact people (so a person-search visibly resolves to the contact).
-function ResultRow({ c, active, onPick, onHover }) {
+function ResultRow({ c, active, onPick, onHover, bindCompany }) {
   const name = c.companyName || c.clientName || c.companyKey;
   const fu = followUpStatus(c.nextFollowUp);
   const phone = primaryPhone(c);
@@ -40,6 +40,7 @@ function ResultRow({ c, active, onPick, onHover }) {
     <Box
       onMouseEnter={onHover}
       onClick={onPick}
+      {...(bindCompany ? bindCompany(c) : {})}
       role="button" tabIndex={-1}
       sx={{
         position: 'relative', overflow: 'hidden', cursor: 'pointer',
@@ -82,7 +83,7 @@ function ResultRow({ c, active, onPick, onHover }) {
   );
 }
 
-export default function CrmSearch({ open, onClose, onSearch, onOpen }) {
+export default function CrmSearch({ open, onClose, onSearch, onOpen, bindCompany }) {
   const [q, setQ] = React.useState('');
   const [results, setResults] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
@@ -192,6 +193,7 @@ export default function CrmSearch({ open, onClose, onSearch, onOpen }) {
                   active={i === active}
                   onHover={() => setActive(i)}
                   onPick={() => pick(c)}
+                  bindCompany={bindCompany}
                 />
               ))}
             </Stack>

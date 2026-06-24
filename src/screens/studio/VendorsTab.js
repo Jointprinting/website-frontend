@@ -33,13 +33,15 @@ import config from '../../config.json';
 import {
   D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative,
 } from './_shared';
+import { useContextMenu } from './ContextMenu';
+import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
 
 const base = `${config.backendUrl}/api`;
 const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 const fieldSx = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13.5, py: 1 } };
 
 // ── Vendor row in the list ────────────────────────────────────────────────────
-function VendorRow({ v, onOpen }) {
+function VendorRow({ v, onOpen, bindVendor }) {
   const details = [
     v.contactName,
     v.address,
@@ -48,6 +50,7 @@ function VendorRow({ v, onOpen }) {
   return (
     <Box
       onClick={() => onOpen(v._id)}
+      {...(bindVendor ? bindVendor(v) : {})}
       role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(v._id); }}
       sx={{
@@ -88,7 +91,7 @@ function VendorRow({ v, onOpen }) {
 }
 
 // ── List view ─────────────────────────────────────────────────────────────────
-function VendorsList({ vendors, loading, query, onQuery, onOpen }) {
+function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor }) {
   const list = useMemo(() => {
     const t = query.trim().toLowerCase();
     if (!t) return vendors;
@@ -118,7 +121,7 @@ function VendorsList({ vendors, loading, query, onQuery, onOpen }) {
           </Typography>
         </Box>
       ) : (
-        <Stack spacing={1}>{list.map((v) => <VendorRow key={v._id} v={v} onOpen={onOpen} />)}</Stack>
+        <Stack spacing={1}>{list.map((v) => <VendorRow key={v._id} v={v} onOpen={onOpen} bindVendor={bindVendor} />)}</Stack>
       )}
     </Stack>
   );
@@ -412,6 +415,22 @@ export default function VendorsTab({ token, onBack }) {
     }
   }, [openId, authHdr]);
 
+  // ── Right-click menu wiring ───────────────────────────────────────────────
+  const { bind: bindMenu, registerFallback } = useContextMenu();
+
+  // bindVendor(vendor) → props a vendor row spreads onto its container. "Set next
+  // PO #" opens the vendor card, where that editable field lives.
+  const bindVendor = useCallback((v) => bindMenu(() => buildVendorMenu(v, {
+    onOpen: (id) => setOpenId(id),
+    onSetNextPo: (vend) => setOpenId(vend._id),
+  })), [bindMenu]);
+
+  // Right-click on empty Vendors chrome → back to the hub. (No global search on
+  // this surface, so we offer the always-useful "Back to hub".)
+  useEffect(() => registerFallback(() => buildFallbackMenu({
+    onBackToHub: onBack,
+  })), [registerFallback, onBack]);
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 5, bgcolor: D.panel, borderBottom: `1px solid ${D.line}`,
@@ -434,7 +453,7 @@ export default function VendorsTab({ token, onBack }) {
           <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
             onBack={() => setOpenId(null)} onPatch={patch} />
         ) : (
-          <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} />
+          <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} bindVendor={bindVendor} />
         )}
       </Box>
     </Box>

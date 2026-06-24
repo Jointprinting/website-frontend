@@ -65,7 +65,7 @@ function matchesTemp(card, temp) {
 
 // A draggable company card. Mirrors CalendarView's EventChip drag contract:
 // onDragStart/onDragEnd bubble to the board, which owns the in-flight ref.
-function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked }) {
+function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, bindCompany }) {
   const m = stageMeta(card.stage);
   const fu = followUpStatus(card.nextFollowUp);
   const won = isWonStage(card.stage);
@@ -78,6 +78,7 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked }
       onDragStart={(e) => onDragStart(e, card)}
       onDragEnd={onDragEnd}
       onClick={(e) => { e.stopPropagation(); onOpen(card.companyKey); }}
+      {...(bindCompany ? bindCompany(card) : {})}
       title={`${card.name}${card.address || card.area ? ` · ${card.address || card.area}` : ''} — drag to change stage`}
       sx={{
         position: 'relative', overflow: 'hidden', cursor: locked ? 'wait' : 'grab',
@@ -126,7 +127,7 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked }
 
 // A single stage column: header (stage chip + count + total $) and a droppable,
 // scrollable card list. Highlights when a card is dragged over it.
-function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, onDragOverCol, onDragLeaveCol, draggingKey, lockedKeys }) {
+function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, onDragOverCol, onDragLeaveCol, draggingKey, lockedKeys, bindCompany }) {
   const m = stageMeta(group.stage);
   const won = isWonStage(group.stage);
   const cards = group.clients || [];
@@ -183,6 +184,7 @@ function StageColumn({ group, isOver, onOpen, onDragStart, onDragEnd, onDrop, on
             onDragEnd={onDragEnd}
             dragging={draggingKey === card.companyKey}
             locked={lockedKeys ? lockedKeys.has(card.companyKey) : false}
+            bindCompany={bindCompany}
           />
         ))}
       </Box>
@@ -208,7 +210,7 @@ export default function PipelineView({
   groups, summary, probability, loading,
   query, onQueryChange, tag, onTagChange, tagOptions,
   area, onAreaChange, areaOptions,
-  onOpen, onMoveStage,
+  onOpen, onMoveStage, bindCompany,
 }) {
   // Within-board controls (client-side; the loaded set already has the fields):
   // temperature filter + within-column sort. Area + tag + search are wired up
@@ -303,6 +305,7 @@ export default function PipelineView({
       onDragLeaveCol={handleDragLeaveCol}
       draggingKey={dragState.activeKey}
       lockedKeys={lockedKeys}
+      bindCompany={bindCompany}
     />
   );
 
