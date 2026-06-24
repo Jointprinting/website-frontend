@@ -303,6 +303,35 @@ export default function CrmTab({ token, onBack }) {
     }
   }, [authHdr, flash, loadDuplicates, refreshAffected]);
 
+  // Delete ONE log entry from a company card (owner: "i cant delete notes"). The
+  // entry id is its _id (or a numeric index for legacy id-less entries). Refreshes
+  // the open detail so the timeline updates.
+  const deleteLogEntry = React.useCallback(async (key, entryId) => {
+    try {
+      await axios.delete(`${base}/${encodeURIComponent(key)}/log/${encodeURIComponent(entryId)}`, authHdr);
+      flash('Note deleted.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not delete that note.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  // Archive (soft-delete) THIS one card from its detail page (owner: "fine
+  // removing their card"). Soft / reversible; returns to the list after.
+  const archiveOne = React.useCallback(async (key) => {
+    try {
+      const res = await axios.post(`${base}/${encodeURIComponent(key)}/archive`, {}, authHdr);
+      flash('Card archived. Recover it from Companies → Archived.');
+      setOpenKey(null);
+      refreshAffected();
+      return res.data;
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not archive that card.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
   // Archive (soft-delete) a set of records.
   const archiveCompanies = React.useCallback(async (keys) => {
     try {
@@ -478,6 +507,8 @@ export default function CrmTab({ token, onBack }) {
           onBack={() => setOpenKey(null)}
           onPatch={patchDetailField}
           onLog={openLogForDetail}
+          onDeleteLog={(entryId) => detail?.client && deleteLogEntry(detail.client.companyKey, entryId)}
+          onArchive={() => detail?.client && archiveOne(detail.client.companyKey)}
         />
       );
     }
