@@ -1651,6 +1651,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         <InlineField label="Supplier" value={local.supplier || ''} savingHint={savingField === 'supplier'}
           onChange={v => { updateLocal({ supplier: v }); queueField('supplier', v); }} onBlur={v => saveField('supplier', v)} />
 
+        {/* Multi-vendor: a mixed promos + apparel job runs across several
+            printers/suppliers, not the one project-level field above. Surface
+            every distinct supplier on this project — derived from the
+            confirmation items' printerName and the generated POs' vendors — so
+            the owner sees the full set at a glance. A single-supplier job just
+            shows one chip (or nothing if none is set yet). */}
+        <Box sx={{ gridColumn: '1 / -1' }}>
+          <SuppliersStrip project={local} authHdr={authHdr} />
+        </Box>
+
         {/* Sale + delivery dates aren't hand-entered here anymore — date of sale
             comes from the confirmation, and delivery progress lives in the
             tracker timeline below. */}
@@ -1668,64 +1678,37 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             }}
           />
         </Box>
+        {/* Documents — open the Quote / Confirmation / POs directly. The inline
+            quote preview that used to live here was removed: the owner just wants
+            to OPEN the doc, not skim a mini-table. Each action shows a tiny
+            "built / not yet" hint so the state is still legible at a glance. */}
         <Box sx={{ gridColumn: '1 / -1' }}>
-          {(() => {
-            const qLines = local.quoteLines || [];
-            const lineUnit = (l) => {
-              const q = Number(l.qty) || 0;
-              const setupShip = (Number(l.setupCost) || 0) + (Number(l.shippingCost) || 0);
-              const unitCogs = (Number(l.blankCost) || 0) + (Number(l.printCost) || 0) + (q > 0 ? setupShip / q : 0);
-              return Number(l.unitPrice) || unitCogs * (Number(l.markup) || 1);
-            };
-            const qTotal = qLines.reduce((s, l) => s + (Number(l.qty) || 0) * lineUnit(l), 0);
-            return (
-              <>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-                  <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                    Quote
-                    {qLines.length > 0 && (
-                      <Typography component="span" sx={{ color: B.muted, fontSize: 10, ml: 0.6, textTransform: 'none', letterSpacing: 0 }}>
-                        · {qLines.length} line{qLines.length === 1 ? '' : 's'} · {fmt(qTotal)}
-                      </Typography>
-                    )}
-                  </Typography>
-                  <Button size="small" startIcon={<RequestQuoteOutlinedIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => onOpenQuote()}
-                    sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-                    {qLines.length === 0 ? 'Build quote' : 'Open quoter'}
-                  </Button>
-                </Stack>
-                {qLines.length === 0 ? (
-                  <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5,
-                    textAlign: 'center', color: B.muted, fontSize: 11 }}>
-                    No quote yet. Open the quoter to price this project.
-                  </Box>
-                ) : (
-                  <Stack gap={0.2}>
-                    {qLines.map((l, i) => (
-                      <Box key={i} sx={{ display: 'flex', gap: 1, fontSize: 11, py: 0.5,
-                        borderBottom: `1px solid ${B.faint}` }}>
-                        <Typography sx={{ color: B.muted, fontFamily: 'monospace', minWidth: 38 }}>
-                          {Number(l.qty) || 0}×
-                        </Typography>
-                        <Typography sx={{ color: B.white, flex: 1, overflow: 'hidden',
-                          textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {l.description || l.styleCode || 'Item'}{l.color ? ` · ${l.color}` : ''}
-                        </Typography>
-                        <Typography sx={{ color: B.muted, fontFamily: 'monospace' }}>
-                          {fmt(lineUnit(l))}
-                        </Typography>
-                        <Typography sx={{ color: B.green, fontFamily: 'monospace', fontWeight: 700,
-                          minWidth: 64, textAlign: 'right' }}>
-                          {fmt((Number(l.qty) || 0) * lineUnit(l))}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                )}
-              </>
-            );
-          })()}
+          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.75 }}>
+            Documents
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
+            <DocAction
+              icon={<RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />}
+              label="Open Quote"
+              hint={(local.quoteLines || []).length > 0 ? `${(local.quoteLines || []).length} line${(local.quoteLines || []).length === 1 ? '' : 's'}` : 'Not started'}
+              ready={(local.quoteLines || []).length > 0}
+              onClick={() => onOpenQuote()}
+            />
+            <DocAction
+              icon={<DescriptionOutlinedIcon sx={{ fontSize: 16 }} />}
+              label="Open Confirmation"
+              hint={hasConfirmation(local.confirmation) ? 'Built' : 'Not built'}
+              ready={hasConfirmation(local.confirmation)}
+              onClick={() => onOpenConfirmation()}
+            />
+            <DocAction
+              icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
+              label="Open POs"
+              hint="Purchase orders"
+              ready={false}
+              onClick={() => setPoOpen(true)}
+            />
+          </Stack>
         </Box>
         <Box sx={{ gridColumn: '1 / -1' }}>
           <InlineField label="Notes (internal)" multiline value={local.notes || ''} savingHint={savingField === 'notes'}
@@ -1950,10 +1933,17 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
           Updated {fmtRelative(local.updatedAt)}
         </Typography>
+        {/* Open Quote · Confirmation · POs — the three docs, reachable from every
+            tab (the Overview tab also lists them inline under "Documents"). */}
+        <Button startIcon={<RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />}
+          onClick={() => onOpenQuote()}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Quote
+        </Button>
         <Button startIcon={<DescriptionOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={() => onOpenConfirmation()}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-          Build confirmation
+          Confirmation
         </Button>
         <Button startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={() => setPoOpen(true)}
@@ -1961,8 +1951,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           POs
         </Button>
         {/* "Share for approval" lives on the Approval tab (and in the
-            confirmation builder's header) — not in this footer, which stays
-            reserved for the three always-relevant actions. */}
+            confirmation builder's header) — not in this footer. */}
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
           onClick={() => onDelete(project._id)}
           sx={{ color: '#f87171', fontSize: 11, textTransform: 'none' }}>
@@ -1970,6 +1959,84 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         </Button>
       </Box>
     </Drawer>
+  );
+}
+
+// One "Documents" action: a labeled button with a tiny state hint and a
+// ready/not-ready dot. Replaces the old inline quote preview — the owner opens
+// the doc instead of skimming a mini-table.
+function DocAction({ icon, label, hint, ready, onClick }) {
+  return (
+    <Button onClick={onClick} startIcon={icon}
+      sx={{ flex: 1, justifyContent: 'flex-start', textTransform: 'none', color: B.white,
+        border: `1px solid ${B.border}`, borderRadius: 1.5, px: 1.5, py: 1, gap: 0.5,
+        '&:hover': { borderColor: B.green, bgcolor: B.panelHi } }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{label}</Typography>
+        <Stack direction="row" alignItems="center" gap={0.5}>
+          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ready ? B.green : B.muted, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: 10, color: B.muted, lineHeight: 1.2 }}>{hint}</Typography>
+        </Stack>
+      </Box>
+    </Button>
+  );
+}
+
+// Multi-vendor strip: every DISTINCT supplier on a project, since a mixed
+// promos + apparel job runs across several. Sources, merged + de-duped
+// case-insensitively (first-seen casing wins):
+//   • each confirmation item's printerName (the per-item supplier)
+//   • the project-level printerName / supplier fields (the legacy single case)
+//   • the generated POs' vendorName (fetched like FlowPipeline does)
+// A single-supplier job renders one chip; none yet → a quiet hint. The PO fetch
+// is best-effort and never blocks the render.
+function SuppliersStrip({ project, authHdr }) {
+  const [poVendors, setPoVendors] = useState([]);
+  useEffect(() => {
+    if (!project || !project._id) { setPoVendors([]); return undefined; }
+    let cancelled = false;
+    setPoVendors([]);
+    axios.get(`${config.backendUrl}/api/orders/${project._id}/pos`, authHdr)
+      .then(r => { if (!cancelled) setPoVendors((r.data.pos || []).map(p => p && p.vendorName).filter(Boolean)); })
+      .catch(() => { if (!cancelled) setPoVendors([]); });
+    return () => { cancelled = true; };
+  }, [project?._id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const confItems = (project.confirmation && Array.isArray(project.confirmation.items)) ? project.confirmation.items : [];
+  const raw = [
+    ...confItems.map(it => it && it.printerName),
+    project.printerName,
+    project.supplier,
+    ...poVendors,
+  ];
+  const seen = new Map();   // lowercased -> display
+  raw.forEach(name => {
+    const s = String(name || '').trim();
+    if (!s) return;
+    const k = s.toLowerCase();
+    if (!seen.has(k)) seen.set(k, s);
+  });
+  const suppliers = Array.from(seen.values());
+
+  return (
+    <Box>
+      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+        {suppliers.length > 1 ? `Suppliers · ${suppliers.length}` : 'Supplier'}
+      </Typography>
+      {suppliers.length === 0 ? (
+        <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic' }}>
+          None set yet — add a printer above, or build the confirmation / POs.
+        </Typography>
+      ) : (
+        <Stack direction="row" gap={0.75} flexWrap="wrap" useFlexGap>
+          {suppliers.map((s, i) => (
+            <Chip key={i} size="small" label={s}
+              sx={{ bgcolor: B.panelHi, color: B.white, border: `1px solid ${B.border}`,
+                fontSize: 11, maxWidth: 220, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+          ))}
+        </Stack>
+      )}
+    </Box>
   );
 }
 

@@ -17,19 +17,14 @@ import PictureAsPdfIcon       from '@mui/icons-material/PictureAsPdf';
 import ShareIcon              from '@mui/icons-material/Share';
 import AddCircleOutlineIcon   from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
-import DesignServicesIcon     from '@mui/icons-material/DesignServices';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
-import VisibilityOutlinedIcon  from '@mui/icons-material/VisibilityOutlined';
 import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
 import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, fmt, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents } from './_shared';
-import jpLogoColored from '../../modules/images/logo_colored.webp';
+import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
-
-// Absolute URL so the logo also resolves inside the about:blank print popup.
-const BRAND_LOGO = `${window.location.origin}${jpLogoColored}`;
+import ConfirmationDocument, { DOC } from '../ConfirmationDocument';
 
 // Resize + JPEG-recompress uploaded mockup images before stuffing them into
 // the confirmation document. Without this the doc inflates with multi-MB
@@ -139,18 +134,12 @@ function todayCalendarISO() {
   const d = new Date();
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
 }
-function fmtCalendarDate(d, opts) {
-  if (!d) return '';
-  return new Date(d).toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
-}
-
 export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval }) {
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
-  const [previewBusy, setPreviewBusy] = useState(false);
 
   // Load the draft on open. Order of precedence:
   //   1. A localStorage draft for this project (always wins — if you typed
@@ -317,28 +306,22 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
 
   // Share-for-approval button in the header — saves first (so the link points
   // at the latest state) and delegates to the parent for the actual token mint.
+  // Guarded client-side so the owner gets an immediate, specific reason instead
+  // of a broken confirmation reaching the client; the server enforces the same
+  // checks on /approval-link/send as a backstop (stale tab / direct call).
   const shareApproval = async () => {
     if (!onShareApproval) return;
+    const issues = shareIssuesFor(local);
+    if (issues.length > 0) {
+      alert(issues.length === 1 ? issues[0]
+        : `This confirmation isn't ready to share:\n\n• ${issues.join('\n• ')}`);
+      return;
+    }
     setShareBusy(true);
     try {
       if (dirty) await persist();
       await onShareApproval();
     } finally { setShareBusy(false); }
-  };
-
-  // Open the live client view (read-only) in a new tab so you can see exactly
-  // what they'll see before sending. Saves first so the preview is current.
-  const previewAsClient = async () => {
-    setPreviewBusy(true);
-    try {
-      if (dirty) await persist();
-      const r = await axios.post(`${config.backendUrl}/api/orders/${project._id}/approval-link`,
-        { rotate: false }, { headers: { Authorization: `Bearer ${token}` } });
-      const url = `${window.location.origin}/approve/${project._id}?token=${r.data.token}&preview=1`;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-      alert(e.response?.data?.message || 'Could not open the preview.');
-    } finally { setPreviewBusy(false); }
   };
 
   // Closing the dialog now auto-saves dirty changes instead of asking. The
@@ -348,7 +331,19 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     onClose();
   };
 
-  const totals = computeTotals(local);
+  // Resolve an item's images EXACTLY as the public ApprovalView does, so the
+  // preview pane and the live client page show the identical sources (H1):
+  // explicit variant snapshots → legacy single upload → the referenced mockup's
+  // thumbnail (+ back only when showBack). mockupMap is keyed by mockupNum and
+  // by name (raw + normalized), same as the client payload's resolver.
+  const resolveItemImagesForBuilder = (it) => {
+    const snaps = (it.mockupSnapshots || []).map(s => s && s.dataUrl).filter(Boolean);
+    if (snaps.length) return snaps;
+    if (it.customMockupDataUrl) return [it.customMockupDataUrl];
+    const m = it.mockupNum ? (mockupMap[it.mockupNum] || mockupMap[normMockupKey(it.mockupNum)]) : null;
+    if (!m) return [];
+    return [m.thumbnail, it.showBack ? m.data : null].filter(Boolean);
+  };
 
   return (
     <Dialog open={open}
@@ -379,15 +374,10 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
             </Typography>
           </Box>
         </Typography>
-        <Button size="small" disabled={previewBusy}
-          startIcon={previewBusy
-            ? <CircularProgress size={12} sx={{ color: D.muted }} />
-            : <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
-          onClick={previewAsClient}
-          sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.muted, borderRadius: 999,
-            transition: 'color 0.18s ease', '&:hover': { color: D.text } }}>
-          Preview
-        </Button>
+        {/* The separate "Preview" button is gone: the live pane on the right IS
+            the client view now (the shared ConfirmationDocument), so there's
+            nothing extra to preview. "Share for approval" and "Download PDF"
+            remain. */}
         {onShareApproval && (
           <Button size="small" disabled={shareBusy}
             startIcon={shareBusy
@@ -432,11 +422,26 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
             maxHeight: { md: '85vh' } }}>
             <Editor local={local} update={update} project={project} mockups={mockups} mockupMap={mockupMap} />
           </Box>
-          {/* Preview */}
-          <Box sx={{ p: { xs: 1.5, md: 3 }, bgcolor: '#e6e6df', overflow: 'auto', ...scrollbar,
-            maxHeight: { md: '85vh' } }}>
-            <Preview conf={local} project={project} mockupMap={mockupMap}
-              clientLogo={logo} totals={totals} />
+          {/* Live preview === the client's approval page. This pane renders the
+              SAME ConfirmationDocument the public ApprovalView renders, on the
+              same dark canvas — so what the owner sees here is exactly what the
+              client gets. It updates live as `local` changes. */}
+          <Box sx={{ p: { xs: 1.5, md: 3 }, bgcolor: DOC.bg, overflow: 'auto', ...scrollbar,
+            maxHeight: { md: '85vh' },
+            backgroundImage: `radial-gradient(120% 60% at 50% -10%, rgba(74,222,128,0.10), rgba(7,11,9,0) 60%)` }}>
+            <Box sx={{ maxWidth: 780, mx: 'auto' }}>
+              <ConfirmationDocument
+                conf={local}
+                project={{
+                  companyName: project.companyName, clientName: project.clientName,
+                  orderNumber: project.orderNumber, orderDate: local.orderDate,
+                  confirmationMessage: project.confirmationMessage,
+                  confirmationTerms: project.confirmationTerms,
+                }}
+                logo={logo}
+                resolveItemImages={resolveItemImagesForBuilder}
+              />
+            </Box>
           </Box>
         </Box>
       </DialogContent>
@@ -1084,243 +1089,14 @@ function SmallField({ label, value, onChange, type = 'text' }) {
   );
 }
 
-// ── Preview (printable) ──────────────────────────────────────────────────────
-// Layout matches the user's Excel template: small brand mark + title at top,
-// Basic Info / Shipping Info two-col band, per-item row with mockup(s) on the
-// left and a Size/Qty/Unit/Total table on the right with Brand / Style /
-// Garment Color / Printer / Print Type labeled below the totals.
+// ── (removed) Preview / ItemPreview / InfoRow / SpecRow ──────────────────────
+// The builder's printable white "Excel-style" preview was replaced by the
+// shared ConfirmationDocument (src/screens/ConfirmationDocument.js), which the
+// live preview pane above and the public ApprovalView client page both render —
+// so the preview is now byte-identical to what the client sees (Nate's WYSIWYG
+// ask). The PDF (controllers/confirmationPdf.js) stays visually reconciled with
+// it (same lines, Subtotal row, totals order).
 
-function Preview({ conf, project, mockupMap, clientLogo, totals }) {
-  return (
-    <Box id="confirmation-preview" sx={{
-      bgcolor: '#fff', color: '#111', borderRadius: 1, p: { xs: 2, md: 4 },
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      boxShadow: '0 2px 14px rgba(0,0,0,0.08)', maxWidth: 880, mx: 'auto',
-    }}>
-      {/* Header band — brand logo + title together (Excel style) */}
-      <Stack direction="row" alignItems="center" gap={2} mb={2}>
-        <Box component="img" src={BRAND_LOGO} alt="Joint Printing"
-          sx={{ height: 56, width: 'auto', objectFit: 'contain' }} />
-        <Typography sx={{ fontWeight: 900, fontSize: 26, lineHeight: 1.1, color: '#111', flex: 1 }}>
-          {conf.orderTitle || `${project.companyName || 'Untitled'} Merch`}
-        </Typography>
-        {clientLogo && (
-          <Box sx={{ width: 56, height: 56, p: 0.4, border: '1px solid #e6e6e0',
-            borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            bgcolor: '#fff', overflow: 'hidden' }}>
-            <Box component="img" src={clientLogo} alt=""
-              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          </Box>
-        )}
-      </Stack>
-
-      {/* Basic Info / Shipping Info */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 3 }}>
-        <Box>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>
-            Basic Info
-          </Typography>
-          <InfoRow label="Order Title"  value={conf.orderTitle} />
-          <InfoRow label="Client Name"  value={project.clientName || project.companyName} />
-          <InfoRow label="Date"         value={fmtCalendarDate(conf.orderDate, { month: 'long', day: 'numeric', year: 'numeric' })} />
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.6 }}>
-            Shipping Info
-          </Typography>
-          <InfoRow label="Shipping Name"   value={conf.shipping.name} />
-          <InfoRow label="Attention Name"  value={conf.shipping.attention} />
-          <InfoRow label="Street Address"  value={conf.shipping.streetAddress} />
-          <InfoRow label="City, State, Zip" value={conf.shipping.cityStateZip} />
-        </Box>
-      </Box>
-
-      {/* Multi-location ship-to summary — only when destinations are set */}
-      {Array.isArray(conf.shipTos) && conf.shipTos.length > 0 && (
-        <Box sx={{ mb: 3, border: '1px solid #e6e6e0', borderRadius: 1, p: 1.5, bgcolor: '#fafaf7' }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.75 }}>
-            Shipping to {conf.shipTos.length} locations
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
-            {conf.shipTos.map((st, i) => (
-              <Box key={st.key || i} sx={{ fontSize: 12 }}>
-                <Box sx={{ fontWeight: 700, color: '#111' }}>{st.label || st.name || `Location ${i + 1}`}</Box>
-                {st.name && st.label && <Box sx={{ color: '#444' }}>{st.name}</Box>}
-                {st.street && <Box sx={{ color: '#444' }}>{st.street}</Box>}
-                {st.cityStateZip && <Box sx={{ color: '#444' }}>{st.cityStateZip}</Box>}
-                {(() => {
-                  const rows = (conf.items || [])
-                    .map(it => ({ name: (it.productName || it.brandName || it.styleCode || 'Item'), qty: allocFor(it, st.key) }))
-                    .filter(r => r.qty > 0);
-                  return rows.length > 0 ? (
-                    <Box sx={{ mt: 0.4, color: '#666', fontSize: 11.5 }}>
-                      {rows.map((r, ri) => <Box key={ri}>{r.name}: {r.qty}</Box>)}
-                    </Box>
-                  ) : null;
-                })()}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', mb: 0.5 }}>
-        Order Info
-      </Typography>
-      {conf.items.length === 0 ? (
-        <Typography sx={{ color: '#999', fontSize: 13, fontStyle: 'italic', mb: 3 }}>
-          No items added yet.
-        </Typography>
-      ) : conf.items.map((it, i) => (
-        <ItemPreview key={i} idx={i} item={it} mockupMap={mockupMap} />
-      ))}
-
-      {/* Totals + add-ons */}
-      <Box sx={{ mt: 3, borderTop: '2px solid #111', pt: 1.5 }}>
-        {totals.lines.map((l, i) => (
-          <Stack key={i} direction="row" justifyContent="space-between" sx={{ fontSize: 13, py: 0.5, color: '#444' }}>
-            <Box>{l.label || (l.isPercent ? 'Adjustment' : 'Add-on')}{l.isPercent ? ` - ${l.amount}%` : ''}</Box>
-            <Box sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(l.value)}</Box>
-          </Stack>
-        ))}
-        <Stack direction="row" justifyContent="space-between" sx={{ fontSize: 18, fontWeight: 900, mt: 1, pt: 1, borderTop: '1px solid #111' }}>
-          <Box>Grand Total</Box>
-          <Box sx={{ fontFamily: 'monospace' }}>{fmt(totals.grandTotal)}</Box>
-        </Stack>
-      </Box>
-
-      {/* Payment footer */}
-      <Box sx={{ mt: 4, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
-        <Box>Credit Card Payments: 2.99% charge added to total</Box>
-        <Box>ACH Bank Transfers: 1% charge added to total</Box>
-        <Box>Venmo: 1.9% + $0.10   @jointprinting</Box>
-      </Box>
-    </Box>
-  );
-}
-
-function InfoRow({ label, value }) {
-  return (
-    <Stack direction="row" sx={{ fontSize: 12.5, py: 0.3, gap: 1 }}>
-      <Box sx={{ color: '#111', fontWeight: 700, minWidth: 130 }}>{label}:</Box>
-      <Box sx={{ color: '#111' }}>{value || <span style={{ color: '#bbb' }}>—</span>}</Box>
-    </Stack>
-  );
-}
-
-function ItemPreview({ idx, item, mockupMap }) {
-  const m = item.mockupNum ? (mockupMap[item.mockupNum] || mockupMap[normMockupKey(item.mockupNum)]) : null;
-  const frontImg = item.customMockupDataUrl || (m && m.thumbnail);
-  // Back composite comes from the library item's `data` slot (see hasBack
-  // above) — pageState composites never survive sync.
-  const backImg  = item.showBack && m && m.data;
-  const snapshots = item.mockupSnapshots || [];
-  const hasVariants = snapshots.length > 0;
-
-  const subtotal = item.sizes.reduce((s, x) => s + (Number(x.qty) || 0) * (Number(x.unitPrice) || 0), 0);
-  const totalQty = item.sizes.reduce((s, x) => s + (Number(x.qty) || 0), 0);
-  const nonZeroSizes = item.sizes.filter(s => Number(s.qty) > 0);
-  return (
-    <Box className="item-row" sx={{ mt: 2, mb: 2, pb: 2, borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
-      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#111', mb: 1 }}>
-        Order Item {idx + 1})
-      </Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '300px 1fr' }, gap: 2.5 }}>
-        {/* Left: mockup(s) */}
-        <Box>
-          {hasVariants ? (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center' }}>
-              {snapshots.map((s, i) => (
-                <Box key={i} sx={{ textAlign: 'center', width: snapshots.length > 3 ? 70 : 92 }}>
-                  <Box sx={{ aspectRatio: '1', bgcolor: '#fff', overflow: 'hidden',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Box component="img" src={s.dataUrl} alt=""
-                      sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                  </Box>
-                  {s.label && (
-                    <Typography sx={{ fontSize: 11, color: '#444', mt: 0.3 }}>{s.label}</Typography>
-                  )}
-                </Box>
-              ))}
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-              <Box sx={{ width: backImg ? 140 : 280, aspectRatio: '1', bgcolor: '#fff',
-                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {frontImg
-                  ? <Box component="img" src={frontImg} alt=""
-                      sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                  : <DesignServicesIcon sx={{ color: '#bbb', fontSize: 36 }} />}
-              </Box>
-              {backImg && (
-                <Box sx={{ width: 140, aspectRatio: '1', bgcolor: '#fff',
-                  overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Box component="img" src={backImg} alt=""
-                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                </Box>
-              )}
-            </Box>
-          )}
-        </Box>
-
-        {/* Right: size table + meta */}
-        <Box>
-          {nonZeroSizes.length === 0 ? (
-            <Box sx={{ color: '#bbb', fontSize: 12, fontStyle: 'italic', mb: 1 }}>No quantities set.</Box>
-          ) : (
-            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13,
-              border: '1px solid #111' }}>
-              <thead>
-                <tr style={{ background: '#f6f6f4' }}>
-                  <th style={{ textAlign: 'left',  fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Size</th>
-                  <th style={{ textAlign: 'left',  fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Quantity</th>
-                  <th style={{ textAlign: 'right', fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Unit Price</th>
-                  <th style={{ textAlign: 'right', fontSize: 11, color: '#111', padding: '4px 8px', border: '1px solid #ddd', fontWeight: 700 }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {nonZeroSizes.map((s, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{s.label}</td>
-                    <td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{s.qty}</td>
-                    <td style={{ padding: '4px 8px', border: '1px solid #ddd', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.unitPrice)}</td>
-                    <td style={{ padding: '4px 8px', border: '1px solid #ddd', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(s.qty * s.unitPrice)}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td style={{ padding: '4px 8px', border: '1px solid #111', fontWeight: 700 }}>Total</td>
-                  <td style={{ padding: '4px 8px', border: '1px solid #111', fontWeight: 700 }}>{totalQty}</td>
-                  <td style={{ padding: '4px 8px', border: '1px solid #111' }}></td>
-                  <td style={{ padding: '4px 8px', border: '1px solid #111', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(subtotal)}</td>
-                </tr>
-              </tbody>
-            </Box>
-          )}
-
-          {/* Labeled spec rows underneath the table — match the Excel layout */}
-          <Box sx={{ mt: 1, fontSize: 12.5 }}>
-            {item.productName && <SpecRow label="Product Name" value={item.productName} />}
-            {!item.productName && item.brandName && <SpecRow label="Brand Name" value={item.brandName} />}
-            {item.styleCode && <SpecRow label="Style Code" value={item.styleCode} />}
-            {item.printType && <SpecRow label="Print Type" value={item.printType} />}
-            <SpecRow label="Garment Color"  value={item.color} />
-            {/* Printer is internal info — kept off the client-facing confirmation. */}
-          </Box>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-function SpecRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <Stack direction="row" sx={{ py: 0.15 }}>
-      <Box sx={{ minWidth: 130, color: '#111', fontWeight: 700 }}>{label}</Box>
-      <Box sx={{ color: '#111' }}>{value}</Box>
-    </Stack>
-  );
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1443,6 +1219,41 @@ function computeTotals(conf) {
   });
   // Snap the grand total to cents (H4) — matches the backend totalValue.
   return { itemsSubtotal, lines, grandTotal: roundCents(running) };
+}
+
+// Pre-share gate (mirrors backend models/Order.js confirmationShareIssues):
+// reasons this confirmation must NOT be sent to a client. Returns human-readable
+// strings (empty = OK).
+//   • H3: no priced line items / $0 grand total — not a real order. Guarded on
+//     "no priced items / empty", never "merely small", so a deep discount with
+//     real priced items still passes.
+//   • C2: an item whose per-location allocations EXCEED its quantity — a broken
+//     split must never reach the client (under-allocation is fine; the unsent
+//     remainder shows as an "Unassigned" row on the client page).
+// Only enforced once the confirmation has content.
+function shareIssuesFor(conf) {
+  const issues = [];
+  const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
+  const customLines = (conf && Array.isArray(conf.customLines)) ? conf.customLines : [];
+  if (items.length === 0 && customLines.length === 0) return issues;   // empty: handled elsewhere
+  const pricedItems = items.filter(it =>
+    (it.sizes || []).some(sz => (Number(sz.qty) || 0) > 0 && (Number(sz.unitPrice) || 0) > 0));
+  const grandTotal = computeTotals(conf).grandTotal;
+  if (pricedItems.length === 0 || grandTotal <= 0) {
+    issues.push('This confirmation has no priced line items (the total is $0). Add quantities and unit prices before sharing.');
+  }
+  const shipTos = (conf && Array.isArray(conf.shipTos)) ? conf.shipTos : [];
+  if (shipTos.length > 0) {
+    items.forEach((it, i) => {
+      const total = itemTotalQty(it);
+      const allocated = allocatedQty(it, shipTos);
+      if (total > 0 && allocated > total) {
+        const name = it.productName || it.brandName || it.styleCode || `Item ${i + 1}`;
+        issues.push(`"${name}" is over-allocated across locations (${allocated} of ${total} units assigned). Fix the per-location split before sharing.`);
+      }
+    });
+  }
+  return issues;
 }
 
 // Whether per-location tax is in play — used to suppress the single "NJ tax"

@@ -24,6 +24,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
+import ConfirmationDocument from './ConfirmationDocument';
 
 // ── Brand tokens (dark) ──────────────────────────────────────────────────────
 const T = {
@@ -59,85 +60,12 @@ function money(n) {
 
 const _norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
-// Round-half-up to cents — mirrors backend models/Order.js roundCents.
-const roundCents = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
-// Is this add-on customLine a sales-tax line? Mirrors backend isTaxCustomLine:
-// explicit `isTax` flag wins, else a label mentioning "tax".
-const isTaxCustomLine = (line) =>
-  !!line && (line.isTax === true || /tax/i.test(String(line.label || '')));
-
-// Per-location sales tax for a multi-ship-to confirmation. Mirrors the backend
-// models/Order.js computeLocationTax and studio/_shared.js confLocationTax:
-// active only when a shipTo carries taxRate > 0; each item's merchandise
-// revenue is allocated to a location proportionally by its unit share (clamped
-// to [0,1] of the item — H5), summed, then × taxRate%, rounded to cents (H4).
-// Tax is on merchandise only (not the add-on lines).
-function confLocationTax(conf) {
-  const n = (v) => Number(v) || 0;
-  const shipTos = Array.isArray(conf?.shipTos) ? conf.shipTos : [];
-  const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
-  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
-  const items = Array.isArray(conf?.items) ? conf.items : [];
-  const lines = taxed.map((st) => {
-    const subtotal = items.reduce((sum, it) => {
-      const itemRevenue = (it.sizes || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
-      const itemQty = (it.sizes || []).reduce((q, sz) => q + n(sz.qty), 0);
-      if (itemQty <= 0) return sum;
-      const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
-      const share = allocQty <= 0 ? 0 : (allocQty >= itemQty ? 1 : allocQty / itemQty);
-      return sum + itemRevenue * share;
-    }, 0);
-    const rate = n(st.taxRate);
-    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, value: roundCents(subtotal * rate / 100) };
-  });
-  return { active: true, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
-}
-
-// Mirror the server PDF's confirmation totals: percent custom-lines apply to
-// the running subtotal, in order; then per-location sales tax (multi-ship-to)
-// is added last. With no taxed shipTos this is byte-identical to before. When
-// per-location tax is active, a legacy tax customLine is dropped (C3) so a job
-// is taxed exactly once; the grand total snaps to cents (H4).
-function computeConfTotals(conf) {
-  const items = Array.isArray(conf?.items) ? conf.items : [];
-  const itemsSubtotal = items.reduce((s, it) =>
-    s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
-  const locationTax = confLocationTax(conf);
-  let running = itemsSubtotal;
-  const lines = [];
-  (conf?.customLines || []).forEach(l => {
-    if (locationTax.active && isTaxCustomLine(l)) return;   // double-tax guard
-    const isPct = !!l.isPercent;
-    const amt = Number(l.amount) || 0;
-    const value = isPct ? running * amt / 100 : amt;
-    running += value;
-    const base = l.label || (isPct ? 'Adjustment' : 'Add-on');
-    lines.push({ label: isPct ? `${base} - ${amt}%` : base, value });
-  });
-  locationTax.lines.forEach(t => {
-    running += t.value;
-    lines.push({ label: t.label, value: t.value });
-  });
-  return { itemsSubtotal, lines, grandTotal: roundCents(running) };
-}
-
-function confItemTitle(it, idx) {
-  const productLabel = it.productName || it.brandName || '';
-  const head = productLabel && it.styleCode ? `${productLabel} (${it.styleCode})` : (productLabel || it.styleCode);
-  return [head, it.color, it.printType].filter(Boolean).join(' · ') || `Item ${idx + 1}`;
-}
-
-// Short display name for a confirmation item, used in the per-location list.
-function confItemShortName(it, idx) {
-  return it.productName || it.brandName || it.styleCode || `Item ${idx + 1}`;
-}
-
-// Units of an item allocated to a given ship-to key (0 when unset). Additive
-// overlay — present only when the owner split the order across locations.
-function allocQtyFor(it, key) {
-  const a = (it.allocations || []).find(x => x && x.key === key);
-  return a ? (Number(a.qty) || 0) : 0;
-}
+// NOTE: the confirmation document (header, items, sizes, per-location tax,
+// totals) and ALL of its money math now live in the shared ConfirmationDocument
+// component (./ConfirmationDocument), which this page and the owner's builder
+// preview both render — so the two are byte-identical (Nate's WYSIWYG ask) and
+// the per-location-tax / double-tax-guard / roundCents logic exists in exactly
+// one place. The helpers that used to live here moved there.
 
 // Clickable image that opens the lightbox. Adds a zoom cursor + a soft hover
 // lift and a small magnifier badge so it reads as "tap to enlarge".
@@ -403,7 +331,14 @@ export default function ApprovalView() {
   const groupNames = [...new Set(quoteLines.map(l => l.group).filter(Boolean))];
   const hasGroups = groupNames.length > 0;
   const standaloneLines = quoteLines.map((l, i) => ({ ...l, idx: i })).filter(l => !l.group);
-  const alreadyPicked = quoteLines.some(l => l.accepted) || !!p.optionsPickedAt;
+  // C1: gate the "building" interstitial on the CURRENT cycle's pick only.
+  // optionsPickedAt arrives already filtered by approvalSupersededAt server-side,
+  // so a re-share/supersede clears it and a returning client is never stranded on
+  // "building your confirmation". We deliberately do NOT also key off
+  // quoteLines[].accepted here — those flags survive a re-share of the same quote
+  // and would otherwise re-strand the client; the accepted lines still drive the
+  // "what you chose" recap below, just not this gate.
+  const alreadyPicked = !!p.optionsPickedAt;
   const stage = (p.hasConfirmation || (Array.isArray(p.confirmation?.items) && p.confirmation.items.length > 0))
     ? 'confirmation'
     : !hasGroups
@@ -441,16 +376,29 @@ export default function ApprovalView() {
     }
   };
 
-  // Full confirmation (matches the downloadable PDF) when one's been built.
+  // Full confirmation (rendered by the shared ConfirmationDocument, which also
+  // computes its own totals) when one's been built.
   const conf = p.confirmation || {};
   const confItems = Array.isArray(conf.items) ? conf.items : [];
   const hasConf = confItems.length > 0;
-  const confTotals = computeConfTotals(conf);
+  // Index the confirmation's mockups by BOTH the normalized number AND the
+  // normalized name. An item that references a mockup with no number stores the
+  // mockup's NAME in mockupNum (the picker normalizes name → mockupNum), so
+  // without the name key the client page would miss it and fall to a placeholder
+  // while the builder preview + PDF resolve it fine (the old H1 divergence). This
+  // mirrors the builder's mockupMap, the PDF's thumbByNorm, and the backend's
+  // byNorm — every renderer now resolves the exact same source.
   const mockupByNum = {};
-  mockups.forEach(m => { const k = _norm(m.mockupNum); if (k) mockupByNum[k] = { front: m.thumbnail, back: m.back }; });
+  mockups.forEach(m => {
+    const entry = { front: m.thumbnail, back: m.back };
+    const kn = _norm(m.mockupNum);
+    if (kn) mockupByNum[kn] = entry;
+    const knm = _norm(m.name);
+    if (knm && !mockupByNum[knm]) mockupByNum[knm] = entry;
+  });
   // Per-item image: explicit snapshot → legacy single → the referenced mockup's
-  // thumbnail (matched by #). Same resolution order the PDF uses, so every
-  // colorway shows its own photo.
+  // thumbnail (matched by # or name). Same resolution order the builder preview
+  // and the PDF use, so every colorway shows its own photo identically.
   const confItemImages = (it) => {
     const snaps = (it.mockupSnapshots || []).map(s => s && s.dataUrl).filter(Boolean);
     if (snaps.length) return snaps;
@@ -496,7 +444,12 @@ export default function ApprovalView() {
       )}
 
       <Box sx={{ maxWidth: 780, mx: 'auto', p: { xs: 2, md: 4 } }}>
-        {/* Header — branded lockup + client / invoice / date */}
+        {/* Header — branded lockup + client / invoice / date. In the
+            confirmation stage the shared ConfirmationDocument renders its own
+            (identical) header + message, so we suppress this one to avoid a
+            double header — the page is then byte-identical to the builder
+            preview. Other stages (picker / building / legacy) keep this header. */}
+        {stage !== 'confirmation' && (
         <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, position: 'relative', overflow: 'hidden', animation: 'rise 500ms ease both' }}>
           <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
             background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
@@ -524,15 +477,15 @@ export default function ApprovalView() {
             sx={{ mt: 2.5, pt: 2.5, borderTop: `1px solid ${T.line}` }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.5 }}>Prepared for</Typography>
-              <Typography sx={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2 }}>
+              <Typography sx={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2, overflowWrap: 'anywhere' }}>
                 {p.companyName || p.clientName || 'Untitled'}
               </Typography>
               {p.clientName && p.companyName && p.clientName !== p.companyName && (
-                <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.2 }}>{p.clientName}</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.2, overflowWrap: 'anywhere' }}>{p.clientName}</Typography>
               )}
             </Box>
             {(p.orderNumber || p.orderDate) && (
-              <Stack direction="row" gap={3} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+              <Stack direction="row" gap={3} sx={{ textAlign: { xs: 'left', sm: 'right' }, flexShrink: 0 }}>
                 {p.orderNumber && (
                   <Box>
                     <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.5 }}>Invoice</Typography>
@@ -551,13 +504,14 @@ export default function ApprovalView() {
             )}
           </Stack>
         </Box>
+        )}
 
         {/* Progress rail */}
         <Box sx={{ mt: 2.5, mb: 0.5, animation: 'rise 500ms ease both', animationDelay: '60ms' }}>
           <ProgressRail states={railStates} />
         </Box>
 
-        {p.confirmationMessage && (
+        {stage !== 'confirmation' && p.confirmationMessage && (
           <Box sx={{ ...card, mt: 2, p: 2, borderLeft: `3px solid ${T.green}` }}>
             <Typography sx={{ color: T.text, fontSize: 13.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
               {p.confirmationMessage}
@@ -681,10 +635,12 @@ export default function ApprovalView() {
               Locked in — building your confirmation
             </Typography>
             <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 1, mb: 2.5, lineHeight: 1.6, maxWidth: 460, mx: 'auto' }}>
-              Nice picks. We&apos;re putting your final confirmation together right now — you&apos;ll get an email
-              the moment it&apos;s ready to review and approve, right here on this page.
+              Nice picks — these are with our team now. We&apos;ll put your final confirmation together and email you
+              the moment it&apos;s ready to review and approve, right here on this page. No action needed from you for now.
             </Typography>
-            {/* Indeterminate progress shimmer — makes the wait feel intentional */}
+            {/* A calm "received" shimmer. Deliberately NOT a progress bar that
+                implies live percentage — nothing is actively ticking, and a fake
+                progress meter would imply false progress (MED). */}
             <Box sx={{ position: 'relative', height: 4, borderRadius: 999, bgcolor: T.line, overflow: 'hidden', maxWidth: 320, mx: 'auto', mb: 3 }}>
               <Box sx={{ position: 'absolute', top: 0, bottom: 0, width: '40%', borderRadius: 999,
                 background: `linear-gradient(90deg, transparent, ${T.green}, transparent)`, animation: 'indet 1.5s ease-in-out infinite' }} />
@@ -701,132 +657,39 @@ export default function ApprovalView() {
                 </Stack>
               ))}
             </Box>
-            <Button size="small" onClick={() => setRepicking(true)}
-              sx={{ color: T.muted, textTransform: 'none', fontSize: 12.5, mt: 2, '&:hover': { color: T.green, bgcolor: 'transparent' } }}>
-              ← Change my picks
-            </Button>
+            {/* Escape hatch (H4): even while "building", the client always has a
+                way to reach us — they're never stuck with no way to ask. */}
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} justifyContent="center" alignItems="center" sx={{ mt: 2 }}>
+              <Button size="small" onClick={() => setRepicking(true)}
+                sx={{ color: T.muted, textTransform: 'none', fontSize: 12.5, '&:hover': { color: T.green, bgcolor: 'transparent' } }}>
+                ← Change my picks
+              </Button>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, width: 1, height: 14, bgcolor: T.line }} />
+              <Button size="small" startIcon={<EditNoteIcon sx={{ fontSize: 16 }} />} onClick={() => setChangesOpen(true)}
+                sx={{ color: T.muted, textTransform: 'none', fontSize: 12.5, '&:hover': { color: T.green, bgcolor: 'transparent' } }}>
+                Ask a question
+              </Button>
+            </Stack>
           </Box>
         ) : stage === 'confirmation' ? (
-          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
-            <Typography sx={{ ...eyebrow, mb: 2 }}>Your order</Typography>
-            <Stack gap={2}>
-              {confItems.map((it, idx) => {
-                const sizes = (it.sizes || []).filter(sz => Number(sz.qty) > 0);
-                const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
-                const imgs = confItemImages(it);
-                return (
-                  <Box key={idx} sx={{ border: `1px solid ${T.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: T.inset }}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} gap={{ xs: 2, sm: 2.5 }} alignItems="flex-start">
-                      {imgs.length > 0 && (
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>
-                          {imgs.map((src, i) => (
-                            <ZoomImg key={i} src={src} onZoom={openLightbox}
-                              sx={{ width: { xs: 120, sm: 140 }, height: { xs: 120, sm: 140 }, objectFit: 'cover', borderRadius: 2,
-                                border: `1px solid ${T.line}`, bgcolor: T.panel,
-                                transition: 'box-shadow 200ms ease, border-color 200ms ease',
-                                '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.45)', borderColor: T.lineHi } }} />
-                          ))}
-                        </Box>
-                      )}
-                      <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-                        <Typography sx={{ fontWeight: 800, fontSize: 15.5, mb: 1.25 }}>{confItemTitle(it, idx)}</Typography>
-                        {sizes.length > 0 && (
-                          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
-                            <thead>
-                              <tr>
-                                {['Size', 'Qty', 'Unit price'].map((h, hi) => (
-                                  <th key={h} style={{ textAlign: hi === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase',
-                                    letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '5px 8px', borderBottom: `1px solid ${T.line}` }}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sizes.map((sz, i) => (
-                                <tr key={i}>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, color: T.text }}>{sz.label || '—'}</td>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{Number(sz.qty) || 0}</td>
-                                  <td style={{ padding: '6px 8px', borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </Box>
-                        )}
-                        <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2} sx={{ mt: 1.25 }}>
-                          <Typography sx={{ ...eyebrow, color: T.faint }}>Item subtotal</Typography>
-                          <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>{money(itemSubtotal)}</Typography>
-                        </Stack>
-                      </Box>
-                    </Stack>
-                  </Box>
-                );
-              })}
-            </Stack>
-
-            {/* Shipping to multiple locations — only when the order is split */}
-            {Array.isArray(conf.shipTos) && conf.shipTos.length > 0 && (
-              <Box sx={{ mt: 2.5 }}>
-                <Typography sx={{ ...eyebrow, mb: 1.5 }}>
-                  Shipping to {conf.shipTos.length} locations
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-                  {conf.shipTos.map((st, si) => {
-                    const rows = confItems
-                      .map((it, ii) => ({ name: confItemShortName(it, ii), qty: allocQtyFor(it, st.key) }))
-                      .filter(r => r.qty > 0);
-                    return (
-                      <Box key={st.key || si} sx={{ border: `1px solid ${T.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.25 }, bgcolor: T.inset }}>
-                        <Typography sx={{ fontWeight: 800, fontSize: 14 }}>
-                          {st.label || st.name || `Location ${si + 1}`}
-                        </Typography>
-                        {(st.name && st.label) && (
-                          <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2 }}>{st.name}</Typography>
-                        )}
-                        {(st.street || st.cityStateZip) && (
-                          <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2, lineHeight: 1.45 }}>
-                            {[st.street, st.cityStateZip].filter(Boolean).join(', ')}
-                          </Typography>
-                        )}
-                        {rows.length > 0 && (
-                          <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${T.line}` }}>
-                            {rows.map((r, ri) => (
-                              <Stack key={ri} direction="row" justifyContent="space-between" gap={2} sx={{ py: 0.4 }}>
-                                <Typography sx={{ fontSize: 12.5, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
-                                <Typography sx={{ fontSize: 12.5, fontWeight: 700, flexShrink: 0, ...mono }}>{r.qty}</Typography>
-                              </Stack>
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Box>
-            )}
-
-            {/* Totals — recessed panel, big green grand total */}
-            <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: T.inset, border: `1px solid ${T.line}` }}>
-              <Stack direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
-                <Box sx={{ color: T.muted }}>Subtotal</Box>
-                <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(confTotals.itemsSubtotal)}</Box>
-              </Stack>
-              {confTotals.lines.map((l, i) => (
-                <Stack key={i} direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
-                  <Box sx={{ color: T.muted }}>{l.label}</Box>
-                  <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(l.value)}</Box>
-                </Stack>
-              ))}
-              <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${T.green}` }}>
-                <Box sx={{ fontWeight: 800, fontSize: 17 }}>Total</Box>
-                <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: 24, color: T.green, letterSpacing: -0.5, ...mono }}>{money(confTotals.grandTotal)}</Box>
-              </Stack>
-            </Box>
-
-            {p.confirmationTerms && (
-              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${T.line}` }}>
-                <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.75 }}>Terms</Typography>
-                <Typography sx={{ color: T.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{p.confirmationTerms}</Typography>
-              </Box>
-            )}
+          // The client's order — rendered by the SHARED ConfirmationDocument, the
+          // exact same component the owner's builder preview uses (Nate's WYSIWYG
+          // ask). confItemImages is handed in as the image resolver so the builder
+          // and this page resolve identical sources (H1). Owner-only cost/printer
+          // never appear — the component never reads them and the public payload
+          // already strips them server-side.
+          <Box sx={{ mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+            <ConfirmationDocument
+              conf={conf}
+              project={{
+                companyName: p.companyName, clientName: p.clientName,
+                orderNumber: p.orderNumber, orderDate: p.orderDate,
+                confirmationMessage: p.confirmationMessage, confirmationTerms: p.confirmationTerms,
+              }}
+              logo={logo}
+              resolveItemImages={confItemImages}
+              onZoom={openLightbox}
+            />
           </Box>
         ) : (
           // Legacy / simple table fallback
