@@ -339,6 +339,13 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                   onChange={e => update({ contactName: e.target.value })} sx={inkInput} />
               </PF>
             </Box>
+
+            {/* Per-vendor numbering visibility (#1): show the number the NEXT PO for
+                this printer would take, so the owner can see/seed the sequence to
+                match his real run. Edit the start on the vendor's card (Vendors). */}
+            {(editing.vendorName || '').trim() && (
+              <NextPoHint vendorName={editing.vendorName.trim()} authHdr={authHdr} />
+            )}
             <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
               <PF label="Vendor address">
                 <TextField size="small" value={editing.vendorAddress || ''} placeholder="331 York Rd, Warminster, PA 18974"
@@ -366,8 +373,21 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                 </Typography>} />
             </Box>
 
-            {/* Shipping block */}
-            <SectionLabel>Shipping info</SectionLabel>
+            {/* Two ship-to blocks. JP supplies the blanks ~99% of the time, so a PO
+                has TWO addresses: where the BLANKS go (the printer's dock) and where
+                the FINISHED goods go (the client). Both print on the PO. */}
+            <SectionLabel>Ship blanks to (printer)</SectionLabel>
+            <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
+              {[['name', 'Printer name'], ['attention', 'Attention'], ['streetAddress', 'Street address'], ['cityStateZip', 'City, State, Zip']].map(([k, label]) => (
+                <PF key={k} label={label}>
+                  <TextField size="small" value={(editing.shipToPrinter && editing.shipToPrinter[k]) || ''}
+                    onChange={e => update({ shipToPrinter: { ...(editing.shipToPrinter || {}), [k]: e.target.value } })} sx={inkInput} />
+                </PF>
+              ))}
+            </Box>
+
+            {/* Finished-goods destination (usually the client's drop-ship address). */}
+            <SectionLabel>Finished goods ship to</SectionLabel>
             <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
               {[['name', 'Shipping name'], ['attention', 'Attention'], ['streetAddress', 'Street address'], ['cityStateZip', 'City, State, Zip']].map(([k, label]) => (
                 <PF key={k} label={label}>
@@ -576,6 +596,33 @@ function RecentCosts({ vendorName, authHdr, onAdd }) {
         </Box>
       </Collapse>
     </Box>
+  );
+}
+
+// ── Next PO # hint ────────────────────────────────────────────────────────────
+// A quiet read-only line under the header showing what number the NEXT PO for this
+// printer would take (the per-vendor sequence, floored by the owner-set start).
+// Surfaces the numbering so a collision with the owner's real run is visible; the
+// start itself is edited on the vendor's card. Debounced so retyping a vendor name
+// doesn't spam the endpoint.
+function NextPoHint({ vendorName, authHdr }) {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    if (!vendorName) { setInfo(null); return undefined; }
+    let cancelled = false;
+    const id = setTimeout(() => {
+      axios.get(`${base}/orders/po-next-number`, { ...authHdr, params: { vendor: vendorName } })
+        .then(r => { if (!cancelled) setInfo(r.data); })
+        .catch(() => { if (!cancelled) setInfo(null); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [vendorName, authHdr]);
+  if (!info || !info.next) return null;
+  return (
+    <Typography sx={{ color: D.faint, fontSize: 11, mt: -1, mb: 1.5, ...mono }}>
+      Next auto # for {vendorName}: <Box component="span" sx={{ color: D.green, fontWeight: 800 }}>{info.next}</Box>
+      {info.nextPoStart ? ` · start set to ${info.nextPoStart}` : ' · set a start on the Vendors card to continue an existing run'}
+    </Typography>
   );
 }
 
