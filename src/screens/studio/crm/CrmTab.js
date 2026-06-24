@@ -882,8 +882,10 @@ export default function CrmTab({ token, onBack }) {
       </Menu>
 
       {/* Body — the Kanban board gets a wider canvas (its columns scroll
-          horizontally); every other view keeps the comfortable reading column. */}
-      <Box sx={{
+          horizontally); every other view keeps the comfortable reading column.
+          data-ctx-chrome opts the empty body space into the global right-click
+          fallback (search / back-to-hub) without hijacking text or bound rows. */}
+      <Box data-ctx-chrome sx={{
         maxWidth: (view === 'pipeline' && !openKey) ? 1440 : 1080,
         mx: 'auto', px: { xs: 1.5, sm: 2.5 }, py: { xs: 2, sm: 3 },
       }}>

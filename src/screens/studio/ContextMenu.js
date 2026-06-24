@@ -39,7 +39,7 @@ import { D, mono } from './_shared';
 // field, or a link must keep the browser's own menu. We walk up from the event
 // target to the element that registered actions; if we cross one of these
 // "leave it native" nodes first, we bail and let Chrome handle it.
-const NATIVE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'A', 'AUDIO', 'VIDEO']);
+const NATIVE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'A', 'IMG', 'AUDIO', 'VIDEO']);
 
 function isNativeTarget(el) {
   let n = el;
@@ -59,6 +59,18 @@ function isNativeTarget(el) {
 function hasTextSelection() {
   const sel = typeof window !== 'undefined' ? window.getSelection() : null;
   return !!(sel && sel.rangeCount > 0 && !sel.isCollapsed && String(sel).trim().length > 0);
+}
+
+// Heuristic: is this element a "leaf" of real, copyable text (a heading, label,
+// count, paragraph, cell) with no element children? Such a target should keep
+// the native menu even inside opted-in chrome, so the owner can copy/inspect it.
+// Containers (which have element children, e.g. the empty grid wrapper) are NOT
+// leaves, so a right-click on the blank space between cards still gets our menu.
+function isTextLeaf(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const hasElementChild = el.children && el.children.length > 0;
+  const text = (el.textContent || '').trim();
+  return !hasElementChild && text.length > 0;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -123,13 +135,25 @@ export function ContextMenuProvider({ children }) {
     };
   }, []);
 
-  // Document-level fallback: a right-click that wasn't claimed by any bound
-  // element. We only act on non-native targets, and only if a fallback builder
-  // produced items — otherwise the native menu shows (correct for plain text).
+  // Document-level fallback: a right-click on EMPTY app chrome that wasn't
+  // claimed by any bound element. To honour "preserve the native menu on plain
+  // text" we DON'T fire on arbitrary chrome — only inside a region a tool has
+  // explicitly opted in via `data-ctx-chrome` (its empty background canvas).
+  // That way a right-click on a heading / label / body paragraph the owner might
+  // want to copy keeps the browser's own menu, while a right-click on the blank
+  // space around the cards still offers the global niceties.
   React.useEffect(() => {
     const onDocContext = (e) => {
       if (e.defaultPrevented) return;       // a bound element already handled it
+      // Never re-trigger over our own open menu surface.
+      if (e.target.closest && e.target.closest('[data-ctxmenu-surface]')) return;
       if (isNativeTarget(e.target) || hasTextSelection()) return;
+      // Keep the native menu on a real text leaf (heading/label/count) even when
+      // it lives inside opted-in chrome, so copy/inspect still work there.
+      if (isTextLeaf(e.target)) return;
+      // Require an opted-in empty-chrome ancestor — keeps the rest of the page
+      // (and the whole public site) on the native menu.
+      if (!(e.target.closest && e.target.closest('[data-ctx-chrome]'))) return;
       const builder = fallbacksRef.current[fallbacksRef.current.length - 1];
       if (!builder) return;
       const items = sanitizeItems(builder.getItems(e));
@@ -199,9 +223,10 @@ function ContextMenuSurface({ x, y, items, onClose }) {
 
   return ReactDOM.createPortal(
     <Box
+      data-ctxmenu-surface=""
       // Full-screen catcher: a right-click or left-click on the backdrop closes
-      // the menu (and we re-open at the new spot on right-click via the doc
-      // handler, since this layer sits above bound elements while open).
+      // the menu. The data-ctxmenu-surface marker makes the document fallback
+      // skip this layer (so a backdrop right-click just closes, never re-opens).
       onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       onContextMenu={(e) => { e.preventDefault(); onClose(); }}
       sx={{

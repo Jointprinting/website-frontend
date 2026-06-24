@@ -766,7 +766,7 @@ export default function OrderTracker({ token, onBack }) {
             )}
           </Box>
         ) : (
-          <Box sx={{
+          <Box data-ctx-chrome sx={{
             display: 'grid',
             gap: { xs: 1.2, md: 2 },
             // Slightly narrower minmax than before so the new taller (1:1

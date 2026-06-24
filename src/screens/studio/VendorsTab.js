@@ -448,7 +448,7 @@ export default function VendorsTab({ token, onBack }) {
         </Typography>
       </Box>
 
-      <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 3 }, py: { xs: 2, md: 3 }, ...scrollbar }}>
+      <Box data-ctx-chrome sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 3 }, py: { xs: 2, md: 3 }, ...scrollbar }}>
         {openId ? (
           <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
             onBack={() => setOpenId(null)} onPatch={patch} />
