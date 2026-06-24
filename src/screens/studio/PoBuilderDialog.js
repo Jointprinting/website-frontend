@@ -7,10 +7,10 @@
 // JP pays the vendor); everything stays editable because vendors vary.
 // Download renders the PDF server-side; the admin emails it himself.
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Dialog, DialogContent,
-  CircularProgress, FormControlLabel, Switch, Tooltip,
+  CircularProgress, FormControlLabel, Switch, Tooltip, Collapse, InputAdornment,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
@@ -19,6 +19,8 @@ import PictureAsPdfIcon        from '@mui/icons-material/PictureAsPdf';
 import ArrowBackIcon           from '@mui/icons-material/ArrowBack';
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline';
 import BoltIcon                from '@mui/icons-material/Bolt';
+import ExpandMoreIcon          from '@mui/icons-material/ExpandMore';
+import SearchIcon              from '@mui/icons-material/Search';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, dropPrimaryBtn, hasConfirmation } from './_shared';
@@ -54,6 +56,18 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
 
   const grandTotal = useMemo(() =>
     (editing?.charges || []).reduce((s, c) => s + (Number(c.amount) || 0), 0), [editing]);
+
+  // Append a charge from the "recent costs" panel to the PO being edited. Copies
+  // only label + amount (the shape the schema stores) so a past line can be
+  // re-used as a pricing starting point, then hand-tweaked like any other.
+  // Defined before the early return so the hook order stays stable.
+  const addCharge = useCallback((charge) => {
+    setEditing(prev => prev && ({
+      ...prev,
+      charges: [...(prev.charges || []), { label: charge.label || '', amount: Number(charge.amount) || 0 }],
+    }));
+    setDirty(true);
+  }, []);
 
   if (!project) return null;
 
@@ -417,6 +431,13 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
               Add charge
             </Button>
 
+            {/* Cost memory: recent charges this vendor was billed on past POs, so
+                the owner can price from history. Read-only; "+ add" copies a line
+                into the charges above. Only shown once a vendor is named. */}
+            {(editing.vendorName || '').trim() && (
+              <RecentCosts vendorName={editing.vendorName.trim()} authHdr={authHdr} onAdd={addCharge} />
+            )}
+
             <PF label="Notes (optional, prints on the PO)">
               <TextField size="small" fullWidth multiline minRows={2} value={editing.notes || ''}
                 onChange={e => update({ notes: e.target.value })} sx={inkInput} />
@@ -437,6 +458,105 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Recent costs for this vendor ──────────────────────────────────────────────
+// Collapsible "cost memory" panel for the charges area. Calls the read-only
+// /po-cost-history endpoint (debounced, with an optional search box feeding `q`)
+// and lists the vendor's recent charges newest-first; each row's "+ add" appends
+// that label+amount to the PO being edited. Purely additive — nothing here edits
+// or persists on its own.
+function RecentCosts({ vendorName, authHdr, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Only hit the network once the panel is open. Debounce the search box so we
+  // don't fire a request per keystroke (same ~280ms as the CRM search boxes).
+  useEffect(() => {
+    if (!open || !vendorName) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    const id = setTimeout(() => {
+      axios.get(`${base}/orders/po-cost-history`, {
+        ...authHdr,
+        params: { vendor: vendorName, q: q.trim() || undefined },
+      })
+        .then(r => { if (!cancelled) setRows(r.data.rows || []); })
+        .catch(() => { if (!cancelled) setRows([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 280);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [open, vendorName, q]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Box sx={{ mb: 2, border: `1px solid ${D.line}`, borderRadius: 2, bgcolor: D.inset, overflow: 'hidden' }}>
+      <Stack direction="row" alignItems="center" gap={1}
+        onClick={() => setOpen(o => !o)}
+        sx={{ px: 1.3, py: 0.9, cursor: 'pointer', userSelect: 'none',
+          transition: 'background-color 0.18s ease', '&:hover': { bgcolor: D.panelHi } }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 800, color: D.text, flex: 1, letterSpacing: 0.2 }}>
+          💡 Recent costs
+          <Typography component="span" sx={{ color: D.muted, fontWeight: 600, ml: 0.75 }}>
+            — {vendorName}
+          </Typography>
+        </Typography>
+        <ExpandMoreIcon sx={{ fontSize: 18, color: D.muted,
+          transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+      </Stack>
+
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ px: 1.3, pb: 1.1, pt: 0.3 }}>
+          <TextField size="small" fullWidth value={q} placeholder="Filter past charges…"
+            onChange={e => setQ(e.target.value)}
+            InputProps={{ startAdornment: (
+              <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: D.faint }} /></InputAdornment>
+            ) }}
+            sx={{ ...dropInput, mb: 1, '& .MuiInputBase-input': { color: D.text, fontSize: 12.5, py: 0.7 } }} />
+
+          {loading ? (
+            <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={16} sx={{ color: D.green }} /></Box>
+          ) : rows.length === 0 ? (
+            <Typography sx={{ color: D.faint, fontSize: 11.5, py: 1, textAlign: 'center' }}>
+              {q ? 'No past charges match.' : 'No past charges for this vendor yet.'}
+            </Typography>
+          ) : (
+            <Stack gap={0.5} sx={{ maxHeight: 220, overflowY: 'auto', ...scrollbar }}>
+              {rows.map((c, i) => (
+                <Stack key={i} direction="row" alignItems="center" gap={1}
+                  sx={{ px: 1, py: 0.7, borderRadius: 1.5, bgcolor: D.panel, border: `1px solid ${D.line}`,
+                    transition: 'border-color 0.18s ease, background-color 0.18s ease',
+                    '&:hover': { borderColor: D.lineHi, bgcolor: D.panelHi } }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 12, color: D.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.label || '(no label)'}
+                    </Typography>
+                    <Typography sx={{ fontSize: 10.5, color: D.faint }}>
+                      {c.date ? new Date(c.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''}
+                      {c.poNumber ? ` · ${c.poNumber}` : ''}
+                      {c.unitCost != null ? ` · ${fmt(c.unitCost)}/unit` : ''}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ ...mono, fontSize: 12, fontWeight: 800, color: D.text, whiteSpace: 'nowrap' }}>
+                    {fmt(c.amount)}
+                  </Typography>
+                  <Tooltip title="Add this charge to the PO">
+                    <Button size="small" onClick={() => onAdd(c)}
+                      startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+                      sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0,
+                        px: 1, borderRadius: 999, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                      add
+                    </Button>
+                  </Tooltip>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      </Collapse>
+    </Box>
   );
 }
 
