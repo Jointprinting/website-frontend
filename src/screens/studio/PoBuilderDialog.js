@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Dialog, DialogContent,
   CircularProgress, FormControlLabel, Switch, Tooltip, Collapse, InputAdornment,
+  Autocomplete,
 } from '@mui/material';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
@@ -182,18 +183,28 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
     }
   };
 
-  // Typing a known vendor name pre-fills their contact card — but never over
-  // something already typed by hand (correcting a contact then re-touching the
-  // vendor name must not wipe the correction).
-  const onVendorName = (name) => {
-    const v = vendors.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+  // Resolve a typed/selected printer name to a known vendor and pre-fill their
+  // contact card — but never over something already typed by hand (correcting a
+  // contact then re-touching the vendor name must not wipe the correction).
+  // `picked` is the vendor object when chosen from the autocomplete dropdown
+  // (authoritative); for free typing we still try an exact name match so a typed
+  // existing name pre-fills too. Picking a known vendor fills more aggressively
+  // (the user explicitly chose it) but still respects already-entered values.
+  const fillFromVendor = (name, picked) => {
+    const v = picked
+      || vendors.find(x => (x.name || '').toLowerCase() === String(name || '').toLowerCase());
     update(v
-      ? { vendorName: name,
+      ? { vendorName: v.name || name,
           contactName: editing.contactName || v.contactName || '',
           vendorAddress: editing.vendorAddress || v.address || '',
-          shipMethod: editing.shipMethod || v.shipMethod || '' }
+          shipMethod: editing.shipMethod || v.shipMethod || '',
+          // A picked vendor's blanks-mode seeds the PO toggle only when the user
+          // hasn't diverged from the default — never clobbers an explicit choice.
+          ...(picked && typeof picked.blanksProvided === 'boolean'
+            ? { blanksProvided: picked.blanksProvided } : {}) }
       : { vendorName: name });
   };
+  const onVendorName = (name) => fillFromVendor(name, null);
 
   const closeGuard = () => {
     if (dirty && !window.confirm('You have unsaved PO changes. Close anyway?')) return;
@@ -327,12 +338,55 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                   sx={inkInput} />
               </PF>
               <PF label="Printer / vendor">
-                <TextField size="small" value={editing.vendorName || ''} placeholder="Heritage Screen Printing"
-                  inputProps={{ list: 'po-vendor-options' }}
-                  onChange={e => onVendorName(e.target.value)} sx={inkInput} />
-                <datalist id="po-vendor-options">
-                  {vendors.map(v => <option key={v._id} value={v.name} />)}
-                </datalist>
+                <Autocomplete
+                  freeSolo
+                  selectOnFocus
+                  handleHomeEndKeys
+                  options={vendors}
+                  value={editing.vendorName || ''}
+                  // Show the vendor's name in the option list + the input.
+                  getOptionLabel={(o) => (typeof o === 'string' ? o : (o?.name || ''))}
+                  isOptionEqualToValue={(o, val) =>
+                    (typeof o === 'string' ? o : o?.name) === (typeof val === 'string' ? val : val?.name)}
+                  filterOptions={(opts, state) => {
+                    const t = state.inputValue.trim().toLowerCase();
+                    if (!t) return opts;
+                    return opts.filter((o) =>
+                      [o.name, o.contactName, o.address, o.shipMethod].filter(Boolean).join(' ').toLowerCase().includes(t));
+                  }}
+                  // Picking an existing vendor (object) fills the card; typing free
+                  // text keeps the name as-is (a genuinely new printer).
+                  onChange={(_e, val) => {
+                    if (val && typeof val === 'object') fillFromVendor(val.name, val);
+                    else onVendorName(typeof val === 'string' ? val : '');
+                  }}
+                  onInputChange={(_e, val, reason) => { if (reason === 'input') onVendorName(val); }}
+                  renderOption={(props, o) => (
+                    <Box component="li" {...props} key={o._id}
+                      sx={{ display: 'block !important', py: 0.75 }}>
+                      <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13 }}>
+                        {o.name}
+                        {o.aliasCount ? (
+                          <Box component="span" sx={{ ml: 0.75, color: D.green, fontSize: 10.5, fontWeight: 800 }}>
+                            +{o.aliasCount} alias
+                          </Box>
+                        ) : null}
+                      </Typography>
+                      {(o.hint || o.contactName || o.address) && (
+                        <Typography sx={{ color: D.faint, fontSize: 11, ...mono, mt: 0.1 }}>
+                          {o.hint || [o.contactName, o.address, o.shipMethod].filter(Boolean).join(' · ')}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  renderInput={(params) => (
+                    <TextField {...params} size="small" placeholder="Heritage Screen Printing" sx={inkInput} />
+                  )}
+                  componentsProps={{ paper: { sx: {
+                    bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`,
+                    '& .MuiAutocomplete-option': { '&[aria-selected="true"], &.Mui-focused': { bgcolor: 'rgba(74,222,128,0.10)' } },
+                  } } }}
+                />
               </PF>
               <PF label="Contact">
                 <TextField size="small" value={editing.contactName || ''} placeholder="Jaide Thomas"
