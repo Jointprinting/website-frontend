@@ -7,13 +7,12 @@
 //   Calendar   → /api/crm/calendar   month grid of follow-ups, drag to reschedule
 //   Companies  → /api/crm            searchable / filterable list
 //   (Detail)   → /api/crm/:key       one company, opened from any list
-//   Import     → /api/crm/import     load the field tracker from CSV
 //
 // This component owns ALL data + transport so the view components stay
-// presentational and the write paths (log a touch, reschedule, field edit,
-// import) invalidate the right caches in one place. New views (Kanban, a
-// dashboard) slot in by adding a NAV entry + a branch in renderView — the data
-// helpers here are already shaped for them.
+// presentational and the write paths (log a touch, reschedule, field edit)
+// invalidate the right caches in one place. New views (Kanban, a dashboard) slot
+// in by adding a NAV entry + a branch in renderView — the data helpers here are
+// already shaped for them.
 
 import * as React from 'react';
 import axios from 'axios';
@@ -26,7 +25,6 @@ import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlin
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
-import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import SearchIcon from '@mui/icons-material/Search';
@@ -44,14 +42,13 @@ import TodayView from './TodayView';
 import CalendarView from './CalendarView';
 import CompaniesView from './CompaniesView';
 import CompanyDetail from './CompanyDetail';
-import ImportView from './ImportView';
 import PipelineView from './PipelineView';
 import CleanupView from './CleanupView';
 
 const base = `${config.backendUrl}/api/crm`;
 
-// Primary tab bar — the five views the owner lives in (J: Import + Clean up moved
-// to the overflow "•••" menu so the main bar stays focused).
+// Primary tab bar — the five views the owner lives in (Clean up moved to the
+// overflow "•••" menu so the main bar stays focused).
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
@@ -63,7 +60,6 @@ const NAV = [
 // Overflow ("•••") menu — still fully reachable, just tucked out of the daily
 // flow: housekeeping tools the owner reaches for occasionally.
 const OVERFLOW_NAV = [
-  { id: 'import',   label: 'Import CSV',    Icon: UploadFileOutlinedIcon },
   { id: 'cleanup',  label: 'Clean up',      Icon: CleaningServicesOutlinedIcon },
   { id: 'archived', label: 'Archived',      Icon: Inventory2OutlinedIcon },
 ];
@@ -348,18 +344,6 @@ export default function CrmTab({ token, onBack }) {
       throw e;
     }
   }, [authHdr, flash]);
-
-  // Import — two-step: preview (dry-run, writes nothing) then commit. `opts`
-  // carries { mode: 'merge' | 'replace' }.
-  const importPreview = React.useCallback(async (csv, opts = {}) => {
-    const res = await axios.post(`${base}/import`, { csv, dryRun: true, mode: opts.mode || 'merge' }, authHdr);
-    return res.data; // { dryRun, willCreate, willUpdate, willSkip, proposedMerges, ... }
-  }, [authHdr]);
-
-  const importCommit = React.useCallback(async (csv, opts = {}) => {
-    const res = await axios.post(`${base}/import`, { csv, mode: opts.mode || 'merge' }, authHdr);
-    return res.data; // { created, updated, skipped, replacedArchived, ... }
-  }, [authHdr]);
 
   // Merge one duplicate into a survivor (folds + re-points orders, archives the
   // merged record server-side).
@@ -750,14 +734,6 @@ export default function CrmTab({ token, onBack }) {
             onUnarchive={(key) => unarchiveOne(key)}
           />
         );
-      case 'import':
-        return (
-          <ImportView
-            onPreview={importPreview}
-            onCommit={importCommit}
-            onImported={() => { refreshAffected(); flash('Lists refreshed with your import.'); }}
-          />
-        );
       default:
         return null;
     }
@@ -832,9 +808,9 @@ export default function CrmTab({ token, onBack }) {
                 </Button>
               );
             })}
-            {/* Overflow ("•••") — Import / Clean up / Archived. Highlighted when an
+            {/* Overflow ("•••") — Clean up / Archived. Highlighted when an
                 overflow view is active so the owner sees where they are. */}
-            <Tooltip title="More — Import, Clean up, Archived">
+            <Tooltip title="More — Clean up, Archived">
               <IconButton
                 onClick={(e) => setOverflowAnchor(e.currentTarget)}
                 size="small"

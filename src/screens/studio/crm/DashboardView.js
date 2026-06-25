@@ -28,7 +28,7 @@ import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { D, mono } from '../_shared';
 import {
-  StageChip, Eyebrow, EmptyState, stageMeta, telHref, fmtMoney0,
+  Eyebrow, EmptyState, stageMeta, telHref, fmtMoney0,
   headsUpMeta, severityMeta,
 } from './_crm';
 
@@ -50,52 +50,6 @@ function MetricCard({ label, value, accent, hint }) {
       {hint && (
         <Typography sx={{ ...mono, color: D.faint, fontSize: 11, fontWeight: 700, mt: 0.25 }}>{hint}</Typography>
       )}
-    </Box>
-  );
-}
-
-// ── Stage funnel ────────────────────────────────────────────────────────────────
-// A horizontal bar per stage; width is the stage's share of the max count so the
-// busiest stage fills the track. Count + $ ride at the ends. Pure CSS — no chart
-// dependency.
-function StageFunnel({ stages }) {
-  const rows = stages || [];
-  const maxCount = Math.max(1, ...rows.map((s) => s.count || 0));
-  return (
-    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 1.75, sm: 2 } }}>
-      <Eyebrow sx={{ mb: 1.5 }}>Pipeline by stage</Eyebrow>
-      <Stack spacing={0.9}>
-        {rows.map((s) => {
-          const m = stageMeta(s.stage);
-          const pct = Math.round(((s.count || 0) / maxCount) * 100);
-          return (
-            <Stack key={s.stage} direction="row" alignItems="center" spacing={1.25}>
-              {/* Stage label — fixed width so bars left-align */}
-              <Box sx={{ width: 88, flexShrink: 0 }}>
-                <StageChip stage={s.stage} />
-              </Box>
-              {/* Bar track */}
-              <Box sx={{ flexGrow: 1, minWidth: 0, height: 22, borderRadius: 1, bgcolor: D.inset, position: 'relative', overflow: 'hidden' }}>
-                <Box sx={{
-                  position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, minWidth: s.count > 0 ? 4 : 0,
-                  bgcolor: m.color, opacity: 0.85, borderRadius: 1,
-                  transition: 'width 0.4s ease',
-                }} />
-                <Typography sx={{
-                  ...mono, position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 11.5, fontWeight: 800, color: pct > 12 ? D.ink : D.muted,
-                }}>
-                  {s.count}
-                </Typography>
-              </Box>
-              {/* $ for the stage */}
-              <Typography sx={{ ...mono, width: 64, flexShrink: 0, textAlign: 'right', color: s.value > 0 ? D.muted : D.faint, fontSize: 11.5, fontWeight: 700 }}>
-                {s.value > 0 ? fmtMoney0(s.value) : '—'}
-              </Typography>
-            </Stack>
-          );
-        })}
-      </Stack>
     </Box>
   );
 }
@@ -396,10 +350,7 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         />
       </Box>
 
-      {/* 2 — Stage funnel */}
-      <StageFunnel stages={pipeline.stages} />
-
-      {/* 3 — Needs your attention (the centerpiece). The backend already
+      {/* Needs your attention (the centerpiece). The backend already
           down-ranks cold/never-worked leads, so this leads with overdue/hot. Each
           row gets call/log/reschedule + a one-tap clear (archive). */}
       <Box>
