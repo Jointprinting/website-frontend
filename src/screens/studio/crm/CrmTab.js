@@ -27,6 +27,7 @@ import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
+import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
@@ -44,6 +45,7 @@ import CompaniesView from './CompaniesView';
 import CompanyDetail from './CompanyDetail';
 import PipelineView from './PipelineView';
 import CleanupView from './CleanupView';
+import ReconcileView from './ReconcileView';
 
 const base = `${config.backendUrl}/api/crm`;
 
@@ -60,6 +62,7 @@ const NAV = [
 // Overflow ("•••") menu — still fully reachable, just tucked out of the daily
 // flow: housekeeping tools the owner reaches for occasionally.
 const OVERFLOW_NAV = [
+  { id: 'reconcile', label: 'Load / reconcile data', Icon: CloudSyncOutlinedIcon },
   { id: 'cleanup',  label: 'Clean up',      Icon: CleaningServicesOutlinedIcon },
   { id: 'archived', label: 'Archived',      Icon: Inventory2OutlinedIcon },
 ];
@@ -723,6 +726,13 @@ export default function CrmTab({ token, onBack }) {
             onMerge={mergeCompany}
             onArchive={archiveCompanies}
             onRefresh={() => { loadDuplicates(); loadCleanupClients(); }}
+          />
+        );
+      case 'reconcile':
+        return (
+          <ReconcileView
+            token={token}
+            onApplied={() => { refreshAffected(); flash('Data loaded. Your CRM is reconciled.'); }}
           />
         );
       case 'archived':
