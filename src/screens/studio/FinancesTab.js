@@ -19,6 +19,8 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
+import ReplayIcon from '@mui/icons-material/Replay';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { B, darkInput, scrollbar } from './_shared';
@@ -26,15 +28,37 @@ import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 
 const base = `${config.backendUrl}/api`;
-const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
+// to a finite number first (Number(n) || 0 turns NaN/undefined/null/'' → 0), so no
+// odd/missing value can ever render "$NaN" or white-screen the finance tab.
+const money = (n) => {
+  const v = Number(n);
+  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+// A percentage for display — finite-guarded the same way (a bad value shows 0%).
+const pct = (n) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
+// Mirror the backend round2 EXACTLY (it adds Number.EPSILON) so the previewed
+// processing fee equals the cent the backend books — without the epsilon, certain
+// half-cent amounts (e.g. a 1% ACH fee on $14.50) would preview a cent low.
+const round = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+// Safe YYYY-MM-DD for display — new Date(bad).toISOString() THROWS, which would
+// white-screen the whole tab over one row with a missing/garbage date. Returns an
+// em dash for anything unparseable so the ledger always renders.
+const ymd = (d) => {
+  const t = d ? new Date(d) : null;
+  return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : '—';
+};
 const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
-  'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
+  'Processing Fee', 'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
 // COGS categories that net against an order's revenue — MUST match the backend
 // Transaction.COGS_CATEGORIES so the drill-in profit reconciles with by-order.
-const COGS_CATEGORIES = ['Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission'];
+const COGS_CATEGORIES = ['Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission', 'Processing Fee'];
+// Merchant processing-fee rates (fractions of the payment) — MUST match the backend
+// Transaction.PROCESSING_FEE_RATES so the fee the UI previews equals the one booked.
+const PROCESSING_FEE_RATES = { cc: 0.0299, ach: 0.01, none: 0 };
+const FEE_METHOD_LABEL = { cc: 'Credit card (2.99%)', ach: 'ACH / bank (1%)', none: 'No fee (cash / check)' };
 // Canonical order-number key — strips non-digits AND leading zeros, mirroring the
 // backend controllers/finances.js normalizeOrderNumber so the drill-in groups a
 // "0000021" row and a "21" row into the one order the by-order list keys by.
@@ -44,8 +68,8 @@ const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').rep
 const signedAmt = (t) => (t && t.isCredit ? -(Number(t.amount) || 0) : (Number(t.amount) || 0));
 const CAT_COLOR = {
   'Blank COGS': '#60a5fa', 'Printer COGS': '#a78bfa', 'Shipping': '#2dd4bf', 'Art': '#f472b6',
-  'Commission': '#fbbf24', 'Software': '#f97316', 'Owner Draw': '#9ca3af', 'Sales Tax': '#ef4444',
-  'Refund': '#fb7185', 'Other': '#6b7280',
+  'Commission': '#fbbf24', 'Processing Fee': '#34d399', 'Software': '#f97316', 'Owner Draw': '#9ca3af',
+  'Sales Tax': '#ef4444', 'Refund': '#fb7185', 'Other': '#6b7280',
 };
 // Is this row money coming IN to the business? Income is normally in; a credit
 // flips it — an income credit (customer refund) is money OUT, an expense credit
@@ -87,8 +111,17 @@ export default function FinancesTab({ token, onBack }) {
         axios.get(`${base}/finances/by-client`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/payment-gaps`, { ...authHdr, params: { year } }),
       ]);
-      setSummary(s.data); setOrders(o.data.orders || []); setTxns(t.data.transactions || []);
-      setMonths(m.data.months || []); setClients(c.data.clients || []); setGaps(g.data || null);
+      // Coerce every list to an array of non-null rows at the boundary, so no
+      // downstream .map can hit a null row and white-screen the tab regardless of
+      // what the API returns. (The backend is also hardened, but this is belt-and-
+      // suspenders for the screen the owner is actively using.)
+      const arr = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+      setSummary(s.data || null);
+      setOrders(arr(o.data && o.data.orders));
+      setTxns(arr(t.data && t.data.transactions));
+      setMonths(arr(m.data && m.data.months));
+      setClients(arr(c.data && c.data.clients));
+      setGaps(g.data || null);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -279,7 +312,7 @@ export default function FinancesTab({ token, onBack }) {
               <Stat label="Revenue" value={money(summary.income)} color={B.white} />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
-              <Stat label="Margin" value={`${summary.margin}%`} color={summary.margin >= 0 ? B.green : '#f87171'} />
+              <Stat label="Margin" value={`${pct(summary.margin)}%`} color={pct(summary.margin) >= 0 ? B.green : '#f87171'} />
             </Box>
             {/* Owner cash lens — what the business EARNED (profit, above) vs what
                 you TOOK HOME (draws) vs what was LEFT IN the business. Profit
@@ -326,15 +359,15 @@ export default function FinancesTab({ token, onBack }) {
               <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>Where the money goes</Typography>
               <Stack gap={1}>
                 {expenses.map(([cat, amt]) => {
-                  const pct = summary.pctOfSpend?.[cat] || 0;
+                  const share = pct(summary.pctOfSpend?.[cat]);
                   return (
                     <Box key={cat}>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.3 }}>
                         <Typography sx={{ color: B.white, fontSize: 12 }}>{cat}</Typography>
-                        <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {pct}%</Typography>
+                        <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {share}%</Typography>
                       </Stack>
                       <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                        <Box sx={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
+                        <Box sx={{ width: `${Math.max(0, Math.min(100, share))}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
                           transformOrigin: 'left', animation: 'jpGrowX 700ms cubic-bezier(.2,.7,.3,1) both' }} />
                       </Box>
                     </Box>
@@ -365,7 +398,7 @@ export default function FinancesTab({ token, onBack }) {
                         <Box component="td" sx={{ color: B.white }}>{money(o.revenue)}</Box>
                         <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
                         <Box component="td" sx={{ color: o.profit >= 0 ? B.green : '#f87171' }}>{money(o.profit)}</Box>
-                        <Box component="td" sx={{ color: o.margin >= 0 ? B.green : '#f87171' }}>{o.margin}%</Box>
+                        <Box component="td" sx={{ color: pct(o.margin) >= 0 ? B.green : '#f87171' }}>{pct(o.margin)}%</Box>
                       </Box>
                     ))}
                   </Box>
@@ -382,7 +415,7 @@ export default function FinancesTab({ token, onBack }) {
                     {txns.slice().reverse().map((t) => (
                       <Box component="tr" key={t._id} onClick={() => setEditTxn(t)} {...bindTxn(t)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
-                        <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{new Date(t.date).toISOString().slice(0, 10)}</Box>
+                        <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{ymd(t.date)}</Box>
                         <Box component="td" sx={{ py: 0.6, px: 0.5, whiteSpace: 'nowrap' }}>
                           <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
                             color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
@@ -431,12 +464,13 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
   // drill-in shows the same rows the by-order grouping rolled up — a "0000021"
   // ledger row lines up with the "21" order the user clicked. (C2)
   const key = normOrderNo(orderNumber);
-  const rows = (txns || []).filter((t) => normOrderNo(t.orderNumber) === key)
+  const rows = (txns || []).filter((t) => t && normOrderNo(t.orderNumber) === key)
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date));
   // Credit-aware cash view: a supplier credit counts as money IN, a customer
   // refund as money OUT — so In/Out read true even with returns mixed in.
-  const income  = rows.filter((t) => isInflow(t)).reduce((s, t) => s + t.amount, 0);
-  const expense = rows.filter((t) => !isInflow(t)).reduce((s, t) => s + t.amount, 0);
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const income  = rows.filter((t) => isInflow(t)).reduce((s, t) => s + num(t.amount), 0);
+  const expense = rows.filter((t) => !isInflow(t)).reduce((s, t) => s + num(t.amount), 0);
   // Profit reconciles EXACTLY with the by-order list (M6): the SAME definition —
   // signed Customer-Sales revenue minus signed COGS — not the all-categories cash
   // Net. (Cash In/Out above stays a separate lens; profit is the margin number.)
@@ -465,7 +499,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
                 <Box component="tr" key={t._id} onClick={() => onEditTxn && onEditTxn(t)}
                   sx={{ borderTop: `1px solid ${B.border}`, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
                   <Box component="td" sx={{ py: 0.7, px: 1.5, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
-                    {new Date(t.date).toISOString().slice(0, 10)}
+                    {ymd(t.date)}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 0.5, whiteSpace: 'nowrap' }}>
                     <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
@@ -504,7 +538,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
 // opens the Add-transaction modal prefilled with the client + amount, so closing
 // the gap is a single confirm. Renders nothing when there's no gap (pristine).
 function PaymentGaps({ gaps, onRecord }) {
-  const rows = (gaps && gaps.orders) || [];
+  const rows = (gaps && Array.isArray(gaps.orders) ? gaps.orders : []).filter(Boolean);
   const totals = (gaps && gaps.totals) || {};
   if (!rows.length) return null;
   const noPay = round(totals.costWithoutPayment);
@@ -573,8 +607,12 @@ function PaymentGaps({ gaps, onRecord }) {
 }
 
 function MonthlyTrend({ months }) {
-  if (!months || months.length === 0) return null;
-  const max = Math.max(1, ...months.map((m) => Math.max(m.income, Math.abs(m.net))));
+  // Defensive: drop any null/month-less entry so one bad row can't break the chart.
+  const safe = (months || []).filter((m) => m && typeof m.month === 'string');
+  if (safe.length === 0) return null;
+  months = safe;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);   // finite bar heights only
+  const max = Math.max(1, ...months.map((m) => Math.max(n(m.income), Math.abs(n(m.net)))));
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -586,15 +624,16 @@ function MonthlyTrend({ months }) {
       </Stack>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', overflowX: 'auto', ...scrollbar, pb: 0.5 }}>
         {months.map((m, mi) => {
-          const [y, mo] = m.month.split('-');
+          const [y, mo] = String(m.month).split('-');
           const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short' });
+          const inc = n(m.income), net = n(m.net);
           return (
             <Box key={m.month} sx={{ minWidth: 36, flexShrink: 0, textAlign: 'center' }}
-              title={`${label} ${y} · revenue ${money(m.income)} · profit ${money(m.net)}`}>
+              title={`${label} ${y} · revenue ${money(inc)} · profit ${money(net)}`}>
               <Box sx={{ height: 92, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 0.5 }}>
-                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (m.income / max) * 100)}%`,
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (inc / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45}ms` }} />
-                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: m.net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(m.net) / max) * 100)}%`,
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(net) / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45 + 60}ms` }} />
               </Box>
               <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4 }}>{label}</Typography>
@@ -635,7 +674,7 @@ function TopClients({ clients }) {
                 <Box component="td" sx={{ color: B.muted }}>{c.orders}</Box>
                 <Box component="td" sx={{ color: B.white }}>{money(c.revenue)}</Box>
                 <Box component="td" sx={{ color: c.profit >= 0 ? B.green : '#f87171' }}>{money(c.profit)}</Box>
-                <Box component="td" sx={{ color: c.margin >= 0 ? B.green : '#f87171' }}>{c.margin}%</Box>
+                <Box component="td" sx={{ color: pct(c.margin) >= 0 ? B.green : '#f87171' }}>{pct(c.margin)}%</Box>
               </Box>
             ))}
           </Box>
@@ -651,13 +690,20 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   // to the client's payment — Income · Customer Sales · the order's client + amount.
   const seed = txn || prefill || null;
   const [type, setType] = useState(seed?.type || 'expense');
-  const [date, setDate] = useState(txn ? new Date(txn.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => {
+    const d = txn && txn.date ? new Date(txn.date) : null;
+    return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  });
   const [category, setCategory] = useState(seed?.category || (seed?.type === 'income' ? 'Customer Sales' : 'Printer COGS'));
   const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
   const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
   const [party, setParty] = useState(seed?.party || '');
   const [description, setDescription] = useState(seed?.description || '');
   const [isCredit, setIsCredit] = useState(!!txn?.isCredit);
+  // Payment method on a CLIENT PAYMENT (income · Customer Sales) → drives the
+  // auto-booked Processing Fee. Defaults to the saved method when editing, else
+  // 'none' so a NEW payment never silently adds a fee until the owner picks CC/ACH.
+  const [paymentMethod, setPaymentMethod] = useState(seed?.paymentMethod || 'none');
   const [receiptName, setReceiptName] = useState('');
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -702,10 +748,40 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
       // leave fields as-is; the receipt is still attached for manual entry
     } finally { setScanning(false); }
   };
+  // A real CLIENT PAYMENT (money IN for a sale, not a refund) — the only row a
+  // merchant Processing Fee applies to. Drives whether the payment-method picker
+  // and the fee preview show.
+  const isClientPayment = type === 'income' && category === 'Customer Sales' && !isCredit;
+  // What the processor will take, previewed live so the owner sees it before saving.
+  // Mirrors the backend computeProcessingFee exactly (amount × rate, 2dp).
+  const feeRate = PROCESSING_FEE_RATES[paymentMethod] || 0;
+  const feeAmount = isClientPayment ? round((Number(amount) || 0) * feeRate) : 0;
+
+  // One-tap "this is a refund": set Income · Customer Sales · Credit so it books as
+  // contra-revenue against the order (the owner never has to reason about the
+  // Credit toggle). The order # is what links it to the right order, so we surface
+  // that the field is required right here.
+  const makeRefund = () => {
+    setType('income');
+    setCategory('Customer Sales');
+    setIsCredit(true);
+    setPaymentMethod('none');     // a refund is never charged a processing fee
+    setErr('');
+  };
+
   const save = async () => {
     if (!amount || Number(amount) <= 0) { setErr('Enter an amount'); return; }
+    // A refund without an order # can't reduce the right order — make that obvious
+    // instead of silently booking an unlinked credit.
+    if (isCredit && type === 'income' && !String(orderNumber).replace(/[^0-9]/g, '')) {
+      setErr('Add the order # this refund is for'); return;
+    }
     setSaving(true); setErr('');
     const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit };
+    // Tag the payment method on a client payment so the backend auto-books the
+    // Processing Fee as a linked cost on the same order. Sent on edits too, so
+    // changing/removing the method re-syncs (or clears) the fee row.
+    if (type === 'income' && category === 'Customer Sales') form.paymentMethod = isCredit ? 'none' : paymentMethod;
     if (receiptDataUrl) form.receiptDataUrl = receiptDataUrl;
     try { await onSave(form); } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
   };
@@ -713,16 +789,39 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   const fld = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 } };
   const sel = { color: B.white, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: B.muted } };
   const hasReceipt = !!(txn && txn.receiptUrl);
+  // A refund is currently being entered (income credit) — the dialog reflects it.
+  const isRefundMode = type === 'income' && isCredit;
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
       <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>{edit ? 'Edit transaction' : 'Add transaction'}</Typography>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+          {edit ? 'Edit transaction' : isRefundMode ? 'Record a refund' : 'Add transaction'}
+        </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>
         <Stack gap={1.25}>
+          {/* Quick actions on a NEW entry — so the owner doesn't have to remember the
+              Income/Customer Sales/Credit combo. "Refund a customer" sets it all up
+              and just asks for the order #. Hidden once already in refund mode. */}
+          {!edit && !isRefundMode && (
+            <Button onClick={makeRefund} startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
+              sx={{ alignSelf: 'flex-start', color: '#fb7185', textTransform: 'none', fontWeight: 700, fontSize: 12,
+                border: '1px solid rgba(251,113,133,0.4)', borderRadius: 1.5, px: 1.25, py: 0.4,
+                '&:hover': { bgcolor: 'rgba(251,113,133,0.08)', borderColor: 'rgba(251,113,133,0.6)' } }}>
+              Refund a customer
+            </Button>
+          )}
+          {isRefundMode && (
+            <Box sx={{ border: '1px solid rgba(251,113,133,0.4)', bgcolor: 'rgba(251,113,133,0.07)', borderRadius: 1.5, px: 1.25, py: 0.85 }}>
+              <Typography sx={{ color: '#fb7185', fontWeight: 700, fontSize: 12 }}>Customer refund</Typography>
+              <Typography sx={{ color: B.muted, fontSize: 10.5, lineHeight: 1.35 }}>
+                Money back to a client — this lowers the order&apos;s revenue and profit. Enter the amount refunded and the order&nbsp;#.
+              </Typography>
+            </Box>
+          )}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
             <FormControl size="small" sx={fld}>
               <Select value={type} onChange={(e) => { setType(e.target.value); setCategory(e.target.value === 'income' ? 'Customer Sales' : 'Printer COGS'); }} sx={sel}>
@@ -742,9 +841,40 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
             <TextField size="small" placeholder={type === 'income' ? 'Client' : 'Vendor'} value={party} onChange={(e) => setParty(e.target.value)} sx={fld} />
-            <TextField size="small" placeholder="Order #" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} sx={fld} />
+            <TextField size="small" placeholder={isRefundMode ? 'Order # (required)' : 'Order #'} value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)}
+              sx={isRefundMode && !String(orderNumber).replace(/[^0-9]/g, '')
+                ? { ...fld, '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(251,113,133,0.6)' } }
+                : fld} />
           </Box>
           <TextField size="small" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} sx={fld} />
+          {/* Payment method → auto-books the merchant Processing Fee as a cost on
+              this order. Only on a real client payment (income · Customer Sales, not
+              a refund). The fee is previewed live so the owner sees what's deducted. */}
+          {isClientPayment && (
+            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, px: 1.25, py: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ mb: 0.75 }}>
+                <CreditCardOutlinedIcon sx={{ fontSize: 15, color: B.muted }} />
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: B.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>How was it paid?</Typography>
+              </Stack>
+              <FormControl size="small" sx={{ ...fld, width: '100%' }}>
+                <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} sx={sel}>
+                  {['none', 'cc', 'ach'].map((m) => <MenuItem key={m} value={m}>{FEE_METHOD_LABEL[m]}</MenuItem>)}
+                </Select>
+              </FormControl>
+              {feeAmount > 0 ? (
+                <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.75 }}>
+                  Processing fee <Box component="span" sx={{ color: '#f87171', fontWeight: 700 }}>{money(feeAmount)}</Box>
+                  {' '}({(feeRate * 100).toFixed(2)}%) will be booked as a cost on
+                  {orderNumber ? <> order <Box component="span" sx={{ color: B.white }}>#{String(orderNumber).replace(/[^0-9]/g, '')}</Box></> : ' this order'}.
+                  Net into the business: <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money((Number(amount) || 0) - feeAmount)}</Box>.
+                </Typography>
+              ) : (
+                <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.75 }}>
+                  No processor fee (cash, check, or a waived fee). Pick CC/ACH to auto-book the merchant fee.
+                </Typography>
+              )}
+            </Box>
+          )}
           {/* Credit / return toggle — books a positive amount that flows the
               opposite way, so a refund or supplier credit nets correctly instead
               of looking like a charge/sale. */}
