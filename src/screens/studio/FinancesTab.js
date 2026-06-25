@@ -292,18 +292,13 @@ export default function FinancesTab({ token, onBack }) {
                   <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Your money</Typography>
                   <Typography sx={{ color: B.muted, fontSize: 10.5 }}>Profit is what the business earned · draws aren’t a cost</Typography>
                 </Stack>
-                <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(3,1fr)' } }}>
+                <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)' } }}>
                   <Stat label="Profit (earned)" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} />
                   <Stat label="Take-home (draws)" value={money(summary.takeHome)} color={B.white} />
-                  <Stat label="Left in business"
-                    value={money(summary.leftInBusiness)}
-                    color={summary.leftInBusiness >= 0 ? B.green : '#fbbf24'} />
                 </Box>
                 <Typography sx={{ color: B.muted, fontSize: 11, mt: 1 }}>
                   The business earned <Box component="span" sx={{ color: B.white }}>{money(summary.net)}</Box>;
-                  you took home <Box component="span" sx={{ color: B.white }}>{money(summary.takeHome)}</Box> in owner draws,
-                  leaving <Box component="span" sx={{ color: summary.leftInBusiness >= 0 ? B.green : '#fbbf24' }}>{money(summary.leftInBusiness)}</Box> in the business.
-                  {summary.leftInBusiness < 0 && ' You drew more than the business earned this period.'}
+                  you took home <Box component="span" sx={{ color: B.white }}>{money(summary.takeHome)}</Box> in owner draws.
                   {summary.ownerContribution > 0 && <> {' '}(+ {money(summary.ownerContribution)} you put in — equity, not income.)</>}
                 </Typography>
               </Box>
