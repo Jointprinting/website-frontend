@@ -17,8 +17,6 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
-import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
-import ThermostatOutlinedIcon from '@mui/icons-material/ThermostatOutlined';
 import SortOutlinedIcon from '@mui/icons-material/SortOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -28,15 +26,6 @@ import {
   StageChip, EmptyState, TagChips, stageMeta, followUpStatus, fmtMoney0,
   PIPELINE_STAGES, SECONDARY_STAGES, STAGE_PROBABILITY, tempMeta, isWonStage,
 } from './_crm';
-
-// Temperature filter options (a card matches if it carries the matching tag).
-const TEMP_FILTERS = [
-  { value: 'all', label: 'Any temp' },
-  { value: 'hot', label: 'Hot' },
-  { value: 'warm', label: 'Warm' },
-  { value: 'room-temp', label: 'Room temp' },
-  { value: 'cold', label: 'Cold' },
-];
 
 // Within-column sort options.
 const SORTS = [
@@ -55,12 +44,6 @@ function sortCards(cards, sort) {
   else if (sort === 'followup') arr.sort((a, b) => fuSortKey(a) - fuSortKey(b));
   else arr.sort((a, b) => (Number(b.dealValue) || 0) - (Number(a.dealValue) || 0)); // value (default)
   return arr;
-}
-
-// Does a card carry the chosen temperature tag? (case-insensitive)
-function matchesTemp(card, temp) {
-  if (temp === 'all') return true;
-  return (card.tags || []).some((t) => String(t).toLowerCase().trim() === temp);
 }
 
 // A draggable company card. Mirrors CalendarView's EventChip drag contract:
@@ -209,24 +192,20 @@ function Metric({ label, value, tone }) {
 export default function PipelineView({
   groups, summary, probability, loading,
   query, onQueryChange, tag, onTagChange, tagOptions,
-  area, onAreaChange, areaOptions,
   onOpen, onMoveStage, bindCompany,
 }) {
-  // Within-board controls (client-side; the loaded set already has the fields):
-  // temperature filter + within-column sort. Area + tag + search are wired up
-  // through the parent so the fetch can scope server-side where it helps.
-  const [temp, setTemp] = React.useState('all');
+  // Within-board control (client-side; the loaded set already has the fields):
+  // within-column sort. Tag + search are wired through the parent so the fetch
+  // can scope server-side. (The old "Area" / "Temp" filters were removed — the
+  // stage columns already do that grouping; they were noise.)
   const [sort, setSort] = React.useState('value');
 
-  // Apply the client-side temp filter + sort to each group, then recompute its
-  // count + totalValue so the column header reflects what's actually shown.
+  // Apply the within-column sort to each group, then recompute its count +
+  // totalValue so the column header reflects what's actually shown.
   const shapedByStage = React.useMemo(() => {
     const map = {};
     (groups || []).forEach((g) => {
-      const filtered = (g.clients || [])
-        .filter((c) => matchesTemp(c, temp))
-        .filter((c) => (area && area !== 'all' ? c.area === area : true));
-      const sorted = sortCards(filtered, sort);
+      const sorted = sortCards(g.clients || [], sort);
       map[g.stage] = {
         ...g,
         clients: sorted,
@@ -235,7 +214,7 @@ export default function PipelineView({
       };
     });
     return map;
-  }, [groups, temp, sort, area]);
+  }, [groups, sort]);
 
   // Seed a group for any stage missing from the payload so columns always show.
   const groupFor = React.useCallback(
@@ -325,9 +304,8 @@ export default function PipelineView({
         {loading && <CircularProgress size={18} sx={{ color: D.green }} />}
       </Box>
 
-      {/* Filters — search + tag (server-side) · area + temperature + sort (within
-          the loaded board). Gives the owner the control he asked for without a
-          round-trip per knob. */}
+      {/* Filters — search + tag (server-side) · sort (within the loaded board).
+          Kept lean on purpose: the stage columns already segment the board. */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25} useFlexGap flexWrap="wrap">
         <TextField
           value={query} onChange={(e) => onQueryChange(e.target.value)}
@@ -346,28 +324,6 @@ export default function PipelineView({
         >
           <MenuItem value="all">All tags</MenuItem>
           {(tagOptions || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-        </TextField>
-        {onAreaChange && (
-          <TextField
-            select value={area || 'all'} onChange={(e) => onAreaChange(e.target.value)}
-            size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Area"
-            disabled={(areaOptions || []).length === 0}
-            InputProps={{ startAdornment: (
-              <InputAdornment position="start"><PlaceOutlinedIcon sx={{ color: D.faint, fontSize: 16 }} /></InputAdornment>
-            ) }}
-          >
-            <MenuItem value="all">All areas</MenuItem>
-            {(areaOptions || []).map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-          </TextField>
-        )}
-        <TextField
-          select value={temp} onChange={(e) => setTemp(e.target.value)}
-          size="small" sx={{ ...dropInput, minWidth: { sm: 140 } }} label="Temp"
-          InputProps={{ startAdornment: (
-            <InputAdornment position="start"><ThermostatOutlinedIcon sx={{ color: D.faint, fontSize: 17 }} /></InputAdornment>
-          ) }}
-        >
-          {TEMP_FILTERS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
         </TextField>
         <TextField
           select value={sort} onChange={(e) => setSort(e.target.value)}
@@ -388,8 +344,8 @@ export default function PipelineView({
       ) : totalCards === 0 ? (
         <EmptyState
           icon={<ViewKanbanOutlinedIcon />}
-          title={query || tag !== 'all' || temp !== 'all' || (area && area !== 'all') ? 'No matches' : 'Your pipeline is empty'}
-          hint={query || tag !== 'all' || temp !== 'all' || (area && area !== 'all')
+          title={query || tag !== 'all' ? 'No matches' : 'Your pipeline is empty'}
+          hint={query || tag !== 'all'
             ? 'Try clearing the search or tag filter.'
             : 'Add a deal value + stage on a company to see it here.'}
         />

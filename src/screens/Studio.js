@@ -75,7 +75,8 @@ import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
-import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
+import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import JpLoader from '../common/JpLoader';
 
 const TOKEN_KEY = 'jpStudioToken';
@@ -1931,24 +1932,52 @@ function ColdCallTab({ token }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Hub — picks which tool to enter, grouped by brand
+//  Hub — picks which tool to enter, organized by REAL daily importance
 // ─────────────────────────────────────────────────────────────────────────────
-// Ordered by daily frequency of use — Order Tracker first, maintenance last.
-// Subtitles give the page some weight and tell new-tab-me what each tile does.
+// The owner found the flat 9-card grid overwhelming. So the live tools are split
+// into three tiers and the hub renders each at a different volume:
+//   • primary   — the daily core, big bold cards: Today (the action queue),
+//                 Orders (the pipeline), Clients (the CRM book).
+//   • secondary — used often but not first: Finances, Mockups, Field Map,
+//                 Inquiries, Catalogs. Normal-size cards.
+//   • tucked    — reach-for-occasionally, small & quiet: Printers · Vendors
+//                 (now a lightweight directory, no longer a heavy headline tab)
+//                 and Backup.
+// `target` is the StudioBody view to open; `view` lets a tile deep-link into a
+// tool's internal view (Today / Clients both open the CRM at the right tab).
+// Every destination stays reachable — this only changes prominence + ordering.
 const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
     tagline: 'Run the shop',
-    tools: [
-      { id: 'crm',         label: 'CRM',           desc: 'Call list, follow-ups, companies',       Icon: ContactPhoneOutlinedIcon },
-      { id: 'clients',     label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',     Icon: PeopleOutlineIcon },
-      { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',             Icon: DesignServicesIcon },
-      { id: 'roadtrip',    label: 'Field Map',     desc: 'Plan in-person sweeps',                  Icon: ExploreOutlinedIcon },
-      { id: 'submissions', label: 'Inquiries',     desc: 'Contact-form leads',                     Icon: InboxIcon },
-      { id: 'catalogs',    label: 'Catalogs',      desc: 'Curated picks, featured items',          Icon: MenuBookOutlinedIcon },
-      { id: 'finances',    label: 'Finances',      desc: 'P&L, margins, expenses',                 Icon: PaidOutlinedIcon },
-      { id: 'vendors',     label: 'Vendors',       desc: 'Printers & suppliers — POs, spend',      Icon: StorefrontOutlinedIcon },
-      { id: 'backup',      label: 'Backup',        desc: 'Snapshots of projects + mockups',        Icon: BackupIcon },
+    tiers: [
+      {
+        id: 'primary',
+        tools: [
+          { id: 'today',    label: 'Today',         desc: 'Your call queue — who to follow up with now', Icon: TodayOutlinedIcon,         target: 'crm', view: 'today' },
+          { id: 'clients',  label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',          Icon: PeopleOutlineIcon },
+          { id: 'crm',      label: 'Clients',       desc: 'Your CRM — companies, leads, follow-ups',      Icon: ContactPhoneOutlinedIcon,  target: 'crm', view: 'companies' },
+        ],
+      },
+      {
+        id: 'secondary',
+        label: 'More tools',
+        tools: [
+          { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
+          { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
+          { id: 'roadtrip',    label: 'Field Map',    desc: 'Plan in-person sweeps',         Icon: ExploreOutlinedIcon },
+          { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
+          { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
+        ],
+      },
+      {
+        id: 'tucked',
+        label: 'Maintenance',
+        tools: [
+          { id: 'vendors', label: 'Printers · Vendors', desc: 'Supplier directory — POs, spend',  Icon: LocalShippingOutlinedIcon },
+          { id: 'backup',  label: 'Backup',             desc: 'Snapshots of projects + mockups',  Icon: BackupIcon },
+        ],
+      },
     ],
   },
   {
@@ -1965,12 +1994,37 @@ const HUB_GROUPS = [
   },
 ];
 
-// Flat list of all tools, with brand attached, for header lookups
-const HUB_TOOLS = HUB_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, brand: g.brand })));
+// All tools in a group, flattened across its tiers (tiered groups) or its flat
+// `tools` (paused group).
+const groupTools = (g) => (g.tiers ? g.tiers.flatMap((t) => t.tools) : (g.tools || []));
 
-function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
+// Flat list of all tools, with brand attached, for header lookups. De-dupes by
+// the StudioBody view id (`target` || `id`) so the two CRM entry points (Today /
+// Clients) resolve to a single header label without colliding. The CANONICAL
+// tile (whose own id IS the view id — e.g. the "Clients" tile, id 'crm') wins the
+// label, even if a deep-link alias (the 'today' tile, target 'crm') was seen
+// first — so a tool's header never reads its alias's name.
+const HUB_TOOLS = (() => {
+  const byView = new Map();
+  for (const g of HUB_GROUPS) {
+    for (const t of groupTools(g)) {
+      const viewId = t.target || t.id;
+      const entry = { ...t, id: viewId, brand: g.brand };
+      const isCanonical = t.id === viewId;
+      if (!byView.has(viewId) || isCanonical) byView.set(viewId, entry);
+    }
+  }
+  return [...byView.values()];
+})();
+
+// size: 'large' (primary tier), 'normal' (secondary), or muted (paused).
+// `large` cards get more height, a bigger icon, and a brighter label so the
+// daily-core tier reads as the headline; muted cards (paused) read quietest.
+function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large }) {
   const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
+  const iconSize = large ? 54 : (muted ? 42 : 48);
+  const glyph = large ? 28 : (muted ? 21 : 24);
   return (
     <Grow in timeout={400 + delay}>
       <Paper
@@ -1982,9 +2036,9 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
         sx={{
           cursor: 'pointer',
           bgcolor: D.panel,
-          border: `1px solid ${D.line}`,
+          border: `1px solid ${large ? D.lineHi : D.line}`,
           borderRadius: 3,
-          minHeight: muted ? 132 : 168,
+          minHeight: large ? 188 : (muted ? 132 : 156),
           transition: 'border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease',
           position: 'relative',
           overflow: 'hidden',
@@ -1992,14 +2046,14 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
           flexDirection: 'column',
           alignItems: 'flex-start',
           justifyContent: 'flex-start',
-          gap: muted ? 1.25 : 1.5,
-          p: { xs: 2, sm: muted ? 2.25 : 2.5 },
+          gap: large ? 1.75 : (muted ? 1.25 : 1.5),
+          p: { xs: 2, sm: large ? 3 : (muted ? 2.25 : 2.5) },
           // Muted (paused) cards drop the green wash so they read quieter; live
-          // cards get the soft top-left brand glow.
+          // cards get the soft top-left brand glow — brighter on the primary tier.
           opacity: muted ? 0.78 : 1,
           backgroundImage: muted
             ? 'none'
-            : 'linear-gradient(155deg, rgba(74,222,128,0.06) 0%, rgba(255,255,255,0.012) 55%, transparent 100%)',
+            : `linear-gradient(155deg, rgba(74,222,128,${large ? 0.1 : 0.06}) 0%, rgba(255,255,255,0.012) 55%, transparent 100%)`,
           '&:hover': {
             borderColor: D.lineHi,
             transform: 'translateY(-3px)',
@@ -2013,19 +2067,20 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
           '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
         }}
       >
-        {/* Top accent hairline — invisible until hover, the brand "glow" cue. */}
-        <Box className="hub-accent" sx={{ ...accentBar, opacity: 0, transition: 'opacity 0.2s ease' }} />
+        {/* Top accent hairline — invisible until hover (visible on the primary
+            tier from the start, so the daily core glows). */}
+        <Box className="hub-accent" sx={{ ...accentBar, opacity: large ? 0.9 : 0, transition: 'opacity 0.2s ease' }} />
         <Box
           className="hub-icon"
           sx={{
-            width: muted ? 42 : 48, height: muted ? 42 : 48, borderRadius: 2,
+            width: iconSize, height: iconSize, borderRadius: 2,
             bgcolor: D.greenDk, color: D.green,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s ease',
             position: 'relative',
           }}
         >
-          <Icon sx={{ fontSize: muted ? 21 : 24 }} />
+          <Icon sx={{ fontSize: glyph }} />
           {notice && !badge && (
             <Box sx={{
               position: 'absolute', top: -3, right: -3,
@@ -2051,14 +2106,14 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted }) {
         </Box>
         <Box sx={{ flexGrow: 1, minHeight: 0 }}>
           <MuiTypography className="hub-label" sx={{
-            color: D.text, fontWeight: 800, fontSize: muted ? 14.5 : 15.5, letterSpacing: 0.2,
+            color: D.text, fontWeight: 800, fontSize: large ? 18 : (muted ? 14.5 : 15.5), letterSpacing: 0.2,
             transition: 'color 0.2s ease', lineHeight: 1.25, mb: 0.4,
           }}>
             {label}
           </MuiTypography>
           {desc && (
             <MuiTypography sx={{
-              color: D.muted, fontSize: 11.5, lineHeight: 1.4,
+              color: D.muted, fontSize: large ? 12.5 : 11.5, lineHeight: 1.4,
             }}>
               {desc}
             </MuiTypography>
@@ -2130,20 +2185,15 @@ function SectionHeader({ brand, tagline, dim, right }) {
   );
 }
 
-function ToolGrid({ tools, twoUp, muted, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+// cols: explicit responsive column template. `large` renders the primary tier;
+// `muted` the paused group. onPick receives the whole tool so a tile can
+// deep-link into a tool's internal view (Today / Clients → CRM).
+function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
   return (
     <Box sx={{
       display: 'grid',
       gap: { xs: 1.25, sm: 1.5 },
-      // Wider grid on desktop fills the empty horizontal space the previous
-      // 3-col layout left behind. 4 across on lg keeps the common tiles on one
-      // comfortable row; the paused (2-tool) group stays a tidy pair.
-      gridTemplateColumns: {
-        xs: 'repeat(2, 1fr)',
-        sm: twoUp ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-        md: twoUp ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-        lg: twoUp ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-      },
+      gridTemplateColumns: cols,
     }}>
       {tools.map((t, i) => {
         const showNotice = t.id === 'jpwrecon' && sweepNeeded;
@@ -2154,8 +2204,9 @@ function ToolGrid({ tools, twoUp, muted, startIdx, onPick, sweepNeeded, sweepBlo
             key={t.id}
             tool={t}
             muted={muted}
+            large={large}
             delay={(startIdx + i) * 50}
-            onClick={() => onPick(t.id)}
+            onClick={() => onPick(t)}
             notice={showNotice ? "Today's sweep not run yet" : null}
             countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
             badge={badge}
@@ -2165,6 +2216,26 @@ function ToolGrid({ tools, twoUp, muted, startIdx, onPick, sweepNeeded, sweepBlo
     </Box>
   );
 }
+
+// A small, quiet label that opens the secondary / tucked tiers — lighter than a
+// full SectionHeader so the daily-core tier stays the visual headline.
+function TierLabel({ children }) {
+  return (
+    <MuiTypography sx={{
+      ...eyebrow, color: D.faint, fontSize: 10, letterSpacing: 2, mb: 1.25, display: 'block',
+    }}>
+      {children}
+    </MuiTypography>
+  );
+}
+
+// Column templates per tier — primary is a roomy 3-up, secondary fills the row,
+// tucked is a tidy small row. All collapse to 2-up / 1-up on small screens.
+const TIER_COLS = {
+  primary:   { xs: '1fr', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(3, 1fr)' },
+  secondary: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
+  tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
+};
 
 // Future-phase placeholder. Intentionally inert — a calm, labeled slot on the
 // hub reserved for smart alerts. No data, no logic; just reserves the space
@@ -2207,27 +2278,37 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
   const paused = HUB_GROUPS.filter((g) => g.paused);
   let cardIdx = 0;
 
+  // Shared props every ToolGrid needs (badges / sweep nudges).
+  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries };
+
   return (
     <Stack spacing={4}>
-      {live.map((group) => {
-        const startIdx = cardIdx;
-        cardIdx += group.tools.length;
-        return (
-          <Box key={group.brand}>
-            <SectionHeader brand={group.brand} tagline={group.tagline} />
-            <ToolGrid
-              tools={group.tools}
-              twoUp={group.tools.length <= 2}
-              startIdx={startIdx}
-              onPick={onPick}
-              sweepNeeded={sweepNeeded}
-              sweepBlocked={sweepBlocked}
-              nextResetAt={nextResetAt}
-              unseenInquiries={unseenInquiries}
-            />
-          </Box>
-        );
-      })}
+      {live.map((group) => (
+        <Box key={group.brand}>
+          <SectionHeader brand={group.brand} tagline={group.tagline} />
+          {/* Tiered: the daily core (primary) renders big & bold; secondary and
+              tucked tiers read progressively quieter so the hub stops feeling
+              overwhelming. Each tier is its own grid + a soft label. */}
+          <Stack spacing={2.5}>
+            {(group.tiers || []).map((tier) => {
+              const startIdx = cardIdx;
+              cardIdx += tier.tools.length;
+              return (
+                <Box key={tier.id}>
+                  {tier.label && <TierLabel>{tier.label}</TierLabel>}
+                  <ToolGrid
+                    tools={tier.tools}
+                    cols={TIER_COLS[tier.id] || TIER_COLS.secondary}
+                    large={tier.id === 'primary'}
+                    startIdx={startIdx}
+                    {...gridProps}
+                  />
+                </Box>
+              );
+            })}
+          </Stack>
+        </Box>
+      ))}
 
       {/* Reserved, logic-free slot for the future smart-alerts phase. */}
       <Box>
@@ -2292,7 +2373,7 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
               <Box sx={{ pt: 0.5 }}>
                 <ToolGrid
                   tools={group.tools}
-                  twoUp={group.tools.length <= 2}
+                  cols={TIER_COLS.tucked}
                   muted
                   startIdx={startIdx}
                   onPick={onPick}
@@ -2315,6 +2396,10 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
 // ─────────────────────────────────────────────────────────────────────────────
 function StudioBody({ token, onLogout }) {
   const [view, setView] = React.useState('hub');
+  // Which internal view the CRM should land on when entered from a hub tile
+  // (Today tile → 'today', Clients tile → 'companies'). Null = the CRM's own
+  // default. Bumped with a nonce so re-picking the same tile re-applies it.
+  const [crmEntry, setCrmEntry] = React.useState({ view: null, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
@@ -2371,7 +2456,12 @@ function StudioBody({ token, onLogout }) {
     return () => { cancelled = true; };
   }, [view, token]);
 
-  const handlePick = (id) => {
+  // A hub tile hands the whole tool. `target` is the StudioBody view to open
+  // (defaults to the tile's id); `view` deep-links into that tool's internal
+  // view (the two CRM tiles, Today / Clients, both target 'crm').
+  const handlePick = (tool) => {
+    const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
+    const innerView = typeof tool === 'object' && tool ? tool.view : null;
     if (id === 'mockup') {
       window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
       return;
@@ -2382,6 +2472,7 @@ function StudioBody({ token, onLogout }) {
         { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
         .catch(() => { /* best-effort; badge already cleared locally */ });
     }
+    if (id === 'crm') setCrmEntry((p) => ({ view: innerView || 'companies', nonce: p.nonce + 1 }));
     setView(id);
   };
 
@@ -2445,7 +2536,9 @@ function StudioBody({ token, onLogout }) {
   }
 
   if (view === 'crm') {
-    return <CrmTab token={token} onBack={() => setView('hub')} />;
+    // Key by the entry nonce so re-picking the Today/Clients tile re-lands on
+    // the right internal view (CrmTab reads initialView at mount).
+    return <CrmTab key={crmEntry.nonce} token={token} initialView={crmEntry.view} onBack={() => setView('hub')} />;
   }
 
   if (view === 'backup') {
