@@ -28,7 +28,7 @@ import { D, scrollbar, dropInput, fmt, mono, accentBar, dropPrimaryBtn, hasConfi
 
 const base = `${config.backendUrl}/api`;
 
-export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
+export default function PoBuilderDialog({ open, project, authHdr, onClose, onNavigate }) {
   const [pos, setPos] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -206,6 +206,22 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
   };
   const onVendorName = (name) => fillFromVendor(name, null);
 
+  // Jump from a PO to its vendor's card. Resolve the name to a known vendor (exact
+  // case-insensitive — the same match fillFromVendor uses) so we pass its _id when
+  // we have it; otherwise hand the name and let VendorsTab resolve it. Returns
+  // whether a usable name was present (gates the affordance — a blank/Unassigned
+  // vendor is not a link, never a dead-end).
+  const openVendorCard = (name) => {
+    const nm = String(name || '').trim();
+    if (!onNavigate || !nm) return;
+    const v = vendors.find((x) => (x.name || '').toLowerCase() === nm.toLowerCase());
+    onNavigate({ view: 'vendors', vendorId: v ? v._id : null, vendorName: nm });
+  };
+  const isRealVendor = (name) => {
+    const nm = String(name || '').trim().toLowerCase();
+    return !!nm && nm !== 'unassigned' && nm !== 'unnamed vendor';
+  };
+
   const closeGuard = () => {
     if (dirty && !window.confirm('You have unsaved PO changes. Close anyway?')) return;
     onClose();
@@ -280,7 +296,20 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                       {po.poNumber || '—'}
                     </Typography>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: D.text }}>{po.vendorName || 'Unnamed vendor'}</Typography>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: D.text }}>
+                        {(onNavigate && isRealVendor(po.vendorName)) ? (
+                          <Box
+                            component="span"
+                            onClick={(e) => { e.stopPropagation(); openVendorCard(po.vendorName); }}
+                            role="button" tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVendorCard(po.vendorName); } }}
+                            title={`Open ${po.vendorName} card`}
+                            sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                          >
+                            {po.vendorName}
+                          </Box>
+                        ) : (po.vendorName || 'Unnamed vendor')}
+                      </Typography>
                       <Typography sx={{ fontSize: 11, color: D.muted }}>
                         {po.date ? new Date(po.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''}
                         {(po.items || []).length ? ` · ${(po.items || []).length} item${(po.items || []).length === 1 ? '' : 's'}` : ''}
@@ -337,7 +366,23 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose }) {
                   onChange={e => update({ date: e.target.value ? new Date(`${e.target.value}T00:00:00Z`).toISOString() : null })}
                   sx={inkInput} />
               </PF>
-              <PF label="Printer / vendor">
+              <PF label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  Printer / vendor
+                  {(onNavigate && isRealVendor(editing.vendorName)) && (
+                    <Box
+                      component="span"
+                      onClick={() => openVendorCard(editing.vendorName)}
+                      role="button" tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openVendorCard(editing.vendorName); } }}
+                      title={`Open ${editing.vendorName} card`}
+                      sx={{ color: D.green, cursor: 'pointer', textTransform: 'none', letterSpacing: 0, fontWeight: 700, '&:hover': { textDecoration: 'underline' } }}
+                    >
+                      open card
+                    </Box>
+                  )}
+                </Box>
+              }>
                 <Autocomplete
                   freeSolo
                   selectOnFocus

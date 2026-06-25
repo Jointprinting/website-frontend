@@ -14,7 +14,7 @@
 // token (the backend routes are requireAdmin). Reuses the premium `D` palette so
 // it reads as part of the same Studio family as the CRM cards.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, TextField, IconButton, Button, CircularProgress,
   InputAdornment, Switch, FormControlLabel, Tooltip, Radio, Chip, Divider, Collapse,
@@ -245,9 +245,32 @@ const Eyebrow = ({ children, sx }) => (
   <Typography sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase', ...sx }}>{children}</Typography>
 );
 
-function PoRow({ p }) {
+// A clickable row that jumps to the linked order's project page. Used by both the
+// PO and order lists on the vendor card. Clickable only when an order/project
+// number is present (the PO/order row always carries one here) AND a navigator
+// is wired; otherwise a plain row — no dead-end.
+function rowOpenProps(target, onOpen) {
+  const canOpen = !!onOpen && !!(target.projectNumber || target.orderNumber);
+  if (!canOpen) return { boxSx: {}, handlers: {} };
+  const go = () => onOpen({ orderNumber: target.orderNumber, projectNumber: target.projectNumber });
+  return {
+    boxSx: {
+      cursor: 'pointer', transition: 'background-color 0.15s ease',
+      '&:hover': { bgcolor: 'rgba(74,222,128,0.06)' },
+    },
+    handlers: {
+      onClick: go,
+      role: 'button', tabIndex: 0,
+      onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } },
+      title: 'Open this order',
+    },
+  };
+}
+
+function PoRow({ p, onOpenOrder }) {
+  const { boxSx, handlers } = rowOpenProps(p, onOpenOrder);
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25, borderBottom: `1px solid ${D.line}` }}>
+    <Box {...handlers} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25, borderBottom: `1px solid ${D.line}`, ...boxSx }}>
       <DescriptionOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -261,9 +284,10 @@ function PoRow({ p }) {
   );
 }
 
-function OrderRow({ o }) {
+function OrderRow({ o, onOpenOrder }) {
+  const { boxSx, handlers } = rowOpenProps(o, onOpenOrder);
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25, borderBottom: `1px solid ${D.line}` }}>
+    <Box {...handlers} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25, borderBottom: `1px solid ${D.line}`, ...boxSx }}>
       <ReceiptLongOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -282,9 +306,21 @@ function OrderRow({ o }) {
   );
 }
 
-function TxnRow({ t }) {
+function TxnRow({ t, onOpenOrder }) {
+  // A receipt/expense tagged to an order links to that order (link #6). Only when
+  // it carries an order # AND a navigator — an untagged expense is a plain row.
+  const canOpen = !!onOpenOrder && !!t.orderNumber;
+  const go = canOpen ? () => onOpenOrder({ orderNumber: t.orderNumber }) : undefined;
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1, px: 1.25, borderBottom: `1px solid ${D.line}` }}>
+    <Box
+      onClick={go}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } : undefined}
+      title={canOpen ? `Open order #${t.orderNumber}` : undefined}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1, px: 1.25, borderBottom: `1px solid ${D.line}`,
+        cursor: canOpen ? 'pointer' : 'default', transition: 'background-color 0.15s ease',
+        '&:hover': canOpen ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined }}>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography sx={{ color: D.text, fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {t.description || t.category || 'Expense'}
@@ -315,7 +351,7 @@ function ProfileField({ label, value, onCommit, placeholder, saving }) {
 }
 
 // ── Detail card ───────────────────────────────────────────────────────────────
-function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
+function VendorDetail({ data, loading, onBack, onPatch, savingField, onOpenOrder }) {
   const vendor = data?.vendor || null;
   const pos = data?.pos || [];
   const orders = data?.orders || [];
@@ -428,7 +464,7 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
           {orders.length === 0 ? (
             <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No connected orders yet.</Typography>
           ) : (
-            <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{orders.map((o) => <OrderRow key={o.orderNumber} o={o} />)}</Box>
+            <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{orders.map((o) => <OrderRow key={o.orderNumber} o={o} onOpenOrder={onOpenOrder} />)}</Box>
           )}
         </Box>
         <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
@@ -439,7 +475,7 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
           {pos.length === 0 ? (
             <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No POs issued yet.</Typography>
           ) : (
-            <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{pos.map((p) => <PoRow key={p._id} p={p} />)}</Box>
+            <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{pos.map((p) => <PoRow key={p._id} p={p} onOpenOrder={onOpenOrder} />)}</Box>
           )}
         </Box>
       </Box>
@@ -455,7 +491,7 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
             No expenses booked to this printer yet. Booking a receipt with this vendor + an order # connects it here automatically.
           </Typography>
         ) : (
-          <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{transactions.map((t) => <TxnRow key={t._id} t={t} />)}</Box>
+          <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>{transactions.map((t) => <TxnRow key={t._id} t={t} onOpenOrder={onOpenOrder} />)}</Box>
         )}
       </Box>
 
@@ -471,7 +507,7 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
 }
 
 // ── Tab shell ─────────────────────────────────────────────────────────────────
-export default function VendorsTab({ token, onBack }) {
+export default function VendorsTab({ token, onBack, onNavigate, initialVendor }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [vendors, setVendors] = useState([]);
   const [duplicates, setDuplicates] = useState([]);
@@ -520,6 +556,35 @@ export default function VendorsTab({ token, onBack }) {
   }, [authHdr]);
 
   useEffect(() => { if (openId) loadDetail(openId); else setDetail(null); }, [openId, loadDetail]);
+
+  // ── Cross-tab deep link IN: open one vendor card ─────────────────────────────
+  // A jump from a PO / order / supplier chip hands initialVendor { vendorId,
+  // vendorName }. Prefer the id; otherwise resolve the name to a vendor by EXACT
+  // case-insensitive name (the same match the PO builder uses) once the list is
+  // loaded — only when it's unambiguous. If it can't be resolved (unknown/blank,
+  // or two share the name), we don't guess: seed the search box so the owner
+  // lands on the filtered directory (no crash, no dead-end). Re-keyed by nonce in
+  // Studio so a fresh jump re-runs this.
+  const vendorLinkDone = useRef(false);
+  useEffect(() => {
+    if (vendorLinkDone.current) return;
+    const want = initialVendor || {};
+    const id = want.vendorId ? String(want.vendorId) : '';
+    const nm = want.vendorName ? String(want.vendorName).trim() : '';
+    if (!id && !nm) { vendorLinkDone.current = true; return; }
+    if (id) { vendorLinkDone.current = true; setOpenId(id); return; }
+    // Name path: wait for the vendor list before resolving (the list is needed to
+    // match a name → card). While it's still loading / not yet arrived we hold off
+    // WITHOUT marking done, so the resolve runs once the vendors land. A genuinely
+    // empty vendor DB has nothing to open anyway, so holding is harmless there.
+    if (loading || vendors.length === 0) return;
+    vendorLinkDone.current = true;
+    const lower = nm.toLowerCase();
+    const matches = vendors.filter((v) => (v.name || '').trim().toLowerCase() === lower);
+    if (matches.length === 1) setOpenId(matches[0]._id);
+    else setQuery(nm);   // unknown or ambiguous → filtered directory, owner picks
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialVendor, loading, vendors]);
 
   // PATCH a vendor field → refresh the card + keep the list name in sync.
   const patch = useCallback(async (body) => {
@@ -574,7 +639,9 @@ export default function VendorsTab({ token, onBack }) {
       <Box data-ctx-chrome sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 3 }, py: { xs: 2, md: 3 }, ...scrollbar }}>
         {openId ? (
           <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
-            onBack={() => setOpenId(null)} onPatch={patch} />
+            onBack={() => setOpenId(null)} onPatch={patch}
+            // A connected order/PO/receipt row jumps to that order's project page.
+            onOpenOrder={onNavigate ? (t) => onNavigate({ view: 'clients', orderNumber: t.orderNumber, projectNumber: t.projectNumber }) : undefined} />
         ) : (
           <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} bindVendor={bindVendor}
             duplicates={duplicates} onMerge={merge} />

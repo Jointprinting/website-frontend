@@ -213,13 +213,25 @@ function LogEntry({ entry, last, onDelete }) {
   );
 }
 
-function OrderRow({ o }) {
+function OrderRow({ o, onOpen }) {
   const meta = STATUS_META[o.status] || { label: o.status || '—', color: D.muted, bg: 'rgba(255,255,255,0.06)' };
+  // Clickable only when we can resolve the target order (a project/order number).
+  // No identifier → render as a plain row (no dead-end, no misleading affordance).
+  const canOpen = !!onOpen && !!(o.projectNumber || o.orderNumber);
   return (
-    <Box sx={{
-      display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25,
-      borderBottom: `1px solid ${D.line}`,
-    }}>
+    <Box
+      onClick={canOpen ? () => onOpen(o) : undefined}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(o); } } : undefined}
+      title={canOpen ? 'Open this order' : undefined}
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25,
+        borderBottom: `1px solid ${D.line}`,
+        cursor: canOpen ? 'pointer' : 'default',
+        transition: 'background-color 0.15s ease',
+        '&:hover': canOpen ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
+      }}>
       <ReceiptLongOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, ...mono }}>
@@ -264,18 +276,47 @@ function Metric({ label, value, accent, hint }) {
 }
 
 // One linked PO — number · vendor on the left, grand total (monospace) on the
-// right. Same row rhythm as OrderRow.
-function PoRow({ p }) {
+// right. Same row rhythm as OrderRow. The row opens the PO on its order; the
+// vendor name (when present) is its own link to that vendor's card.
+function PoRow({ p, onOpen, onOpenVendor }) {
+  // Open-PO needs the sibling order (resolved by the parent from orderId) — gate
+  // on that so a PO whose order can't be resolved stays a plain, safe row.
+  const canOpen = !!onOpen && !!(p.orderId || p.projectNumber || p.orderNumber);
+  const canOpenVendor = !!onOpenVendor && !!p.vendorName;
   return (
-    <Box sx={{
-      display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25,
-      borderBottom: `1px solid ${D.line}`,
-    }}>
+    <Box
+      onClick={canOpen ? () => onOpen(p) : undefined}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(p); } } : undefined}
+      title={canOpen ? 'Open this PO' : undefined}
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25, py: 1.1, px: 1.25,
+        borderBottom: `1px solid ${D.line}`,
+        cursor: canOpen ? 'pointer' : 'default',
+        transition: 'background-color 0.15s ease',
+        '&:hover': canOpen ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
+      }}>
       <DescriptionOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {p.poNumber ? (String(p.poNumber).startsWith('#') ? p.poNumber : `#${p.poNumber}`) : 'PO'}
-          {p.vendorName ? <Box component="span" sx={{ color: D.faint, fontWeight: 600, ...mono }}> · {p.vendorName}</Box> : null}
+          {p.vendorName ? (
+            <Box component="span" sx={{ color: D.faint, fontWeight: 600, ...mono }}> · {
+              canOpenVendor ? (
+                <Box
+                  component="span"
+                  onClick={(e) => { e.stopPropagation(); onOpenVendor(p.vendorName); }}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenVendor(p.vendorName); } }}
+                  title={`Open ${p.vendorName}`}
+                  sx={{ color: D.green, cursor: 'pointer', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                >
+                  {p.vendorName}
+                </Box>
+              ) : p.vendorName
+            }</Box>
+          ) : null}
         </Typography>
         <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{p.date ? fmtDate(p.date) : '—'}</Typography>
       </Box>
@@ -334,7 +375,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
   // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -543,7 +584,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>{pos.length}</Typography>
               </Stack>
               <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>
-                {pos.map((p) => <PoRow key={p._id} p={p} />)}
+                {pos.map((p) => <PoRow key={p._id} p={p} onOpen={onOpenPo} onOpenVendor={onOpenVendor} />)}
               </Box>
             </Box>
           )}
@@ -638,7 +679,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No linked orders yet.</Typography>
               ) : (
                 <Box sx={{ mx: -1.25, '& > div:last-of-type': { borderBottom: 'none' } }}>
-                  {orders.map((o) => <OrderRow key={o._id || o.projectNumber || o.orderNumber} o={o} />)}
+                  {orders.map((o) => <OrderRow key={o._id || o.projectNumber || o.orderNumber} o={o} onOpen={onOpenOrder} />)}
                 </Box>
               )}
             </Box>

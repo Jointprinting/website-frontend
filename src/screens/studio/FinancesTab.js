@@ -6,7 +6,7 @@
 // receipt and books the cost into the ledger + analytics in one step (replacing
 // the manual "download invoice → personal Drive" habit). Reads /api/finances.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem, CircularProgress,
   Dialog, DialogContent, TextField,
@@ -76,7 +76,7 @@ const CAT_COLOR = {
 // (supplier credit) is money IN. Drives the +/− sign and colour in the ledger.
 const isInflow = (t) => (t.type === 'income') !== !!t.isCredit;
 
-export default function FinancesTab({ token, onBack }) {
+export default function FinancesTab({ token, onBack, onNavigate }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
   const [year, setYear]       = useState(new Date().getFullYear());
@@ -182,6 +182,31 @@ export default function FinancesTab({ token, onBack }) {
   useEffect(() => registerFallback(() => buildFallbackMenu({
     onBackToHub: onBack,
   })), [registerFallback, onBack]);
+
+  // ── Cross-tab deep links OUT (additive) ──────────────────────────────────────
+  // The order # on any finance row jumps to that order's project page; the client
+  // name jumps to its CRM card. The CRM jump needs an authoritative companyKey —
+  // the by-order API now returns one per row (Order join on the canonical number,
+  // '' when ambiguous/unknown). We index it by canonical order # so a transaction
+  // row (which carries only an order # + a party name) can resolve the SAME key.
+  const ckByOrder = useMemo(() => {
+    const m = {};
+    (orders || []).forEach((o) => {
+      const k = normOrderNo(o && o.orderNumber);
+      if (k && o.companyKey) m[k] = o.companyKey;   // '' keys are intentionally skipped (not linkable)
+    });
+    return m;
+  }, [orders]);
+  const goOrder = useCallback((orderNumber) => {
+    const k = normOrderNo(orderNumber);
+    if (!onNavigate || !k) return;
+    onNavigate({ view: 'clients', orderNumber: k });
+  }, [onNavigate]);
+  const goCompanyForOrder = useCallback((orderNumber) => {
+    const ck = ckByOrder[normOrderNo(orderNumber)];
+    if (!onNavigate || !ck) return;
+    onNavigate({ view: 'crm', companyKey: ck });
+  }, [onNavigate, ckByOrder]);
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
   const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
@@ -345,7 +370,11 @@ export default function FinancesTab({ token, onBack }) {
             {/* Money owed to you / Unrecorded payments — the additive lens that
                 EXPLAINS a low net: vendor costs entered without the matching
                 client payment. One tap records the missing income, prefilled. */}
-            <PaymentGaps gaps={gaps} onRecord={(row) => setPrefill({
+            <PaymentGaps gaps={gaps}
+              onOpenOrder={onNavigate ? (orderNumber) => goOrder(orderNumber) : undefined}
+              onOpenClient={onNavigate ? (orderNumber) => goCompanyForOrder(orderNumber) : undefined}
+              canOpenClient={(orderNumber) => !!ckByOrder[normOrderNo(orderNumber)]}
+              onRecord={(row) => setPrefill({
               type: 'income', category: 'Customer Sales',
               party: row.client && row.client !== '—' ? row.client : '',
               amount: row.outstanding > 0 ? row.outstanding : (row.billed > 0 ? row.billed : ''),
@@ -390,17 +419,42 @@ export default function FinancesTab({ token, onBack }) {
                     </Box>
                   </Box>
                   <Box component="tbody">
-                    {orders.map((o) => (
+                    {orders.map((o) => {
+                      // The row still drills into the in-tab order ledger (unchanged).
+                      // Two ADDITIVE deep links sit on top: the order # opens the
+                      // order's project page; the client name opens its CRM card
+                      // (only when an authoritative companyKey resolved).
+                      const canOrder = !!onNavigate && !!normOrderNo(o.orderNumber);
+                      const ck = ckByOrder[normOrderNo(o.orderNumber)];
+                      const canClient = !!onNavigate && !!ck && !!o.client;
+                      return (
                       <Box component="tr" key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
-                        <Box component="td" sx={{ textAlign: 'left !important', color: B.muted }}>#{o.orderNumber}</Box>
-                        <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
+                        <Box component="td" sx={{ textAlign: 'left !important', color: canOrder ? B.green : B.muted }}>
+                          <Box component="span"
+                            onClick={canOrder ? (e) => { e.stopPropagation(); goOrder(o.orderNumber); } : undefined}
+                            title={canOrder ? 'Open this order' : undefined}
+                            sx={{ cursor: canOrder ? 'pointer' : 'inherit', '&:hover': canOrder ? { textDecoration: 'underline' } : undefined }}>
+                            #{o.orderNumber}
+                          </Box>
+                        </Box>
+                        <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {canClient ? (
+                            <Box component="span"
+                              onClick={(e) => { e.stopPropagation(); goCompanyForOrder(o.orderNumber); }}
+                              title="Open this client's CRM card"
+                              sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                              {o.client}
+                            </Box>
+                          ) : (o.client || '—')}
+                        </Box>
                         <Box component="td" sx={{ color: B.white }}>{money(o.revenue)}</Box>
                         <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
                         <Box component="td" sx={{ color: o.profit >= 0 ? B.green : '#f87171' }}>{money(o.profit)}</Box>
                         <Box component="td" sx={{ color: pct(o.margin) >= 0 ? B.green : '#f87171' }}>{pct(o.margin)}%</Box>
                       </Box>
-                    ))}
+                      );
+                    })}
                   </Box>
                 </Box>
               </Box>
@@ -424,7 +478,40 @@ export default function FinancesTab({ token, onBack }) {
                           {t.isCredit && <CreditBadge />}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, color: B.white, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.party || t.description}{t.orderNumber ? <Box component="span" sx={{ color: B.muted }}> · #{t.orderNumber}</Box> : null}
+                          {(() => {
+                            // The order # on a transaction links to its order page
+                            // (link #6); the party name links to that order's CRM
+                            // card when an authoritative companyKey resolves. Both
+                            // stop propagation so the row's own edit-open still works.
+                            const canOrder = !!onNavigate && !!normOrderNo(t.orderNumber);
+                            const ck = ckByOrder[normOrderNo(t.orderNumber)];
+                            const canClient = !!onNavigate && !!ck && t.type === 'income' && !!t.party;
+                            const nameNode = canClient ? (
+                              <Box component="span"
+                                onClick={(e) => { e.stopPropagation(); goCompanyForOrder(t.orderNumber); }}
+                                title="Open this client's CRM card"
+                                sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                {t.party}
+                              </Box>
+                            ) : (t.party || t.description);
+                            return (
+                              <>
+                                {nameNode}
+                                {t.orderNumber ? (
+                                  <Box component="span" sx={{ color: canOrder ? B.green : B.muted }}> · {
+                                    canOrder ? (
+                                      <Box component="span"
+                                        onClick={(e) => { e.stopPropagation(); goOrder(t.orderNumber); }}
+                                        title={`Open order #${t.orderNumber}`}
+                                        sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                        #{t.orderNumber}
+                                      </Box>
+                                    ) : `#${t.orderNumber}`
+                                  }</Box>
+                                ) : null}
+                              </>
+                            );
+                          })()}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', color: isInflow(t) ? B.green : '#f87171' }}>
                           {isInflow(t) ? '+' : '−'}{money(t.amount)}
@@ -451,7 +538,9 @@ export default function FinancesTab({ token, onBack }) {
       )}
       {editTxn && <TxnDialog token={token} txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
       {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} onClose={() => setOpenOrder(null)}
-        onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }} />}
+        onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }}
+        onOpenOrderPage={onNavigate ? () => { setOpenOrder(null); goOrder(openOrder); } : undefined}
+        onOpenClient={(onNavigate && ckByOrder[normOrderNo(openOrder)]) ? () => { setOpenOrder(null); goCompanyForOrder(openOrder); } : undefined} />}
     </Box>
   );
 }
@@ -459,7 +548,7 @@ export default function FinancesTab({ token, onBack }) {
 // Click any order (Profit-by-order row, or a red "lost money" chip) to see every
 // transaction tagged to it — revenue and every cost — with in/out/net. Tap a line
 // to jump into editing it (e.g. fix a wrong date that parked an order in December).
-function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
+function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, onOpenClient }) {
   // Match on the CANONICAL number (leading zeros stripped, both sides) so the
   // drill-in shows the same rows the by-order grouping rolled up — a "0000021"
   // ledger row lines up with the "21" order the user clicked. (C2)
@@ -483,10 +572,25 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth
       PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           Order #{orderNumber}{client !== '—' ? ` · ${client}` : ''}
         </Typography>
+        {/* Jump out to the full surfaces — additive shortcuts beside the close X. */}
+        {onOpenOrderPage && (
+          <Box component="button" type="button" onClick={onOpenOrderPage}
+            sx={{ background: 'none', border: `1px solid ${B.border}`, borderRadius: 1, color: B.green, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: B.green } }}>
+            Open order
+          </Box>
+        )}
+        {onOpenClient && (
+          <Box component="button" type="button" onClick={onOpenClient}
+            sx={{ background: 'none', border: `1px solid ${B.border}`, borderRadius: 1, color: B.green, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: B.green } }}>
+            Open client
+          </Box>
+        )}
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 0 }}>
@@ -537,7 +641,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn }) {
 // not yet collected (outstanding). Each row offers a one-tap "Record payment" that
 // opens the Add-transaction modal prefilled with the client + amount, so closing
 // the gap is a single confirm. Renders nothing when there's no gap (pristine).
-function PaymentGaps({ gaps, onRecord }) {
+function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient }) {
   const rows = (gaps && Array.isArray(gaps.orders) ? gaps.orders : []).filter(Boolean);
   const totals = (gaps && gaps.totals) || {};
   if (!rows.length) return null;
@@ -582,8 +686,18 @@ function PaymentGaps({ gaps, onRecord }) {
             {rows.map((o) => (
               <Box component="tr" key={o.orderNumber}
                 sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
-                <Box component="td" sx={{ textAlign: 'left !important', color: B.muted }}>#{o.orderNumber}</Box>
-                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
+                <Box component="td" sx={{ textAlign: 'left !important', color: onOpenOrder ? B.green : B.muted }}>
+                  {onOpenOrder ? (
+                    <Box component="span" onClick={() => onOpenOrder(o.orderNumber)} title="Open this order"
+                      sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>#{o.orderNumber}</Box>
+                  ) : `#${o.orderNumber}`}
+                </Box>
+                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {(onOpenClient && o.client && canOpenClient && canOpenClient(o.orderNumber)) ? (
+                    <Box component="span" onClick={() => onOpenClient(o.orderNumber)} title="Open this client's CRM card"
+                      sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>{o.client}</Box>
+                  ) : (o.client || '—')}
+                </Box>
                 <Box component="td" sx={{ color: B.white }}>{o.billed ? money(o.billed) : '—'}</Box>
                 <Box component="td" sx={{ color: o.collected > 0 ? B.green : B.muted }}>{money(o.collected)}</Box>
                 <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
