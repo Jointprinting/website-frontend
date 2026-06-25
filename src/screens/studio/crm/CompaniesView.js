@@ -1,8 +1,16 @@
 // src/screens/studio/crm/CompaniesView.js
-// The full company list (/api/crm) with a search box (q) and stage / tag filters
-// driven by the parent (debounced fetch in one place). Address has replaced the
-// old "Area" as the location line; the legacy area is still read as a fallback so
-// existing data shows, but it's no longer a primary, filterable field.
+// The full company list (/api/crm) — now one cohesive, SEGMENTED surface instead
+// of a flat, choppy list. A single instant toggle splits the whole book into:
+//   • Clients      — real customers (placed an order; the Phase-1 isCustomer)
+//   • Active leads — warm / in-pipeline
+//   • Everyone else— cold / dormant / parked
+// Default is Clients (the people who pay). Switching is client-side and instant —
+// the parent fetches the whole non-archived book once (search scopes it server-
+// side); the segment + tag just narrow what's shown, so there's no page-to-page
+// jank. Search-first; one click on a row → the full company thread.
+//
+// The old "filter by area" and "filter by temperature" controls are gone on
+// purpose (the stages/segments already do that job) — fewer knobs, less noise.
 //
 // Doubles as the Archived recover surface: pass `archived` + an `onUnarchive`
 // handler and the view switches to a self-contained, client-side-filtered list of
@@ -20,10 +28,11 @@ import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import RestoreFromTrashOutlinedIcon from '@mui/icons-material/RestoreFromTrashOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
+import AddBusinessOutlinedIcon from '@mui/icons-material/AddBusinessOutlined';
 import { D, mono, dropInput, fmtRelative } from '../_shared';
 import {
-  StageChip, EmptyState, TagChips, CRM_STAGES, stageMeta, interestLabel, followUpStatus,
-  primaryPhone, isWonStage,
+  StageChip, EmptyState, TagChips, stageMeta, interestLabel, followUpStatus,
+  primaryPhone, isWonStage, CRM_SEGMENTS, SEGMENT_META, segmentOf,
 } from './_crm';
 
 function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
@@ -99,9 +108,48 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
   );
 }
 
+// The segment toggle — three pill tabs with live counts. Clients first (the
+// people who pay). Instant: it only flips a client-side filter, no refetch.
+function SegmentTabs({ segment, onSegmentChange, counts }) {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', useFlexGap: true }}>
+      {CRM_SEGMENTS.map((id) => {
+        const active = segment === id;
+        const m = SEGMENT_META[id];
+        return (
+          <Box
+            key={id}
+            onClick={() => onSegmentChange(id)}
+            role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSegmentChange(id); }}
+            sx={{
+              cursor: 'pointer', userSelect: 'none', borderRadius: 999,
+              px: 1.6, py: 0.7, display: 'flex', alignItems: 'center', gap: 0.75,
+              border: `1px solid ${active ? D.green : D.line}`,
+              bgcolor: active ? 'rgba(74,222,128,0.12)' : 'transparent',
+              transition: 'border-color 0.15s ease, background 0.15s ease, color 0.15s ease',
+              '&:hover': { borderColor: active ? D.green : D.lineHi,
+                bgcolor: active ? 'rgba(74,222,128,0.16)' : 'rgba(255,255,255,0.03)' },
+            }}
+          >
+            <Typography sx={{ color: active ? D.green : D.text, fontWeight: 800, fontSize: 13 }}>
+              {m.label}
+            </Typography>
+            <Box component="span" sx={{ ...mono, fontSize: 11.5, fontWeight: 800,
+              color: active ? D.green : D.faint }}>
+              {counts[id] ?? 0}
+            </Box>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
 export default function CompaniesView({
-  clients, loading, query, onQueryChange, stage, onStageChange,
+  clients, loading, query, onQueryChange,
   tag, onTagChange, tagOptions, onOpen, archived = false, onUnarchive, bindCompany,
+  segment = 'clients', onSegmentChange, onAddCompany,
 }) {
   // Archived mode runs its own client-side search (the archived set is fetched
   // separately and isn't wired to the live ?q= companies fetch).
@@ -120,7 +168,23 @@ export default function CompaniesView({
     });
   }, [archived, clients, localQuery]);
 
-  const list = archived ? archivedFiltered : (clients || []);
+  // Live segment counts across the loaded (non-archived) book, so the three
+  // pill tabs always show how the whole set splits — independent of which
+  // segment is active. Tag/search already scoped the fetched set server-side.
+  const counts = React.useMemo(() => {
+    const acc = { clients: 0, leads: 0, everyone: 0 };
+    if (archived) return acc;
+    (clients || []).forEach((c) => { acc[segmentOf(c)] += 1; });
+    return acc;
+  }, [clients, archived]);
+
+  // The shown list = the active segment's slice of the loaded set.
+  const segmented = React.useMemo(() => {
+    if (archived) return archivedFiltered;
+    return (clients || []).filter((c) => segmentOf(c) === segment);
+  }, [archived, archivedFiltered, clients, segment]);
+
+  const list = segmented;
 
   // ── Archived recover surface ────────────────────────────────────────────────
   if (archived) {
@@ -168,11 +232,12 @@ export default function CompaniesView({
     );
   }
 
-  const anyFilter = query || stage !== 'all' || tag !== 'all';
+  const m = SEGMENT_META[segment] || SEGMENT_META.clients;
+  const anyFilter = query || tag !== 'all';
 
   return (
     <Stack spacing={2}>
-      {/* Controls */}
+      {/* Search + add + tag */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
         <TextField
           value={query} onChange={(e) => onQueryChange(e.target.value)}
@@ -181,13 +246,6 @@ export default function CompaniesView({
             <InputAdornment position="start"><SearchIcon sx={{ color: D.faint, fontSize: 20 }} /></InputAdornment>
           ) }}
         />
-        <TextField
-          select value={stage} onChange={(e) => onStageChange(e.target.value)}
-          size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Stage"
-        >
-          <MenuItem value="all">All stages</MenuItem>
-          {CRM_STAGES.map((s) => <MenuItem key={s} value={s}>{stageMeta(s).label}</MenuItem>)}
-        </TextField>
         <TextField
           select value={tag} onChange={(e) => onTagChange(e.target.value)}
           size="small" sx={{ ...dropInput, minWidth: { sm: 150 } }} label="Tag"
@@ -199,12 +257,30 @@ export default function CompaniesView({
           <MenuItem value="all">All tags</MenuItem>
           {(tagOptions || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
         </TextField>
+        {onAddCompany && (
+          <Button
+            onClick={onAddCompany}
+            startIcon={<AddBusinessOutlinedIcon sx={{ fontSize: 18 }} />}
+            sx={{ textTransform: 'none', fontWeight: 800, fontSize: 13, whiteSpace: 'nowrap',
+              color: D.ink, bgcolor: D.green, borderRadius: 999, px: 2,
+              boxShadow: `0 6px 18px ${D.glow}`,
+              '&:hover': { bgcolor: '#5cec8e', boxShadow: `0 10px 26px ${D.glow}` } }}
+          >
+            Add company
+          </Button>
+        )}
       </Stack>
+
+      {/* Segment toggle — Clients / Active leads / Everyone else (instant) */}
+      {onSegmentChange && (
+        <SegmentTabs segment={segment} onSegmentChange={onSegmentChange} counts={counts} />
+      )}
 
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
           {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'company' : 'companies'}`}
         </Typography>
+        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{m.hint}</Typography>
       </Stack>
 
       {loading ? (
@@ -214,10 +290,12 @@ export default function CompaniesView({
       ) : list.length === 0 ? (
         <EmptyState
           icon={<PeopleAltOutlinedIcon />}
-          title={anyFilter ? 'No matches' : 'No companies yet'}
+          title={anyFilter ? 'No matches' : `No ${m.label.toLowerCase()} yet`}
           hint={anyFilter
-            ? 'Try clearing a filter or the search.'
-            : 'Import your field tracker to load your leads.'}
+            ? 'Try clearing the search or tag — or switch segment.'
+            : (segment === 'clients'
+              ? 'Companies become clients the moment they place an order.'
+              : 'Switch segment, search, or add a company.')}
         />
       ) : (
         <Stack spacing={1}>

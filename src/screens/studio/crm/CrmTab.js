@@ -37,6 +37,7 @@ import { dayKey, stageMeta } from './_crm';
 import { useContextMenu } from '../ContextMenu';
 import { buildCompanyMenu, buildFallbackMenu } from '../contextMenuActions';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
+import AddCompanyDialog from './AddCompanyDialog';
 import CrmSearch from './CrmSearch';
 import DashboardView from './DashboardView';
 import TodayView from './TodayView';
@@ -49,14 +50,17 @@ import ReconcileView from './ReconcileView';
 
 const base = `${config.backendUrl}/api/crm`;
 
-// Primary tab bar — the five views the owner lives in (Clean up moved to the
-// overflow "•••" menu so the main bar stays focused).
+// Primary tab bar — ordered by daily importance. The segmented company book
+// (Clients / Active leads / Everyone else) leads as the CRM's home, with the
+// daily call queue (Today) right beside it; Pipeline / Calendar / Dashboard
+// follow. Clean up / reconcile / archived live in the overflow "•••" menu so
+// the main bar stays focused.
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
+  { id: 'companies', label: 'Clients',   Icon: PeopleAltOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
   { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
-  { id: 'companies', label: 'Companies', Icon: PeopleAltOutlinedIcon },
+  { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
 ];
 
 // Overflow ("•••") menu — still fully reachable, just tucked out of the daily
@@ -78,11 +82,16 @@ function gridRange(year, month) {
   return { from: dayKey(new Date(startMs)), to: dayKey(new Date(startMs + 41 * 86400000)) };
 }
 
-export default function CrmTab({ token, onBack }) {
+export default function CrmTab({ token, onBack, initialView }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
 
-  const [view, setView] = React.useState('dashboard');
+  // The segmented company book leads by default (Clients first); a hub deep-link
+  // can request a specific landing view (e.g. 'today') via initialView.
+  const [view, setView] = React.useState(
+    initialView && ['companies', 'today', 'pipeline', 'calendar', 'dashboard'].includes(initialView)
+      ? initialView : 'companies',
+  );
   const [openKey, setOpenKey] = React.useState(null); // company detail overlay (null = closed)
 
   // ── Per-view data ────────────────────────────────────────────────────────
@@ -101,8 +110,10 @@ export default function CrmTab({ token, onBack }) {
   const [clients, setClients] = React.useState([]);
   const [companiesLoading, setCompaniesLoading] = React.useState(true);
   const [query, setQuery] = React.useState('');
-  const [stageFilter, setStageFilter] = React.useState('all');
   const [tagFilter, setTagFilter] = React.useState('all');
+  // The active company segment (Clients / Active leads / Everyone else). Client-
+  // side over the loaded book, so switching is instant. Defaults to Clients.
+  const [segment, setSegment] = React.useState('clients');
 
   // Pipeline (Kanban) — its own filter pair so it doesn't fight the Companies
   // search box, plus the server-computed groups/summary/probability from
@@ -111,7 +122,6 @@ export default function CrmTab({ token, onBack }) {
   const [pipelineLoading, setPipelineLoading] = React.useState(true);
   const [pipeQuery, setPipeQuery] = React.useState('');
   const [pipeTag, setPipeTag] = React.useState('all');
-  const [pipeArea, setPipeArea] = React.useState('all'); // client-side board filter
 
   // Clean up — duplicate groups (/duplicates) + dead/no-follow-up archive
   // candidates. The dead list is derived from an UNFILTERED company fetch (its
@@ -142,6 +152,8 @@ export default function CrmTab({ token, onBack }) {
   // `target` carries the companyKey + name + the card's previous stage so we can
   // revert the optimistic move if the prompt is cancelled.
   const [lostDlg, setLostDlg] = React.useState({ open: false, target: null });
+  // Add-company dialog (the deduped manual entry point).
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const [toast, setToast] = React.useState({ open: false, msg: '', sev: 'success', action: null });
   const flash = React.useCallback((msg, sev = 'success', action = null) => setToast({ open: true, msg, sev, action }), []);
@@ -198,12 +210,14 @@ export default function CrmTab({ token, onBack }) {
     } finally { setCalLoading(false); }
   }, [authHdr, flash]);
 
-  const loadCompanies = React.useCallback(async (q, stage, tag) => {
+  // The whole non-archived book (scoped only by search + tag); the segment split
+  // (Clients / leads / everyone) is applied client-side in CompaniesView, so
+  // switching segments is instant and the counts always reflect the full set.
+  const loadCompanies = React.useCallback(async (q, tag) => {
     setCompaniesLoading(true);
     try {
       const params = {};
       if (q && q.trim()) params.q = q.trim();
-      if (stage && stage !== 'all') params.stage = stage;
       if (tag && tag !== 'all') params.tag = tag;
       const res = await axios.get(base, { ...authHdr, params });
       setClients(res.data?.clients || []);
@@ -289,9 +303,9 @@ export default function CrmTab({ token, onBack }) {
 
   // Companies: debounce the search box so we don't fire a request per keystroke.
   React.useEffect(() => {
-    const id = setTimeout(() => loadCompanies(query, stageFilter, tagFilter), 280);
+    const id = setTimeout(() => loadCompanies(query, tagFilter), 280);
     return () => clearTimeout(id);
-  }, [query, stageFilter, tagFilter, loadCompanies]);
+  }, [query, tagFilter, loadCompanies]);
 
   // Pipeline: same debounced-search treatment as Companies.
   React.useEffect(() => {
@@ -327,12 +341,12 @@ export default function CrmTab({ token, onBack }) {
     loadDashboard();
     loadToday();
     loadCalendar(calCursor);
-    loadCompanies(query, stageFilter, tagFilter);
+    loadCompanies(query, tagFilter);
     loadPipeline(pipeQuery, pipeTag);
     if (view === 'cleanup') { loadDuplicates(); loadCleanupClients(); }
     if (view === 'archived') loadArchived();
     if (openKey) loadDetail(openKey);
-  }, [loadDashboard, loadToday, loadCalendar, calCursor, loadCompanies, query, stageFilter, tagFilter,
+  }, [loadDashboard, loadToday, loadCalendar, calCursor, loadCompanies, query, tagFilter,
       loadPipeline, pipeQuery, pipeTag, view, loadDuplicates, loadCleanupClients, loadArchived, openKey, loadDetail]);
 
   // ── Write transport ───────────────────────────────────────────────────────
@@ -426,6 +440,17 @@ export default function CrmTab({ token, onBack }) {
       throw e;
     }
   }, [authHdr, flash, refreshAffected]);
+
+  // Create a company by hand (the deduped Add-company dialog). Reuses the PATCH
+  // /:companyKey upsert (get-or-create by companyKey) — the same path field edits
+  // take — so there's no special create endpoint. After it lands, jump straight
+  // into the new card so the owner can keep filling it in.
+  const createCompany = React.useCallback(async (key, patch) => {
+    await patchCompany(key, patch);
+    flash('Company added.');
+    refreshAffected();
+    setOpenKey(key);
+  }, [patchCompany, flash, refreshAffected]);
 
   // ── Action handlers wired into the views/dialogs ──────────────────────────
   const openCompany = (key) => setOpenKey(key);
@@ -623,13 +648,6 @@ export default function CrmTab({ token, onBack }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [clients, pipeline]);
 
-  // Distinct areas present on the loaded board — feeds the pipeline area filter.
-  const pipeAreaOptions = React.useMemo(() => {
-    const set = new Set();
-    (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => { if (c.area) set.add(c.area); }));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [pipeline]);
-
   // Dead / no-follow-up archive candidates, derived from the loaded Companies
   // set. A candidate is a lead that's parked (lost/dormant) OR an early-funnel
   // lead with no next step (lead/contacted + no nextFollowUp). We deliberately
@@ -690,7 +708,6 @@ export default function CrmTab({ token, onBack }) {
             loading={pipelineLoading}
             query={pipeQuery} onQueryChange={setPipeQuery}
             tag={pipeTag} onTagChange={setPipeTag} tagOptions={tagOptions}
-            area={pipeArea} onAreaChange={setPipeArea} areaOptions={pipeAreaOptions}
             onOpen={openCompany}
             onMoveStage={pipelineMoveStage}
             bindCompany={bindCompany}
@@ -712,8 +729,9 @@ export default function CrmTab({ token, onBack }) {
           <CompaniesView
             clients={clients} loading={companiesLoading}
             query={query} onQueryChange={setQuery}
-            stage={stageFilter} onStageChange={setStageFilter}
             tag={tagFilter} onTagChange={setTagFilter} tagOptions={tagOptions}
+            segment={segment} onSegmentChange={setSegment}
+            onAddCompany={() => setAddOpen(true)}
             onOpen={openCompany}
             bindCompany={bindCompany}
           />
@@ -897,6 +915,15 @@ export default function CrmTab({ token, onBack }) {
         onClose={cancelLost}
         onSubmit={submitLost}
         companyName={lostDlg.target?.name}
+      />
+
+      {/* Add a company — deduped manual entry (suggests existing matches first) */}
+      <AddCompanyDialog
+        open={addOpen}
+        token={token}
+        onClose={() => setAddOpen(false)}
+        onCreate={createCompany}
+        onOpenExisting={openCompany}
       />
 
       {/* Global search command palette */}

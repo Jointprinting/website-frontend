@@ -78,6 +78,48 @@ export const isWonStage = (s) => s === 'won' || s === 'customer';
 // A stage that's parked off the active ladder.
 export const isClosedStage = (s) => s === 'lost' || s === 'dormant';
 
+// ── CRM segments — the instant, choppy-free split of the whole book ────────────
+// Three buckets the owner toggles between in one click (no separate pages):
+//   • clients   — REAL customers: have placed an order. The authoritative signal
+//                 is `isCustomer` (server-computed from order reality, Phase 1);
+//                 won/customer stage is a parity fallback so a freshly-won deal
+//                 still reads as a client even before its order row lands.
+//   • leads     — warm / in-pipeline: actively being worked but not yet a client.
+//                 That's the mid-funnel stages (contacted/quoting/sampling) plus a
+//                 brand-new `lead` that has a next step scheduled (so a worked
+//                 lead doesn't hide in "everyone else").
+//   • everyone  — the cold / dormant / parked remainder: an untouched `lead` with
+//                 no follow-up, plus lost/dormant.
+// One record lands in exactly one bucket (clients wins, then leads, then
+// everyone), so the three counts always sum to the whole non-archived book.
+export const CRM_SEGMENTS = ['clients', 'leads', 'everyone'];
+export const SEGMENT_META = {
+  clients:  { label: 'Clients',      hint: 'Placed an order' },
+  leads:    { label: 'Active leads', hint: 'Warm · in pipeline' },
+  everyone: { label: 'Everyone else', hint: 'Cold · dormant · parked' },
+};
+
+// Is this company a real customer? Mirror the row star/detail logic exactly:
+// the server's isCustomer (order reality) OR a won/customer stage.
+export const isClient = (c) => !!(c && (c.isCustomer || isWonStage(c.stage)));
+
+// Warm / in-pipeline lead (and NOT already a client).
+const ACTIVE_LEAD_STAGES = ['contacted', 'quoting', 'sampling'];
+export const isActiveLead = (c) => {
+  if (!c || isClient(c)) return false;
+  if (ACTIVE_LEAD_STAGES.includes(c.stage)) return true;
+  // A brand-new lead the owner is actively working (has a next step) is warm too.
+  if (c.stage === 'lead' && c.nextFollowUp) return true;
+  return false;
+};
+
+// The bucket a record belongs to — exactly one of CRM_SEGMENTS.
+export const segmentOf = (c) => {
+  if (isClient(c)) return 'clients';
+  if (isActiveLead(c)) return 'leads';
+  return 'everyone';
+};
+
 // ── Temperature / lifecycle tags ──────────────────────────────────────────────
 // The importer tags records with a temperature (hot/warm/room-temp/cold/lost/
 // in-progress/won/meta-ad) and engagement (eng-high/eng-med/eng-low). These are
