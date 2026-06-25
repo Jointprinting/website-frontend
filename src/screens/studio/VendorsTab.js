@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, TextField, IconButton, Button, CircularProgress,
-  InputAdornment, Switch, FormControlLabel, Tooltip,
+  InputAdornment, Switch, FormControlLabel, Tooltip, Radio, Chip, Divider, Collapse,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
@@ -28,6 +28,7 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
+import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import {
@@ -90,8 +91,107 @@ function VendorRow({ v, onOpen, bindVendor }) {
   );
 }
 
+// ── Duplicate-detection / merge (mirrors CRM CleanupView) ──────────────────────
+// One member row inside a duplicate group, with a survivor radio.
+function DupMemberRow({ m, selected, onSelect }) {
+  return (
+    <Box onClick={onSelect}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1.5, cursor: 'pointer',
+        bgcolor: selected ? 'rgba(74,222,128,0.07)' : 'transparent',
+        border: `1px solid ${selected ? D.lineHi : 'transparent'}`,
+        '&:hover': { bgcolor: selected ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.03)' } }}>
+      <Radio checked={selected} size="small" sx={{ color: D.faint, p: 0.5, '&.Mui-checked': { color: D.green } }} />
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13.5 }}>{m.name}</Typography>
+          {m.hasDetails && (
+            <Chip label="has details" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: 'rgba(45,212,191,0.12)', color: '#5eead4' }} />
+          )}
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11.5, ...mono, mt: 0.2 }}>
+          {[
+            m.poCount ? `${m.poCount} PO${m.poCount === 1 ? '' : 's'}` : null,
+            m.spend ? money0(m.spend) : null,
+            m.orderCount ? `${m.orderCount} order${m.orderCount === 1 ? '' : 's'}` : null,
+            m.contactName || m.address || null,
+          ].filter(Boolean).join(' · ') || 'no details yet'}
+        </Typography>
+      </Box>
+      {selected && <Typography sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5 }}>SURVIVOR</Typography>}
+    </Box>
+  );
+}
+
+// One duplicate group: pick a survivor, Merge folds the others in (re-points POs +
+// receipts + learning to the survivor on the backend), nothing lost.
+function DupGroup({ group, onMerge }) {
+  const [survivor, setSurvivor] = useState(group.suggestedSurvivor);
+  const [busy, setBusy] = useState(false);
+  const others = group.members.filter((m) => m._id !== survivor);
+
+  const doMerge = async () => {
+    setBusy(true);
+    try {
+      for (const m of others) {
+        // eslint-disable-next-line no-await-in-loop
+        await onMerge(survivor, m._id);
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 1.75 }}>
+      <Stack spacing={0.5}>
+        {group.members.map((m) => (
+          <DupMemberRow key={m._id} m={m} selected={m._id === survivor} onSelect={() => setSurvivor(m._id)} />
+        ))}
+      </Stack>
+      <Divider sx={{ borderColor: D.line, my: 1.25 }} />
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+          Merges {others.length} other {others.length === 1 ? 'record' : 'records'} in. POs, receipts &amp; history are kept.
+        </Typography>
+        <Button onClick={doMerge} disabled={busy || others.length === 0} size="small"
+          sx={{ ...dropPrimaryBtn, py: 0.5 }} startIcon={!busy ? <MergeTypeOutlinedIcon /> : null}>
+          {busy ? <CircularProgress size={16} sx={{ color: D.ink }} /> : 'Merge'}
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+// Collapsible "duplicates found" banner above the vendor list. Hidden entirely
+// when there are no duplicate groups, so a clean book shows nothing.
+function DuplicatesPanel({ groups, onMerge }) {
+  const [open, setOpen] = useState(false);
+  if (!groups || groups.length === 0) return null;
+  return (
+    <Box sx={{ border: `1px solid rgba(74,222,128,0.4)`, borderRadius: 2.5, bgcolor: 'rgba(74,222,128,0.05)', overflow: 'hidden' }}>
+      <Box onClick={() => setOpen((o) => !o)} role="button" tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter') setOpen((o) => !o); }}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1.25, cursor: 'pointer' }}>
+        <MergeTypeOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 13.5 }}>
+            {groups.length} possible duplicate {groups.length === 1 ? 'printer' : 'printers'}
+          </Typography>
+          <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
+            Same printer under two names (e.g. “Heritage” and “Heritage Screen Printing”). Merge to combine — nothing is lost.
+          </Typography>
+        </Box>
+        <ChevronRightIcon sx={{ color: D.faint, fontSize: 20, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.18s ease' }} />
+      </Box>
+      <Collapse in={open}>
+        <Stack spacing={1.25} sx={{ px: 1.25, pb: 1.5, pt: 0.25 }}>
+          {groups.map((g) => <DupGroup key={g.matchKey} group={g} onMerge={onMerge} />)}
+        </Stack>
+      </Collapse>
+    </Box>
+  );
+}
+
 // ── List view ─────────────────────────────────────────────────────────────────
-function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor }) {
+function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, duplicates, onMerge }) {
   const list = useMemo(() => {
     const t = query.trim().toLowerCase();
     if (!t) return vendors;
@@ -108,6 +208,9 @@ function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor }) {
           <InputAdornment position="start"><SearchIcon sx={{ color: D.faint, fontSize: 20 }} /></InputAdornment>
         ) }}
       />
+      {/* Duplicate-printer detection + one-tap merge (mirrors CRM cleanup). Only
+          shows when the backend proposes groups; hidden on a clean book. */}
+      {!query && <DuplicatesPanel groups={duplicates} onMerge={onMerge} />}
       <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
         {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'vendor' : 'vendors'}`}
       </Typography>
@@ -371,12 +474,19 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField }) {
 export default function VendorsTab({ token, onBack }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [vendors, setVendors] = useState([]);
+  const [duplicates, setDuplicates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingField, setSavingField] = useState('');
+
+  const loadDuplicates = useCallback(() => {
+    axios.get(`${base}/orders/vendors/duplicates`, authHdr)
+      .then((r) => setDuplicates(r.data.groups || []))
+      .catch(() => setDuplicates([]));
+  }, [authHdr]);
 
   const loadVendors = useCallback(() => {
     setLoading(true);
@@ -386,7 +496,20 @@ export default function VendorsTab({ token, onBack }) {
       .finally(() => setLoading(false));
   }, [authHdr]);
 
-  useEffect(() => { loadVendors(); }, [loadVendors]);
+  useEffect(() => { loadVendors(); loadDuplicates(); }, [loadVendors, loadDuplicates]);
+
+  // Merge one vendor into another (survivor, merged are ids). The backend folds
+  // profile blanks + learned links and re-points POs/receipts to the survivor,
+  // then soft-deletes the merged record. Refresh the list + duplicate groups after.
+  const merge = useCallback(async (survivor, mergedId) => {
+    try {
+      await axios.post(`${base}/orders/vendors/merge`, { survivor, merged: mergedId }, authHdr);
+      loadVendors();
+      loadDuplicates();
+    } catch (e) {
+      alert(`Merge failed: ${e.response?.data?.message || e.message}`);
+    }
+  }, [authHdr, loadVendors, loadDuplicates]);
 
   const loadDetail = useCallback((id) => {
     setDetailLoading(true);
@@ -453,7 +576,8 @@ export default function VendorsTab({ token, onBack }) {
           <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
             onBack={() => setOpenId(null)} onPatch={patch} />
         ) : (
-          <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} bindVendor={bindVendor} />
+          <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} bindVendor={bindVendor}
+            duplicates={duplicates} onMerge={merge} />
         )}
       </Box>
     </Box>
