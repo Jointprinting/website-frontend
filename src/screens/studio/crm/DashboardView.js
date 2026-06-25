@@ -2,14 +2,14 @@
 // The CRM landing page — a single-glance command center fed by /api/crm/dashboard.
 // Four bands, top to bottom:
 //   1. Metric cards     — open pipeline $, weighted forecast $, overdue, due
-//                         today, touches (7d). Monospace figures.
+//                         today, customers. Monospace figures.
 //   2. Stage funnel     — count + $ per stage as CSS bars (no chart lib), bar
 //                         width ∝ count, $ labeled on the right.
 //   3. Needs attention  — the heads-up feed (THE centerpiece): prioritized rows,
 //                         each with an icon, the message, and the same quick
 //                         actions as Today (tap-to-call, log, reschedule, open),
 //                         driven by the SAME dialogs/transport.
-//   4. Breakdowns       — counts + open $ by area and by interest.
+//   4. Working widgets  — this-week agenda, conversion snapshot, biggest deals.
 // Presentational only: the parent (CrmTab) owns data + the dialog transport and
 // passes the handlers, so a heads-up row's "Log call" opens the very same
 // LogTouchDialog a Today row does.
@@ -25,11 +25,10 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
-import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { D, mono } from '../_shared';
 import {
-  StageChip, Eyebrow, EmptyState, stageMeta, interestLabel, telHref, fmtMoney0,
+  StageChip, Eyebrow, EmptyState, stageMeta, telHref, fmtMoney0,
   headsUpMeta, severityMeta,
 } from './_crm';
 
@@ -193,35 +192,6 @@ function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive }) {
   );
 }
 
-// ── Breakdown table ──────────────────────────────────────────────────────────
-// A compact "label · count · $" list, reused for area + interest. `labelFor`
-// maps the raw key to a display string (interest codes → friendly names).
-function Breakdown({ title, rows, labelFor }) {
-  const list = (rows || []).filter((r) => (r.count || 0) > 0);
-  return (
-    <Box sx={{ flex: '1 1 280px', minWidth: 240, bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 1.75, sm: 2 } }}>
-      <Eyebrow sx={{ mb: 1.25 }}>{title}</Eyebrow>
-      {list.length === 0 ? (
-        <Typography sx={{ color: D.faint, fontSize: 12.5 }}>No data yet.</Typography>
-      ) : (
-        <Stack spacing={0.75}>
-          {list.map((r, i) => (
-            <Stack key={i} direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 600, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {labelFor(r)}
-              </Typography>
-              <Typography sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 700, width: 34, textAlign: 'right' }}>{r.count}</Typography>
-              <Typography sx={{ ...mono, color: r.openValue > 0 ? D.muted : D.faint, fontSize: 12, fontWeight: 700, width: 60, textAlign: 'right' }}>
-                {r.openValue > 0 ? fmtMoney0(r.openValue) : '—'}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
-      )}
-    </Box>
-  );
-}
-
 // A small card shell with an eyebrow header and optional right-side accessory.
 function WidgetCard({ title, right, children, sx = {} }) {
   return (
@@ -336,54 +306,6 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
   );
 }
 
-// ── Activity pulse ────────────────────────────────────────────────────────────
-// Touches over 7d / 30d as a momentum read, with a simple proportional bar pair
-// + an encouraging streak-style line. Uses the activity figures the dashboard
-// already returns (no extra round-trip).
-function ActivityPulse({ activity }) {
-  const t7 = activity.touches7 || 0;
-  const t30 = activity.touches30 || 0;
-  const perWeekAvg = t30 / 4;
-  const trendUp = t7 >= perWeekAvg && t7 > 0;
-  return (
-    <WidgetCard title="Activity pulse"
-      right={<BoltOutlinedIcon sx={{ fontSize: 18, color: trendUp ? D.green : D.faint }} />}>
-      <Stack direction="row" spacing={2} alignItems="flex-end">
-        <Box>
-          <Typography sx={{ ...mono, color: D.text, fontSize: 30, fontWeight: 800, lineHeight: 1 }}>{t7}</Typography>
-          <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', mt: 0.3 }}>
-            touches · 7d
-          </Typography>
-        </Box>
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Stack spacing={0.6}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ width: 26, color: D.faint, fontSize: 10.5, ...mono }}>7d</Typography>
-              <Box sx={{ flexGrow: 1, height: 8, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
-                <Box sx={{ height: '100%', borderRadius: 999, bgcolor: D.green,
-                  width: `${t30 > 0 ? Math.round((t7 / Math.max(t7, t30)) * 100) : (t7 > 0 ? 100 : 0)}%`,
-                  transition: 'width 0.4s ease' }} />
-              </Box>
-            </Stack>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ width: 26, color: D.faint, fontSize: 10.5, ...mono }}>30d</Typography>
-              <Box sx={{ flexGrow: 1, height: 8, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
-                <Box sx={{ height: '100%', borderRadius: 999, bgcolor: 'rgba(74,222,128,0.45)',
-                  width: t30 > 0 ? '100%' : '0%', transition: 'width 0.4s ease' }} />
-              </Box>
-            </Stack>
-          </Stack>
-          <Typography sx={{ color: trendUp ? D.green : D.muted, fontSize: 11.5, fontWeight: 600, mt: 1 }}>
-            {t7 === 0 && t30 === 0 ? 'No touches logged yet — log a call to start a streak.'
-              : trendUp ? 'Ahead of your 30-day pace. Keep it rolling.'
-              : `30-day pace is ${Math.round(perWeekAvg)}/wk — a few more this week stays on track.`}
-          </Typography>
-        </Box>
-      </Stack>
-    </WidgetCard>
-  );
-}
-
 // ── Biggest deals on the radar ────────────────────────────────────────────────
 // The highest-value OPEN deals currently flagged for attention (sourced from the
 // heads-up feed, which carries each company's value). A focused "don't drop these"
@@ -448,8 +370,6 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
 
   const pipeline = data?.pipeline || {};
   const followUps = data?.followUps || {};
-  const activity = data?.activity || {};
-  const breakdowns = data?.breakdowns || {};
   const heads = data?.headsUp || { items: [], counts: {}, total: 0 };
   const totalCompanies = data?.totalCompanies || 0;
   const customersWithOrders = data?.customersWithOrders || 0;
@@ -523,33 +443,16 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         )}
       </Box>
 
-      {/* 4 — Working widgets (replaces the old static count tables). A real
-          planner row: this-week agenda, conversion snapshot, activity pulse, the
-          biggest deals on the radar, and the segment breakdowns — elevated. */}
+      {/* 4 — Working widgets: this-week agenda, conversion snapshot, and the
+          biggest deals on the radar. All wrap in one flex row so removing a
+          widget just reflows the rest — no fixed columns, no dead gaps. */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
         <ThisWeekAgenda followUps={followUps} onGoToday={onGoToday} />
         <ConversionCard
           totalCompanies={totalCompanies} customersWithOrders={customersWithOrders}
           pipeline={pipeline}
         />
-      </Box>
-
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
-        <ActivityPulse activity={activity} />
         <TopDeals items={items} onOpen={onOpen} />
-      </Box>
-
-      {/* Segment breakdowns — still here for the owner who slices by area/interest,
-          just no longer the dead-end bottom of the page. */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
-        <Breakdown
-          title="By area" rows={breakdowns.byArea}
-          labelFor={(r) => r.area || 'Unassigned'}
-        />
-        <Breakdown
-          title="By interest" rows={breakdowns.byInterest}
-          labelFor={(r) => (r.interestType ? interestLabel(r.interestType) : 'Unknown')}
-        />
       </Box>
     </Stack>
   );
