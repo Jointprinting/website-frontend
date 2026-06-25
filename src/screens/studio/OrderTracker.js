@@ -68,7 +68,13 @@ const SECONDARY_FILTERS = [
   { value: 'cancelled',     label: 'Cancelled' },
 ];
 
-export default function OrderTracker({ token, onBack }) {
+// Canonical order-number key — digits only, leading zeros stripped. The SAME
+// rule the backend (normalizeOrderNumber) and the finance/CRM surfaces use, so a
+// cross-tab deep link resolves the right project across "0000021" / "#21" /
+// "PO-021" variants and never mis-opens a different order. Empty/no-digit → ''.
+const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+
+export default function OrderTracker({ token, onBack, onNavigate, initialOrder }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
 
@@ -140,6 +146,43 @@ export default function OrderTracker({ token, onBack }) {
   }, [authHdr]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  // ── Cross-tab deep link IN: open one project ─────────────────────────────────
+  // A jump from the CRM card / finance row / vendor card hands an initialOrder
+  // { orderNumber, projectNumber, openPos }. Once projects are loaded we resolve
+  // the matching one — in PRIORITY order so we never open a near-miss when a
+  // better match exists:
+  //   1) exact projectNumber (the stable per-project id)
+  //   2) CANONICAL orderNumber/invoice (digits-only, leading zeros stripped — the
+  //      SAME key finance/CRM use) so "0000021"/"#21"/"21" all line up
+  //   3) ONLY if neither hit: canonical projectNumber == the number (legacy orders
+  //      that key off the project #). Tried last so an invoice "21" prefers the
+  //      order whose INVOICE is 21 over a different project whose PROJECT # is 21.
+  // No match → land on the list (the record may be archived/cleaned up): no crash,
+  // no dead-end. `initialOrder` is re-keyed by nonce in Studio, so a fresh jump
+  // re-runs this whole tab (remount resets deepLinkDone).
+  const deepLinkDone = React.useRef(false);
+  const [openPosOnMount, setOpenPosOnMount] = useState(false);
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    if (loading) return;
+    const want = initialOrder || {};
+    const pn = want.projectNumber != null ? String(want.projectNumber).trim() : '';
+    const on = normOrderNo(want.orderNumber);
+    if (!pn && !on) { deepLinkDone.current = true; return; }   // nothing to open
+    deepLinkDone.current = true;
+    const list = projects || [];
+    const match =
+      (pn && list.find((p) => String(p.projectNumber) === pn)) ||
+      (on && list.find((p) => normOrderNo(p.orderNumber) === on)) ||
+      (on && list.find((p) => normOrderNo(p.projectNumber) === on)) ||
+      null;
+    if (match) {
+      setActiveProject(match);
+      setOpenPosOnMount(!!want.openPos);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, projects, initialOrder]);
 
   // Keyboard shortcuts: `/` focuses search, `n` creates a new project,
   // `Esc` closes the drawer. Ignore when typing in any input.
@@ -805,6 +848,10 @@ export default function OrderTracker({ token, onBack }) {
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
         onOpenConfirmation={() => setConfirmation(activeProject)}
         onOpenQuote={() => setQuote(activeProject)}
+        onNavigate={onNavigate}
+        // Open the PO dialog automatically when arrived via a "open PO" deep link.
+        openPosOnMount={openPosOnMount}
+        onPosOpened={() => setOpenPosOnMount(false)}
         token={token}
         authHdr={authHdr}
       />
@@ -1223,7 +1270,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
@@ -1239,6 +1286,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // persists across opens and the URL never changes.
   const [tab, setTab] = useState('overview');
   useEffect(() => { if (open) setTab('overview'); }, [open]);
+
+  // When opened via a "open this PO" deep link, pop the PO dialog once the drawer
+  // is up. Fires once per request (the parent clears openPosOnMount via onPosOpened).
+  useEffect(() => {
+    if (open && openPosOnMount) {
+      setPoOpen(true);
+      if (onPosOpened) onPosOpened();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, openPosOnMount]);
 
   // Full re-seed only when a DIFFERENT project opens. Keyed on id so an
   // autosave round-trip — which hands back a fresh project object with the same
@@ -1445,14 +1502,36 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <ClientLogoSlot logo={logo} companyName={local.companyName || local.clientName}
           onUpload={onUploadLogo} onRemove={onRemoveLogo} />
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', letterSpacing: 0.4 }}>
             PROJECT #{local.projectNumber || '—'}
             {local.orderNumber && ` · INVOICE #${local.orderNumber}`}
           </Typography>
-          <Typography sx={{ color: B.white, fontSize: 18, fontWeight: 800, mt: 0.2 }}>
-            {local.companyName || local.clientName || 'Untitled'}
-          </Typography>
+          {(() => {
+            const displayName = local.companyName || local.clientName || 'Untitled';
+            // Canonical companyKey — the SAME derivation Order.companyKey uses, so
+            // the jump lands on the exact CRM card. Link only when we have a real
+            // name to key on AND a navigator; otherwise plain text (no dead-end).
+            const ck = local.companyKey || (local.companyName || local.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+            const canOpen = !!onNavigate && !!ck && !!(local.companyName || local.clientName);
+            return (
+              <Typography
+                onClick={canOpen ? () => onNavigate({ view: 'crm', companyKey: ck }) : undefined}
+                role={canOpen ? 'button' : undefined}
+                tabIndex={canOpen ? 0 : undefined}
+                onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate({ view: 'crm', companyKey: ck }); } } : undefined}
+                title={canOpen ? `Open ${displayName} in CRM` : undefined}
+                sx={{
+                  color: B.white, fontSize: 18, fontWeight: 800, mt: 0.2,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  cursor: canOpen ? 'pointer' : 'default', display: 'inline-block', maxWidth: '100%',
+                  '&:hover': canOpen ? { color: B.green, textDecoration: 'underline' } : undefined,
+                }}
+              >
+                {displayName}
+              </Typography>
+            );
+          })()}
         </Box>
         <Box sx={{ flex: 1 }} />
         {(() => {
@@ -1727,7 +1806,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             the owner sees the full set at a glance. A single-supplier job just
             shows one chip (or nothing if none is set yet). */}
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <SuppliersStrip project={local} authHdr={authHdr} />
+          <SuppliersStrip project={local} authHdr={authHdr} onNavigate={onNavigate} />
         </Box>
 
         {/* Sale + delivery dates aren't hand-entered here anymore — date of sale
@@ -1930,7 +2009,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       </>)}
 
       <PoBuilderDialog open={poOpen} project={project} authHdr={authHdr}
-        onClose={() => setPoOpen(false)} />
+        onClose={() => setPoOpen(false)} onNavigate={onNavigate} />
 
       {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
       {tab === 'files' && (() => {
@@ -2059,7 +2138,7 @@ function DocAction({ icon, label, hint, ready, onClick }) {
 //   • the generated POs' vendorName (fetched like FlowPipeline does)
 // A single-supplier job renders one chip; none yet → a quiet hint. The PO fetch
 // is best-effort and never blocks the render.
-function SuppliersStrip({ project, authHdr }) {
+function SuppliersStrip({ project, authHdr, onNavigate }) {
   const [poVendors, setPoVendors] = useState([]);
   useEffect(() => {
     if (!project || !project._id) { setPoVendors([]); return undefined; }
@@ -2098,11 +2177,20 @@ function SuppliersStrip({ project, authHdr }) {
         </Typography>
       ) : (
         <Stack direction="row" gap={0.75} flexWrap="wrap" useFlexGap>
-          {suppliers.map((s, i) => (
-            <Chip key={i} size="small" label={s}
-              sx={{ bgcolor: B.panelHi, color: B.white, border: `1px solid ${B.border}`,
-                fontSize: 11, maxWidth: 220, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
-          ))}
+          {suppliers.map((s, i) => {
+            // Each supplier chip jumps to that vendor's card (resolved by name in
+            // VendorsTab). Clickable only when we have a navigator + a real name.
+            const canOpen = !!onNavigate && !!s;
+            return (
+              <Chip key={i} size="small" label={s}
+                onClick={canOpen ? () => onNavigate({ view: 'vendors', vendorName: s }) : undefined}
+                title={canOpen ? `Open ${s}` : undefined}
+                sx={{ bgcolor: B.panelHi, color: B.white, border: `1px solid ${B.border}`,
+                  fontSize: 11, maxWidth: 220, cursor: canOpen ? 'pointer' : 'default',
+                  '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+                  '&:hover': canOpen ? { borderColor: B.green, color: B.green } : undefined }} />
+            );
+          })}
         </Stack>
       )}
     </Box>

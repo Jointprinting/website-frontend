@@ -2399,7 +2399,16 @@ function StudioBody({ token, onLogout }) {
   // Which internal view the CRM should land on when entered from a hub tile
   // (Today tile → 'today', Clients tile → 'companies'). Null = the CRM's own
   // default. Bumped with a nonce so re-picking the same tile re-applies it.
-  const [crmEntry, setCrmEntry] = React.useState({ view: null, nonce: 0 });
+  // `companyKey` deep-links straight to one company's card (a cross-tab link
+  // from an order / finance / vendor surface), null = no specific card.
+  const [crmEntry, setCrmEntry] = React.useState({ view: null, companyKey: null, nonce: 0 });
+  // Cross-tab deep-link targets for the other tools (mirrors crmEntry). Each is
+  // seeded by `navigate()` below and consumed by its tab's `initial*` prop, which
+  // opens the named record at mount/nonce. null target = no specific record.
+  //   ordersEntry  → open one project in OrderTracker (by project/order number)
+  //   vendorsEntry → open one vendor card in VendorsTab (by id, or resolve a name)
+  const [ordersEntry, setOrdersEntry]   = React.useState({ orderNumber: null, projectNumber: null, openPos: false, nonce: 0 });
+  const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
@@ -2472,9 +2481,51 @@ function StudioBody({ token, onLogout }) {
         { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
         .catch(() => { /* best-effort; badge already cleared locally */ });
     }
-    if (id === 'crm') setCrmEntry((p) => ({ view: innerView || 'companies', nonce: p.nonce + 1 }));
+    if (id === 'crm') setCrmEntry((p) => ({ view: innerView || 'companies', companyKey: null, nonce: p.nonce + 1 }));
+    // Entering Orders/Vendors from the hub bumps their entry nonce with a CLEARED
+    // target, so the tool remounts fresh — a stale deep-linked drawer from an
+    // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
+    if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
+    if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
     setView(id);
   };
+
+  // ── Cross-tab deep-link router ───────────────────────────────────────────────
+  // The connective tissue of the ecosystem: any surface can jump to a related
+  // record in another tool by calling onNavigate(target). Mirrors handlePick's
+  // entry+nonce pattern so the destination tab opens the exact record at mount.
+  // Purely additive — every existing flow is untouched; this only ADDS jumps.
+  //   { view:'crm',     companyKey }                         → open that CRM card
+  //   { view:'clients', orderNumber?|projectNumber?, openPos?} → open that order
+  //   { view:'vendors', vendorId?|vendorName }               → open that vendor
+  // A target with no usable id still switches to the tool (never a dead-end); the
+  // tab degrades gracefully (lands on its list) when the record can't be found.
+  const navigate = React.useCallback((target) => {
+    if (!target || !target.view) return;
+    const v = target.view;
+    if (v === 'crm') {
+      const key = target.companyKey ? String(target.companyKey) : null;
+      setCrmEntry((p) => ({ view: 'companies', companyKey: key, nonce: p.nonce + 1 }));
+      setView('crm');
+    } else if (v === 'clients') {
+      setOrdersEntry((p) => ({
+        orderNumber: target.orderNumber != null ? String(target.orderNumber) : null,
+        projectNumber: target.projectNumber != null ? String(target.projectNumber) : null,
+        openPos: !!target.openPos,
+        nonce: p.nonce + 1,
+      }));
+      setView('clients');
+    } else if (v === 'vendors') {
+      setVendorsEntry((p) => ({
+        vendorId: target.vendorId ? String(target.vendorId) : null,
+        vendorName: target.vendorName ? String(target.vendorName) : null,
+        nonce: p.nonce + 1,
+      }));
+      setView('vendors');
+    } else {
+      setView(v);
+    }
+  }, []);
 
   // Road Trip Recon needs the full viewport — break out of the Studio's
   // maxWidth="md" container and render a slim header instead of the usual
@@ -2532,13 +2583,33 @@ function StudioBody({ token, onLogout }) {
 
 
   if (view === 'clients') {
-    return <OrderTracker token={token} onBack={() => setView('hub')} />;
+    // initialOrder deep-links to one project (from a CRM/finance/vendor row).
+    // Keyed by nonce so re-navigating to the same order re-opens it.
+    return (
+      <OrderTracker
+        key={ordersEntry.nonce}
+        token={token}
+        onBack={() => setView('hub')}
+        onNavigate={navigate}
+        initialOrder={ordersEntry}
+      />
+    );
   }
 
   if (view === 'crm') {
     // Key by the entry nonce so re-picking the Today/Clients tile re-lands on
-    // the right internal view (CrmTab reads initialView at mount).
-    return <CrmTab key={crmEntry.nonce} token={token} initialView={crmEntry.view} onBack={() => setView('hub')} />;
+    // the right internal view (CrmTab reads initialView at mount). initialCompanyKey
+    // deep-links straight to one company's card from another surface.
+    return (
+      <CrmTab
+        key={crmEntry.nonce}
+        token={token}
+        initialView={crmEntry.view}
+        initialCompanyKey={crmEntry.companyKey}
+        onBack={() => setView('hub')}
+        onNavigate={navigate}
+      />
+    );
   }
 
   if (view === 'backup') {
@@ -2546,11 +2617,19 @@ function StudioBody({ token, onLogout }) {
   }
 
   if (view === 'finances') {
-    return <FinancesTab token={token} onBack={() => setView('hub')} />;
+    return <FinancesTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
   }
 
   if (view === 'vendors') {
-    return <VendorsTab token={token} onBack={() => setView('hub')} />;
+    return (
+      <VendorsTab
+        key={vendorsEntry.nonce}
+        token={token}
+        onBack={() => setView('hub')}
+        onNavigate={navigate}
+        initialVendor={vendorsEntry}
+      />
+    );
   }
 
   return (

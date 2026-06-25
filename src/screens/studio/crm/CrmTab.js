@@ -82,7 +82,7 @@ function gridRange(year, month) {
   return { from: dayKey(new Date(startMs)), to: dayKey(new Date(startMs + 41 * 86400000)) };
 }
 
-export default function CrmTab({ token, onBack, initialView }) {
+export default function CrmTab({ token, onBack, initialView, initialCompanyKey, onNavigate }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
 
@@ -92,7 +92,10 @@ export default function CrmTab({ token, onBack, initialView }) {
     initialView && ['companies', 'today', 'pipeline', 'calendar', 'dashboard'].includes(initialView)
       ? initialView : 'companies',
   );
-  const [openKey, setOpenKey] = React.useState(null); // company detail overlay (null = closed)
+  // company detail overlay (null = closed). A cross-tab deep link
+  // (initialCompanyKey) seeds it open straight to that card. The whole CrmTab is
+  // re-keyed on the entry nonce in Studio, so this initializer re-runs per jump.
+  const [openKey, setOpenKey] = React.useState(initialCompanyKey || null);
 
   // ── Per-view data ────────────────────────────────────────────────────────
   // Dashboard — the one-shot aggregate (/dashboard): pipeline + follow-ups +
@@ -664,6 +667,16 @@ export default function CrmTab({ token, onBack, initialView }) {
       .sort((a, b) => (a.companyName || a.companyKey).localeCompare(b.companyName || b.companyKey));
   }, [cleanupClients]);
 
+  // A PO on the company card links to its Order (PurchaseOrder.orderId → the
+  // matching order row), so opening the PO lands on the right project's POs even
+  // though the PO itself carries no human order/project number. Returns the
+  // sibling order POJO (with its orderNumber/projectNumber), or null if unknown.
+  const orderForPo = (p) => {
+    const oid = p && p.orderId != null ? String(p.orderId) : '';
+    if (!oid) return null;
+    return (detail?.orders || []).find((o) => String(o._id) === oid) || null;
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const renderView = () => {
     if (openKey) {
@@ -676,6 +689,26 @@ export default function CrmTab({ token, onBack, initialView }) {
           onLog={openLogForDetail}
           onDeleteLog={(entryId) => detail?.client && deleteLogEntry(detail.client.companyKey, entryId)}
           onArchive={() => detail?.client && archiveOne(detail.client.companyKey)}
+          // Cross-tab deep links out of the company card (additive navigation):
+          //   an order row → the Order Tracker project; a PO → that order's POs;
+          //   a PO's vendor name → the vendor card.
+          onOpenOrder={onNavigate ? (o) => onNavigate({
+            view: 'clients',
+            orderNumber: o && o.orderNumber,
+            projectNumber: o && o.projectNumber,
+          }) : undefined}
+          onOpenPo={onNavigate ? (p) => {
+            // POs carry orderId (not a project #); resolve the sibling order so
+            // the PO opens on the right project's POs.
+            const o = orderForPo(p);
+            onNavigate({
+              view: 'clients',
+              orderNumber: o && o.orderNumber,
+              projectNumber: o && o.projectNumber,
+              openPos: true,
+            });
+          } : undefined}
+          onOpenVendor={onNavigate ? (vendorName) => onNavigate({ view: 'vendors', vendorName }) : undefined}
         />
       );
     }
