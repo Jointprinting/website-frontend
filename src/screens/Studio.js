@@ -2623,14 +2623,17 @@ export default function Studio() {
 }
 
 // ── BackupNagBanner ──────────────────────────────────────────────────────────
-// Sits at the top of the Studio hub. Two independent, dismissible nudges:
+// Sits at the top of the Studio hub. ONE dismissible nudge at a time, never two
+// stacked. Two independent triggers feed it, overdue taking priority:
 //
 //   1. OVERDUE backup — driven by the backend (/admin/backup/status isDue): the
 //      weekly archive hasn't been taken in a while. Dismiss snoozes it a week.
-//   2. MONTHLY hard-drive reminder — a separate, gentle heads-up to copy the
-//      latest archive onto an external drive (the third, fully-offline basket
-//      beyond the site DB and Google Drive). Purely client-side: it reappears
-//      ~30 days after it was last dismissed. Non-naggy by design.
+//      When overdue, the single banner folds in the hard-drive ask too, so the
+//      one line says "download it AND copy it to an external drive".
+//   2. MONTHLY hard-drive reminder — a gentler heads-up to copy the latest
+//      archive onto an external drive (the third, fully-offline basket beyond
+//      the site DB and Google Drive). Purely client-side: it reappears ~30 days
+//      after it was last dismissed. Shown on its own only when NOT overdue.
 //
 // Both store their last-dismissed time in localStorage so they don't re-nag on
 // every page load. Click the body to jump to the Backup tab; click ✕ to dismiss.
@@ -2703,23 +2706,25 @@ function BackupNagBanner({ token, onClick }) {
 
   if (!showOverdue && !showHdd) return null;
 
+  // ONE banner, overdue first. When overdue, the message folds in the external-
+  // drive ask so we never stack a second backup banner underneath it. Only when
+  // the backup is current do we fall back to the gentler monthly HD reminder.
   const overdueMsg = info && info.lastBackupAt
-    ? `Backup is ${info.lastBackupDays} days old — overdue.`
-    : `You haven't backed up yet. Take 30 seconds to download an archive.`;
+    ? `Backup is ${info.lastBackupDays} days old — download it and copy to an external drive.`
+    : `You haven't backed up yet — download an archive and copy it to an external drive.`;
+
+  if (showOverdue) {
+    return (
+      <Banner tone="overdue" onDismiss={dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt)}>
+        ⚠ {overdueMsg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
+      </Banner>
+    );
+  }
 
   return (
-    <>
-      {showOverdue && (
-        <Banner tone="overdue" onDismiss={dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt)}>
-          ⚠ {overdueMsg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
-        </Banner>
-      )}
-      {showHdd && (
-        <Banner tone="hdd" onDismiss={dismiss(K_HDD_REMINDER, setHddDismissedAt)}>
-          🗄 Monthly reminder: download the latest backup and copy it to an external hard drive.
-          {' '}<Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
-        </Banner>
-      )}
-    </>
+    <Banner tone="hdd" onDismiss={dismiss(K_HDD_REMINDER, setHddDismissedAt)}>
+      🗄 Monthly reminder: download the latest backup and copy it to an external hard drive.
+      {' '}<Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
+    </Banner>
   );
 }
