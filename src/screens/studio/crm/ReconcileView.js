@@ -107,6 +107,11 @@ export default function ReconcileView({ token, onApplied }) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [applying, setApplying] = React.useState(false);
   const [result, setResult] = React.useState(null); // post-apply report (incl. batchId)
+  // Has reconcile EVER been applied (any prior session)? This is a ONE-TIME tool —
+  // once the data's loaded we don't shove the full plan + a big "Confirm" button at
+  // the owner again; we show a quiet "already loaded" card with a small re-run link.
+  const [status, setStatus] = React.useState(null);     // { applied, lastBatchId, at }
+  const [forceShow, setForceShow] = React.useState(false); // owner clicked "re-run"
 
   // Load the PLAN (dry-run; writes nothing). Re-runnable.
   const loadPreview = React.useCallback(async () => {
@@ -122,7 +127,23 @@ export default function ReconcileView({ token, onApplied }) {
     }
   }, [authHdr]);
 
-  React.useEffect(() => { loadPreview(); }, [loadPreview]);
+  // Has it been applied before? Cheap status check; failure just falls back to the
+  // normal flow (treated as "not applied").
+  const loadStatus = React.useCallback(async () => {
+    try {
+      const res = await axios.get(`${base}/reconcile/status`, authHdr);
+      setStatus(res.data || { applied: false });
+    } catch (_) {
+      setStatus({ applied: false });
+    }
+  }, [authHdr]);
+
+  React.useEffect(() => { loadPreview(); loadStatus(); }, [loadPreview, loadStatus]);
+
+  // Auto-hide gate: when it's already applied (and the owner hasn't explicitly
+  // chosen to re-run this session) AND there's nothing fresh waiting, show the
+  // quiet "done" card instead of the firehose.
+  const alreadyApplied = !!(status && status.applied) && !forceShow && !result;
 
   // Apply — the ONLY write. Requires the explicit confirm flag; the dialog gate is
   // the second deliberate step.
@@ -133,15 +154,17 @@ export default function ReconcileView({ token, onApplied }) {
       setResult(res.data);
       setConfirmOpen(false);
       if (onApplied) onApplied();
-      // Re-pull the preview so it now reads as a no-op (idempotency made visible).
+      // Re-pull the preview so it now reads as a no-op (idempotency made visible),
+      // and refresh status so the next visit lands on the quiet "already loaded" card.
       loadPreview();
+      loadStatus();
     } catch (e) {
       setError(e?.response?.data?.message || 'The reconcile could not be applied.');
       setConfirmOpen(false);
     } finally {
       setApplying(false);
     }
-  }, [authHdr, onApplied, loadPreview]);
+  }, [authHdr, onApplied, loadPreview, loadStatus]);
 
   if (loading) {
     return (
@@ -157,6 +180,35 @@ export default function ReconcileView({ token, onApplied }) {
       <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
         <Typography sx={{ color: '#f87171', fontWeight: 700 }}>{error}</Typography>
         <Button onClick={loadPreview} startIcon={<RefreshOutlinedIcon />} sx={dropGhostBtn}>Try again</Button>
+      </Stack>
+    );
+  }
+
+  // Already loaded in a prior session → quiet confirmation, not the full firehose.
+  // A small "re-run" link reveals the whole plan + Confirm again if ever needed,
+  // so nothing is lost — just out of the way.
+  if (alreadyApplied) {
+    return (
+      <Stack spacing={2} sx={{ py: 4 }} alignItems="center">
+        <Box sx={{ maxWidth: 460, width: '100%', p: 3, borderRadius: 3, textAlign: 'center',
+          bgcolor: D.panel, border: `1px solid ${D.line}` }}>
+          <CheckCircleOutlineIcon sx={{ fontSize: 30, color: D.green, mb: 1 }} />
+          <Typography sx={{ fontWeight: 800, fontSize: 16, color: D.text }}>Your data is loaded.</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 13, mt: 0.75, lineHeight: 1.6 }}>
+            This one-time load already ran — your CRM is reconciled. You don’t need to do anything here.
+          </Typography>
+          {status && status.lastBatchId && (
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 11, mt: 1 }}>batch&nbsp;{status.lastBatchId}</Typography>
+          )}
+          <Button
+            onClick={() => { setForceShow(true); loadPreview(); }}
+            startIcon={<RefreshOutlinedIcon sx={{ fontSize: 15 }} />}
+            sx={{ mt: 2, textTransform: 'none', color: D.faint, fontWeight: 600, fontSize: 12,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}
+          >
+            Re-run the load
+          </Button>
+        </Box>
       </Stack>
     );
   }

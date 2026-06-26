@@ -122,10 +122,10 @@ export const segmentOf = (c) => {
 
 // ── Temperature / lifecycle tags ──────────────────────────────────────────────
 // The importer tags records with a temperature (hot/warm/room-temp/cold/lost/
-// in-progress/won/meta-ad) and engagement (eng-high/eng-med/eng-low). These are
-// just normal tags[] under the hood; this map gives the KNOWN ones a legible
-// color + glyph so they read as status, not noise. Unknown tags fall back to the
-// neutral teal TagChips treatment. Keyed lowercase; matched case-insensitively.
+// in-progress/won/meta-ad). These are just normal tags[] under the hood; this map
+// gives the KNOWN ones a legible color + glyph so they read as status, not noise.
+// Unknown tags fall back to the neutral teal TagChips treatment. Keyed lowercase;
+// matched case-insensitively.
 export const TEMP_META = {
   hot:           { label: 'Hot',          color: '#fb7185', dot: '#fb7185', emoji: '🔥' },
   warm:          { label: 'Warm',         color: '#fbbf24', dot: '#fbbf24' },
@@ -138,11 +138,27 @@ export const TEMP_META = {
   won:           { label: 'Won',          color: '#4ade80', dot: '#4ade80' },
   'meta-ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
   'meta ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
-  'eng-high':    { label: 'Eng · high',   color: '#4ade80', dot: '#4ade80' },
-  'eng-med':     { label: 'Eng · med',    color: '#fbbf24', dot: '#fbbf24' },
-  'eng-low':     { label: 'Eng · low',    color: '#9ca3af', dot: '#9ca3af' },
 };
 export const tempMeta = (t) => TEMP_META[String(t || '').toLowerCase().trim()] || null;
+
+// ── Hidden system tags — the cryptic import-only noise ────────────────────────
+// The importer stamps a handful of MACHINE-ONLY tags the owner never needs to see
+// on a card: the engagement levels (eng-high/med/low/inactive) and the order-ref
+// hint. They still live in tags[] (the backend's replace-mode logic keys off them
+// to know a record is an untouched import), but they're pure clutter in the UI —
+// the owner called them out by name. We filter them out of EVERY tag surface here,
+// so removing them is one rule, not a per-view edit. Matched case-insensitively;
+// also drops any future eng-* variant.
+const HIDDEN_TAG_EXACT = new Set(['order-ref', 'eng-high', 'eng-med', 'eng-medium', 'eng-low', 'eng-inactive']);
+export const isHiddenTag = (t) => {
+  const v = String(t || '').toLowerCase().trim();
+  if (!v) return true;                       // blank → nothing to show
+  if (HIDDEN_TAG_EXACT.has(v)) return true;
+  if (/^eng[-\s]/.test(v)) return true;      // any eng-* engagement level
+  return false;
+};
+// The owner-visible tags on a record: real tags minus the hidden system noise.
+export const visibleTags = (tags) => (Array.isArray(tags) ? tags.filter((t) => t && !isHiddenTag(t)) : []);
 
 // ── Interest vocabulary ───────────────────────────────────────────────────────
 export const INTEREST_TYPES = ['', 'promos', 'apparel', 'both'];
@@ -401,7 +417,10 @@ export function EmptyState({ icon, title, hint }) {
 // neutral teal chip. Read-only by default; pass `onDelete(tag)` to make each chip
 // removable (used on the detail editor). `size="tiny"` packs them onto cards.
 export function TagChips({ tags, onDelete, size = 'small', max, sx = {} }) {
-  const raw = Array.isArray(tags) ? tags.filter(Boolean) : [];
+  // Drop the hidden machine-only tags (eng-*/order-ref) from every surface — the
+  // owner never sees that import noise, whether the chips are read-only or the
+  // removable detail editor.
+  const raw = visibleTags(tags);
   if (raw.length === 0) return null;
   // Sort known temperature tags first so the hot/warm signal leads.
   const list = [...raw].sort((a, b) => (tempMeta(b) ? 1 : 0) - (tempMeta(a) ? 1 : 0));

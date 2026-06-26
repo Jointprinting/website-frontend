@@ -33,7 +33,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
-import { dayKey, stageMeta } from './_crm';
+import { dayKey, stageMeta, isHiddenTag } from './_crm';
 import { useContextMenu } from '../ContextMenu';
 import { buildCompanyMenu, buildFallbackMenu } from '../contextMenuActions';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
@@ -72,14 +72,15 @@ const OVERFLOW_NAV = [
 ];
 const ALL_NAV = [...NAV, ...OVERFLOW_NAV];
 
-// First & last day (YYYY-MM-DD) of the full Sun→Sat grid that contains `month`
-// of `year` — the exact window the calendar grid renders, so every visible cell
-// (incl. adjacent-month spill days) has its events. Built in UTC to match
-// CalendarView's UTC grid (see the date-helper note in _crm.js).
+// First & last day (YYYY-MM-DD) of `month` of `year` — the calendar now renders a
+// CLEAN single-month grid (no adjacent-month spill cells), so we fetch exactly the
+// month's follow-ups. Built in UTC to match CalendarView's UTC grid (see the
+// date-helper note in _crm.js). Cross-month moves work by navigating the calendar
+// (which refetches the new month) and dropping there.
 function gridRange(year, month) {
-  const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay();
-  const startMs = Date.UTC(year, month, 1 - firstDow);
-  return { from: dayKey(new Date(startMs)), to: dayKey(new Date(startMs + 41 * 86400000)) };
+  const from = dayKey(new Date(Date.UTC(year, month, 1)));
+  const to = dayKey(new Date(Date.UTC(year, month + 1, 0))); // last day of the month
+  return { from, to };
 }
 
 export default function CrmTab({ token, onBack, initialView, initialCompanyKey, onNavigate }) {
@@ -355,12 +356,14 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // ── Write transport ───────────────────────────────────────────────────────
   // One PATCH path for everything: field edits, log-a-touch, reschedule. The
   // backend disambiguates by body shape.
-  const patchCompany = React.useCallback(async (key, body) => {
+  // `opts.silent` suppresses the per-call error toast — used by bulk callers (e.g.
+  // the calendar multi-move) that show ONE summary toast instead of N racing ones.
+  const patchCompany = React.useCallback(async (key, body, opts = {}) => {
     try {
       const res = await axios.patch(`${base}/${encodeURIComponent(key)}`, body, authHdr);
       return res.data?.client || null;
     } catch (e) {
-      flash(e?.response?.data?.message || 'That change didn’t save.', 'error');
+      if (!opts.silent) flash(e?.response?.data?.message || 'That change didn’t save.', 'error');
       throw e;
     }
   }, [authHdr, flash]);
@@ -491,7 +494,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
 
   // Calendar drag-drop: optimistic move, then PATCH; refetch reconciles. The
   // optimistic value is UTC-noon of the dropped day so it re-buckets onto the
-  // same cell (dayKey reads UTC) before the server echoes back UTC midnight.
+  // same cell (dayKey reads UTC) before the server echoes back UTC midnight. This
+  // UTC-noon convention is what keeps a dropped "June 25" persisting as June 25 for
+  // the US owner — no off-by-one.
   const calendarReschedule = async (key, newDayKey, ev) => {
     setCalEvents((list) => list.map((e) => (e.companyKey === key ? { ...e, nextFollowUp: `${newDayKey}T12:00:00Z` } : e)));
     try {
@@ -500,6 +505,32 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
       flash(`${ev?.name || 'Follow-up'} → ${nice}`);
     } catch (_) {
       // revert on failure by refetching the window
+      loadCalendar(calCursor);
+      return;
+    }
+    refreshAffected();
+  };
+
+  // Calendar MULTI-move (Notion-style): drop a selection of chips on one day, move
+  // them all to that date. Optimistic (UTC-noon, same as the single move), then
+  // PATCH each in parallel; one refetch reconciles. A target day months away works
+  // the same — the dropped dayKey is whatever cell the owner navigated to.
+  const calendarRescheduleMany = async (keys, newDayKey, evs) => {
+    const keySet = new Set(keys);
+    setCalEvents((list) => list.map((e) => (keySet.has(e.companyKey) ? { ...e, nextFollowUp: `${newDayKey}T12:00:00Z` } : e)));
+    const nice = new Date(`${newDayKey}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+    try {
+      // Silent per-call (we show one summary toast below), so N failures don't
+      // spray N error snackbars that clobber the summary.
+      const results = await Promise.allSettled(keys.map((k) => patchCompany(k, { nextFollowUp: newDayKey }, { silent: true })));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        flash(`Moved ${keys.length - failed} of ${keys.length} to ${nice}. ${failed} didn’t save.`, failed === keys.length ? 'error' : 'info');
+        if (failed === keys.length) { loadCalendar(calCursor); return; }
+      } else {
+        flash(`${keys.length} follow-ups → ${nice}`);
+      }
+    } catch (_) {
       loadCalendar(calCursor);
       return;
     }
@@ -644,10 +675,13 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
 
   // Distinct tags across the loaded company set — feeds the tag-filter selects on
   // both Companies and Pipeline so the owner picks from tags that actually exist.
+  // The hidden machine-only tags (eng-*/order-ref) are excluded so the dropdown
+  // stays as clean as the cards.
   const tagOptions = React.useMemo(() => {
     const set = new Set();
-    (clients || []).forEach((c) => (c.tags || []).forEach((t) => { if (t) set.add(t); }));
-    (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => (c.tags || []).forEach((t) => { if (t) set.add(t); })));
+    const add = (t) => { if (t && !isHiddenTag(t)) set.add(t); };
+    (clients || []).forEach((c) => (c.tags || []).forEach(add));
+    (pipeline.groups || []).forEach((g) => (g.clients || []).forEach((c) => (c.tags || []).forEach(add)));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [clients, pipeline]);
 
@@ -753,6 +787,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onCursorChange={setCalCursor}
             onOpen={openCompany}
             onReschedule={calendarReschedule}
+            onRescheduleMany={calendarRescheduleMany}
             onPickReschedule={(ev) => openResched({ companyKey: ev.companyKey, name: ev.name, nextFollowUp: ev.nextFollowUp })}
             bindCompany={bindCompany}
           />

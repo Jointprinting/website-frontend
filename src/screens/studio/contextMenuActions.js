@@ -12,7 +12,8 @@
 // Conventions:
 //   • Builders defensively read fields (a row may lack a phone/email/etc); an
 //     action that can't apply is dropped or disabled, never a no-op crash.
-//   • `confirm()` guards destructive items.
+//   • Reversible destructive items (archive) fire immediately and rely on an
+//     "Undo" toast; only HARD-delete items keep a confirm() guard.
 //   • Copy actions use copyToClipboard and flash a toast when a flasher is given.
 
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
@@ -116,8 +117,10 @@ export function buildCompanyMenu(c, handlers = {}) {
     copyItem({ key: 'copy-email', label: 'Copy email', value: email, flash: handlers.flash, toastLabel: 'Email', icon: MailOutlineIcon }),
     handlers.onArchive && { divider: true },
     handlers.onArchive && {
+      // Archives immediately — no native confirm. The handler shows a few-second
+      // "Undo" toast that restores the card, so there's nothing to confirm.
       key: 'archive', label: 'Archive', icon: ArchiveOutlinedIcon, danger: true,
-      onClick: () => { if (window.confirm(`Archive “${name}”? It stays recoverable from the Archived list.`)) handlers.onArchive(key); },
+      onClick: () => handlers.onArchive(key),
     },
   ];
   return items;

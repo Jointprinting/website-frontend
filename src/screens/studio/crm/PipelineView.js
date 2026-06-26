@@ -21,9 +21,10 @@ import SortOutlinedIcon from '@mui/icons-material/SortOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { D, mono, dropInput } from '../_shared';
 import {
-  StageChip, EmptyState, TagChips, stageMeta, followUpStatus, fmtMoney0,
+  StageChip, EmptyState, stageMeta, followUpStatus, fmtMoney0,
   PIPELINE_STAGES, SECONDARY_STAGES, STAGE_PROBABILITY, tempMeta, isWonStage,
 } from './_crm';
 
@@ -46,14 +47,40 @@ function sortCards(cards, sort) {
   return arr;
 }
 
-// A draggable company card. Mirrors CalendarView's EventChip drag contract:
-// onDragStart/onDragEnd bubble to the board, which owns the in-flight ref.
+// The ONE temperature signal a card shows: the hottest known temp tag (hot >
+// warm > cold > the rest), or null. Engagement-level / order-ref noise never
+// reaches here (those are filtered as hidden tags), so a card's heat dot is a
+// real hot/warm/cold read, not import clutter.
+const TEMP_RANK = { hot: 3, warm: 2, 'room-temp': 1, 'room temp': 1, cold: 1 };
+function cardHeat(tags) {
+  let best = null;
+  let bestRank = 0;
+  for (const t of (tags || [])) {
+    const r = TEMP_RANK[String(t).toLowerCase().trim()] || 0;
+    // Only an actual hot/warm/room-temp/cold tag earns a heat dot — other known
+    // tags (won/lost/meta-ad/in-progress) aren't a "temperature" and shouldn't
+    // paint one.
+    if (r > bestRank) { best = tempMeta(t); bestRank = r; }
+  }
+  return best;
+}
+
+// A draggable company card — deliberately SPARSE (owner: "declutter it"). It shows
+// only what scans a pipeline at a glance:
+//   • company name
+//   • deal value
+//   • a subtle temperature dot (hot/warm/cold) when known
+//   • a single follow-up / overdue indicator (the next-step signal)
+// The cryptic eng·/order-ref tag chips are gone (filtered as hidden system tags).
+// Mirrors CalendarView's EventChip drag contract: onDragStart/onDragEnd bubble to
+// the board, which owns the in-flight ref.
 function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, bindCompany }) {
   const m = stageMeta(card.stage);
   const fu = followUpStatus(card.nextFollowUp);
   const won = isWonStage(card.stage);
-  // Surface the hottest temperature tag on the rail as a subtle heat accent.
-  const heat = (card.tags || []).map((t) => tempMeta(t)).find(Boolean);
+  const heat = cardHeat(card.tags);
+  // The accent rail reads the deal's heat when known, else its stage; a won deal
+  // always glows green.
   const railColor = won ? stageMeta('won').color : (heat ? heat.color : m.color);
   return (
     <Box
@@ -62,7 +89,7 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, 
       onDragEnd={onDragEnd}
       onClick={(e) => { e.stopPropagation(); onOpen(card.companyKey); }}
       {...(bindCompany ? bindCompany(card) : {})}
-      title={`${card.name}${card.address || card.area ? ` · ${card.address || card.area}` : ''} — drag to change stage`}
+      title={`${card.name}${card.address || card.area ? ` · ${card.address || card.area}` : ''}${heat ? ` · ${heat.label}` : ''} — drag to change stage`}
       sx={{
         position: 'relative', overflow: 'hidden', cursor: locked ? 'wait' : 'grab',
         bgcolor: D.panel, border: `1px solid ${won ? 'rgba(74,222,128,0.4)' : D.line}`, borderRadius: 2, p: 1.25,
@@ -78,13 +105,20 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, 
       }}
     >
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1} sx={{ pl: 0.5 }}>
-        <Typography sx={{
-          color: D.text, fontWeight: 800, fontSize: 13, lineHeight: 1.3, minWidth: 0,
-          overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-        }}>
-          {card.name}
-        </Typography>
+        <Stack direction="row" alignItems="flex-start" spacing={0.75} sx={{ minWidth: 0 }}>
+          {/* Subtle temperature dot — hot/warm/cold at a glance, nothing more. */}
+          {heat && (
+            <Box title={heat.label} sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: heat.dot,
+              mt: '4px', flexShrink: 0, boxShadow: `0 0 6px -1px ${heat.dot}` }} />
+          )}
+          <Typography sx={{
+            color: D.text, fontWeight: 800, fontSize: 13, lineHeight: 1.3, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
+            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          }}>
+            {card.name}
+          </Typography>
+        </Stack>
         {card.dealValue > 0 && (
           <Typography sx={{ ...mono, color: D.green, fontWeight: 800, fontSize: 12.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
             {fmtMoney0(card.dealValue)}
@@ -92,16 +126,16 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, 
         )}
       </Stack>
 
-      {(card.nextFollowUp || (card.tags && card.tags.length > 0)) && (
-        <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap spacing={0.5} sx={{ mt: 0.85, pl: 0.5 }}>
-          {card.nextFollowUp && (
-            <Chip
-              label={fu.label} size="small"
-              sx={{ bgcolor: 'transparent', color: fu.tone, fontWeight: 700, fontSize: 10, ...mono,
-                border: `1px solid ${D.line}`, height: 18, '& .MuiChip-label': { px: 0.75 } }}
-            />
-          )}
-          <TagChips tags={card.tags} size="tiny" max={3} />
+      {/* Next-step / overdue indicator — the one status line on the card. */}
+      {card.nextFollowUp && (
+        <Stack direction="row" alignItems="center" sx={{ mt: 0.85, pl: 0.5 }}>
+          <Chip
+            icon={<EventOutlinedIcon sx={{ fontSize: 12 }} />}
+            label={fu.label} size="small"
+            sx={{ bgcolor: 'transparent', color: fu.tone, fontWeight: 700, fontSize: 10, ...mono,
+              border: `1px solid ${fu.overdue ? 'rgba(248,113,113,0.4)' : D.line}`, height: 18,
+              '& .MuiChip-label': { px: 0.6 }, '& .MuiChip-icon': { color: fu.tone, ml: 0.5, mr: -0.25 } }}
+          />
         </Stack>
       )}
     </Box>
