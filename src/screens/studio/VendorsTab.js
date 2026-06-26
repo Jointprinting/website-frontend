@@ -29,6 +29,7 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
+import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import {
@@ -36,6 +37,7 @@ import {
 } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
+import RebuildPrintersView from './RebuildPrintersView';
 
 const base = `${config.backendUrl}/api`;
 const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
@@ -190,8 +192,32 @@ function DuplicatesPanel({ groups, onMerge }) {
   );
 }
 
+// ── One-time "Rebuild printers from Drive" call-to-action ─────────────────────
+// A prominent banner above the vendor list that opens the preview→confirm rebuild.
+// Auto-hidden once the rebuild has been applied (status.applied) — like the other
+// one-time tools — so it doesn't nag after the printers are loaded.
+function RebuildBanner({ onOpen }) {
+  return (
+    <Box sx={{ border: `1px solid ${D.lineHi}`, borderRadius: 2.5, bgcolor: 'rgba(74,222,128,0.06)', p: 1.75 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+        <CloudSyncOutlinedIcon sx={{ color: D.green, fontSize: 26, flexShrink: 0 }} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14 }}>Rebuild printers from your Drive</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12.5, lineHeight: 1.5 }}>
+            Load your real printers and their purchase orders from your Google&nbsp;Drive PO history, with the spend from
+            your books. Preview first — nothing changes until you confirm, and it’s fully reversible.
+          </Typography>
+        </Box>
+        <Button onClick={onOpen} sx={{ ...dropPrimaryBtn, px: 2.5, flexShrink: 0 }} startIcon={<CloudSyncOutlinedIcon />}>
+          Preview rebuild
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
 // ── List view ─────────────────────────────────────────────────────────────────
-function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, duplicates, onMerge }) {
+function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, duplicates, onMerge, showRebuild, onRebuild }) {
   const list = useMemo(() => {
     const t = query.trim().toLowerCase();
     if (!t) return vendors;
@@ -208,6 +234,8 @@ function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, dup
           <InputAdornment position="start"><SearchIcon sx={{ color: D.faint, fontSize: 20 }} /></InputAdornment>
         ) }}
       />
+      {/* One-time "Rebuild printers from Drive" CTA — auto-hidden once applied. */}
+      {!query && showRebuild && <RebuildBanner onOpen={onRebuild} />}
       {/* Duplicate-printer detection + one-tap merge (mirrors CRM cleanup). Only
           shows when the backend proposes groups; hidden on a clean book. */}
       {!query && <DuplicatesPanel groups={duplicates} onMerge={onMerge} />}
@@ -517,6 +545,17 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingField, setSavingField] = useState('');
+  // "Rebuild printers from Drive" one-time tool. `rebuilding` opens the surface;
+  // `rebuildStatus` tracks whether it has ever been applied, so the CTA banner
+  // auto-hides afterward (like the CRM reconcile / finance restart tools).
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildStatus, setRebuildStatus] = useState(null); // { applied, lastBatchId }
+
+  const loadRebuildStatus = useCallback(() => {
+    axios.get(`${base}/orders/vendors/rebuild/status`, authHdr)
+      .then((r) => setRebuildStatus(r.data || { applied: false }))
+      .catch(() => setRebuildStatus({ applied: false }));
+  }, [authHdr]);
 
   const loadDuplicates = useCallback(() => {
     axios.get(`${base}/orders/vendors/duplicates`, authHdr)
@@ -532,7 +571,7 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
       .finally(() => setLoading(false));
   }, [authHdr]);
 
-  useEffect(() => { loadVendors(); loadDuplicates(); }, [loadVendors, loadDuplicates]);
+  useEffect(() => { loadVendors(); loadDuplicates(); loadRebuildStatus(); }, [loadVendors, loadDuplicates, loadRebuildStatus]);
 
   // Merge one vendor into another (survivor, merged are ids). The backend folds
   // profile blanks + learned links and re-points POs/receipts to the survivor,
@@ -637,14 +676,30 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
       </Box>
 
       <Box data-ctx-chrome sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 3 }, py: { xs: 2, md: 3 }, ...scrollbar }}>
-        {openId ? (
+        {rebuilding ? (
+          <Stack spacing={2}>
+            <Button onClick={() => setRebuilding(false)} startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />} size="small"
+              sx={{ textTransform: 'none', color: D.muted, fontWeight: 600, px: 0.5, alignSelf: 'flex-start', '&:hover': { color: D.green, bgcolor: 'transparent' } }}>
+              All vendors
+            </Button>
+            <RebuildPrintersView
+              token={token}
+              onClose={() => setRebuilding(false)}
+              // After a successful rebuild: refresh the list + duplicate groups + the
+              // status (so the CTA banner auto-hides on return).
+              onApplied={() => { loadVendors(); loadDuplicates(); loadRebuildStatus(); }}
+            />
+          </Stack>
+        ) : openId ? (
           <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
             onBack={() => setOpenId(null)} onPatch={patch}
             // A connected order/PO/receipt row jumps to that order's project page.
             onOpenOrder={onNavigate ? (t) => onNavigate({ view: 'clients', orderNumber: t.orderNumber, projectNumber: t.projectNumber }) : undefined} />
         ) : (
           <VendorsList vendors={vendors} loading={loading} query={query} onQuery={setQuery} onOpen={setOpenId} bindVendor={bindVendor}
-            duplicates={duplicates} onMerge={merge} />
+            duplicates={duplicates} onMerge={merge}
+            // Show the one-time rebuild CTA until it's been applied (auto-hide after).
+            showRebuild={!(rebuildStatus && rebuildStatus.applied)} onRebuild={() => setRebuilding(true)} />
         )}
       </Box>
     </Box>
