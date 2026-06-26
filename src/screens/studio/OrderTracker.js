@@ -1270,6 +1270,115 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   );
 }
 
+// ── Next action ───────────────────────────────────────────────────────────────
+// Reads where the project is in its lifecycle (quote -> confirmation -> approval
+// -> paid -> production -> shipped -> delivered) and returns the ONE thing to do
+// next, with a label, a short why, and a verb for the button. Pure (no hooks/DB)
+// so the decision is obvious and testable; the caller wires `run` to an existing
+// handler — this adds NO new capability, it just points at the right one. Returns
+// null only for the terminal states (delivered / cancelled), where there's no
+// pending action and we show a calm "complete" line instead.
+function computeNextAction(project) {
+  if (!project) return null;
+  const status = project.status || 'quoted';
+  if (status === 'cancelled') return null;
+  if (status === 'delivered') return null;
+
+  const hasQuote = (project.quoteLines || []).length > 0;
+  const hasConf = hasConfirmation(project.confirmation);
+  const cutoff = project.approvalSupersededAt ? new Date(project.approvalSupersededAt).getTime() : 0;
+  const evs = project.approvalEvents || [];
+  const approvedByClient = evs.some(e => e.kind === 'approved' && new Date(e.at).getTime() > cutoff);
+  const clientPicked = !!project.optionsPickedAt || (project.quoteLines || []).some(l => l.accepted);
+  const isPaid = !!project.paid;
+
+  // Pre-approval lifecycle (status still 'quoted'): the work is to get to a
+  // client sign-off. Order: build a quote -> build the confirmation (once the
+  // client has picked, or straight away for a simple quote) -> share for approval.
+  if (status === 'quoted' && !approvedByClient) {
+    if (!hasQuote) {
+      return { key: 'quote', verb: 'Build the quote', why: 'No quote yet — price it up so you can send options.', cta: 'Open quote builder', action: 'quote', tone: '#60a5fa' };
+    }
+    if (!hasConf) {
+      return clientPicked
+        ? { key: 'confirmation', verb: 'Build the confirmation', why: 'Client picked their options — turn it into the confirmation to approve.', cta: 'Open confirmation builder', action: 'confirmation', tone: '#a78bfa' }
+        : { key: 'share-pick', verb: 'Share for the client to pick', why: 'Quote is ready — send the link so they choose options and sign off the designs.', cta: 'Share approval link', action: 'share', tone: '#4ade80' };
+    }
+    return { key: 'share-approve', verb: 'Send it for approval', why: 'Confirmation is built — share the link so the client can approve.', cta: 'Share approval link', action: 'share', tone: '#4ade80' };
+  }
+
+  // Approved (by client sign-off or status): collect payment, then move it into
+  // production and along the fulfillment track.
+  if (status === 'quoted' || status === 'approved') {
+    if (!isPaid) {
+      return { key: 'paid', verb: 'Collect payment', why: 'Approved — mark it paid once the deposit/payment lands to unlock production.', cta: 'Mark paid', action: 'paid', tone: '#fbbf24' };
+    }
+    return { key: 'place', verb: 'Place with the printer', why: 'Paid — kick it into production and start the POs.', cta: 'Move to Placed', action: 'status:placed', tone: '#fbbf24' };
+  }
+  if (status === 'placed') {
+    return { key: 'production', verb: 'Start production', why: 'Placed — mark it in production once the printer is running.', cta: 'Move to In Production', action: 'status:in_production', tone: '#f97316' };
+  }
+  if (status === 'in_production') {
+    return { key: 'ship', verb: 'Ship it', why: 'In production — mark shipped when it leaves the printer.', cta: 'Move to Shipped', action: 'status:shipped', tone: '#2dd4bf' };
+  }
+  if (status === 'shipped') {
+    return { key: 'deliver', verb: 'Confirm delivery', why: 'Shipped — mark delivered when it arrives to close the project.', cta: 'Move to Delivered', action: 'status:delivered', tone: '#4ade80' };
+  }
+  return null;
+}
+
+// The next-action hero: one focused card at the top of the drawer that states
+// the current step and the single button that advances it. It never replaces any
+// existing control (status select, FlowPipeline, document buttons all stay) — it
+// just removes the "what do I do here?" friction by pointing at the right one.
+function NextActionCard({ project, onRun }) {
+  const next = computeNextAction(project);
+  const meta = STATUS_META[project?.status] || STATUS_META.quoted;
+  if (!next) {
+    // Terminal: a calm, non-actionable confirmation instead of an empty CTA.
+    const done = project?.status === 'delivered';
+    return (
+      <Box sx={{ mx: 2.5, mt: 1, mb: 0.5, px: 2, py: 1.25, borderRadius: 1.5,
+        bgcolor: done ? 'rgba(74,222,128,0.08)' : 'rgba(156,163,175,0.08)',
+        border: `1px solid ${done ? 'rgba(74,222,128,0.3)' : B.border}`,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        {done
+          ? <CheckCircleIcon sx={{ color: B.green, fontSize: 18 }} />
+          : <RadioButtonUncheckedIcon sx={{ color: B.muted, fontSize: 18 }} />}
+        <Typography sx={{ color: done ? B.green : B.muted, fontSize: 12, fontWeight: 700 }}>
+          {done ? 'Delivered — this project is complete.' : 'Cancelled — no action needed.'}
+        </Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box sx={{ mx: 2.5, mt: 1.25, mb: 0.5, p: 1.75, borderRadius: 2,
+      bgcolor: `${next.tone}14`, border: `1px solid ${next.tone}55` }}>
+      <Stack direction="row" alignItems="center" gap={1.25}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ color: next.tone, fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+            Next step · {meta.label}
+          </Typography>
+          <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 800, mt: 0.2, lineHeight: 1.2 }}>
+            {next.verb}
+          </Typography>
+          <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.3, lineHeight: 1.4 }}>
+            {next.why}
+          </Typography>
+        </Box>
+        <Button
+          onClick={() => onRun(next.action)}
+          variant="contained" size="small" disableElevation
+          sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 800, fontSize: 12,
+            bgcolor: next.tone, color: '#0a0f0c', borderRadius: 1.5, px: 1.5,
+            '&:hover': { bgcolor: next.tone, filter: 'brightness(1.08)' } }}>
+          {next.cta}
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
 function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
@@ -1581,6 +1690,22 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         onOpenQuote={onOpenQuote}
         onOpenConfirmation={onOpenConfirmation}
         onOpenPos={() => setPoOpen(true)} />
+
+      {/* Next action — the single most important thing to do at this stage, with
+          a button that drives the existing tool/control. Surfaces the lifecycle's
+          next step so the project reads as a guided hub, not a wall of fields.
+          Every underlying control still lives below; this only points at it. */}
+      <NextActionCard project={local} onRun={(action) => {
+        if (action === 'quote') { onOpenQuote(); return; }
+        if (action === 'confirmation') { onOpenConfirmation(); return; }
+        if (action === 'share') { onShareApproval(); return; }
+        if (action === 'paid') { updateLocal({ paid: true }); saveField('paid', true); return; }
+        if (action && action.startsWith('status:')) {
+          const next = action.slice('status:'.length);
+          updateLocal({ status: next });
+          saveField('status', next);
+        }
+      }} />
 
       {/* Tab bar — the drawer's sections grouped into three panels so it
           reads as one organized surface instead of a long scroll. Overview
@@ -1946,6 +2071,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
               textTransform: 'none', px: 1.5, '&:hover': { bgcolor: '#3bd070' } }}>
             Share approval link
           </Button>
+          {/* How the client said they'll pay (chosen on the approval page). The
+              fee is theirs; we surface it here so the owner sees it at a glance. */}
+          {local.paymentMethod && (
+            <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <ReceiptLongOutlinedIcon sx={{ color: B.green, fontSize: 15 }} />
+              <Typography sx={{ color: B.white, fontSize: 11.5, fontWeight: 700 }}>
+                Paying by {local.paymentMethod === 'cc' ? 'credit card (+2.99%)' : 'ACH transfer (+1%)'}
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Box>
 
