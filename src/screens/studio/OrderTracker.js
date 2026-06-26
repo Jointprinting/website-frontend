@@ -8,6 +8,7 @@ import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
   Dialog, DialogContent, DialogActions, Menu, ListItemIcon, ListItemText, Divider,
+  useMediaQuery, useTheme,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
 import AddIcon             from '@mui/icons-material/Add';
@@ -52,6 +53,15 @@ import jpLogoWhite from '../../modules/images/logo_white.webp';
 import JpLoader from '../../common/JpLoader';
 
 const base = `${config.backendUrl}/api`;
+
+// True on phone-width screens — drives MUI Dialogs full-screen on xs so the
+// dense order forms get the whole viewport instead of a clipped centered card.
+// Desktop (sm+) is unaffected. Shared by every dialog in this file.
+function useFullScreenDialog() {
+  const theme = useTheme();
+  return useMediaQuery(theme.breakpoints.down('sm'));
+}
+
 // Primary filters: the ones you actually act on. Delivered / Cancelled stay
 // accessible via the overflow select beside the chips.
 const STATUS_FILTERS = [
@@ -1354,7 +1364,7 @@ function NextActionCard({ project, onRun }) {
   return (
     <Box sx={{ mx: 2.5, mt: 1.25, mb: 0.5, p: 1.75, borderRadius: 2,
       bgcolor: `${next.tone}14`, border: `1px solid ${next.tone}55` }}>
-      <Stack direction="row" alignItems="center" gap={1.25}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} gap={1.25}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ color: next.tone, fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>
             Next step · {meta.label}
@@ -1369,7 +1379,7 @@ function NextActionCard({ project, onRun }) {
         <Button
           onClick={() => onRun(next.action)}
           variant="contained" size="small" disableElevation
-          sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 800, fontSize: 12,
+          sx={{ flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'auto' }, textTransform: 'none', fontWeight: 800, fontSize: 12,
             bgcolor: next.tone, color: '#0a0f0c', borderRadius: 1.5, px: 1.5,
             '&:hover': { bgcolor: next.tone, filter: 'brightness(1.08)' } }}>
           {next.cta}
@@ -2546,6 +2556,7 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
 // reference a mockup not in the studio) and orphans (studio items not used
 // by any project).
 function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToProject }) {
+  const fsDialog = useFullScreenDialog();
   const [tab, setTab] = React.useState('missing');
 
   React.useEffect(() => { if (open) setTab('missing'); }, [open]);
@@ -2554,8 +2565,8 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
   const list = data ? (data[tab] || []) : [];
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2672,13 +2683,14 @@ function HealthStat({ label, value, accent }) {
 // can be attached to a project (by batch number or company name) before the
 // user commits the bulk update. Nothing changes until Apply is pressed.
 function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
+  const fsDialog  = useFullScreenDialog();
   const summary   = data && data.summary;
   const links     = (data && data.links) || [];
   const ambiguous = (data && data.ambiguous) || [];
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2802,6 +2814,7 @@ function parseEmails(str) {
 // the people already invited; "Start a fresh link" is the only thing that rotates
 // the token, for when the quote/proof has changed.
 function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStartFresh }) {
+  const fsDialog = useFullScreenDialog();
   const { open, ttl, emails, url, expiresAt, recipients = [], status, loading, busy, err, notice } = state;
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => { if (open) setCopied(false); }, [open, url]);
@@ -2818,8 +2831,8 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
   const statusColor = kind === 'approved' ? B.green : kind === 'requested_changes' ? '#fbbf24' : B.muted;
 
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2994,14 +3007,15 @@ function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
 // no chart library), top clients by delivered revenue, top garment styles
 // by qty across all quote lines, overall margin %.
 function AnalyticsDialog({ open, data, loading, onClose }) {
+  const fsDialog = useFullScreenDialog();
   const months = (data && data.revenueByMonth) || [];
   const maxRev = months.reduce((m, x) => Math.max(m, x.revenue || 0), 0);
   const topClients = (data && data.topClients) || [];
   const overall    = (data && data.overall)    || { revenue: 0, cogs: 0, margin: 0, marginPct: 0 };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3119,6 +3133,7 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
 // delivered revenue, open value, unpaid AR, last activity. Click any row to
 // filter the project grid down to that client.
 function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) {
+  const fsDialog = useFullScreenDialog();
   const [q, setQ] = React.useState('');
   React.useEffect(() => { if (open) setQ(''); }, [open]);
 
@@ -3128,8 +3143,8 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
     : clients;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3238,6 +3253,7 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
 // 2) Company name collisions — multiple companyName strings that all reduce to
 //    the same companyKey (typos / variants). Merge into one canonical name.
 function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) {
+  const fsDialog = useFullScreenDialog();
   const [selectedIds, setSelectedIds] = React.useState({});
   const [mergeTargets, setMergeTargets] = React.useState({});  // companyKey → chosen canonical name
   React.useEffect(() => { if (open) { setSelectedIds({}); setMergeTargets({}); } }, [open]);
@@ -3256,8 +3272,8 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
+      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>

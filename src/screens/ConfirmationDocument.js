@@ -393,7 +393,7 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
           ))}
           <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${DOC.green}` }}>
             <Box sx={{ fontWeight: 800, fontSize: 17 }}>Total</Box>
-            <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: 24, color: DOC.green, letterSpacing: -0.5, ...mono }}>{money(totals.grandTotal)}</Box>
+            <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: { xs: 21, md: 24 }, color: DOC.green, letterSpacing: -0.5, overflowWrap: 'anywhere', ...mono }}>{money(totals.grandTotal)}</Box>
           </Stack>
         </Box>
 
