@@ -366,8 +366,7 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         {items.length === 0 ? (
           <EmptyState
             icon={<TaskAltOutlinedIcon />}
-            title="Nothing needs chasing"
-            hint="No overdue, stale, or neglected deals right now. Great spot to be in."
+            title="Nothing overdue or stale"
           />
         ) : (
           <Stack spacing={1}>

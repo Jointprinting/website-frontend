@@ -97,7 +97,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
       onClick={(e) => { e.stopPropagation(); onToggleSelect(ev); }}
       onDoubleClick={(e) => { e.stopPropagation(); onOpen(ev.companyKey); }}
       {...ctxProps}
-      title={`${ev.name}${ev.area ? ` · ${ev.area}` : ''} — click to select · drag to a day · double-click to open · ⟳ for any date`}
+      title={`${ev.name}${ev.area ? ` · ${ev.area}` : ''}`}
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.5,
         px: 0.75, py: '3px', mb: 0.5, borderRadius: 1.25, cursor: 'grab',
