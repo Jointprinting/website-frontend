@@ -22,10 +22,12 @@ import CheckIcon from '@mui/icons-material/Check';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import axios from 'axios';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import config from '../../config.json';
 import { B, darkInput, scrollbar } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
+import FinanceRestartView from './FinanceRestartView';
 
 const base = `${config.backendUrl}/api`;
 // money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
@@ -70,6 +72,8 @@ const CAT_COLOR = {
   'Blank COGS': '#60a5fa', 'Printer COGS': '#a78bfa', 'Shipping': '#2dd4bf', 'Art': '#f472b6',
   'Commission': '#fbbf24', 'Processing Fee': '#34d399', 'Software': '#f97316', 'Owner Draw': '#9ca3af',
   'Sales Tax': '#ef4444', 'Refund': '#fb7185', 'Other': '#6b7280',
+  // Operating-expense categories the budget restart introduces (not order COGS).
+  'Marketing': '#e879f9', 'Travel/Field': '#38bdf8', 'Accounting': '#facc15',
 };
 // Is this row money coming IN to the business? Income is normally in; a credit
 // flips it — an income credit (customer refund) is money OUT, an expense credit
@@ -94,6 +98,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [prefill, setPrefill] = useState(null);
   const [editTxn, setEditTxn] = useState(null);
   const [openOrder, setOpenOrder] = useState(null);
+  // The "Restart finances from my budgets" surface (preview→confirm→apply, reversible).
+  // A full-screen sub-view, mirroring the CRM ReconcileView pattern.
+  const [showRestart, setShowRestart] = useState(false);
   const [bannerDismiss, setBannerDismiss] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
   });
@@ -229,6 +236,18 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     setBannerDismiss(d);
   };
 
+  // The restart surface takes over the whole tab (its own back button returns
+  // here). On apply it reloads the finance data so the page shows the new truth.
+  if (showRestart) {
+    return (
+      <FinanceRestartView
+        token={token}
+        onBack={() => setShowRestart(false)}
+        onApplied={() => { load(); }}
+      />
+    );
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white,
       '@keyframes jpBannerIn':  { from: { opacity: 0, transform: 'translateY(-8px)' },  to: { opacity: 1, transform: 'translateY(0)' } },
@@ -258,6 +277,11 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
+        <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
+          title="Rebuild your finances from your budget trackers (preview first — reversible)"
+          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+          Restart from budgets
+        </Button>
       </Box>
 
       <Box data-ctx-chrome sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
