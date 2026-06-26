@@ -69,7 +69,11 @@ export default function ProductHero() {
         component="a"
         href="/products"
         sx={{
-          minWidth: 280,
+          // xs: drop the 280px floor so the pill shrinks to its own (already
+          // roomy) padding on a narrow phone instead of forcing page overflow.
+          // sm+ keeps the exact 280px button — desktop untouched.
+          minWidth: { xs: 0, sm: 280 },
+          maxWidth: '100%',
           borderRadius: 999,
           fontSize: 17,
           fontWeight: 700,

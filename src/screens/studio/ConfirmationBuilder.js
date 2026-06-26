@@ -496,7 +496,7 @@ function Editor({ local, update, project, mockups, mockupMap }) {
 
       {/* Shipping */}
       <Section title="Shipping">
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
           <SmallField label="Shipping name" value={local.shipping.name}
             onChange={v => updateShipping({ name: v })} />
           <SmallField label="Attention" value={local.shipping.attention}
@@ -718,7 +718,7 @@ function MultiShipTo({ local, update }) {
                     <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
                   </IconButton>
                 </Stack>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 0.6 }}>
                   <SmallField label="Label (e.g. Brooklyn HQ)" value={st.label}
                     onChange={v => updateShipTo(i, { label: v })} />
                   <SmallField label="Ship-to name" value={st.name}
@@ -923,7 +923,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
       </Box>
 
       {/* Garment fields */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6, mb: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 0.6, mb: 1 }}>
         <SmallField label="Brand"      value={item.brandName} onChange={v => onUpdate({ brandName: v })} />
         <SmallField label="Style code" value={item.styleCode} onChange={v => onUpdate({ styleCode: v })} />
         <Box>

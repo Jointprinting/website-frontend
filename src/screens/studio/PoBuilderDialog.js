@@ -355,7 +355,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
           <>
             {/* Header fields */}
             <Box sx={{ display: 'grid', gap: 1, mb: 2,
-              gridTemplateColumns: { xs: '1fr 1fr', md: '110px 130px 1fr 1fr' } }}>
+              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '110px 130px 1fr 1fr' } }}>
               <PF label="PO #">
                 <TextField size="small" value={editing.poNumber || ''} placeholder="#008"
                   onChange={e => update({ poNumber: e.target.value })} sx={inkInput} />
@@ -476,7 +476,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
                 has TWO addresses: where the BLANKS go (the printer's dock) and where
                 the FINISHED goods go (the client). Both print on the PO. */}
             <SectionLabel>Ship blanks to (printer)</SectionLabel>
-            <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
+            <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
               {[['name', 'Printer name'], ['attention', 'Attention'], ['streetAddress', 'Street address'], ['cityStateZip', 'City, State, Zip']].map(([k, label]) => (
                 <PF key={k} label={label}>
                   <TextField size="small" value={(editing.shipToPrinter && editing.shipToPrinter[k]) || ''}
@@ -487,7 +487,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
 
             {/* Finished-goods destination (usually the client's drop-ship address). */}
             <SectionLabel>Finished goods ship to</SectionLabel>
-            <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
+            <Box sx={{ display: 'grid', gap: 1, mb: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' } }}>
               {[['name', 'Shipping name'], ['attention', 'Attention'], ['streetAddress', 'Street address'], ['cityStateZip', 'City, State, Zip']].map(([k, label]) => (
                 <PF key={k} label={label}>
                   <TextField size="small" value={(editing.shipping && editing.shipping[k]) || ''}

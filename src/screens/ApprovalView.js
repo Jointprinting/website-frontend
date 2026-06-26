@@ -13,6 +13,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Box, Stack, Typography, Button, TextField, CircularProgress, Dialog,
   DialogTitle, DialogContent, DialogActions, Modal, IconButton,
+  useMediaQuery, useTheme,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
@@ -153,6 +154,10 @@ function ProgressRail({ states }) {
 }
 
 export default function ApprovalView() {
+  const theme = useTheme();
+  // Full-screen the "Request edits" dialog on phones so the note field is
+  // usable instead of cramped into a centered card. Desktop (sm+) unchanged.
+  const fullScreenDialog = useMediaQuery(theme.breakpoints.down('sm'));
   const { projectId } = useParams();
   const [params] = useSearchParams();
   const token = params.get('token');
@@ -821,8 +826,8 @@ export default function ApprovalView() {
         </Typography>
       </Box>
 
-      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { bgcolor: T.panel, color: T.text, border: `1px solid ${T.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
+      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth fullScreen={fullScreenDialog}
+        PaperProps={{ sx: { bgcolor: T.panel, color: T.text, border: `1px solid ${T.line}`, borderRadius: { xs: 0, sm: 3 }, backgroundImage: 'none' } }}>
         <DialogTitle sx={{ fontWeight: 800 }}>Request edits</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: T.muted, fontSize: 13, mb: 1.5 }}>
