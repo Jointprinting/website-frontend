@@ -193,16 +193,31 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
   const fillFromVendor = (name, picked) => {
     const v = picked
       || vendors.find(x => (x.name || '').toLowerCase() === String(name || '').toLowerCase());
-    update(v
-      ? { vendorName: v.name || name,
-          contactName: editing.contactName || v.contactName || '',
-          vendorAddress: editing.vendorAddress || v.address || '',
-          shipMethod: editing.shipMethod || v.shipMethod || '',
-          // A picked vendor's blanks-mode seeds the PO toggle only when the user
-          // hasn't diverged from the default — never clobbers an explicit choice.
-          ...(picked && typeof picked.blanksProvided === 'boolean'
-            ? { blanksProvided: picked.blanksProvided } : {}) }
-      : { vendorName: name });
+    if (!v) { update({ vendorName: name }); return; }
+    if (picked) {
+      // Explicit pick from the dropdown: the owner chose THIS printer, so load its
+      // full saved card — name, contact, address, ship method, blanks mode —
+      // OVERWRITING anything auto-filled from a prior selection (so switching the
+      // picked vendor doesn't leave the last one's contact/address behind). The
+      // fields stay fully editable; this just means he isn't asked to retype what
+      // we already have on file.
+      update({
+        vendorName: v.name || name,
+        contactName: v.contactName || '',
+        vendorAddress: v.address || '',
+        shipMethod: v.shipMethod || '',
+        ...(typeof v.blanksProvided === 'boolean' ? { blanksProvided: v.blanksProvided } : {}),
+      });
+    } else {
+      // Free typing matched an existing name: pre-fill ONLY empty fields, so a
+      // value the owner already corrected by hand survives re-touching the name.
+      update({
+        vendorName: v.name || name,
+        contactName: editing.contactName || v.contactName || '',
+        vendorAddress: editing.vendorAddress || v.address || '',
+        shipMethod: editing.shipMethod || v.shipMethod || '',
+      });
+    }
   };
   const onVendorName = (name) => fillFromVendor(name, null);
 
