@@ -48,8 +48,70 @@ export const STAGE_PROBABILITY = {
 
 // Board column order. The "active" lane runs lead → … → won/customer; lost and
 // dormant are parked in a secondary lane the board shows collapsed by default.
+// NOTE (legacy): these are the OLD stage-keyed pipeline columns. The unified
+// order-centric board uses BOARD_COLUMNS below instead; PIPELINE_STAGES /
+// SECONDARY_STAGES stay exported because other screens (and the stage vocabulary)
+// still reference them — do not remove.
 export const PIPELINE_STAGES   = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer'];
 export const SECONDARY_STAGES  = ['lost', 'dormant'];
+
+// ── Unified order-centric board columns ──────────────────────────────────────
+// The pipeline is now "one client → many orders": lead/contacted columns are
+// pre-quote Client cards (no live order); quoting → … → delivered are ORDER cards
+// (one per order). Mirrors controllers/crm.js BOARD_COLUMNS / BOARD_CLOSED_COLUMNS
+// — keep in sync. The server also sends its `columns` in the /pipeline payload, so
+// this is the labels/colors source of truth + a fallback ordering.
+export const BOARD_COLUMNS         = ['lead', 'contacted', 'quoting', 'approval', 'production', 'shipped', 'delivered'];
+export const BOARD_CLOSED_COLUMNS  = ['lost', 'dormant', 'cancelled'];
+
+// Per-column meta (label + colors) for the board. Lead/contacted/lost/dormant
+// REUSE the stage meta (same colors as everywhere else); the order-status columns
+// get their own. Keyed by board column id.
+export const BOARD_COLUMN_META = {
+  lead:       STAGE_META.lead,
+  contacted:  STAGE_META.contacted,
+  quoting:    { label: 'Quoting',    color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  approval:   { label: 'Approval',   color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+  production: { label: 'Production', color: '#818cf8', bg: 'rgba(129,140,248,0.14)' },
+  shipped:    { label: 'Shipped',    color: '#34d399', bg: 'rgba(52,211,153,0.14)' },
+  delivered:  { label: 'Delivered',  color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
+  lost:       STAGE_META.lost,
+  dormant:    STAGE_META.dormant,
+  cancelled:  { label: 'Cancelled',  color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+};
+export const boardColumnMeta = (col) => BOARD_COLUMN_META[col] || STAGE_META.lead;
+
+// Per-column close-probability — MIRRORS controllers/crm.js BOARD_PROBABILITY.
+// Lets the board footer label per-column odds without a round-trip (the weighted
+// forecast itself still comes server-computed on /pipeline). Keep in sync.
+export const BOARD_PROBABILITY = {
+  lead: 0.1, contacted: 0.25, quoting: 0.5, approval: 0.8,
+  production: 0.9, shipped: 0.95, delivered: 1,
+  lost: 0, dormant: 0, cancelled: 0,
+};
+
+// A board column whose cards "win" (celebratory accent) — the realized end of the
+// fulfillment funnel. (Distinct from isWonStage, which is about Client stages.)
+export const isWonColumn = (col) => col === 'delivered';
+
+// The board columns an ORDER card may be dragged among (its fulfillment lifecycle
+// + cancel). Lead/contacted/lost/dormant are CLIENT states an order never enters.
+export const ORDER_BOARD_COLUMNS = ['quoting', 'approval', 'production', 'shipped', 'delivered', 'cancelled'];
+// The board columns a LEAD card may be dragged among. It can advance into quoting
+// (which mints/opens the order via the handoff); it can't jump mid-fulfillment.
+export const LEAD_BOARD_COLUMNS = ['lead', 'contacted', 'quoting'];
+
+// Map a board column → the Order.status to PERSIST when an order card is dropped
+// there. 'production' lands on 'placed' (the canonical entry to the production
+// column; in_production also lives there but a drop only fires on a column change).
+export const BOARD_COLUMN_TO_ORDER_STATUS = {
+  quoting:    'quoted',
+  approval:   'approved',
+  production: 'placed',
+  shipped:    'shipped',
+  delivered:  'delivered',
+  cancelled:  'cancelled',
+};
 
 // ── Funnel / level progression (the "dopamine" spine) ─────────────────────────
 // The forward sales journey as ordered LEVELS — what the progress indicator

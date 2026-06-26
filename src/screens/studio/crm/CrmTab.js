@@ -33,7 +33,9 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
-import { dayKey, stageMeta, isHiddenTag } from './_crm';
+import {
+  dayKey, stageMeta, isHiddenTag, boardColumnMeta, BOARD_COLUMN_TO_ORDER_STATUS,
+} from './_crm';
 import { useContextMenu } from '../ContextMenu';
 import { buildCompanyMenu, buildFallbackMenu } from '../contextMenuActions';
 import { LogTouchDialog, RescheduleDialog, LostReasonDialog } from './CrmDialogs';
@@ -122,7 +124,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // Pipeline (Kanban) — its own filter pair so it doesn't fight the Companies
   // search box, plus the server-computed groups/summary/probability from
   // /pipeline.
-  const [pipeline, setPipeline] = React.useState({ groups: [], summary: {}, probability: null });
+  const [pipeline, setPipeline] = React.useState({ groups: [], summary: {}, probability: null, columns: null });
   const [pipelineLoading, setPipelineLoading] = React.useState(true);
   const [pipeQuery, setPipeQuery] = React.useState('');
   const [pipeTag, setPipeTag] = React.useState('all');
@@ -241,6 +243,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         groups: res.data?.groups || [],
         summary: res.data?.summary || {},
         probability: res.data?.probability || null,
+        columns: res.data?.columns || null,
       });
     } catch (e) {
       flash('Could not load the pipeline.', 'error');
@@ -506,6 +509,23 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // ── Action handlers wired into the views/dialogs ──────────────────────────
   const openCompany = (key) => setOpenKey(key);
 
+  // Click a board card. An ORDER card deep-links into that order's workspace (the
+  // Order Tracker, by projectNumber — the same cross-tab jump the company card's
+  // order rows use); a LEAD card opens the company drawer. Reuses onNavigate /
+  // openCompany so there's no new navigation surface.
+  const openBoardCard = (card) => {
+    if (!card) return;
+    if (card.cardKind === 'order') {
+      if (onNavigate && (card.projectNumber || card._id)) {
+        onNavigate({ view: 'clients', projectNumber: card.projectNumber || undefined });
+      } else if (card.companyKey) {
+        openCompany(card.companyKey); // fallback: no project # to jump to
+      }
+      return;
+    }
+    if (card.companyKey) openCompany(card.companyKey);
+  };
+
   const openLog = (target) => setLogDlg({ open: true, target });
   const openResched = (target) => setReschedDlg({ open: true, target });
 
@@ -582,24 +602,34 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     refreshAffected();
   };
 
-  // Optimistically move a card from one stage column to another in the board
-  // state — pull it out of its old group, drop it into the new one, and fix both
-  // columns' count + totalValue. The summary band is reconciled by the /pipeline
-  // refetch that follows the PATCH (keeps the weighted math server-authoritative).
-  const optimisticMove = React.useCallback((key, toStage) => {
+  // Optimistically move a card (by its stable cardKey) from one board column to
+  // another — pull it out of its old group, drop it into the new one, and fix both
+  // columns' count + totalValue. Keyed by cardKey (NOT companyKey) because a
+  // company can contribute many cards (a lead + several orders); companyKey would
+  // move the wrong sibling. The summary band is reconciled by the /pipeline
+  // refetch that follows the write (keeps the weighted math server-authoritative).
+  const optimisticMove = React.useCallback((cardKey, toCol) => {
     setPipeline((prev) => {
+      // Guard: only move optimistically when the target IS a rendered board column.
+      // A context-menu stage set to a NON-board stage (sampling/won/customer) would
+      // otherwise pull the card out of its column and never re-insert it (the
+      // re-insert below is conditional on a matching group) — a visible flicker/
+      // disappear until the refetch lands. When the target isn't on the board, leave
+      // the card in place and let refreshAffected reconcile.
+      const hasTarget = (prev.groups || []).some((g) => g.stage === toCol);
+      if (!hasTarget) return prev;
       let moved = null;
       const groups = (prev.groups || []).map((g) => {
-        const idx = (g.clients || []).findIndex((c) => c.companyKey === key);
+        const idx = (g.clients || []).findIndex((c) => c.cardKey === cardKey);
         if (idx === -1) return g;
         moved = g.clients[idx];
         const clients = g.clients.filter((_, i) => i !== idx);
         return { ...g, clients, count: clients.length, totalValue: Math.max(0, (g.totalValue || 0) - (moved.dealValue || 0)) };
       });
       if (!moved) return prev;
-      const card = { ...moved, stage: toStage };
+      const card = { ...moved, stage: toCol };
       const next = groups.map((g) => (
-        g.stage === toStage
+        g.stage === toCol
           ? { ...g, clients: [card, ...(g.clients || [])], count: (g.count || 0) + 1, totalValue: (g.totalValue || 0) + (card.dealValue || 0) }
           : g
       ));
@@ -607,46 +637,88 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     });
   }, []);
 
-  // Per-card PENDING LOCK (race guard): while a card's stage PATCH is in flight,
-  // a second drag of the SAME card is ignored — otherwise a fast double-drag can
-  // fire two PATCHes whose refetches race and clobber each other (the card snaps
-  // back to a stale column). The lock is a ref-backed Set so the guard is
-  // synchronous (state would lag the second drop within the same tick).
+  // Per-card PENDING LOCK (race guard): while a card's move is in flight, a second
+  // drag of the SAME card is ignored — otherwise a fast double-drag can fire two
+  // writes whose refetches race and clobber each other (the card snaps back to a
+  // stale column). Keyed by cardKey (so order siblings don't lock each other). The
+  // lock is a ref-backed Set so the guard is synchronous (state would lag the
+  // second drop within the same tick).
   const pendingMovesRef = React.useRef(new Set());
 
-  // Pipeline drag-drop: move a card to a new stage. Dropping into Lost is special
-  // — we move the card optimistically, then open the reason prompt; submitting
-  // PATCHes { stage:'lost', lostReason }, cancelling reverts via refetch. Every
-  // other stage is a straight optimistic move + PATCH { stage } (CalendarView's
-  // pattern), reconciled by refreshAffected().
-  const pipelineMoveStage = async (key, toStage, card) => {
-    // Guard: ignore a re-drag of a card whose previous move hasn't settled.
-    if (pendingMovesRef.current.has(key)) return;
+  // ── LEAD-card stage move (the Client PATCH path) ────────────────────────────
+  // Move a lead/company card to a new BOARD column among the lead columns (lead /
+  // contacted) or into Quoting. Dropping into Lost is special — optimistic move,
+  // then the reason prompt (submitting PATCHes { stage:'lost', lostReason },
+  // cancelling reverts via refetch). Moving into Quoting fires the LEAD→QUOTE
+  // handoff after the stage write settles. `cardKey` is the lock/optimistic key
+  // (== companyKey for a lead card); `record` pre-seeds the handoff.
+  const moveLeadStage = React.useCallback(async (key, toStage, record, cardKey) => {
+    const lockKey = cardKey || key;
+    if (pendingMovesRef.current.has(lockKey)) return;
 
-    optimisticMove(key, toStage);
+    optimisticMove(lockKey, toStage);
     if (toStage === 'lost') {
-      // Card is already optimistically in Lost; the prompt confirms (PATCH) or
-      // cancels (revert via refetch), so we don't need the prior stage here. The
-      // lost dialog owns its own busy state, so no pending lock needed here.
-      setLostDlg({ open: true, target: { companyKey: key, name: card?.name || key } });
+      setLostDlg({ open: true, target: { companyKey: key, name: record?.name || key } });
       return;
     }
-    pendingMovesRef.current.add(key);
+    pendingMovesRef.current.add(lockKey);
     try {
       await patchCompany(key, { stage: toStage });
-      flash(`${card?.name || 'Deal'} → ${stageMeta(toStage).label}`);
+      flash(`${record?.name || 'Deal'} → ${stageMeta(toStage).label}`);
     } catch (_) {
       loadPipeline(pipeQuery, pipeTag); // revert the optimistic move
       return;
     } finally {
-      pendingMovesRef.current.delete(key);
+      pendingMovesRef.current.delete(lockKey);
     }
     refreshAffected();
-    // LEAD -> QUOTE: moving a card into "quoting" mints/opens its project and
-    // redirects to the order page. After refreshAffected so the board is settled;
-    // best-effort so a project hiccup never disturbs the (already-saved) move.
-    if (toStage === 'quoting') enterQuoting(key, card);
-  };
+    // LEAD -> QUOTE: moving into "quoting" mints/opens its project and redirects to
+    // the order page. After refreshAffected so the board is settled; best-effort so
+    // a project hiccup never disturbs the (already-saved) move. On the refetch the
+    // company now has a live order, so it re-renders as an ORDER card in Quoting —
+    // the lead card is gone (no duplicate, no leftover).
+    if (toStage === 'quoting') enterQuoting(key, record);
+  }, [optimisticMove, patchCompany, flash, loadPipeline, pipeQuery, pipeTag, refreshAffected, enterQuoting]);
+
+  // ── ORDER-card status change (the Order PUT path) ───────────────────────────
+  // Move an order card to a new fulfillment column, persisting Order.status via
+  // the SAME endpoint the Order Tracker's status select uses (PUT /orders/:id
+  // { status }). Optimistic + refetch, locked + keyed by cardKey so a company's
+  // other order cards aren't disturbed.
+  const moveOrderStatus = React.useCallback(async (card, toCol) => {
+    const cardKey = card?.cardKey;
+    const id = card?._id;
+    const toStatus = BOARD_COLUMN_TO_ORDER_STATUS[toCol];
+    if (!cardKey || !id || !toStatus) { loadPipeline(pipeQuery, pipeTag); return; }
+    if (pendingMovesRef.current.has(cardKey)) return;
+
+    optimisticMove(cardKey, toCol);
+    pendingMovesRef.current.add(cardKey);
+    try {
+      await axios.put(`${config.backendUrl}/api/orders/${encodeURIComponent(id)}`, { status: toStatus }, authHdr);
+      flash(`${card?.name || 'Order'}${card?.projectNumber ? ` #${card.projectNumber}` : ''} → ${boardColumnMeta(toCol).label}`);
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Couldn’t update that order’s status.', 'error');
+      loadPipeline(pipeQuery, pipeTag); // revert the optimistic move
+      return;
+    } finally {
+      pendingMovesRef.current.delete(cardKey);
+    }
+    refreshAffected();
+  }, [optimisticMove, authHdr, flash, loadPipeline, pipeQuery, pipeTag, refreshAffected]);
+
+  // Pipeline drag-drop entry — receives the WHOLE card (so we can branch on
+  // cardKind + read projectNumber/_id) and the target board column. Routes a lead
+  // card through the Client stage path and an order card through the Order status
+  // path.
+  const pipelineMoveStage = React.useCallback((card, toCol) => {
+    if (!card || !toCol) return;
+    if (card.cardKind === 'order') {
+      moveOrderStatus(card, toCol);
+    } else {
+      moveLeadStage(card.companyKey, toCol, card, card.cardKey);
+    }
+  }, [moveOrderStatus, moveLeadStage]);
 
   const submitLost = async (body) => {
     const t = lostDlg.target;
@@ -695,15 +767,15 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     } catch (_) { /* patchCompany already flashed */ }
   }, [patchCompany, flash, refreshAffected]);
 
-  // Set stage straight from a row (any view). Reuses pipelineMoveStage so the
-  // Lost-reason prompt + optimistic board update + PATCH path are identical to a
-  // drag — from non-board views the optimistic shuffle is just a harmless no-op.
+  // Set a company's CRM stage straight from a row's context menu (any view).
+  // Always a CLIENT stage change, so it routes through the lead/Client path
+  // (moveLeadStage) — the Lost-reason prompt + optimistic board update + PATCH +
+  // the quoting handoff are identical to a lead-card drag. From non-board views the
+  // optimistic shuffle is just a harmless no-op (the card isn't on the board). The
+  // companyKey doubles as the optimistic/lock key (lead cards key by companyKey).
   const setStageQuick = React.useCallback((key, stage, card) => {
-    pipelineMoveStage(key, stage, card);
-  // pipelineMoveStage is a stable closure over refs/setters; intentionally not
-  // listed to avoid re-creating this every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    moveLeadStage(key, stage, card, key);
+  }, [moveLeadStage]);
 
   // The shared handler bundle every company surface reuses. Memoised so the bound
   // onContextMenu prop is stable; the item list itself is built lazily per
@@ -828,10 +900,11 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         return (
           <PipelineView
             groups={pipeline.groups} summary={pipeline.summary} probability={pipeline.probability}
+            columns={pipeline.columns}
             loading={pipelineLoading}
             query={pipeQuery} onQueryChange={setPipeQuery}
             tag={pipeTag} onTagChange={setPipeTag} tagOptions={tagOptions}
-            onOpen={openCompany}
+            onOpen={openBoardCard}
             onMoveStage={pipelineMoveStage}
             bindCompany={bindCompany}
           />
