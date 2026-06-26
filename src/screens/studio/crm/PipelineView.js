@@ -482,8 +482,7 @@ export default function PipelineView({
       )}
 
       <Typography sx={{ color: D.faint, fontSize: 11.5, textAlign: 'center' }}>
-        One client → many orders · drag a lead into Quoting to open its project · drag an order across fulfillment to update its status · forecast weights each column by close-rate
-        {` (lead ${Math.round((probMap.lead ?? 0.1) * 100)}% → shipped ${Math.round((probMap.shipped ?? 0.95) * 100)}%)`}.
+        {`Forecast (lead ${Math.round((probMap.lead ?? 0.1) * 100)}% → shipped ${Math.round((probMap.shipped ?? 0.95) * 100)}%)`}
       </Typography>
     </Stack>
   );

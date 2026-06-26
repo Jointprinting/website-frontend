@@ -159,8 +159,7 @@ export default function TodayView({ summary, rows, loading, onOpen, onLog, onRes
       {rows.length === 0 ? (
         <EmptyState
           icon={<TaskAltOutlinedIcon />}
-          title="You're all caught up"
-          hint="No follow-ups are due today. Nice work."
+          title="No follow-ups due today"
         />
       ) : (
         <Stack spacing={1.25}>

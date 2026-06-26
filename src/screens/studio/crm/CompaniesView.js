@@ -291,11 +291,7 @@ export default function CompaniesView({
         <EmptyState
           icon={<PeopleAltOutlinedIcon />}
           title={anyFilter ? 'No matches' : `No ${m.label.toLowerCase()} yet`}
-          hint={anyFilter
-            ? 'Try clearing the search or tag — or switch segment.'
-            : (segment === 'clients'
-              ? 'Companies become clients the moment they place an order.'
-              : 'Switch segment, search, or add a company.')}
+          hint={anyFilter ? 'No matches — try clearing the search or tag.' : undefined}
         />
       ) : (
         <Stack spacing={1}>

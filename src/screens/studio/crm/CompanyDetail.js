@@ -146,7 +146,7 @@ function TagEditor({ tags, companyKey, onChange, saving }) {
         <TagChips tags={list} onDelete={remove} sx={{ mb: 1.25 }} />
       ) : (
         <Typography sx={{ color: D.faint, fontSize: 12.5, mb: 1.25 }}>
-          No tags yet — add one to group, filter, and mark temperature (hot / warm / cold).
+          No tags yet.
         </Typography>
       )}
       <Stack direction="row" spacing={1}>
