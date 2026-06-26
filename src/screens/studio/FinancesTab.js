@@ -92,6 +92,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [months, setMonths]   = useState([]);
   const [clients, setClients] = useState([]);
   const [gaps, setGaps]       = useState(null);
+  // In-progress orders (paid or in production) missing a cost receipt I haven't
+  // entered yet — printer / blanks / shipping. From /api/finances/missing-receipts.
+  const [needsReceipts, setNeedsReceipts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -145,13 +148,15 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t, m, c, g] = await Promise.all([
+      const [s, o, t, m, c, g, nr] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-month`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-client`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/payment-gaps`, { ...authHdr, params: { year } }),
+        // In-progress orders missing a cost receipt — current by nature, not year-scoped.
+        axios.get(`${base}/finances/missing-receipts`, authHdr),
       ]);
       // Coerce every list to an array of non-null rows at the boundary, so no
       // downstream .map can hit a null row and white-screen the tab regardless of
@@ -164,6 +169,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setMonths(arr(m.data && m.data.months));
       setClients(arr(c.data && c.data.clients));
       setGaps(g.data || null);
+      setNeedsReceipts(nr.data || null);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -466,6 +472,20 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               orderNumber: row.orderNumber,
               description: `Payment — order #${row.orderNumber}${row.client && row.client !== '—' ? ` · ${row.client}` : ''}`,
             })} />
+
+            {/* In-progress orders missing a cost receipt I haven't entered yet
+                (printer / blanks / shipping). One tap opens the expense modal
+                prefilled for that order. */}
+            <NeedsReceipts data={needsReceipts}
+              onOpenOrder={onNavigate ? (orderNumber) => goOrder(orderNumber) : undefined}
+              onAdd={(row) => setPrefill({
+                type: 'expense',
+                category: (row.missing && row.missing[0]) || 'Printer COGS',
+                party: '',
+                amount: '',
+                orderNumber: row.orderNumber,
+                description: `${(row.missingLabels && row.missingLabels[0]) || 'cost'} receipt — order #${row.orderNumber}${row.client && row.client !== '—' ? ` · ${row.client}` : ''}`,
+              })} />
 
             <MonthlyTrend months={months} />
 
@@ -795,6 +815,72 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
                   <Button size="small" onClick={() => onRecord(o)}
                     sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
                       '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Record payment</Button>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// "Needs receipts" — in-progress orders (paid or in production) missing a cost
+// receipt the owner hasn't entered yet, from /api/finances/missing-receipts. Each
+// row names the specific missing type(s) — printer / blanks / shipping — and a
+// one-tap "Add" opens the expense modal prefilled to that order. Renders nothing
+// when everything's accounted for (pristine), so it only ever appears as a nudge.
+function NeedsReceipts({ data, onOpenOrder, onAdd }) {
+  const rows = (data && Array.isArray(data.orders) ? data.orders : []).filter(Boolean);
+  if (!rows.length) return null;
+  const blue = '#60a5fa';
+  return (
+    <Box sx={{ border: `1px solid rgba(96,165,250,0.4)`, bgcolor: 'rgba(96,165,250,0.05)', borderRadius: 2, overflow: 'hidden',
+      animation: 'jpRise 460ms ease both' }}>
+      <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+        <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.5 }}>
+          <ReceiptLongOutlinedIcon sx={{ color: blue }} />
+          <Typography sx={{ color: blue, fontWeight: 800, fontSize: 14, flex: 1 }}>Needs receipts</Typography>
+        </Stack>
+        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+          {rows.length} in-progress order{rows.length > 1 ? 's' : ''} {rows.length > 1 ? 'are' : 'is'} missing a cost receipt you haven’t entered yet.
+        </Typography>
+      </Box>
+      <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+              <Box component="th">Order</Box>
+              <Box component="th">Client</Box>
+              <Box component="th">Missing</Box>
+              <Box component="th" />
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {rows.map((o) => (
+              <Box component="tr" key={o.orderNumber}
+                sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, whiteSpace: 'nowrap' } }}>
+                <Box component="td" sx={{ fontFamily: 'monospace', color: onOpenOrder ? B.green : B.muted }}>
+                  {onOpenOrder ? (
+                    <Box component="span" onClick={() => onOpenOrder(o.orderNumber)} title="Open this order"
+                      sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>#{o.orderNumber}</Box>
+                  ) : `#${o.orderNumber}`}
+                </Box>
+                <Box component="td" sx={{ color: B.white, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
+                <Box component="td">
+                  <Stack direction="row" gap={0.5} sx={{ flexWrap: 'wrap' }}>
+                    {(o.missingLabels || []).map((m) => (
+                      <Box key={m} component="span" sx={{ fontSize: 9.5, fontWeight: 800, color: blue, bgcolor: 'rgba(96,165,250,0.14)',
+                        border: '1px solid rgba(96,165,250,0.32)', borderRadius: 1, px: 0.55, py: 0.15, letterSpacing: 0.3, textTransform: 'uppercase' }}>{m}</Box>
+                    ))}
+                  </Stack>
+                </Box>
+                <Box component="td" sx={{ textAlign: 'right' }}>
+                  {onAdd && (
+                    <Button size="small" onClick={() => onAdd(o)}
+                      sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                        '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Add receipt</Button>
+                  )}
                 </Box>
               </Box>
             ))}

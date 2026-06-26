@@ -1926,7 +1926,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             shown next to the estimate so a gap (or a missing receipt) is obvious.
             The receipts ARE the source of truth; the estimate is the plan. */}
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <ActualCostStrip actual={actual} estCogs={hasConfirmation(local.confirmation) ? confCogs(local.confirmation) : Number(local.cogs) || 0} orderNumber={local.orderNumber} />
+          <ActualCostStrip actual={actual} estCogs={hasConfirmation(local.confirmation) ? confCogs(local.confirmation) : Number(local.cogs) || 0} orderNumber={local.orderNumber}
+            active={local.paid === true || ['placed', 'in_production', 'shipped', 'delivered'].includes(local.status)} />
         </Box>
 
         <InlineField label="Printer"  value={local.printerName} savingHint={savingField === 'printerName'}
@@ -2415,7 +2416,7 @@ function ReadonlyField({ label, value, hint }) {
 // backend computes with the shared finance math (so it equals the finance tab's
 // by-order cost). When no receipts are linked yet, it says so plainly instead of
 // implying the cost is $0.
-function ActualCostStrip({ actual, estCogs, orderNumber }) {
+function ActualCostStrip({ actual, estCogs, orderNumber, active = true }) {
   const est = Number(estCogs) || 0;
   const loading = actual === null;       // fetch in flight (or no order # yet)
   const has = !!(actual && actual.hasReceipts);
@@ -2440,9 +2441,15 @@ function ActualCostStrip({ actual, estCogs, orderNumber }) {
                 from {actual.receiptCount} receipt{actual.receiptCount === 1 ? '' : 's'}
               </Typography>
             </Typography>
-          ) : (
+          ) : active ? (
             <Typography sx={{ color: '#fbbf24', fontSize: 12.5, fontWeight: 700, mt: 0.1 }}>
               No receipts linked yet — showing the estimate
+            </Typography>
+          ) : (
+            // Not started yet (still a quote) — the estimate is all there is, so
+            // don't nag about a "missing" receipt that isn't due.
+            <Typography sx={{ color: B.muted, fontSize: 12.5, fontWeight: 600, mt: 0.1 }}>
+              Estimate — receipts get entered once this order&apos;s underway
             </Typography>
           )}
         </Box>
