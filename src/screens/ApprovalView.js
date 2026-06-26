@@ -256,8 +256,12 @@ export default function ApprovalView() {
     if (isPreview) { alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
+      // The confirmation page shows the "approval is final" notice (this action
+      // is only reachable from that finalized view, never the picker/quoting
+      // stage). Record which notice version the client saw at approval, so the
+      // owner has a record that the terms were presented.
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?${q}`,
-        payMethod ? { paymentMethod: payMethod } : {});
+        { ...(payMethod ? { paymentMethod: payMethod } : {}), termsVersion: 'approval-final-v1' });
       await refresh();
     } catch (e) {
       // 409 = someone on the team already approved or sent it back. Not an
@@ -806,6 +810,15 @@ export default function ApprovalView() {
                     without choosing; it just records their preference. */}
                 <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} />
                 {lockedNote && <LockedNote text={lockedNote} />}
+                {/* Brief, low-key "approval is final" notice. Lives inside the
+                    pending action panel, which only renders on the finalized
+                    confirmation/legacy view — never the picker/quoting stage. */}
+                <Box sx={{ mb: 2, pt: 1.5, borderTop: `1px solid ${T.line}` }}>
+                  <Typography sx={{ color: T.muted, fontSize: 12, lineHeight: 1.6 }}>
+                    <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>Please review carefully — approval is final.</Box>{' '}
+                    By approving, you confirm all spelling, colors, sizes, placement, and garment specs are correct, and that production can begin. On-screen colors and placement are approximations and may vary slightly on the finished product.
+                  </Typography>
+                </Box>
                 <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                   <Button onClick={handleApprove} disabled={actionBusy} endIcon={!actionBusy ? <ArrowForwardIcon /> : null}
                     startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#06140c' }} /> : null}
