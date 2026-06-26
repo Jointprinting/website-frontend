@@ -328,24 +328,16 @@ function PoRow({ p, onOpen, onOpenVendor }) {
 }
 
 // ── Progress / level card (the dopamine moment) ───────────────────────────────
-// A segmented funnel rail with a contextual headline. Climbing the stages fills
-// the bar in the stage color; reaching Won/Customer flips it to a celebratory
-// green banner so closing a deal feels earned. lost/dormant read dimmed + factual.
+// A segmented funnel rail. Climbing the stages fills the bar in the stage color;
+// reaching Won/Customer flips it to a celebratory green banner so closing a deal
+// feels earned. The only words are a short, factual headline + the stage chip —
+// no auto-generated "keep them warm" hand-holding (owner: "its my system, i dont
+// need notes"); the bar + chip already say where the deal stands.
 function ProgressCard({ stage, isCustomer }) {
-  const m = stageMeta(stage);
   const won = isWonStage(stage) || isCustomer;
-  const lost = stage === 'lost';
-  const dormant = stage === 'dormant';
   const headline = won
-    ? (isCustomer ? 'Customer — they’ve ordered. 🎉' : 'Won — nice close. 🎉')
-    : lost ? 'Marked lost'
-    : dormant ? 'Dormant — parked for now'
-    : `${m.label} — keep it moving`;
-  const sub = won
-    ? 'This account is live. Keep them warm for the next run.'
-    : lost ? 'Off the active board. Revisit if anything changes.'
-    : dormant ? 'No active pursuit. Re-engage when the timing is right.'
-    : 'Each stage advances the deal toward a close.';
+    ? (isCustomer ? 'Customer 🎉' : 'Won 🎉')
+    : stageMeta(stage).label;
 
   return (
     <Box sx={{
@@ -370,7 +362,6 @@ function ProgressCard({ stage, isCustomer }) {
         <StageChip stage={stage} glow />
       </Stack>
       <StageProgress stage={stage} height={7} showLabel />
-      <Typography sx={{ color: D.faint, fontSize: 12, mt: 1.25 }}>{sub}</Typography>
     </Box>
   );
 }
@@ -695,12 +686,14 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       </Box>
 
       {/* Archive this card — soft / reversible (recover from Companies → Archived).
+          Archives IMMEDIATELY (no ugly browser confirm — owner's ask): the parent
+          returns to the list and shows a few-second "Undo" toast that restores it.
           The record + its order links + history are all preserved; it just drops
           out of the working surfaces. */}
       {onArchive && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1 }}>
           <Button
-            onClick={() => { if (window.confirm('Archive this card? It drops out of your lists but stays recoverable (nothing is deleted).')) onArchive(); }}
+            onClick={onArchive}
             startIcon={<ArchiveOutlinedIcon sx={{ fontSize: 17 }} />}
             sx={{ textTransform: 'none', color: D.faint, fontWeight: 700, fontSize: 12.5,
               border: `1px solid ${D.line}`, borderRadius: 999, px: 2,

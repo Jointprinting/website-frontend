@@ -75,7 +75,6 @@ import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
-import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import JpLoader from '../common/JpLoader';
 
@@ -1936,16 +1935,16 @@ function ColdCallTab({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // The owner found the flat 9-card grid overwhelming. So the live tools are split
 // into three tiers and the hub renders each at a different volume:
-//   • primary   — the daily core, big bold cards: Today (the action queue),
-//                 Orders (the pipeline), Clients (the CRM book).
+//   • primary   — the daily core, big bold cards: the CRM (clients, leads, and
+//                 today's calls — ONE tile) and the Order Tracker (the pipeline).
 //   • secondary — used often but not first: Finances, Mockups, Field Map,
 //                 Inquiries, Catalogs. Normal-size cards.
 //   • tucked    — reach-for-occasionally, small & quiet: Printers · Vendors
 //                 (now a lightweight directory, no longer a heavy headline tab)
 //                 and Backup.
 // `target` is the StudioBody view to open; `view` lets a tile deep-link into a
-// tool's internal view (Today / Clients both open the CRM at the right tab).
-// Every destination stays reachable — this only changes prominence + ordering.
+// tool's internal view (the CRM tile opens it at the Clients tab; Today sits
+// right beside it inside the CRM). Every destination stays reachable.
 const HUB_GROUPS = [
   {
     brand: 'Joint Printing',
@@ -1954,9 +1953,11 @@ const HUB_GROUPS = [
       {
         id: 'primary',
         tools: [
-          { id: 'today',    label: 'Today',         desc: 'Your call queue — who to follow up with now', Icon: TodayOutlinedIcon,         target: 'crm', view: 'today' },
-          { id: 'clients',  label: 'Order Tracker', desc: 'Projects, quotes, invoices, status',          Icon: PeopleOutlineIcon },
-          { id: 'crm',      label: 'Clients',       desc: 'Your CRM — companies, leads, follow-ups',      Icon: ContactPhoneOutlinedIcon,  target: 'crm', view: 'companies' },
+          // ONE CRM tile (owner: "only need one CRM"). The CRM opens to Clients
+          // with Today as a tab right beside it, so a separate "Today" tile was
+          // redundant — it's gone. This single tile is the whole CRM.
+          { id: 'crm',      label: 'CRM',           desc: 'Clients, leads, today’s calls',      Icon: ContactPhoneOutlinedIcon,  target: 'crm', view: 'companies' },
+          { id: 'clients',  label: 'Order Tracker', desc: 'Projects, quotes, invoices, status', Icon: PeopleOutlineIcon },
         ],
       },
       {
@@ -2187,7 +2188,7 @@ function SectionHeader({ brand, tagline, dim, right }) {
 
 // cols: explicit responsive column template. `large` renders the primary tier;
 // `muted` the paused group. onPick receives the whole tool so a tile can
-// deep-link into a tool's internal view (Today / Clients → CRM).
+// deep-link into a tool's internal view (e.g. the CRM tile → the Clients tab).
 function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
   return (
     <Box sx={{
@@ -2396,11 +2397,11 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
 // ─────────────────────────────────────────────────────────────────────────────
 function StudioBody({ token, onLogout }) {
   const [view, setView] = React.useState('hub');
-  // Which internal view the CRM should land on when entered from a hub tile
-  // (Today tile → 'today', Clients tile → 'companies'). Null = the CRM's own
-  // default. Bumped with a nonce so re-picking the same tile re-applies it.
-  // `companyKey` deep-links straight to one company's card (a cross-tab link
-  // from an order / finance / vendor surface), null = no specific card.
+  // Which internal view the CRM should land on when entered from a hub tile (the
+  // CRM tile → 'companies', i.e. the Clients tab; cross-tab links may request
+  // another). Null = the CRM's own default. Bumped with a nonce so re-picking the
+  // same tile re-applies it. `companyKey` deep-links straight to one company's
+  // card (a cross-tab link from an order / finance / vendor surface).
   const [crmEntry, setCrmEntry] = React.useState({ view: null, companyKey: null, nonce: 0 });
   // Cross-tab deep-link targets for the other tools (mirrors crmEntry). Each is
   // seeded by `navigate()` below and consumed by its tab's `initial*` prop, which
@@ -2467,7 +2468,7 @@ function StudioBody({ token, onLogout }) {
 
   // A hub tile hands the whole tool. `target` is the StudioBody view to open
   // (defaults to the tile's id); `view` deep-links into that tool's internal
-  // view (the two CRM tiles, Today / Clients, both target 'crm').
+  // view (the CRM tile targets 'crm' and opens its Clients tab).
   const handlePick = (tool) => {
     const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
     const innerView = typeof tool === 'object' && tool ? tool.view : null;
@@ -2597,8 +2598,8 @@ function StudioBody({ token, onLogout }) {
   }
 
   if (view === 'crm') {
-    // Key by the entry nonce so re-picking the Today/Clients tile re-lands on
-    // the right internal view (CrmTab reads initialView at mount). initialCompanyKey
+    // Key by the entry nonce so re-picking the CRM tile re-lands on the right
+    // internal view (CrmTab reads initialView at mount). initialCompanyKey
     // deep-links straight to one company's card from another surface.
     return (
       <CrmTab

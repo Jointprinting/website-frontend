@@ -101,11 +101,26 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // The "Restart finances from my budgets" surface (preview→confirm→apply, reversible).
   // A full-screen sub-view, mirroring the CRM ReconcileView pattern.
   const [showRestart, setShowRestart] = useState(false);
+  // "Restart from my budgets" is a ONE-TIME tool. Once it's applied (a finance
+  // restart batch exists), the prominent header button auto-hides — it stays
+  // reachable as a small, quiet link tucked next to the year picker. null = unknown
+  // (treated as "not yet applied" so the button shows until we hear otherwise).
+  const [restartApplied, setRestartApplied] = useState(false);
   const [bannerDismiss, setBannerDismiss] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
   });
   const [bannerLeaving, setBannerLeaving] = useState(false);
   const fileRef = useRef(null);
+
+  // Has a finance restart ever been applied? Cheap status check on mount; a failure
+  // just leaves the button visible (safe default). Re-checked when the restart view
+  // closes (so applying it this session hides the prominent button right after).
+  const loadRestartStatus = useCallback(async () => {
+    try {
+      const r = await axios.get(`${base}/finances/restart/status`, authHdr);
+      setRestartApplied(!!(r.data && r.data.applied));
+    } catch (_) { /* leave as-is; the button stays available */ }
+  }, [authHdr]);
 
   const load = useMemo(() => async () => {
     setLoading(true);
@@ -134,6 +149,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   }, [authHdr, year]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadRestartStatus(); }, [loadRestartStatus]);
 
   const exportCsv = async () => {
     try {
@@ -242,8 +258,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     return (
       <FinanceRestartView
         token={token}
-        onBack={() => setShowRestart(false)}
-        onApplied={() => { load(); }}
+        onBack={() => { setShowRestart(false); loadRestartStatus(); }}
+        onApplied={() => { load(); loadRestartStatus(); }}
       />
     );
   }
@@ -277,11 +293,22 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
-        <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
-          title="Rebuild your finances from your budget trackers (preview first — reversible)"
-          sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
-          Restart from budgets
-        </Button>
+        {/* "Restart from budgets" is a one-time tool. Before it's applied it's a
+            prominent button; once applied it collapses to a small, quiet icon (still
+            reachable to re-run) so it stops cluttering the main finance screen. */}
+        {restartApplied ? (
+          <IconButton size="small" onClick={() => setShowRestart(true)}
+            title="Restart finances from your budgets (already applied — re-run if needed)"
+            sx={{ color: B.muted, '&:hover': { color: B.green } }}>
+            <RestartAltIcon fontSize="small" />
+          </IconButton>
+        ) : (
+          <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
+            title="Rebuild your finances from your budget trackers (preview first — reversible)"
+            sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+            Restart from budgets
+          </Button>
+        )}
       </Box>
 
       <Box data-ctx-chrome sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
