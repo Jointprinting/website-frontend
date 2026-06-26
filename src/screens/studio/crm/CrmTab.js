@@ -368,6 +368,51 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     }
   }, [authHdr, flash]);
 
+  // ── LEAD -> QUOTE handoff ──────────────────────────────────────────────────
+  // The deal only earns a project # when the owner moves it to "quoting". After
+  // that stage write lands, create-or-get the company's working project (the
+  // backend is idempotent — a live project is reused, never double-created) and
+  // jump straight to its order page so the owner can start quotes/mockups.
+  //
+  // BEST-EFFORT by design: this fires AFTER the stage PATCH has already succeeded,
+  // so a hiccup here never undoes the stage move — we just flash a soft note and
+  // stay put (the owner can open the project from the order tracker). `record` is
+  // whatever company POJO triggered the move (a pipeline card or the detail
+  // client); we read name/contact/value off it to pre-seed the project, all
+  // optional (the backend derives the companyKey link either way).
+  const enterQuoting = React.useCallback(async (key, record = {}) => {
+    if (!key) return;
+    try {
+      const r = record || {};
+      const primaryContact = Array.isArray(r.contacts)
+        ? (r.contacts.find((c) => c && (c.email || c.phone || c.name)) || {})
+        : {};
+      const res = await axios.post(`${config.backendUrl}/api/orders/for-company`, {
+        companyKey:   key,
+        companyName:  r.companyName || r.name || '',
+        clientName:   r.clientName || '',
+        dealValue:    Number(r.dealValue) || 0,
+        contactName:  primaryContact.name  || r.clientName || '',
+        contactEmail: r.email || primaryContact.email || '',
+        contactPhone: r.phone || primaryContact.phone || '',
+      }, authHdr);
+      const order = res.data?.order || null;
+      const created = !!res.data?.created;
+      const projectNumber = order && order.projectNumber != null ? String(order.projectNumber) : null;
+      const orderNumber = order && order.orderNumber != null ? String(order.orderNumber) : null;
+      if (onNavigate && order && (projectNumber || orderNumber)) {
+        flash(created
+          ? `Project #${projectNumber || ''} created — opening it now.`
+          : `Opening this company's open project (#${projectNumber || ''}).`);
+        onNavigate({ view: 'clients', projectNumber, orderNumber });
+      }
+    } catch (e) {
+      // Soft miss — the stage already moved; don't scare the owner. They can open
+      // the project from the Order Tracker.
+      flash('Moved to quoting. Couldn’t auto-open a project just now — open it from the order tracker.', 'info');
+    }
+  }, [authHdr, flash, onNavigate]);
+
   // Merge one duplicate into a survivor (folds + re-points orders, archives the
   // merged record server-side).
   const mergeCompany = React.useCallback(async (survivorKey, mergedKey) => {
@@ -597,6 +642,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
       pendingMovesRef.current.delete(key);
     }
     refreshAffected();
+    // LEAD -> QUOTE: moving a card into "quoting" mints/opens its project and
+    // redirects to the order page. After refreshAffected so the board is settled;
+    // best-effort so a project hiccup never disturbs the (already-saved) move.
+    if (toStage === 'quoting') enterQuoting(key, card);
   };
 
   const submitLost = async (body) => {
@@ -618,8 +667,15 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // (and lists, since stage/area/etc. change list rows).
   const patchDetailField = async (patch) => {
     if (!detail?.client) return;
-    await patchCompany(detail.client.companyKey, patch);
+    const key = detail.client.companyKey;
+    const record = detail.client;
+    await patchCompany(key, patch);
     refreshAffected();
+    // The company-card stage selector routes through here; selecting "quoting"
+    // mints/opens the project and redirects to the order page (idempotent + best-
+    // effort, same as the pipeline drag). Only when the stage is actually set to
+    // quoting in THIS edit — never on an unrelated field edit.
+    if (patch && patch.stage === 'quoting') enterQuoting(key, record);
   };
 
   // ── Right-click menu wiring ───────────────────────────────────────────────

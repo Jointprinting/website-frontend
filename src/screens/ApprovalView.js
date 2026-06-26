@@ -24,7 +24,12 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
-import ConfirmationDocument from './ConfirmationDocument';
+import ConfirmationDocument, { computeConfTotals } from './ConfirmationDocument';
+
+// Processing-fee rates by payment method (decimals) — mirrors the backend
+// Order.PAYMENT_FEES single source of truth. Shown to the client for
+// transparency; it never changes the owner's stored confirmation total.
+const PAY_FEES = { cc: 0.0299, ach: 0.01 };
 
 // ── Brand tokens (dark) ──────────────────────────────────────────────────────
 const T = {
@@ -171,6 +176,7 @@ export default function ApprovalView() {
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
   const [picks, setPicks] = useState({});           // group label -> quote line index
   const [pickBusy, setPickBusy] = useState(false);
+  const [payMethod, setPayMethod] = useState('');   // '' | 'cc' | 'ach' — client's payment choice
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
   const [lightbox, setLightbox] = useState(null);    // enlarged image src, or null when closed
 
@@ -208,6 +214,15 @@ export default function ApprovalView() {
     } catch (_) { /* keep existing data */ }
   };
 
+  // Reflect the server's stored payment method (set at approval) so a returning
+  // approved client sees the choice they made. Never overrides an in-progress
+  // pick the client is currently making before they've approved.
+  const serverPayMethod = data?.project?.paymentMethod || '';
+  useEffect(() => {
+    if (serverPayMethod && serverPayMethod !== payMethod) setPayMethod(serverPayMethod);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverPayMethod]);
+
   // Once approved, poll every 60s so the client sees the timeline update in
   // near-real-time when the admin ticks off a step — they don't have to
   // refresh the tab to see "Blanks shipping" turn green. Pauses when the tab
@@ -236,7 +251,8 @@ export default function ApprovalView() {
     if (isPreview) { alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?${q}`, {});
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/approve?${q}`,
+        payMethod ? { paymentMethod: payMethod } : {});
       await refresh();
     } catch (e) {
       // 409 = someone on the team already approved or sent it back. Not an
@@ -381,6 +397,11 @@ export default function ApprovalView() {
   const conf = p.confirmation || {};
   const confItems = Array.isArray(conf.items) ? conf.items : [];
   const hasConf = confItems.length > 0;
+  // The amount the client is approving — the confirmation's grand total when one
+  // exists (the SAME computeConfTotals the document renders, so the fee math sits
+  // on the exact number shown), else the project total. Drives the payment-fee
+  // preview only; it never changes what's stored.
+  const payableTotal = hasConf ? computeConfTotals(conf).grandTotal : total;
   // Index the confirmation's mockups by BOTH the normalized number AND the
   // normalized name. An item that references a mockup with no number stores the
   // mockup's NAME in mockupNum (the picker normalizes name → mockupNum), so
@@ -764,14 +785,21 @@ export default function ApprovalView() {
                     {p.approvalBy ? `Approved by ${p.approvalBy}. ` : ''}We&apos;ll move through the steps below and keep this page updated as each one happens.
                   </Typography>
                 </Box>
+                {payMethod && (
+                  <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked />
+                )}
                 <TrackingTimeline steps={p.tracking?.steps || []} />
               </Box>
             ) : (
               <>
                 <Typography sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13.5, mb: 2, lineHeight: 1.6 }}>
-                  If everything looks good, hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
+                  If everything looks good, pick how you&apos;d like to pay and hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
                 </Typography>
+                {/* Payment method + its fee, shown before approval so the client
+                    sees the CC/ACH cost up front. Optional — approval still works
+                    without choosing; it just records their preference. */}
+                <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} />
                 {lockedNote && <LockedNote text={lockedNote} />}
                 <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                   <Button onClick={handleApprove} disabled={actionBusy} endIcon={!actionBusy ? <ArrowForwardIcon /> : null}
@@ -857,6 +885,66 @@ function LockedNote({ text }) {
   return (
     <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)' }}>
       <Typography sx={{ color: T.amber, fontSize: 13, lineHeight: 1.5 }}>{text}</Typography>
+    </Box>
+  );
+}
+
+// ── Payment method picker ─────────────────────────────────────────────────────
+// The client chooses how they'll pay before approving. Each option shows its
+// processing fee (CC 2.99% / ACH 1%) and the resulting total, computed live off
+// the amount they're approving — so there are no surprises. Purely informational
+// + a record of their choice; it does NOT change the order's stored total (the
+// owner owns that on the confirmation). `value` is '' | 'cc' | 'ach'. When
+// `locked` (post-approval) it renders read-only as a confirmation of the choice.
+function PaymentChoice({ value, onChange, baseTotal, locked = false }) {
+  const opts = [
+    { key: 'cc',  label: 'Credit / debit card', sub: '2.99% processing fee' },
+    { key: 'ach', label: 'ACH bank transfer',   sub: '1% processing fee' },
+  ];
+  const feeFor = (k) => (Number(baseTotal) || 0) * (PAY_FEES[k] || 0);
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>
+        {locked ? 'Payment method' : 'How would you like to pay?'}
+      </Typography>
+      <Stack gap={1}>
+        {opts.map((o) => {
+          const sel = value === o.key;
+          // In the locked view only render the chosen option.
+          if (locked && !sel) return null;
+          const fee = feeFor(o.key);
+          const withFee = (Number(baseTotal) || 0) + fee;
+          return (
+            <Box key={o.key}
+              onClick={locked ? undefined : () => onChange(sel ? '' : o.key)}
+              role={locked ? undefined : 'button'}
+              tabIndex={locked ? undefined : 0}
+              onKeyDown={locked ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(sel ? '' : o.key); } }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2,
+                cursor: locked ? 'default' : 'pointer',
+                border: `1.5px solid ${sel ? T.green : T.line}`,
+                bgcolor: sel ? T.panelHi : T.inset,
+                transition: 'border-color 160ms ease, background 160ms ease',
+                '&:hover': locked ? {} : { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)' } }}>
+              <Box sx={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}` }}>
+                {sel && <CheckIcon sx={{ fontSize: 13, color: '#06140c' }} />}
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: T.text }}>{o.label}</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 11.5 }}>{o.sub}</Typography>
+              </Box>
+              {(Number(baseTotal) || 0) > 0 && (
+                <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                  <Typography sx={{ color: T.faint, fontSize: 11, ...mono }}>+{money(fee)} fee</Typography>
+                  <Typography sx={{ color: sel ? T.green : T.text, fontSize: 13.5, fontWeight: 800, ...mono }}>{money(withFee)}</Typography>
+                </Box>
+              )}
+            </Box>
+          );
+        })}
+      </Stack>
     </Box>
   );
 }
