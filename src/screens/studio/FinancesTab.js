@@ -23,11 +23,13 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import axios from 'axios';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
 import { B, darkInput, scrollbar } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceRestartView from './FinanceRestartView';
+import FinanceDedupeView from './FinanceDedupeView';
 
 const base = `${config.backendUrl}/api`;
 // money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
@@ -106,6 +108,12 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // reachable as a small, quiet link tucked next to the year picker. null = unknown
   // (treated as "not yet applied" so the button shows until we hear otherwise).
   const [restartApplied, setRestartApplied] = useState(false);
+  // The "Review duplicate transactions" surface (merge cross-source dupes the budget
+  // restart left behind; preview→confirm→apply, reversible). A full-screen sub-view,
+  // mirroring the CRM CleanupView pattern. Its entry point auto-HIDES when there are
+  // zero duplicate pairs (the live count drives visibility — no dupes, no clutter).
+  const [showDedupe, setShowDedupe] = useState(false);
+  const [dedupeCount, setDedupeCount] = useState(0);
   const [bannerDismiss, setBannerDismiss] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
   });
@@ -120,6 +128,18 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       const r = await axios.get(`${base}/finances/restart/status`, authHdr);
       setRestartApplied(!!(r.data && r.data.applied));
     } catch (_) { /* leave as-is; the button stays available */ }
+  }, [authHdr]);
+
+  // How many cross-source duplicate pairs are in the ledger right now? Drives whether
+  // the "Review duplicates" entry shows at all (auto-hidden at zero). Cheap preview
+  // read; a failure just hides the entry (safe default). Re-checked when the dedupe
+  // view closes (so merging this session updates/hides the entry right after).
+  const loadDedupeCount = useCallback(async () => {
+    try {
+      const r = await axios.get(`${base}/finances/dedupe/preview`, authHdr);
+      const n = (r.data && r.data.summary && r.data.summary.duplicatePairs) || 0;
+      setDedupeCount(Number(n) || 0);
+    } catch (_) { setDedupeCount(0); /* hide the entry on failure */ }
   }, [authHdr]);
 
   const load = useMemo(() => async () => {
@@ -150,6 +170,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadRestartStatus(); }, [loadRestartStatus]);
+  useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
 
   const exportCsv = async () => {
     try {
@@ -264,6 +285,19 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     );
   }
 
+  // The "Review duplicate transactions" surface also takes over the whole tab. On a
+  // merge it reloads the finance data (the merged amount now counts once) and the
+  // duplicate count (so the entry hides once everything is merged).
+  if (showDedupe) {
+    return (
+      <FinanceDedupeView
+        token={token}
+        onBack={() => { setShowDedupe(false); loadDedupeCount(); }}
+        onApplied={() => { load(); loadDedupeCount(); }}
+      />
+    );
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white,
       '@keyframes jpBannerIn':  { from: { opacity: 0, transform: 'translateY(-8px)' },  to: { opacity: 1, transform: 'translateY(0)' } },
@@ -278,6 +312,17 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
         <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Finances</Typography>
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
+        {/* "Review duplicate transactions" — shown ONLY when the ledger actually has
+            cross-source duplicate pairs (auto-hides at zero). One tap opens the merge
+            surface; the count keeps it honest. */}
+        {dedupeCount > 0 && (
+          <Button onClick={() => setShowDedupe(true)} size="small" startIcon={<MergeTypeOutlinedIcon sx={{ fontSize: 16 }} />}
+            title="Merge duplicate transactions left by the budget restart (preview first — reversible)"
+            sx={{ color: '#06281a', bgcolor: B.green, textTransform: 'none', fontWeight: 800, fontSize: 12, px: 1.5,
+              '&:hover': { bgcolor: '#3cc56f' } }}>
+            Review duplicates ({dedupeCount})
+          </Button>
+        )}
         <Button onClick={() => setShowAdd(true)} size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
           sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Add</Button>
         <FormControl size="small" sx={{ minWidth: 90 }}>
