@@ -156,7 +156,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         axios.get(`${base}/finances/by-client`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/payment-gaps`, { ...authHdr, params: { year } }),
         // In-progress orders missing a cost receipt — current by nature, not year-scoped.
-        axios.get(`${base}/finances/missing-receipts`, authHdr),
+        // Guarded so a momentary backend gap (e.g. right after a deploy, before the
+        // route is live) can't reject the whole load and blank out the finance tab.
+        axios.get(`${base}/finances/missing-receipts`, authHdr).catch(() => ({ data: null })),
       ]);
       // Coerce every list to an array of non-null rows at the boundary, so no
       // downstream .map can hit a null row and white-screen the tab regardless of
