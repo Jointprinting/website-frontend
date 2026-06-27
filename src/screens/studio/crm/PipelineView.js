@@ -53,13 +53,12 @@ function sortCards(cards, sort) {
 
 // A column-local board chip (label + color from the board-column meta). Replaces
 // the stage-keyed StageChip so order columns (Quoting/Approval/…) get a chip too.
-function ColumnChip({ col, glow }) {
+function ColumnChip({ col }) {
   const m = boardColumnMeta(col);
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.9, py: 0.2, borderRadius: 1,
       bgcolor: m.bg, border: `1px solid ${m.color}55`,
-      ...(glow ? { boxShadow: `0 0 10px -3px ${m.color}` } : {}),
     }}>
       <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: m.color }} />
       <Typography sx={{ color: m.color, fontSize: 11, fontWeight: 800, letterSpacing: 0.3 }}>{m.label}</Typography>
@@ -121,7 +120,6 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, 
         '&::before': {
           content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
           bgcolor: railColor, opacity: won ? 1 : 0.8,
-          boxShadow: won ? `0 0 10px -1px ${railColor}` : 'none',
         },
       }}
     >
@@ -130,7 +128,7 @@ function PipelineCard({ card, onOpen, onDragStart, onDragEnd, dragging, locked, 
           {/* Subtle temperature dot — hot/warm/cold at a glance (lead cards only). */}
           {heat && (
             <Box title={heat.label} sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: heat.dot,
-              mt: '4px', flexShrink: 0, boxShadow: `0 0 6px -1px ${heat.dot}` }} />
+              mt: '4px', flexShrink: 0 }} />
           )}
           <Stack spacing={0.4} sx={{ minWidth: 0 }}>
             <Typography sx={{

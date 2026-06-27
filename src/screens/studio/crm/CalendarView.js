@@ -105,7 +105,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
         border: `1px solid ${selected ? D.green : `${m.color}${won ? '88' : '55'}`}`,
         outline: selected ? `1px solid ${D.green}` : 'none', outlineOffset: -2,
         opacity: dragging ? 0.35 : 1,
-        boxShadow: selected ? `0 0 0 1px ${D.green}55` : (won ? `0 0 8px -3px ${m.color}` : 'none'),
+        boxShadow: selected ? `0 0 0 1px ${D.green}55` : 'none',
         transition: 'opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease',
         '&:hover': { transform: 'translateY(-1px)', boxShadow: `0 4px 12px -4px ${m.color}66` },
         '&:active': { cursor: 'grabbing' },

@@ -327,39 +327,25 @@ function PoRow({ p, onOpen, onOpenVendor }) {
   );
 }
 
-// ── Progress / level card (the dopamine moment) ───────────────────────────────
-// A segmented funnel rail. Climbing the stages fills the bar in the stage color;
-// reaching Won/Customer flips it to a celebratory green banner so closing a deal
-// feels earned. The only words are a short, factual headline + the stage chip —
-// no auto-generated "keep them warm" hand-holding (owner: "its my system, i dont
-// need notes"); the bar + chip already say where the deal stands.
+// ── Progress / level card ─────────────────────────────────────────────────────
+// A segmented funnel rail with a short factual headline + the stage chip. Flat —
+// no celebration banner / glow; the bar + chip say where the deal stands.
 function ProgressCard({ stage, isCustomer }) {
   const won = isWonStage(stage) || isCustomer;
-  const headline = won
-    ? (isCustomer ? 'Customer 🎉' : 'Won 🎉')
-    : stageMeta(stage).label;
+  const headline = won ? (isCustomer ? 'Customer' : 'Won') : stageMeta(stage).label;
 
   return (
     <Box sx={{
-      position: 'relative', overflow: 'hidden',
-      bgcolor: won ? 'rgba(74,222,128,0.06)' : D.panel,
-      border: `1px solid ${won ? 'rgba(74,222,128,0.4)' : D.line}`, borderRadius: 2.5,
+      bgcolor: D.panel,
+      border: `1px solid ${D.line}`, borderRadius: 2.5,
       p: { xs: 1.75, sm: 2 },
-      boxShadow: won ? `0 10px 30px -12px ${stageMeta('won').color}66` : 'none',
     }}>
-      {won && (
-        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: `linear-gradient(90deg, ${stageMeta('won').color}00, ${stageMeta('won').color}, ${stageMeta('won').color}00)` }} />
-      )}
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.25 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-          {won && <StarRateRoundedIcon sx={{ fontSize: 19, color: stageMeta('won').color }} />}
-          <Typography sx={{ color: won ? stageMeta('won').color : D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {headline}
-          </Typography>
-        </Stack>
-        <StageChip stage={stage} glow />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {headline}
+        </Typography>
+        <StageChip stage={stage} />
       </Stack>
       <StageProgress stage={stage} height={7} showLabel />
     </Box>

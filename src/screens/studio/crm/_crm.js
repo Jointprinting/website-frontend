@@ -360,10 +360,8 @@ export const primaryPhone = (rec) => {
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 
-// Stage pill — consistent across every view. `glow` adds a soft halo for the
-// won/customer victory rung so a closed deal reads as a reward, not just another
-// chip. `dot` prefixes a tiny level marker.
-export function StageChip({ stage, size = 'small', glow = false, dot = false, sx = {} }) {
+// Stage pill — consistent across every view. `dot` prefixes a tiny level marker.
+export function StageChip({ stage, size = 'small', dot = false, sx = {} }) {
   const m = stageMeta(stage);
   const won = isWonStage(stage);
   return (
@@ -374,7 +372,6 @@ export function StageChip({ stage, size = 'small', glow = false, dot = false, sx
       sx={{
         bgcolor: m.bg, color: m.color, fontWeight: 800, fontSize: 11, height: 22,
         border: `1px solid ${m.color}${won ? '66' : '40'}`, letterSpacing: 0.2,
-        ...(glow && won ? { boxShadow: `0 0 0 1px ${m.color}33, 0 4px 14px -4px ${m.color}aa` } : {}),
         '& .MuiChip-icon': { mr: -0.25 },
         ...sx,
       }}
@@ -406,8 +403,7 @@ export function StageProgress({ stage, height = 6, showLabel = false, sx = {} })
                 flex: 1, height, borderRadius: 999,
                 bgcolor: reached ? segColor : 'rgba(255,255,255,0.07)',
                 opacity: closed ? 0.4 : 1,
-                boxShadow: reached && (won || i === lvl) ? `0 0 8px -1px ${segColor}aa` : 'none',
-                transition: 'background-color 0.35s ease, box-shadow 0.35s ease, opacity 0.25s ease',
+                transition: 'background-color 0.35s ease, opacity 0.25s ease',
               }}
             />
           );
