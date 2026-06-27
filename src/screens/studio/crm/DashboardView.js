@@ -224,17 +224,9 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
   return (
     <WidgetCard title="Conversion">
       <Stack direction="row" spacing={2} alignItems="center">
-        <Box sx={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
-          <CircularProgress variant="determinate" value={100} size={84} thickness={4}
-            sx={{ color: D.inset, position: 'absolute', left: 0 }} />
-          <CircularProgress variant="determinate" value={Math.min(100, rate)} size={84} thickness={4}
-            sx={{ color: stageMeta('customer').color, position: 'absolute', left: 0,
-              '& .MuiCircularProgress-circle': { strokeLinecap: 'round' } }} />
-          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center' }}>
-            <Typography sx={{ ...mono, fontSize: 20, fontWeight: 800, color: D.text, lineHeight: 1 }}>{rate}%</Typography>
-            <Typography sx={{ fontSize: 9, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>won</Typography>
-          </Box>
+        <Box sx={{ flexShrink: 0, textAlign: 'center', minWidth: 72 }}>
+          <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, color: D.text, lineHeight: 1 }}>{rate}%</Typography>
+          <Typography sx={{ fontSize: 9, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>won</Typography>
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={1} alignItems="baseline">

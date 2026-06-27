@@ -56,7 +56,6 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
         '&::before': {
           content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
           bgcolor: stageMeta(c.stage).color, opacity: customer ? 1 : 0.7,
-          boxShadow: customer ? `0 0 10px -1px ${stageMeta(c.stage).color}` : 'none',
         },
       }}
     >
