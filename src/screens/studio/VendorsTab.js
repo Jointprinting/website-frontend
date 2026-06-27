@@ -482,6 +482,23 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField, onOpenOrder
         </Typography>
       </Box>
 
+      {/* Printer-network / geo-routing foundation — owner-filled. Nothing routes
+          off these yet; this is the data the future "best printer nearest the
+          client" engine will use (location, what they make, speed, quality). */}
+      <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+        <Eyebrow sx={{ mb: 1.5, display: 'block' }}>Network &amp; routing</Eyebrow>
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' } }}>
+          <ProfileField label="City" value={vendor.city} placeholder="Warminster" saving={savingField === 'city'} onCommit={(x) => onPatch({ city: x })} />
+          <ProfileField label="State" value={vendor.state} placeholder="PA" saving={savingField === 'state'} onCommit={(x) => onPatch({ state: x.toUpperCase().slice(0, 2) })} />
+          <ProfileField label="ZIP" value={vendor.zip} placeholder="18974" saving={savingField === 'zip'} onCommit={(x) => onPatch({ zip: x })} />
+          <ProfileField label="Lead time (days)" value={vendor.leadTimeDays ? String(vendor.leadTimeDays) : ''} placeholder="e.g. 7" saving={savingField === 'leadTimeDays'} onCommit={(x) => onPatch({ leadTimeDays: parseInt(x, 10) || 0 })} />
+          <ProfileField label="Quality (1–5)" value={vendor.qualityRating ? String(vendor.qualityRating) : ''} placeholder="e.g. 4" saving={savingField === 'qualityRating'} onCommit={(x) => onPatch({ qualityRating: Math.max(0, Math.min(5, parseInt(x, 10) || 0)) })} />
+        </Box>
+        <Box sx={{ mt: 1.5 }}>
+          <ProfileField label="Capabilities (comma-separated)" value={(vendor.capabilities || []).join(', ')} placeholder="screen print, embroidery, DTG, promo, signage" saving={savingField === 'capabilities'} onCommit={(x) => onPatch({ capabilities: x.split(',').map((s) => s.trim()).filter(Boolean) })} />
+        </Box>
+      </Box>
+
       {/* Connected records: orders → POs → receipts. The "full database" view. */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
         <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
