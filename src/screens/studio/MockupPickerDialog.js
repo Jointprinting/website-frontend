@@ -7,7 +7,7 @@ import {
   Box, Stack, Typography, Button, CircularProgress,
 } from '@mui/material';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
-import { B } from './_shared';
+import { B, useMobileFullScreen } from './_shared';
 
 export default function MockupPickerDialog({
   open, onClose, onConfirm, mockups,
@@ -17,6 +17,7 @@ export default function MockupPickerDialog({
   confirmLabel = 'Save',
   busy = false,
 }) {
+  const fullScreen = useMobileFullScreen();
   const [selected, setSelected] = React.useState(initialSelected);
   const [showAll, setShowAll]   = React.useState(false);
 
@@ -54,8 +55,8 @@ export default function MockupPickerDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: fullScreen ? 0 : 2 } }}>
       <DialogTitle sx={{ color: B.white, fontWeight: 700, fontSize: 15, pb: 1 }}>
         {title}
         {(companyName || clientName) && (

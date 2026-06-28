@@ -17,12 +17,13 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, mono, scrollbar } from './_shared';
+import { D, mono, scrollbar, useMobileFullScreen } from './_shared';
 
 const pbase = `${config.backendUrl}/api/products`;
 
 export default function SSBlankPicker({ open, token, onPick, onClose }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const fullScreen = useMobileFullScreen();
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -81,8 +82,8 @@ export default function SSBlankPicker({ open, token, onPick, onClose }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3, backgroundImage: 'none' } }}>
       <Stack direction="row" alignItems="center" gap={1} sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${D.line}` }}>
         {detail && (
           <IconButton size="small" onClick={() => setDetail(null)} sx={{ color: D.muted, '&:hover': { color: D.text } }}>

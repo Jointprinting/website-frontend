@@ -2,6 +2,13 @@
 // Constants, theme tokens, and small utilities shared across the Order Tracker
 // surfaces (ClientHubTab, DashboardView, future Projects/People views).
 
+import useMediaQuery from '@mui/material/useMediaQuery';
+
+// True on phone-width viewports — spread onto a <Dialog fullScreen={…}> so a
+// content-heavy modal takes the whole screen on a phone instead of a cramped,
+// margin-boxed card. Desktop is unaffected.
+export const useMobileFullScreen = () => useMediaQuery((theme) => theme.breakpoints.down('sm'));
+
 export const B = {
   bg:      '#0c1410',
   panel:   '#162420',

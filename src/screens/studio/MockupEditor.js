@@ -31,7 +31,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, mono, scrollbar } from './_shared';
+import { D, mono, scrollbar, useMobileFullScreen } from './_shared';
 import SSBlankPicker from './SSBlankPicker';
 
 const base = `${config.backendUrl}/api/studio`;
@@ -112,6 +112,7 @@ function SourceTile({ label, img, onPick, onOpenLibrary }) {
 // A modal grid of everything saved in one library store (blanks or logos).
 function LibraryPicker({ open, store, token, onPick, onClose }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const fullScreen = useMobileFullScreen();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -130,8 +131,8 @@ function LibraryPicker({ open, store, token, onPick, onClose }) {
   }, [open, store, authHdr]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3, backgroundImage: 'none' } }}>
       <Stack direction="row" alignItems="center" sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${D.line}` }}>
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, flex: 1, textTransform: 'capitalize' }}>
           Pick a saved {store === 'blanks' ? 'blank' : 'logo'}

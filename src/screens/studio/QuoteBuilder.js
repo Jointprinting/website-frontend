@@ -20,7 +20,7 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
-import { D, scrollbar, dropInput, fmt, mono, accentBar } from './_shared';
+import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
 const TIERS = [];
@@ -70,6 +70,7 @@ function emptyLine() {
 }
 
 export default function QuoteBuilder({ open, project, onClose, onSave }) {
+  const fullScreen = useMobileFullScreen();
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
   const [printerName,  setPrinterName]  = useState('');
@@ -195,8 +196,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   return (
     <Dialog open={open}
       onClose={(_, reason) => { if (reason === 'backdropClick') return; closeWithSave(); }}
-      maxWidth={false} fullWidth
-      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3,
+      maxWidth={false} fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3,
         backgroundImage: `radial-gradient(120% 50% at 50% 0%, rgba(74,222,128,0.07), rgba(7,11,9,0) 62%)`,
         boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
