@@ -29,7 +29,7 @@ import {
   D, mono, dropInput, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
 import {
-  StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, stageMeta,
+  StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, PRE_CUSTOMER_STAGES, stageMeta,
   kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
 } from './_crm';
 
@@ -464,7 +464,12 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
         <Field label={savingField === 'stage' ? 'Stage · saving…' : 'Stage'}>
           <TextField select value={client.stage || 'lead'} onChange={(e) => commit('stage', e.target.value)}
             size="small" fullWidth sx={fieldSx}>
-            {CRM_STAGES.map((s) => <MenuItem key={s} value={s}>{stageMeta(s).label}</MenuItem>)}
+            {CRM_STAGES.map((s) => (
+              <MenuItem key={s} value={s}
+                disabled={isCustomer && client.stage !== s && PRE_CUSTOMER_STAGES.includes(s)}>
+                {stageMeta(s).label}
+              </MenuItem>
+            ))}
           </TextField>
         </Field>
         <Field label={savingField === 'dealValue' ? 'Deal value · saving…' : 'Deal value'}>

@@ -38,7 +38,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 
 import { copyToClipboard } from './ContextMenu';
-import { CRM_STAGES, stageMeta, telHref, primaryPhone } from './crm/_crm';
+import { CRM_STAGES, PRE_CUSTOMER_STAGES, isClient, stageMeta, telHref, primaryPhone } from './crm/_crm';
 import { STATUS_OPTIONS, hasConfirmation } from './_shared';
 
 // First usable email for a CRM record: its own, else the first contact with one.
@@ -107,7 +107,8 @@ export function buildCompanyMenu(c, handlers = {}) {
         key: `stage-${s}`,
         label: stageMeta(s).label,
         icon: StageDot(stageMeta(s).color),
-        disabled: c.stage === s,
+        // A real customer can't be demoted to a pre-customer funnel stage.
+        disabled: c.stage === s || (isClient(c) && PRE_CUSTOMER_STAGES.includes(s)),
         onClick: () => handlers.onSetStage(key, s, { name }),
       })),
     },
