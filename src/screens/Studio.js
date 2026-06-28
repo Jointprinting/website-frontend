@@ -2272,7 +2272,70 @@ function AlertsPlaceholder() {
   );
 }
 
-function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+// The live command-center panel: clickable rows for what needs attention, ordered
+// by urgency. Order rows (aging past the owner's 2–3 week turnaround) expand to list
+// the at-risk orders, each deep-linking to its project; follow-up + receipt rows jump
+// to the CRM Today queue / Finances. Falls back to the calm placeholder when clear.
+function SignalsPanel({ signals, onNavigate, onPick }) {
+  const [open, setOpen] = React.useState({});
+  const c = (signals && signals.counts) || {};
+  const fu = (signals && signals.followUps) || {};
+  const orders = (signals && signals.orders) || [];
+  const mr = (signals && signals.missingReceipts) || 0;
+  const total = (c.possibly_late || 0) + (c.running_long || 0) + (fu.overdue || 0) + (fu.dueToday || 0) + mr;
+  if (total <= 0) return <AlertsPlaceholder />;
+  const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const s = (n) => (n === 1 ? '' : 's');
+
+  const rows = [];
+  if (c.possibly_late > 0) rows.push({ key: 'late', tone: '#f87171', label: `${c.possibly_late} order${s(c.possibly_late)} possibly late · 3+ weeks`, flag: 'possibly_late' });
+  if (c.running_long > 0) rows.push({ key: 'long', tone: D.amber, label: `${c.running_long} order${s(c.running_long)} running long · 2+ weeks`, flag: 'running_long' });
+  if (fu.overdue > 0) rows.push({ key: 'overdue', tone: '#f87171', label: `${fu.overdue} follow-up${s(fu.overdue)} overdue`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
+  if (fu.dueToday > 0) rows.push({ key: 'today', tone: D.green, label: `${fu.dueToday} follow-up${s(fu.dueToday)} due today`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
+  if (mr > 0) rows.push({ key: 'receipts', tone: D.amber, label: `${mr} order${s(mr)} need a receipt`, onClick: () => onPick && onPick('finances') });
+
+  return (
+    <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
+      {rows.map((r, i) => {
+        const expandable = !!r.flag;
+        const expanded = !!open[r.key];
+        const click = expandable ? () => toggle(r.key) : r.onClick;
+        return (
+          <Box key={r.key}>
+            <Box onClick={click} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' && click) click(); }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.3, cursor: 'pointer',
+                borderTop: i === 0 ? 'none' : `1px solid ${D.line}`,
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: r.tone, flexShrink: 0, boxShadow: `0 0 8px ${r.tone}66` }} />
+              <MuiTypography sx={{ color: D.text, fontSize: 13.5, fontWeight: 700, flexGrow: 1, minWidth: 0 }}>{r.label}</MuiTypography>
+              {expandable
+                ? <ExpandMoreIcon sx={{ fontSize: 20, color: D.faint, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                : <ChevronRightIcon sx={{ fontSize: 20, color: D.faint }} />}
+            </Box>
+            {expandable && expanded && (
+              <Box sx={{ pb: 0.5, bgcolor: 'rgba(0,0,0,0.16)' }}>
+                {orders.filter((o) => o.flag === r.flag).map((o) => (
+                  <Box key={o._id} onClick={() => onNavigate && onNavigate({ view: 'clients', projectNumber: o.projectNumber })}
+                    role="button" tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && onNavigate) onNavigate({ view: 'clients', projectNumber: o.projectNumber }); }}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4.75, pr: 1.75, py: 0.85, cursor: 'pointer',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}>
+                    <MuiTypography sx={{ ...mono, color: D.green, fontSize: 12, minWidth: 50 }}>#{o.projectNumber || o.orderNumber || '—'}</MuiTypography>
+                    <MuiTypography sx={{ color: D.muted, fontSize: 12.5, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.companyName || o.clientName || '—'}</MuiTypography>
+                    <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>{o.ageDays}d</MuiTypography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
   // Paused groups collapse by default — present but out of the way. State keyed
   // by brand so each remembers its own open/closed for this session.
   const [openPaused, setOpenPaused] = React.useState({});
@@ -2285,6 +2348,12 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
 
   return (
     <Stack spacing={4}>
+      {/* Command center — what needs attention, on arrival (above the launcher). */}
+      <Box>
+        <SectionHeader brand="Signals" tagline="What needs your attention" />
+        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} />
+      </Box>
+
       {live.map((group) => (
         <Box key={group.brand}>
           <SectionHeader brand={group.brand} tagline={group.tagline} />
@@ -2311,12 +2380,6 @@ function Hub({ onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }
           </Stack>
         </Box>
       ))}
-
-      {/* Reserved, logic-free slot for the future smart-alerts phase. */}
-      <Box>
-        <SectionHeader brand="Signals" tagline="Heads-up at a glance" dim />
-        <AlertsPlaceholder />
-      </Box>
 
       {/* Paused businesses — kept, but visually tucked: muted header, a Paused
           chip, and collapsed by default. Every tool inside stays fully
@@ -2425,9 +2488,26 @@ function StudioBody({ token, onLogout }) {
   const [sweepBlocked, setSweepBlocked] = React.useState(false);
   const [nextResetAt, setNextResetAt]   = React.useState(null);
   const [unseenInquiries, setUnseenInquiries] = React.useState(0);
+  // Command-center signals shown in the hub's Signals panel: orders aging past the
+  // owner's 2–3 week turnaround, overdue/due-today follow-ups, and orders missing a
+  // receipt. Each fetch fails silent — a down endpoint just drops its row.
+  const [signals, setSignals] = React.useState({
+    orders: [], counts: { possibly_late: 0, running_long: 0 },
+    followUps: { overdue: 0, dueToday: 0 }, missingReceipts: 0,
+  });
   React.useEffect(() => {
     if (view !== 'hub') return;
     let cancelled = false;
+    const authH = { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 };
+    axios.get(`${config.backendUrl}/api/orders/attention`, authH)
+      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, orders: r.data?.orders || [], counts: r.data?.counts || s.counts })); })
+      .catch(() => { /* silent — orders row just won't show */ });
+    axios.get(`${config.backendUrl}/api/crm/today`, authH)
+      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, followUps: { overdue: r.data?.summary?.overdue || 0, dueToday: r.data?.summary?.dueToday || 0 } })); })
+      .catch(() => { /* silent */ });
+    axios.get(`${config.backendUrl}/api/finances/missing-receipts`, authH)
+      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, missingReceipts: r.data?.count || 0 })); })
+      .catch(() => { /* silent */ });
     // Use /usage instead of /sweep/status. The sweep status doc gets
     // overwritten on every click, so a second click that hit the cap
     // (status='stopped', pairs_done=0) wipes out the morning's
@@ -2694,7 +2774,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} />
+          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
