@@ -147,6 +147,18 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [overflowAnchor, setOverflowAnchor] = React.useState(null);
 
+  // Whether the one-time "Load / reconcile data" import has already run. Once it
+  // has, that overflow entry auto-hides (it's a one-time tool); Clean up and
+  // Archived — the ongoing housekeeping — stay.
+  const [reconcileApplied, setReconcileApplied] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    axios.get(`${base}/reconcile/status`, authHdr)
+      .then((r) => { if (!cancelled) setReconcileApplied(!!(r.data && r.data.applied)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authHdr]);
+
   const [detail, setDetail] = React.useState(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
 
@@ -1061,7 +1073,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`,
           backgroundImage: 'none', borderRadius: 2, minWidth: 200, mt: 0.5 } }}
       >
-        {OVERFLOW_NAV.map((n) => {
+        {OVERFLOW_NAV.filter((n) => n.id !== 'reconcile' || !reconcileApplied).map((n) => {
           const Icon = n.Icon;
           const active = view === n.id;
           return (
