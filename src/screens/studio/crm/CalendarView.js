@@ -87,6 +87,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
   return (
     <Box
       draggable
+      data-ck={ev.companyKey}
       onDragStart={(e) => onDragStart(e, ev)}
       onDragEnd={onDragEnd}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -434,6 +435,86 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
 
   const selectedCount = selectedKeys.size;
 
+  // ── Marquee (rubber-band) select ─────────────────────────────────────────────
+  // Drag a box over the grid (starting on EMPTY space, not a chip) to select every
+  // follow-up the box touches — the Notion-grade "grab a bunch at once" the owner
+  // asked for instead of clicking each chip. Selection updates live as the box grows;
+  // a click on empty space (no real drag) clears the selection. Chip click/drag is
+  // untouched (we bail when the mousedown lands on a chip or a control).
+  const evByKey = React.useMemo(() => {
+    const m = new Map();
+    (events || []).forEach((e) => m.set(e.companyKey, e));
+    return m;
+  }, [events]);
+  const gridRef = React.useRef(null);
+  const marqueeRef = React.useRef(null);                 // { x0, y0, moved } while boxing
+  const marqueeCleanupRef = React.useRef(null);          // tear-down for an in-flight box
+  const [marquee, setMarquee] = React.useState(null);    // client-coord rect (or null)
+
+  const selectWithinRect = React.useCallback((rect) => {
+    const root = gridRef.current;
+    if (!root) return;
+    const next = new Map();
+    root.querySelectorAll('[data-ck]').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = !(r.right < rect.left || r.left > rect.right || r.bottom < rect.top || r.top > rect.bottom);
+      if (!hit) return;
+      const ev = evByKey.get(el.getAttribute('data-ck'));
+      if (ev) next.set(ev.companyKey, ev);
+    });
+    setSelected(next);
+  }, [evByKey]);
+
+  // Never leak the window listeners if the view unmounts mid-box.
+  React.useEffect(() => () => { if (marqueeCleanupRef.current) marqueeCleanupRef.current(); }, []);
+
+  const onGridMouseDown = (e) => {
+    if (e.button !== 0) return;                           // left button only
+    if (e.target.closest('[data-ck]')) return;            // a chip — let it click/drag
+    if (e.target.closest('button, a, [role="button"], input')) return;
+    if (!gridRef.current) return;
+    const start = { x0: e.clientX, y0: e.clientY, moved: false };
+    marqueeRef.current = start;
+    setMarquee({ left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY });
+    e.preventDefault();                                   // no text selection while boxing
+
+    const onMove = (me) => {
+      const s = marqueeRef.current;
+      if (!s) return;
+      if (Math.abs(me.clientX - s.x0) > 3 || Math.abs(me.clientY - s.y0) > 3) s.moved = true;
+      const rect = {
+        left: Math.min(s.x0, me.clientX), top: Math.min(s.y0, me.clientY),
+        right: Math.max(s.x0, me.clientX), bottom: Math.max(s.y0, me.clientY),
+      };
+      setMarquee(rect);
+      if (s.moved) selectWithinRect(rect);
+    };
+    const cleanup = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      marqueeCleanupRef.current = null;
+    };
+    function onUp() {
+      const s = marqueeRef.current;
+      if (s && !s.moved) clearSelection();                // a click on empty space clears
+      marqueeRef.current = null;
+      setMarquee(null);
+      cleanup();
+    }
+    marqueeCleanupRef.current = cleanup;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const marqueeBox = (() => {
+    if (!marquee || !marqueeRef.current?.moved || !gridRef.current) return null;
+    const gr = gridRef.current.getBoundingClientRect();
+    return {
+      left: marquee.left - gr.left, top: marquee.top - gr.top,
+      width: marquee.right - marquee.left, height: marquee.bottom - marquee.top,
+    };
+  })();
+
   return (
     <Stack spacing={2}>
       {/* Month nav — prev/next + a month·year jump, all WITHOUT scrolling the page */}
@@ -483,9 +564,22 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
       )}
 
       {/* Grid */}
-      <Box sx={{
-        border: `1px solid ${D.line}`, borderRadius: 2.5, overflow: 'hidden', bgcolor: D.inset,
-      }}>
+      <Box
+        ref={gridRef}
+        onMouseDown={onGridMouseDown}
+        sx={{
+          position: 'relative', userSelect: 'none',
+          border: `1px solid ${D.line}`, borderRadius: 2.5, overflow: 'hidden', bgcolor: D.inset,
+        }}
+      >
+        {/* Rubber-band selection box */}
+        {marqueeBox && (
+          <Box sx={{
+            position: 'absolute', zIndex: 6, pointerEvents: 'none',
+            left: marqueeBox.left, top: marqueeBox.top, width: marqueeBox.width, height: marqueeBox.height,
+            bgcolor: 'rgba(74,222,128,0.12)', border: `1px solid ${D.green}`, borderRadius: 0.5,
+          }} />
+        )}
         {/* Weekday header */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
           {WEEKDAYS.map((w) => (
@@ -530,7 +624,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
       {/* Legend / hint */}
       <Stack direction="row" alignItems="center" justifyContent="center" flexWrap="wrap" useFlexGap spacing={1.5}>
         <Typography sx={{ color: D.faint, fontSize: 11.5, textAlign: 'center' }}>
-          Click chips to select · drag to a day to reschedule (selected chips move together) · hover ‹ › while dragging to cross months · ⟳ (or right-click) for any date.
+          Drag a box over the grid to select many · click chips to add/remove · drag to a day to reschedule (selected chips move together) · hover ‹ › while dragging to cross months · ⟳ (or right-click) for any date.
         </Typography>
       </Stack>
     </Stack>
