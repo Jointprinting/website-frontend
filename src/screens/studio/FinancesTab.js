@@ -259,6 +259,12 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     if (!onNavigate || !ck) return;
     onNavigate({ view: 'crm', companyKey: ck });
   }, [onNavigate, ckByOrder]);
+  // The by-client API now carries an authoritative companyKey per row, so a Top
+  // Clients name deep-links straight to its CRM card (no dead-end). '' = not linkable.
+  const goCompanyByKey = useCallback((ck) => {
+    if (!onNavigate || !ck) return;
+    onNavigate({ view: 'crm', companyKey: ck });
+  }, [onNavigate]);
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
   const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
@@ -518,7 +524,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               </Stack>
             </Box>
 
-            <TopClients clients={clients} />
+            <TopClients clients={clients} onClient={goCompanyByKey} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
               <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Profit by order ({orders.length})</Typography>
@@ -947,7 +953,7 @@ function Legend({ color, label }) {
   );
 }
 
-function TopClients({ clients }) {
+function TopClients({ clients, onClient }) {
   if (!clients || clients.length === 0) return null;
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
@@ -963,7 +969,14 @@ function TopClients({ clients }) {
           <Box component="tbody">
             {clients.slice(0, 20).map((c) => (
               <Box component="tr" key={c.client} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
-                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.client}</Box>
+                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.companyKey && onClient ? (
+                    <Box component="span" onClick={() => onClient(c.companyKey)}
+                      sx={{ cursor: 'pointer', borderBottom: '1px dotted rgba(255,255,255,0.35)', '&:hover': { color: B.green, borderBottomColor: B.green } }}>
+                      {c.client}
+                    </Box>
+                  ) : c.client}
+                </Box>
                 <Box component="td" sx={{ color: B.muted }}>{c.orders}</Box>
                 <Box component="td" sx={{ color: B.white }}>{money(c.revenue)}</Box>
                 <Box component="td" sx={{ color: c.profit >= 0 ? B.green : '#f87171' }}>{money(c.profit)}</Box>
