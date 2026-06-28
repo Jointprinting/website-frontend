@@ -25,6 +25,11 @@ import { D, mono } from '../_shared';
 // order also lets later phases (Kanban) reuse this single source of truth.
 export const CRM_STAGES = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer', 'lost', 'dormant'];
 
+// Once a company is a real CUSTOMER (has placed an order) it stays one — "even if
+// they go cold." These early funnel stages are a DEMOTION below customer, so they're
+// locked off for a customer and the stored stage can never disagree with order reality.
+export const PRE_CUSTOMER_STAGES = ['lead', 'contacted', 'quoting', 'sampling'];
+
 export const STAGE_META = {
   lead:      { label: 'Lead',      color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
   contacted: { label: 'Contacted', color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
