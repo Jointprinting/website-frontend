@@ -187,13 +187,15 @@ function SideSwitch({ side, onSide, hasBack }) {
   );
 }
 
-export default function MockupEditor({ token, onClose, onSaved }) {
+export default function MockupEditor({ token, onClose, onSaved, prefill }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [side, setSide] = useState('front');
   const [sides, setSides] = useState({ front: DEFAULT_SIDE(), back: DEFAULT_SIDE() });
   const [name, setName] = useState('');
-  const [client, setClient] = useState('');
-  const [projectNo, setProjectNo] = useState('');
+  // Seed client/project from a deep-link (e.g. "new mockup for this order") so the
+  // mockup is born connected to the record you came from.
+  const [client, setClient] = useState((prefill && prefill.client) || '');
+  const [projectNo, setProjectNo] = useState(onlyDigits(prefill && prefill.projectNumber) || '');
   const [mockupNum, setMockupNum] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');

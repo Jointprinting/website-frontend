@@ -2474,6 +2474,9 @@ function StudioBody({ token, onLogout }) {
   //   vendorsEntry → open one vendor card in VendorsTab (by id, or resolve a name)
   const [ordersEntry, setOrdersEntry]   = React.useState({ orderNumber: null, projectNumber: null, openPos: false, nonce: 0 });
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
+  // mockupEntry → open the Mockup Studio straight into "new mockup" or "build a
+  // lookbook" for a client, pre-filled (a cross-tab link from a CRM card / order).
+  const [mockupEntry, setMockupEntry]   = React.useState({ mode: 'list', client: '', projectNumber: '', nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
 
@@ -2567,6 +2570,9 @@ function StudioBody({ token, onLogout }) {
     // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
     if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
+    // Opening the studio plainly from the hub clears any stale deep-link so it
+    // lands on the library, not a previously-linked lookbook/new-mockup.
+    if (id === 'mockup') setMockupEntry((p) => ({ mode: 'list', client: '', projectNumber: '', nonce: p.nonce + 1 }));
     setView(id);
   };
 
@@ -2602,6 +2608,15 @@ function StudioBody({ token, onLogout }) {
         nonce: p.nonce + 1,
       }));
       setView('vendors');
+    } else if (v === 'mockup') {
+      // { view:'mockup', mockupMode:'new'|'lookbook', client?, projectNumber? }
+      setMockupEntry((p) => ({
+        mode: target.mockupMode === 'new' || target.mockupMode === 'lookbook' ? target.mockupMode : 'list',
+        client: target.client ? String(target.client) : '',
+        projectNumber: target.projectNumber != null ? String(target.projectNumber) : '',
+        nonce: p.nonce + 1,
+      }));
+      setView('mockup');
     } else {
       setView(v);
     }
@@ -2701,7 +2716,8 @@ function StudioBody({ token, onLogout }) {
   }
 
   if (view === 'mockup') {
-    return <MockupLibrary token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
+    return <MockupLibrary key={mockupEntry.nonce} token={token} entry={mockupEntry}
+      onBack={() => setView('hub')} onNavigate={navigate} />;
   }
 
   if (view === 'vendors') {
