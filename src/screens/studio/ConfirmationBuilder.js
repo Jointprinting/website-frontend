@@ -22,7 +22,7 @@ import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
 import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents } from './_shared';
+import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import ConfirmationDocument, { DOC } from '../ConfirmationDocument';
 
@@ -135,6 +135,7 @@ function todayCalendarISO() {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
 }
 export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval }) {
+  const fullScreen = useMobileFullScreen();
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -353,8 +354,8 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         if (reason === 'backdropClick') return;
         closeWithSave();
       }}
-      maxWidth={false} fullWidth
-      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3,
+      maxWidth={false} fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3,
         boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
