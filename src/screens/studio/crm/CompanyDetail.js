@@ -29,7 +29,7 @@ import {
   D, mono, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
 import {
-  StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, stageMeta, INTEREST_TYPES, interestLabel,
+  StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, stageMeta,
   kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
 } from './_crm';
 
@@ -472,12 +472,6 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
           <TextField select value={client.stage || 'lead'} onChange={(e) => commit('stage', e.target.value)}
             size="small" fullWidth sx={fieldSx}>
             {CRM_STAGES.map((s) => <MenuItem key={s} value={s}>{stageMeta(s).label}</MenuItem>)}
-          </TextField>
-        </Field>
-        <Field label={savingField === 'interestType' ? 'Interest · saving…' : 'Interest'}>
-          <TextField select value={client.interestType || ''} onChange={(e) => commit('interestType', e.target.value)}
-            size="small" fullWidth sx={fieldSx}>
-            {INTEREST_TYPES.map((i) => <MenuItem key={i || 'none'} value={i}>{interestLabel(i)}</MenuItem>)}
           </TextField>
         </Field>
         <Field label={savingField === 'address' ? 'Address · saving…' : 'Address'}>

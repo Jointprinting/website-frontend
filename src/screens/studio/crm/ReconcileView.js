@@ -193,10 +193,7 @@ export default function ReconcileView({ token, onApplied }) {
         <Box sx={{ maxWidth: 460, width: '100%', p: 3, borderRadius: 3, textAlign: 'center',
           bgcolor: D.panel, border: `1px solid ${D.line}` }}>
           <CheckCircleOutlineIcon sx={{ fontSize: 30, color: D.green, mb: 1 }} />
-          <Typography sx={{ fontWeight: 800, fontSize: 16, color: D.text }}>Your data is loaded.</Typography>
-          <Typography sx={{ color: D.muted, fontSize: 13, mt: 0.75, lineHeight: 1.6 }}>
-            This one-time load already ran — your CRM is reconciled. You don’t need to do anything here.
-          </Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: 16, color: D.text }}>Data loaded</Typography>
           {status && status.lastBatchId && (
             <Typography sx={{ ...mono, color: D.faint, fontSize: 11, mt: 1 }}>batch&nbsp;{status.lastBatchId}</Typography>
           )}

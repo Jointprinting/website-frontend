@@ -1094,10 +1094,9 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
               Income/Customer Sales/Credit combo. "Refund a customer" sets it all up
               and just asks for the order #. Hidden once already in refund mode. */}
           {!edit && !isRefundMode && (
-            <Button onClick={makeRefund} startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
-              sx={{ alignSelf: 'flex-start', color: '#fb7185', textTransform: 'none', fontWeight: 700, fontSize: 12,
-                border: '1px solid rgba(251,113,133,0.4)', borderRadius: 1.5, px: 1.25, py: 0.4,
-                '&:hover': { bgcolor: 'rgba(251,113,133,0.08)', borderColor: 'rgba(251,113,133,0.6)' } }}>
+            <Button onClick={makeRefund} startIcon={<ReplayIcon sx={{ fontSize: 14 }} />} size="small"
+              sx={{ alignSelf: 'flex-start', color: '#fb7185', textTransform: 'none', fontWeight: 600, fontSize: 11.5,
+                px: 0.75, py: 0.25, minWidth: 0, '&:hover': { bgcolor: 'rgba(251,113,133,0.08)' } }}>
               Refund a customer
             </Button>
           )}
@@ -1166,24 +1165,20 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
               opposite way, so a refund or supplier credit nets correctly instead
               of looking like a charge/sale. */}
           <Box onClick={() => setIsCredit((v) => !v)}
-            sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, cursor: 'pointer', userSelect: 'none',
-              border: `1px solid ${isCredit ? 'rgba(251,191,36,0.55)' : B.border}`, borderRadius: 1.5, px: 1.25, py: 0.85,
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none',
+              border: `1px solid ${isCredit ? 'rgba(251,191,36,0.55)' : B.border}`, borderRadius: 1.5, px: 1.25, py: 0.5,
               bgcolor: isCredit ? 'rgba(251,191,36,0.08)' : 'transparent', transition: 'border-color 160ms ease, background 160ms ease' }}>
-            <Box sx={{ width: 16, height: 16, mt: 0.15, borderRadius: 0.5, flexShrink: 0,
+            <Box sx={{ width: 15, height: 15, borderRadius: 0.5, flexShrink: 0,
               border: `2px solid ${isCredit ? '#fbbf24' : B.muted}`, bgcolor: isCredit ? '#fbbf24' : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 160ms ease' }}>
-              {isCredit && <CheckIcon sx={{ fontSize: 12, color: '#1a1206' }} />}
+              {isCredit && <CheckIcon sx={{ fontSize: 11, color: '#1a1206' }} />}
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 700, color: isCredit ? '#fbbf24' : B.white }}>Credit / return</Typography>
-              <Typography sx={{ fontSize: 10.5, color: B.muted, lineHeight: 1.35 }}>
-                {isCredit
-                  ? (type === 'income'
-                      ? 'Customer refund — money back to a client (lowers this order’s revenue).'
-                      : 'Supplier credit — money back from a vendor (lowers this order’s cost).')
-                  : 'Tick if this is money flowing back — a refund or a credit memo.'}
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: isCredit ? '#fbbf24' : B.white, whiteSpace: 'nowrap' }}>Credit / return</Typography>
+            {isCredit && (
+              <Typography sx={{ fontSize: 10.5, color: B.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                · {type === 'income' ? 'refund out (lowers revenue)' : 'credit in (lowers cost)'}
               </Typography>
-            </Box>
+            )}
           </Box>
           {hasReceipt && !receiptDataUrl && (
             <a href={txn.receiptUrl} target="_blank" rel="noreferrer" style={{ color: B.green, fontSize: 12, textDecoration: 'none' }}>
@@ -1196,11 +1191,6 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
             {scanning ? 'Reading receipt…' : (receiptName || (hasReceipt ? 'Replace receipt' : 'Attach receipt / invoice (image or PDF)'))}
             <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
           </Button>
-          {!edit && !receiptName && (
-            <Typography sx={{ color: B.muted, fontSize: 10.5, mt: -0.4 }}>
-              Attach a receipt and the AI fills in vendor, amount, date &amp; category for you.
-            </Typography>
-          )}
           {scanNote && <Typography sx={{ color: B.green, fontSize: 11 }}>{scanNote}</Typography>}
           {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
           <Stack direction="row" justifyContent="flex-end" gap={1} alignItems="center">

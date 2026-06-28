@@ -22,7 +22,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PersonSearchOutlinedIcon from '@mui/icons-material/PersonSearchOutlined';
 import { D, mono, dropInput } from '../_shared';
 import {
-  StageChip, TagChips, followUpStatus, primaryPhone, interestLabel,
+  StageChip, TagChips, followUpStatus, primaryPhone,
 } from './_crm';
 
 // One result row. Shows the company, its stage, a compact context line, and any
@@ -64,7 +64,6 @@ function ResultRow({ c, active, onPick, onHover, bindCompany }) {
           <Typography sx={{ color: D.muted, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {[
               contactNames.length ? contactNames.join(', ') : null,
-              interestLabel(c.interestType) !== '—' ? interestLabel(c.interestType) : null,
               c.address || c.area || null,
               phone || null,
             ].filter(Boolean).join(' · ') || 'No details yet'}

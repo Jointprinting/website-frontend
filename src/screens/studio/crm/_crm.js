@@ -222,11 +222,6 @@ export const isHiddenTag = (t) => {
 // The owner-visible tags on a record: real tags minus the hidden system noise.
 export const visibleTags = (tags) => (Array.isArray(tags) ? tags.filter((t) => t && !isHiddenTag(t)) : []);
 
-// ── Interest vocabulary ───────────────────────────────────────────────────────
-export const INTEREST_TYPES = ['', 'promos', 'apparel', 'both'];
-export const INTEREST_LABEL = { '': '—', promos: 'Promos', apparel: 'Apparel', both: 'Promos + Apparel' };
-export const interestLabel = (i) => INTEREST_LABEL[i || ''] || '—';
-
 // ── Heads-up vocabulary — the dashboard "needs your attention" feed ───────────
 // MIRRORS the types controllers/crm.js classifyHeadsUp emits. Each carries an
 // icon + label + the color the row accent / icon paints. Keep in sync with the
