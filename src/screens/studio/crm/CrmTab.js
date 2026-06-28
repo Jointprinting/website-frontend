@@ -28,6 +28,7 @@ import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
+import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
@@ -49,6 +50,7 @@ import CompanyDetail from './CompanyDetail';
 import PipelineView from './PipelineView';
 import CleanupView from './CleanupView';
 import ReconcileView from './ReconcileView';
+import DataCleanupView from './DataCleanupView';
 
 const base = `${config.backendUrl}/api/crm`;
 
@@ -69,6 +71,7 @@ const NAV = [
 // flow: housekeeping tools the owner reaches for occasionally.
 const OVERFLOW_NAV = [
   { id: 'reconcile', label: 'Load / reconcile data', Icon: CloudSyncOutlinedIcon },
+  { id: 'datacleanup', label: 'Fix data', Icon: AutoFixHighOutlinedIcon },
   { id: 'cleanup',  label: 'Clean up',      Icon: CleaningServicesOutlinedIcon },
   { id: 'archived', label: 'Archived',      Icon: Inventory2OutlinedIcon },
 ];
@@ -158,6 +161,17 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
       .catch(() => {});
     return () => { cancelled = true; };
   }, [authHdr]);
+
+  // Count of detected data issues (orphaned orders, polluted names, mis-keyed
+  // receipts). The "Fix data" overflow entry appears ONLY when this is > 0, and
+  // disappears again once everything's fixed.
+  const [dataCleanupCount, setDataCleanupCount] = React.useState(0);
+  const loadDataCleanupCount = React.useCallback(() => {
+    axios.get(`${base}/data-cleanup/status`, authHdr)
+      .then((r) => setDataCleanupCount(Number(r.data && r.data.total) || 0))
+      .catch(() => setDataCleanupCount(0));
+  }, [authHdr]);
+  React.useEffect(() => { loadDataCleanupCount(); }, [loadDataCleanupCount]);
 
   const [detail, setDetail] = React.useState(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
@@ -962,6 +976,14 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onApplied={() => { refreshAffected(); flash('Data loaded. Your CRM is reconciled.'); }}
           />
         );
+      case 'datacleanup':
+        return (
+          <DataCleanupView
+            token={token}
+            onBack={() => setView('companies')}
+            onApplied={() => { refreshAffected(); loadDataCleanupCount(); flash('Data fixed.'); }}
+          />
+        );
       case 'archived':
         return (
           <CompaniesView
@@ -1073,7 +1095,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`,
           backgroundImage: 'none', borderRadius: 2, minWidth: 200, mt: 0.5 } }}
       >
-        {OVERFLOW_NAV.filter((n) => n.id !== 'reconcile' || !reconcileApplied).map((n) => {
+        {OVERFLOW_NAV
+          .filter((n) => n.id !== 'reconcile' || !reconcileApplied)
+          .filter((n) => n.id !== 'datacleanup' || dataCleanupCount > 0)
+          .map((n) => {
           const Icon = n.Icon;
           const active = view === n.id;
           return (
@@ -1087,7 +1112,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
                 <Icon sx={{ fontSize: 19 }} />
               </ListItemIcon>
               <ListItemText primaryTypographyProps={{ fontSize: 13.5, fontWeight: 700 }}>
-                {n.label}
+                {n.id === 'datacleanup' && dataCleanupCount > 0 ? `${n.label} (${dataCleanupCount})` : n.label}
               </ListItemText>
             </MenuItem>
           );
