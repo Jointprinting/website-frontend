@@ -28,9 +28,11 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, mono, scrollbar } from './_shared';
+import SSBlankPicker from './SSBlankPicker';
 
 const base = `${config.backendUrl}/api/studio`;
 const ordersBase = `${config.backendUrl}/api/orders`;
@@ -196,6 +198,7 @@ export default function MockupEditor({ token, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [picker, setPicker] = useState({ open: false, store: null, slot: null });   // slot: 'blank' | 'logo'
+  const [ssOpen, setSsOpen] = useState(false);
   const [projects, setProjects] = useState([]);
   const stageRef = useRef(null);
   const draggingRef = useRef(false);
@@ -280,6 +283,26 @@ export default function MockupEditor({ token, onClose, onSaved }) {
     } catch (e2) { setErr(e2.message); }
   };
   const openLibrary = (slot) => setPicker({ open: true, store: slot === 'blank' ? 'blanks' : 'logos', slot });
+
+  // An S&S pick is a whole GARMENT in one color: drop its front onto the front
+  // side and its back onto the back side at once, then land on the front.
+  const onPickSS = async ({ front, back, name: garment }) => {
+    setSsOpen(false);
+    try {
+      const [fImg, bImg] = await Promise.all([
+        front ? loadImg(front) : Promise.resolve(null),
+        back ? loadImg(back) : Promise.resolve(null),
+      ]);
+      setSides((s) => ({
+        ...s,
+        front: fImg ? { ...s.front, blank: { src: front, w: fImg.naturalWidth || 1, h: fImg.naturalHeight || 1 } } : s.front,
+        back: bImg ? { ...s.back, blank: { src: back, w: bImg.naturalWidth || 1, h: bImg.naturalHeight || 1 } } : s.back,
+      }));
+      setSide('front');
+      if (!name.trim() && garment) setName(garment);
+      setErr('');
+    } catch (e2) { setErr(e2.message); }
+  };
 
   const onPointerDown = (e) => {
     e.preventDefault();
@@ -395,6 +418,12 @@ export default function MockupEditor({ token, onClose, onSaved }) {
 
         {/* Controls */}
         <Stack gap={1.75}>
+          <Button onClick={() => setSsOpen(true)} startIcon={<StorefrontOutlinedIcon sx={{ fontSize: 17 }} />} fullWidth
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, borderRadius: 2, py: 1,
+              border: `1px solid ${D.lineHi}`, bgcolor: 'rgba(74,222,128,0.06)',
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.12)', borderColor: D.green } }}>
+            Search S&amp;S blanks — drops front + back
+          </Button>
           <SourceTile label="Blank" img={cur.blank} onPick={pickFile('blank')} onOpenLibrary={() => openLibrary('blank')} />
           <SourceTile label="Logo" img={cur.logo} onPick={pickFile('logo')} onOpenLibrary={() => openLibrary('logo')} />
           {cur.logo && (
@@ -452,6 +481,7 @@ export default function MockupEditor({ token, onClose, onSaved }) {
         open={picker.open} store={picker.store} token={token}
         onPick={pickFromLibrary} onClose={() => setPicker({ open: false, store: null, slot: null })}
       />
+      <SSBlankPicker open={ssOpen} token={token} onPick={onPickSS} onClose={() => setSsOpen(false)} />
     </Box>
   );
 }
