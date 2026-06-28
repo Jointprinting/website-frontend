@@ -17,6 +17,7 @@ import {
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import SearchIcon from '@mui/icons-material/Search';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AddIcon from '@mui/icons-material/Add';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
@@ -25,6 +26,7 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, mono, scrollbar } from './_shared';
+import MockupEditor from './MockupEditor';
 
 const base = `${config.backendUrl}/api/studio`;
 // MUST match the company-key convention used everywhere else (lowercased alphanumerics).
@@ -109,6 +111,7 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [grouped, setGrouped] = useState(true);
+  const [mode, setMode] = useState('list');   // 'list' | 'new'
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -155,6 +158,10 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
     gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
   };
 
+  if (mode === 'new') {
+    return <MockupEditor token={token} onClose={() => setMode('list')} onSaved={() => { setMode('list'); load(); }} />;
+  }
+
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 0 }, py: 1 }}>
       <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
@@ -164,10 +171,15 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, flex: 1 }}>
           Mockups <Box component="span" sx={{ color: D.faint, fontWeight: 600, fontSize: 14, ml: 0.5 }}>{items.length}</Box>
         </Typography>
-        <Button onClick={openEditor} startIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+        <Button onClick={() => setMode('new')} startIcon={<AddIcon sx={{ fontSize: 18 }} />}
           sx={{ bgcolor: D.green, color: D.ink, textTransform: 'none', fontWeight: 800, borderRadius: 999, px: 2,
             '&:hover': { bgcolor: '#5cec8e' } }}>
-          Open editor
+          New mockup
+        </Button>
+        <Button onClick={openEditor} startIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
+          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999, px: 1.5,
+            border: `1px solid ${D.line}`, '&:hover': { color: D.text, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.04)' } }}>
+          Full editor
         </Button>
       </Stack>
 
