@@ -23,10 +23,12 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, mono, scrollbar } from './_shared';
 import MockupEditor from './MockupEditor';
+import Lookbook from './Lookbook';
 
 const base = `${config.backendUrl}/api/studio`;
 // MUST match the company-key convention used everywhere else (lowercased alphanumerics).
@@ -111,7 +113,7 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [grouped, setGrouped] = useState(true);
-  const [mode, setMode] = useState('list');   // 'list' | 'new'
+  const [mode, setMode] = useState('list');   // 'list' | 'new' | 'lookbook'
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -162,6 +164,10 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
     return <MockupEditor token={token} onClose={() => setMode('list')} onSaved={() => { setMode('list'); load(); }} />;
   }
 
+  if (mode === 'lookbook') {
+    return <Lookbook token={token} items={items} onBack={() => setMode('list')} />;
+  }
+
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 1.5, md: 0 }, py: 1 }}>
       <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
@@ -175,6 +181,13 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
           sx={{ bgcolor: D.green, color: D.ink, textTransform: 'none', fontWeight: 800, borderRadius: 999, px: 2,
             '&:hover': { bgcolor: '#5cec8e' } }}>
           New mockup
+        </Button>
+        <Button onClick={() => setMode('lookbook')} startIcon={<CollectionsBookmarkOutlinedIcon sx={{ fontSize: 17 }} />}
+          disabled={items.length === 0}
+          sx={{ color: D.text, textTransform: 'none', fontWeight: 700, borderRadius: 999, px: 1.75,
+            border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.04)' },
+            '&.Mui-disabled': { color: D.faint, borderColor: D.line } }}>
+          Lookbook
         </Button>
         <Button onClick={openEditor} startIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
           sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999, px: 1.5,
