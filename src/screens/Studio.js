@@ -73,6 +73,7 @@ import CrmTab from './studio/crm/CrmTab';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
+import MockupLibrary from './studio/MockupLibrary';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
@@ -2472,10 +2473,8 @@ function StudioBody({ token, onLogout }) {
   const handlePick = (tool) => {
     const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
     const innerView = typeof tool === 'object' && tool ? tool.view : null;
-    if (id === 'mockup') {
-      window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
+    // 'mockup' now opens the React Mockups library (the studio's new home); the
+    // standalone canvas editor is reachable from there via "Open editor".
     if (id === 'submissions' && unseenInquiries > 0) {
       setUnseenInquiries(0);
       axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, {},
@@ -2619,6 +2618,10 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
+  }
+
+  if (view === 'mockup') {
+    return <MockupLibrary token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
   }
 
   if (view === 'vendors') {
