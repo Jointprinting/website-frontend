@@ -31,7 +31,7 @@ import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import AddBusinessOutlinedIcon from '@mui/icons-material/AddBusinessOutlined';
 import { D, mono, dropInput, fmtRelative } from '../_shared';
 import {
-  StageChip, EmptyState, TagChips, stageMeta, interestLabel, followUpStatus,
+  StageChip, EmptyState, TagChips, stageMeta, followUpStatus,
   primaryPhone, isWonStage, CRM_SEGMENTS, SEGMENT_META, segmentOf,
 } from './_crm';
 
@@ -68,7 +68,6 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
           </Stack>
           <Typography sx={{ color: D.muted, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {[
-              interestLabel(c.interestType) !== '—' ? interestLabel(c.interestType) : null,
               c.address || c.area,
               contactCount > 0 ? `${contactCount} contact${contactCount === 1 ? '' : 's'}` : null,
               c.lastContact ? `last ${fmtRelative(c.lastContact)}` : null,

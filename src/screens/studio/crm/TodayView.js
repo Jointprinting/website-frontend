@@ -17,7 +17,7 @@ import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import { D, mono, fmtRelative } from '../_shared';
 import {
-  StageChip, EmptyState, interestLabel, followUpStatus, telHref, primaryPhone, kindMeta,
+  StageChip, EmptyState, followUpStatus, telHref, primaryPhone, kindMeta,
   isWonStage, stageMeta,
 } from './_crm';
 
@@ -76,7 +76,7 @@ function CallRow({ row, onOpen, onLog, onReschedule, bindCompany }) {
           </Stack>
 
           <Typography sx={{ color: D.muted, fontSize: 12.5 }}>
-            {[interestLabel(row.interestType) !== '—' ? interestLabel(row.interestType) : null, row.address || row.area]
+            {[row.address || row.area]
               .filter(Boolean).join(' · ') || '—'}
           </Typography>
 
