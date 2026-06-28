@@ -1791,20 +1791,23 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   Mockups · {tiles.length}
                 </Typography>
                 <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
-                  {/* "New mockup" + "Lookbook" open the connected React Mockup Studio
-                      pre-filled for this client + project (each "new" starts a fresh
-                      lettered mockup). "Edit"/"Link" opens the picker to attach
-                      existing mockups. */}
+                  {/* "New mockup" opens the connected React Mockup Studio pre-filled
+                      for this client + project (each click a fresh lettered mockup).
+                      "Edit"/"Link" opens the picker to attach existing mockups. The
+                      Lookbook is just an optional tool — only offered once a project
+                      has SEVERAL mockups (a large order), where a deck makes sense. */}
                   <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                     onClick={() => goStudio('new')}
                     sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
                     New mockup
                   </Button>
-                  <Button size="small" startIcon={<CollectionsBookmarkOutlinedIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => goStudio('lookbook')}
-                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
-                    Lookbook
-                  </Button>
+                  {tiles.length > 1 && (
+                    <Button size="small" startIcon={<CollectionsBookmarkOutlinedIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => goStudio('lookbook')}
+                      sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                      Lookbook
+                    </Button>
+                  )}
                   <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                     onClick={onOpenPicker}
                     sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
