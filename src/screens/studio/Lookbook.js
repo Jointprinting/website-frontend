@@ -291,9 +291,18 @@ export default function Lookbook({ token, onBack, items: itemsProp }) {
 
       {err && <Typography sx={{ color: D.amber, fontSize: 12.5, px: 2, py: 1, flexShrink: 0 }}>{err}</Typography>}
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      {/* Two-pane on desktop; stacks vertically on a phone so the preview isn't
+          crushed by the fixed rail. The rail caps its height on mobile and
+          scrolls its mockup grid internally. */}
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
         {/* Left rail — client + their mockups to tap into the deck */}
-        <Box sx={{ width: 300, flexShrink: 0, borderRight: `1px solid ${D.line}`, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box sx={{
+          width: { xs: '100%', md: 300 }, flexShrink: 0,
+          maxHeight: { xs: '40vh', md: 'none' },
+          borderRight: { xs: 'none', md: `1px solid ${D.line}` },
+          borderBottom: { xs: `1px solid ${D.line}`, md: 'none' },
+          display: 'flex', flexDirection: 'column', minHeight: 0,
+        }}>
           <Box sx={{ p: 1.5, borderBottom: `1px solid ${D.line}` }}>
             <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 0.75 }}>Client</Typography>
             <FormControl fullWidth size="small">
