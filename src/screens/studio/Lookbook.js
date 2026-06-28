@@ -27,6 +27,9 @@ import { D, mono, scrollbar, dropInput } from './_shared';
 
 const base = `${config.backendUrl}/api/studio`;
 const onlyDigits = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '');
+// Lowercased alphanumerics — the canonical company-key convention, used to match
+// a deep-linked client name to one in the (differently-cased) mockup list.
+const deriveKeyLocal = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 // ── layout math — MUST mirror controllers/lookbookPdf.js so the preview matches ──
 const LAYOUTS = { editorial: [1, 1], grid: [2, 2], contact: [3, 3] };
@@ -147,7 +150,7 @@ function ContentPage({ items, layout, info, pageNum, totalPages, showBack, showL
   );
 }
 
-export default function Lookbook({ token, onBack, items: itemsProp }) {
+export default function Lookbook({ token, onBack, items: itemsProp, initialClient }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [items, setItems] = useState(Array.isArray(itemsProp) ? itemsProp : []);
   const [loading, setLoading] = useState(!Array.isArray(itemsProp) || itemsProp.length === 0);
@@ -188,11 +191,14 @@ export default function Lookbook({ token, onBack, items: itemsProp }) {
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
-  // Default the client to whoever has the most mockups, once loaded.
+  // Default the client: a deep-linked client (e.g. "build a lookbook for this
+  // company") wins if they have mockups; otherwise whoever has the most.
   useEffect(() => {
     if (client || !clients.length) return;
-    setClient(clients.slice().sort((a, b) => b[1] - a[1])[0][0]);
-  }, [clients, client]);
+    const want = (initialClient || '').trim();
+    const match = want && clients.find(([c]) => deriveKeyLocal(c) === deriveKeyLocal(want));
+    setClient(match ? match[0] : clients.slice().sort((a, b) => b[1] - a[1])[0][0]);
+  }, [clients, client, initialClient]);
 
   const clientMockups = useMemo(
     () => items.filter((it) => (it.client || '').trim() === client),

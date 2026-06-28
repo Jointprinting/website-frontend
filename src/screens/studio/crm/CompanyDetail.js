@@ -22,6 +22,8 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
+import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
+import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
@@ -352,7 +354,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onNewMockup, onBuildLookbook }) {
   // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -494,6 +496,27 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       {/* Progress / level — the dopamine spine. Lights up as the deal climbs the
           funnel; a Customer/Won earns the full green bar + a celebratory banner. */}
       <ProgressCard stage={client.stage} isCustomer={isCustomer} />
+
+      {/* Studio shortcuts — jump straight into the Mockup Studio for THIS company,
+          pre-filled, so a mockup/lookbook is born wired to the right client. */}
+      {(onNewMockup || onBuildLookbook) && (
+        <Stack direction="row" gap={1} flexWrap="wrap" useFlexGap>
+          {onNewMockup && (
+            <Button onClick={onNewMockup} startIcon={<AddPhotoAlternateOutlinedIcon sx={{ fontSize: 17 }} />}
+              sx={{ flex: '1 1 0', minWidth: 150, color: D.text, textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1,
+                border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.03)' } }}>
+              New mockup
+            </Button>
+          )}
+          {onBuildLookbook && (
+            <Button onClick={onBuildLookbook} startIcon={<CollectionsBookmarkOutlinedIcon sx={{ fontSize: 17 }} />}
+              sx={{ flex: '1 1 0', minWidth: 150, color: D.text, textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1,
+                border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.03)' } }}>
+              Build lookbook
+            </Button>
+          )}
+        </Stack>
+      )}
 
       {/* Business with this company — the money story: lifetime finance (reusing
           the same revenue/COGS/margin math as /api/finances) + linked POs. ONLY

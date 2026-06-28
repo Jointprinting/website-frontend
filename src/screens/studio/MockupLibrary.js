@@ -106,7 +106,7 @@ function MockupCard({ it, onClient, onOrder, onOpenEditor }) {
   );
 }
 
-export default function MockupLibrary({ token, onBack, onNavigate }) {
+export default function MockupLibrary({ token, onBack, onNavigate, entry }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +124,13 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
     finally { setLoading(false); }
   }, [authHdr]);
   useEffect(() => { load(); }, [load]);
+
+  // Deep-link: another surface (a CRM card, an order) can open the studio straight
+  // into "new mockup" or "build a lookbook" for a client, pre-filled. Keyed on the
+  // entry nonce so re-picking the same target re-triggers it.
+  useEffect(() => {
+    if (entry && (entry.mode === 'new' || entry.mode === 'lookbook')) setMode(entry.mode);
+  }, [entry && entry.nonce]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEditor = () => window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer');
 
@@ -161,11 +168,15 @@ export default function MockupLibrary({ token, onBack, onNavigate }) {
   };
 
   if (mode === 'new') {
-    return <MockupEditor token={token} onClose={() => setMode('list')} onSaved={() => { setMode('list'); load(); }} />;
+    return <MockupEditor token={token}
+      prefill={entry && entry.mode === 'new' ? { client: entry.client, projectNumber: entry.projectNumber } : null}
+      onClose={() => setMode('list')} onSaved={() => { setMode('list'); load(); }} />;
   }
 
   if (mode === 'lookbook') {
-    return <Lookbook token={token} items={items} onBack={() => setMode('list')} />;
+    return <Lookbook token={token} items={items}
+      initialClient={entry && entry.mode === 'lookbook' ? entry.client : ''}
+      onBack={() => setMode('list')} />;
   }
 
   return (
