@@ -26,7 +26,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import {
-  D, mono, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, STATUS_META,
+  D, mono, dropInput, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
 import {
   StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, stageMeta,
@@ -397,7 +397,6 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   const log = Array.isArray(client.log) ? [...client.log].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)) : [];
   const contacts = client.contacts || [];
   const fu = followUpStatus(client.nextFollowUp);
-  const phone = client.phone || (contacts.find((c) => c.phone)?.phone) || '';
 
   return (
     <Stack spacing={2.5}>
@@ -447,12 +446,6 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             )}
           </Box>
           <Stack direction="row" spacing={1} flexShrink={0}>
-            {phone && (
-              <Button component="a" href={telHref(phone)} startIcon={<PhoneInTalkIcon />}
-                sx={{ ...dropPrimaryBtn, px: 2 }}>
-                Call
-              </Button>
-            )}
             <Button onClick={onLog} startIcon={<EditNoteOutlinedIcon />}
               sx={{ color: D.text, border: `1px solid ${D.line}`, fontWeight: 700, textTransform: 'none',
                 borderRadius: 999, px: 2, '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}>
@@ -465,7 +458,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       {/* Editable header grid */}
       <Box sx={{
         display: 'grid', gap: 1.5,
-        gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' },
+        gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' },
         bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2,
       }}>
         <Field label={savingField === 'stage' ? 'Stage · saving…' : 'Stage'}>
@@ -473,11 +466,6 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             size="small" fullWidth sx={fieldSx}>
             {CRM_STAGES.map((s) => <MenuItem key={s} value={s}>{stageMeta(s).label}</MenuItem>)}
           </TextField>
-        </Field>
-        <Field label={savingField === 'address' ? 'Address · saving…' : 'Address'}>
-          <TextField value={addressText} onChange={(e) => setAddressText(e.target.value)}
-            onBlur={() => { if ((client.address || '') !== addressText) commit('address', addressText); }}
-            size="small" fullWidth sx={fieldSx} placeholder="e.g. 123 Main St, Newark NJ" />
         </Field>
         <Field label={savingField === 'dealValue' ? 'Deal value · saving…' : 'Deal value'}>
           <TextField value={dealValue} onChange={(e) => setDealValue(e.target.value.replace(/[^\d.]/g, ''))}
@@ -624,6 +612,12 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 </Stack>
               </>
             )}
+            <Divider sx={{ borderColor: D.line, my: 1.5 }} />
+            <Field label={savingField === 'address' ? 'Address · saving…' : 'Address'}>
+              <TextField value={addressText} onChange={(e) => setAddressText(e.target.value)}
+                onBlur={() => { if ((client.address || '') !== addressText) commit('address', addressText); }}
+                size="small" fullWidth sx={fieldSx} placeholder="e.g. 123 Main St, Newark NJ" />
+            </Field>
           </Box>
 
           {/* Tags — add / remove, each change PATCHes the whole tags[] */}
