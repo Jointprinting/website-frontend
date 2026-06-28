@@ -17,7 +17,7 @@ import {
   DialogContent, DialogActions, CircularProgress, MenuItem, InputAdornment,
 } from '@mui/material';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
-import { D, dropInput, dropPrimaryBtn, dropGhostBtn } from '../_shared';
+import { D, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
 import { CRM_STAGES, stageMeta } from './_crm';
 import useCompanyMatch from './useCompanyMatch';
 import CompanyMatchHint from './CompanyMatchHint';
@@ -36,6 +36,7 @@ const deriveCompanyKey = (name) => String(name || '').toLowerCase().replace(/[^a
 // onCreate(companyKey, patch) → Promise: the parent PATCH-upserts and refreshes.
 // onOpenExisting(companyKey): jump to an existing record (the dedup reuse path).
 export default function AddCompanyDialog({ open, token, onClose, onCreate, onOpenExisting }) {
+  const fullScreen = useMobileFullScreen();
   const [name, setName] = React.useState('');
   const [contactName, setContactName] = React.useState('');
   const [phone, setPhone] = React.useState('');
@@ -70,7 +71,8 @@ export default function AddCompanyDialog({ open, token, onClose, onCreate, onOpe
   const pickExisting = (key) => { onClose(); onOpenExisting(key); };
 
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth PaperProps={dialogPaper}>
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}
+      PaperProps={fullScreen ? { sx: { ...dialogPaper.sx, borderRadius: 0 } } : dialogPaper}>
       <DialogTitle sx={{ fontWeight: 800, pb: 0.5 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <BusinessOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
