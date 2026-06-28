@@ -340,10 +340,16 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             <MenuItem value="">All</MenuItem>
           </Select>
         </FormControl>
-        <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
-          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; importCsv(f); }} />
-        <IconButton size="small" title="Import JP Ledger CSV" onClick={() => fileRef.current?.click()}
-          sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
+        {/* CSV import is a ONE-TIME bulk load. Once the ledger has any rows it
+            auto-hides — going forward, entries are added individually (Add). */}
+        {txns.length === 0 && (
+          <>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; importCsv(f); }} />
+            <IconButton size="small" title="Import JP Ledger CSV" onClick={() => fileRef.current?.click()}
+              sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
+          </>
+        )}
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
         {/* "Restart from budgets" is a one-time tool. Before it's applied it's a
