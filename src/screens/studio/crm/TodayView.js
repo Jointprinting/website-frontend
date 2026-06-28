@@ -7,7 +7,7 @@
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, IconButton, Tooltip, CircularProgress,
+  Box, Stack, Typography, IconButton, Tooltip, CircularProgress, Button,
 } from '@mui/material';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
@@ -135,7 +135,7 @@ function CallRow({ row, onOpen, onLog, onReschedule, bindCompany }) {
   );
 }
 
-export default function TodayView({ summary, rows, loading, onOpen, onLog, onReschedule, bindCompany }) {
+export default function TodayView({ summary, rows, loading, onOpen, onLog, onReschedule, onPushOverdue, bindCompany }) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -155,6 +155,22 @@ export default function TodayView({ summary, rows, loading, onOpen, onLog, onRes
         <StatPill value={dueToday} label="Due today" tone={dueToday > 0 ? D.amber : D.muted} />
         <StatPill value={total} label="To call" tone={D.green} />
       </Stack>
+
+      {/* The Monday-pileup clear: one tap pushes every overdue follow-up to the next
+          business day (reschedule — trivially reversible per row). */}
+      {overdue > 0 && onPushOverdue && (
+        <Stack direction="row" justifyContent="flex-end">
+          <Button
+            onClick={onPushOverdue} size="small"
+            startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ textTransform: 'none', color: D.amber, fontWeight: 700, fontSize: 12.5,
+              borderRadius: 999, px: 1.75, py: 0.5, border: `1px solid ${D.line}`,
+              '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.05)', borderColor: D.lineHi } }}
+          >
+            Push {overdue} overdue → next business day
+          </Button>
+        </Stack>
+      )}
 
       {rows.length === 0 ? (
         <EmptyState

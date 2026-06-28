@@ -36,6 +36,7 @@ import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import {
   dayKey, stageMeta, isHiddenTag, boardColumnMeta, BOARD_COLUMN_TO_ORDER_STATUS,
+  followUpStatus,
 } from './_crm';
 import { useContextMenu } from '../ContextMenu';
 import { buildCompanyMenu, buildFallbackMenu } from '../contextMenuActions';
@@ -628,6 +629,39 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     refreshAffected();
   };
 
+  // The next BUSINESS day (skip Sat/Sun) as a 'YYYY-MM-DD' key, in the owner's local
+  // calendar — the same shape a picked reschedule date has.
+  const nextBusinessDayKey = () => {
+    const d = new Date();
+    do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // "Push all overdue → next business day" (the Monday-pileup button). Reschedules
+  // every overdue Today row to the next business day in one go — optimistic drop from
+  // the list, parallel PATCH, one refetch reconciles. Mirrors calendarRescheduleMany.
+  const pushOverdueToNextBusinessDay = async () => {
+    const overdue = (today.rows || []).filter((r) => followUpStatus(r.nextFollowUp).overdue);
+    if (overdue.length === 0) return;
+    const target = nextBusinessDayKey();
+    const keys = overdue.map((r) => r.companyKey);
+    const keySet = new Set(keys);
+    const nice = new Date(`${target}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+    setToday((t) => ({
+      ...t,
+      rows: (t.rows || []).filter((r) => !keySet.has(r.companyKey)),
+      summary: { ...t.summary, overdue: 0, total: Math.max(0, (t.summary?.total || 0) - keys.length) },
+    }));
+    try {
+      const results = await Promise.allSettled(keys.map((k) => patchCompany(k, { nextFollowUp: target }, { silent: true })));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) flash(`Pushed ${keys.length - failed} of ${keys.length} to ${nice}. ${failed} didn’t save.`, failed === keys.length ? 'error' : 'info');
+      else flash(`${keys.length} overdue → ${nice}`);
+    } catch (_) { /* refetch below reconciles */ }
+    loadToday();
+    refreshAffected();
+  };
+
   // Optimistically move a card (by its stable cardKey) from one board column to
   // another — pull it out of its old group, drop it into the new one, and fix both
   // columns' count + totalValue. Keyed by cardKey (NOT companyKey) because a
@@ -919,6 +953,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onOpen={openCompany}
             onLog={(row) => openLog({ companyKey: row.companyKey, name: row.name, nextFollowUp: row.nextFollowUp })}
             onReschedule={(row) => openResched({ companyKey: row.companyKey, name: row.name, nextFollowUp: row.nextFollowUp })}
+            onPushOverdue={pushOverdueToNextBusinessDay}
             bindCompany={bindCompany}
           />
         );
