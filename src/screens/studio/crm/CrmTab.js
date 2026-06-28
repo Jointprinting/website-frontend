@@ -917,13 +917,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             });
           } : undefined}
           onOpenVendor={onNavigate ? (vendorName) => onNavigate({ view: 'vendors', vendorName }) : undefined}
-          // Studio shortcuts — open the Mockup Studio pre-filled for this company.
+          // Studio shortcut — open the Mockup Studio pre-filled for this company.
           onNewMockup={onNavigate ? () => onNavigate({
             view: 'mockup', mockupMode: 'new',
-            client: detail?.client?.companyName || detail?.client?.clientName || '',
-          }) : undefined}
-          onBuildLookbook={onNavigate ? () => onNavigate({
-            view: 'mockup', mockupMode: 'lookbook',
             client: detail?.client?.companyName || detail?.client?.clientName || '',
           }) : undefined}
         />

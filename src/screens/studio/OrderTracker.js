@@ -15,6 +15,7 @@ import AddIcon             from '@mui/icons-material/Add';
 import SearchIcon          from '@mui/icons-material/Search';
 import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
+import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
@@ -1396,6 +1397,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [uploading, setUploading] = useState(false);
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
+  // Jump into the connected React Mockup Studio for THIS project, pre-filled — a
+  // mockup made here is born wired to this client + project.
+  const goStudio = (mockupMode) => onNavigate && onNavigate({
+    view: 'mockup', mockupMode,
+    client: (project && (project.companyName || project.clientName)) || '',
+    projectNumber: (project && project.projectNumber) || '',
+  });
   // Receipt-derived ACTUAL cost for this order — the real source of truth (the
   // expense receipts linked by order #), as opposed to the quote/confirmation
   // ESTIMATE in local.cogs. { actualCost, receiptCount, hasReceipts }.
@@ -1782,18 +1790,24 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                   Mockups · {tiles.length}
                 </Typography>
-                <Stack direction="row" alignItems="center" gap={0.5}>
-                  {/* Always-present "New mockup" — opens a fresh studio deep-linked
-                      to this project so each click starts a NEW lettered mockup
-                      (A, B, C…). Previously the only studio entry point lived in the
-                      empty state, so once one mockup existed there was no way to add
-                      another. "Edit"/"Link" still opens the picker to attach existing
-                      mockups. */}
+                <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
+                  {/* "New mockup" opens the connected React Mockup Studio pre-filled
+                      for this client + project (each click a fresh lettered mockup).
+                      "Edit"/"Link" opens the picker to attach existing mockups. The
+                      Lookbook is just an optional tool — only offered once a project
+                      has SEVERAL mockups (a large order), where a deck makes sense. */}
                   <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => window.open(`/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer')}
+                    onClick={() => goStudio('new')}
                     sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
                     New mockup
                   </Button>
+                  {tiles.length > 1 && (
+                    <Button size="small" startIcon={<CollectionsBookmarkOutlinedIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => goStudio('lookbook')}
+                      sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                      Lookbook
+                    </Button>
+                  )}
                   <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                     onClick={onOpenPicker}
                     sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
@@ -1804,12 +1818,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
               {tiles.length === 0 ? (
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
-                  No mockups for this client yet — save one in jpstudio with title "{(project.companyName || project.clientName || '').trim() || 'Company'} Merch" and it'll auto-appear here.
+                  No mockups for this client yet — make one in the Mockup Studio and it'll auto-appear here, linked to this project.
                   <Box sx={{ mt: 1 }}>
                     <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
-                      onClick={() => window.open(`/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer')}
+                      onClick={() => goStudio('new')}
                       sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
-                      Open Mockup Studio for this project
+                      Make a mockup for this project
                     </Button>
                   </Box>
                 </Box>
