@@ -10,13 +10,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Button, CircularProgress, IconButton, Autocomplete, TextField,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Checkbox,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono } from '../_shared';
@@ -46,13 +47,20 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
   const [applying, setApplying] = useState(false);
   const [err, setErr] = useState('');
   const [receiptTargets, setReceiptTargets] = useState({});   // txnId -> order #
+  // Archiving a sale is destructive, so each duplicate is OPT-IN (default checked, but
+  // the owner can uncheck any he recognizes as a genuine second sale before confirming).
+  const [dupeChecked, setDupeChecked] = useState({});         // txnId -> bool
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
     try {
       const r = await axios.get(`${base}/data-cleanup/preview`, authHdr);
-      setPlan(r.data || null);
+      const data = r.data || null;
+      setPlan(data);
+      const init = {};
+      (data?.dupeSales || []).forEach((d) => { init[d.txnId] = true; });
+      setDupeChecked(init);
     } catch (e) { setErr(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr]);
@@ -65,7 +73,9 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
       const receipts = Object.entries(receiptTargets)
         .filter(([, v]) => String(v || '').replace(/[^0-9]/g, ''))
         .map(([txnId, orderNumber]) => ({ txnId, orderNumber }));
-      await axios.post(`${base}/data-cleanup/apply`, { confirm: true, receipts }, authHdr);
+      // Only the dupes the owner left CHECKED are archived (explicit, never blanket).
+      const dupeSaleIds = (plan?.dupeSales || []).map((d) => d.txnId).filter((id) => dupeChecked[id]);
+      await axios.post(`${base}/data-cleanup/apply`, { confirm: true, receipts, dupeSaleIds }, authHdr);
       setConfirmOpen(false);
       setReceiptTargets({});
       await load();
@@ -74,8 +84,10 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
     finally { setApplying(false); }
   };
 
-  const counts = plan?.counts || { orphans: 0, polluted: 0, misKeyed: 0, total: 0 };
+  const counts = plan?.counts || { orphans: 0, polluted: 0, misKeyed: 0, dupeSales: 0, total: 0 };
   const orderOptions = useMemo(() => (plan?.orderOptions || []).map((o) => o.orderNumber), [plan]);
+  const onlyDigits = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '');
+  const dupeSelectedCount = (plan?.dupeSales || []).filter((d) => dupeChecked[d.txnId]).length;
 
   return (
     <Box sx={{ maxWidth: 760, mx: 'auto', px: { xs: 1.5, md: 0 }, py: 1 }}>
@@ -105,6 +117,29 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
         </Box>
       ) : (
         <Stack gap={2}>
+          <Section icon={<ContentCopyOutlinedIcon sx={{ fontSize: 18, color: '#f87171' }} />}
+            title="Duplicate sales (revenue counted twice)" count={counts.dupeSales}>
+            {(plan.dupeSales || []).map((d) => (
+              <Stack key={d.txnId} direction="row" alignItems="center" gap={1}
+                sx={{ px: 1.25, py: 1.25, borderTop: `1px solid ${D.line}` }}>
+                <Checkbox size="small" checked={!!dupeChecked[d.txnId]}
+                  onChange={(e) => setDupeChecked((p) => ({ ...p, [d.txnId]: e.target.checked }))}
+                  sx={{ color: D.faint, p: 0.5, '&.Mui-checked': { color: D.green } }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700 }}>
+                    <Box component="span" sx={{ textDecoration: dupeChecked[d.txnId] ? 'line-through' : 'none', color: dupeChecked[d.txnId] ? D.muted : D.text }}>{d.party || '—'}</Box>{' '}
+                    <Box component="span" sx={{ ...mono, color: '#f87171', fontWeight: 600 }}>{money(d.amount)}</Box>
+                  </Typography>
+                  <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+                    {d.date ? `${ymd(d.date)} · ` : ''}on #{onlyDigits(d.orderNumber) || '—'} · duplicate of #{onlyDigits(d.keeper?.orderNumber) || '—'}
+                    {d.keeper?.party ? ` (${d.keeper.party})` : ''}
+                  </Typography>
+                </Box>
+                <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{dupeChecked[d.txnId] ? 'will archive' : 'kept'}</Typography>
+              </Stack>
+            ))}
+          </Section>
+
           <Section icon={<BadgeOutlinedIcon sx={{ fontSize: 18, color: '#60a5fa' }} />}
             title="Names with the contact mixed in" count={counts.polluted}>
             {(plan.polluted || []).map((c) => (
@@ -161,8 +196,9 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
           </Section>
 
           <Typography sx={{ color: D.faint, fontSize: 11.5, lineHeight: 1.5, px: 0.5 }}>
-            "Fix all" applies the name splits and order links above, plus any receipt you've re-pointed. It's one reversible
-            batch — undo it anytime from the same place. Merging an actual duplicate company stays in Clean up.
+            "Fix all" archives the duplicate sales (so each counts once), applies the name splits and order links, plus any
+            receipt you've re-pointed. It's one reversible batch — undo it anytime from the same place. Merging an actual
+            duplicate company stays in Clean up.
           </Typography>
         </Stack>
       )}
@@ -172,7 +208,8 @@ export default function DataCleanupView({ token, onBack, onApplied }) {
         <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Fix these now?</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: D.muted, fontSize: 13.5 }}>
-            Applies {counts.polluted} name fix{counts.polluted === 1 ? '' : 'es'}, links {counts.orphans} order{counts.orphans === 1 ? '' : 's'},
+            {dupeSelectedCount > 0 && <>Archives {dupeSelectedCount} duplicate sale{dupeSelectedCount === 1 ? '' : 's'}, </>}
+            applies {counts.polluted} name fix{counts.polluted === 1 ? '' : 'es'}, links {counts.orphans} order{counts.orphans === 1 ? '' : 's'},
             and re-points {Object.values(receiptTargets).filter((v) => String(v || '').replace(/[^0-9]/g, '')).length} receipt(s).
             Reversible.
           </DialogContentText>
