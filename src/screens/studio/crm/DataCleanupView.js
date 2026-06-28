@@ -18,7 +18,7 @@ import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import axios from 'axios';
-import config from '../../config.json';
+import config from '../../../config.json';
 import { D, mono } from '../_shared';
 
 const base = `${config.backendUrl}/api/crm`;
