@@ -794,6 +794,18 @@ export default function ApprovalView() {
                     {p.approvalBy ? `Approved by ${p.approvalBy}. ` : ''}We&apos;ll move through the steps below and keep this page updated as each one happens.
                   </Typography>
                 </Box>
+                {/* Payment is invoiced (QuickBooks) — tell the client an invoice email
+                    is coming; the chosen method just sets how they'll pay it. */}
+                <Box sx={{ textAlign: 'center', mb: 3, px: 2, py: 1.5, borderRadius: 2, border: `1px solid ${T.line}`, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                  <Typography sx={{ color: T.text, fontSize: 13.5, fontWeight: 800 }}>
+                    You&apos;ll receive an email with your invoice shortly.
+                  </Typography>
+                  <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.5, lineHeight: 1.55 }}>
+                    {payMethod === 'cc' ? 'You can pay by card right from the invoice.'
+                      : payMethod === 'ach' ? 'You can pay by bank transfer (ACH) right from the invoice.'
+                      : "It'll have everything you need to complete payment."}
+                  </Typography>
+                </Box>
                 {payMethod && (
                   <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked />
                 )}
