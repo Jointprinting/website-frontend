@@ -30,6 +30,7 @@ import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceRestartView from './FinanceRestartView';
 import FinanceDedupeView from './FinanceDedupeView';
+import OrderReconcileView from './OrderReconcileView';
 
 const base = `${config.backendUrl}/api`;
 // money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
@@ -54,7 +55,8 @@ const ymd = (d) => {
 };
 const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
-  'Processing Fee', 'Software', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
+  'Processing Fee', 'Software', 'Marketing', 'Accounting', 'Travel/Field',
+  'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
 // COGS categories that net against an order's revenue — MUST match the backend
 // Transaction.COGS_CATEGORIES so the drill-in profit reconciles with by-order.
@@ -117,6 +119,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // zero duplicate pairs (the live count drives visibility — no dupes, no clutter).
   const [showDedupe, setShowDedupe] = useState(false);
   const [dedupeCount, setDedupeCount] = useState(0);
+  const [showReconcile, setShowReconcile] = useState(false);
+  const [reconcileCount, setReconcileCount] = useState(0);
   const [bannerDismiss, setBannerDismiss] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jpFinBanner') || 'null'); } catch (_) { return null; }
   });
@@ -143,6 +147,17 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       const n = (r.data && r.data.summary && r.data.summary.duplicatePairs) || 0;
       setDedupeCount(Number(n) || 0);
     } catch (_) { setDedupeCount(0); /* hide the entry on failure */ }
+  }, [authHdr]);
+
+  // How many records still carry a scattered (non-canonical) order number? Drives whether
+  // the "Reconcile order #" entry shows at all (auto-hidden at zero, so it leaves no
+  // clutter once everything reads one number). Re-checked when the view closes.
+  const loadReconcileCount = useCallback(async () => {
+    try {
+      const r = await axios.get(`${base}/finances/order-reconcile/preview`, authHdr);
+      const n = (r.data && r.data.summary && r.data.summary.count) || 0;
+      setReconcileCount(Number(n) || 0);
+    } catch (_) { setReconcileCount(0); /* hide the entry on failure */ }
   }, [authHdr]);
 
   const load = useMemo(() => async () => {
@@ -179,6 +194,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadRestartStatus(); }, [loadRestartStatus]);
   useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
+  useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
 
   const exportCsv = async () => {
     try {
@@ -310,6 +326,19 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     );
   }
 
+  // The "Reconcile order #" surface takes over the whole tab. On apply it reloads the
+  // finance data (the folded rows now read one number) and the reconcile count (so the
+  // entry hides once nothing is left to fold).
+  if (showReconcile) {
+    return (
+      <OrderReconcileView
+        token={token}
+        onBack={() => { setShowReconcile(false); loadReconcileCount(); }}
+        onApplied={() => { load(); loadReconcileCount(); }}
+      />
+    );
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white,
       '@keyframes jpBannerIn':  { from: { opacity: 0, transform: 'translateY(-8px)' },  to: { opacity: 1, transform: 'translateY(0)' } },
@@ -333,6 +362,17 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             sx={{ color: '#06281a', bgcolor: B.green, textTransform: 'none', fontWeight: 800, fontSize: 12, px: 1.5,
               '&:hover': { bgcolor: '#3cc56f' } }}>
             Review duplicates ({dedupeCount})
+          </Button>
+        )}
+        {/* "Reconcile order #" — shown ONLY while some order still carries a scattered
+            number (auto-hides at zero, so it leaves no clutter once everything's folded
+            onto one number). One tap opens the preview→confirm surface; reversible. */}
+        {reconcileCount > 0 && (
+          <Button onClick={() => setShowReconcile(true)} size="small" startIcon={<MergeTypeOutlinedIcon sx={{ fontSize: 16 }} />}
+            title="Fold one order's scattered numbers (e.g. Happy Leaf #141/#1050) onto a single # (preview first — reversible)"
+            sx={{ color: '#06281a', bgcolor: '#fbbf24', textTransform: 'none', fontWeight: 800, fontSize: 12, px: 1.5,
+              '&:hover': { bgcolor: '#f59e0b' } }}>
+            Reconcile order # ({reconcileCount})
           </Button>
         )}
         <Button onClick={() => setShowAdd(true)} size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
