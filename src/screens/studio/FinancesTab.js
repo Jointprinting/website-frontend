@@ -358,16 +358,11 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         )}
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
-        {/* "Restart from budgets" is a one-time tool. Before it's applied it's a
-            prominent button; once applied it collapses to a small, quiet icon (still
-            reachable to re-run) so it stops cluttering the main finance screen. */}
-        {restartApplied ? (
-          <IconButton size="small" onClick={() => setShowRestart(true)}
-            title="Restart finances from your budgets (already applied — re-run if needed)"
-            sx={{ color: B.muted, '&:hover': { color: B.green } }}>
-            <RestartAltIcon fontSize="small" />
-          </IconButton>
-        ) : (
+        {/* "Restart from budgets" is a one-time, destructive rebuild. Before it's
+            ever applied it's a prominent button; once applied it's hidden — leaving a
+            mystery ↻ circle in the daily finance bar was just clutter. (Still fully
+            available + reversible; resurface it on request if you ever need to re-run.) */}
+        {!restartApplied && (
           <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
             title="Rebuild your finances from your budget trackers (preview first — reversible)"
             sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
@@ -912,6 +907,9 @@ function MonthlyTrend({ months }) {
   months = safe;
   const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);   // finite bar heights only
   const max = Math.max(1, ...months.map((m) => Math.max(n(m.income), Math.abs(n(m.net)))));
+  // On "All" the months span multiple years — show the year so two different
+  // "Jan" bars don't read as one confusing jumble.
+  const multiYear = new Set(months.map((m) => String(m.month).split('-')[0])).size > 1;
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -924,18 +922,19 @@ function MonthlyTrend({ months }) {
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', overflowX: 'auto', ...scrollbar, pb: 0.5 }}>
         {months.map((m, mi) => {
           const [y, mo] = String(m.month).split('-');
-          const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short' });
+          const mShort = new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short' });
+          const label = multiYear ? `${mShort} ’${String(y).slice(2)}` : mShort;
           const inc = n(m.income), net = n(m.net);
           return (
-            <Box key={m.month} sx={{ minWidth: 36, flexShrink: 0, textAlign: 'center' }}
-              title={`${label} ${y} · revenue ${money(inc)} · profit ${money(net)}`}>
+            <Box key={m.month} sx={{ minWidth: multiYear ? 46 : 36, flexShrink: 0, textAlign: 'center' }}
+              title={`${mShort} ${y} · revenue ${money(inc)} · profit ${money(net)}`}>
               <Box sx={{ height: 92, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 0.5 }}>
                 <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (inc / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45}ms` }} />
                 <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(net) / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45 + 60}ms` }} />
               </Box>
-              <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4 }}>{label}</Typography>
+              <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4, whiteSpace: 'nowrap' }}>{label}</Typography>
             </Box>
           );
         })}
