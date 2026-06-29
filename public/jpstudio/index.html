@@ -470,6 +470,25 @@ select:focus-visible{
 .ink-chip .swap{color:var(--tx3);font-size:10px;margin-left:1px}
 .ink-chip:hover .swap{color:var(--ac)}
 
+/* ─── Version history ───────────────────────────────────────────── */
+.history-panel{background:var(--s0);border:1px solid var(--bd2);border-radius:14px;width:min(440px,92vw);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.history-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--bd);font-weight:700;font-size:14px;color:var(--tx)}
+.hist-x{background:none;border:none;color:var(--tx3);font-size:15px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1}
+.hist-x:hover{background:var(--s2);color:var(--tx)}
+.history-sub{padding:9px 16px 0;font-family:var(--fm);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3)}
+.history-list{padding:10px 12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.hist-empty{padding:30px 18px;text-align:center;color:var(--tx3);font-size:12.5px;line-height:1.65}
+.hist-item{display:flex;align-items:center;gap:11px;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:8px 10px;transition:border-color .15s}
+.hist-item:hover{border-color:var(--bd2)}
+.hist-thumb{width:46px;height:46px;border-radius:7px;background:var(--s2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.hist-thumb img{width:100%;height:100%;object-fit:contain}
+.hist-meta{flex:1;min-width:0}
+.hist-name{font-size:12.5px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-cur{font-family:var(--fm);font-size:8.5px;color:var(--ac);border:1px solid var(--ac2);border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle;text-transform:uppercase;letter-spacing:.05em}
+.hist-time{font-family:var(--fm);font-size:10px;color:var(--tx3);margin-top:2px}
+.hist-restore{background:var(--s2);border:1px solid var(--bd2);color:var(--tx2);font-size:11px;font-weight:600;border-radius:7px;padding:6px 11px;cursor:pointer;flex-shrink:0;transition:all .15s}
+.hist-restore:hover{background:var(--ac);color:#0a1204;border-color:var(--ac)}
+
 /* ─── Lookbook ────────────────────────────────────────────────── */
 #lookbook-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow:hidden}
 #lookbook-view-wrapper.active{display:flex}
@@ -1337,6 +1356,7 @@ select:focus-visible{
         <div class="psec-hdr"><span class="psec-lbl">Save</span></div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-primary" id="save-mockup-btn" onclick="saveMockupToLibrary()" style="flex:1">↑ Save to Library</button>
+          <button class="btn btn-ghost btn-icon" onclick="openHistory()" title="Version history">🕘</button>
           <button class="btn btn-ghost btn-icon" onclick="resetCurrentPage()" title="Reset page">↺</button>
         </div>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -2496,12 +2516,24 @@ async function syncFromBackend() {
 
 function initDB() {
   return new Promise((res,rej) => {
-    const req = indexedDB.open('JPMockupStudioV2',4);
+    const req = indexedDB.open('JPMockupStudioV2',5);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       ['blanks','logos','mockups'].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id',autoIncrement:true});
       });
+      // v5: version history. `versions` holds lightweight metadata + a small
+      // thumbnail (fast to list); `versionData` holds the heavy pageState
+      // snapshot keyed by the same id, loaded only when you actually restore —
+      // so listing history never pulls megabytes of base64 just to draw thumbs.
+      // Purely additive: existing mockups/blanks/logos are untouched.
+      if (!d.objectStoreNames.contains('versions')) {
+        const vs = d.createObjectStore('versions',{keyPath:'id',autoIncrement:true});
+        vs.createIndex('byMockup','mockupRemoteId',{unique:false});
+      }
+      if (!d.objectStoreNames.contains('versionData')) {
+        d.createObjectStore('versionData',{keyPath:'id'});
+      }
     };
     req.onsuccess = e => {
       db = e.target.result; res(db);
@@ -2760,6 +2792,109 @@ function dbDelete(store,id){
   });
 }
 function dbGet(store,id){ return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).get(id); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+
+// ── Version history (local snapshots) ──────────────────────────────
+// Discreetly snapshots a mockup every time it's opened fresh and every time an
+// edit is saved, so a prior version can be restored when a client wants the old
+// one back. Best-effort + fully guarded: a versioning hiccup never blocks a save
+// or load. Storage stays lean — identical states are deduped by hash, only the
+// newest VERSION_CAP per mockup are kept, and the heavy pageState lives in a
+// separate store (versionData) so the history list only carries thumbnails.
+const VERSION_CAP = 25;
+function _verHash(str){ let h=0x811c9dc5>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return ('00000000'+h.toString(16)).slice(-8); }
+function _verClone(pg){ return JSON.parse(JSON.stringify({ ...pg, frontBlankImg:null, backBlankImg:null, frontLogoImg:null, backLogoImg:null, _savedRemoteId:undefined, _savedDbId:undefined })); }
+async function _verThumb(pg){
+  const src = pg.frontCompositeBase64 || pg.frontBlankBase64 || pg.frontLogoBase64 || pg.backCompositeBase64 || pg.backBlankBase64 || null;
+  if(!src) return null;
+  try { return await _shrinkBase64ForSync(src, 220, 0.68); } catch(_){ return null; }
+}
+function _verDelete(id){ return new Promise((res)=>{ try{ const tx=db.transaction(['versions','versionData'],'readwrite'); tx.objectStore('versions').delete(id); tx.objectStore('versionData').delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>res(); }catch(_){ res(); } }); }
+function _verList(remoteId){
+  return new Promise((res)=>{
+    try {
+      const out=[]; const idx=db.transaction('versions','readonly').objectStore('versions').index('byMockup');
+      const rq=idx.openCursor(IDBKeyRange.only(remoteId));
+      rq.onsuccess=e=>{ const c=e.target.result; if(c){ out.push(c.value); c.continue(); } else res(out.sort((a,b)=>b.savedAt-a.savedAt)); };
+      rq.onerror=()=>res([]);
+    } catch(_){ res([]); }
+  });
+}
+async function saveMockupVersion(remoteId, name, pg, trigger){
+  if(!db || !remoteId || !pg) return;
+  try {
+    const ps = _verClone(pg);
+    const hash = _verHash(JSON.stringify(ps));
+    const existing = await _verList(remoteId);
+    if(existing.length && existing[0].hash === hash) return;        // unchanged → no new version
+    const thumb = await _verThumb(pg);
+    const id = await dbSaveRaw('versions', { mockupRemoteId:remoteId, name:(name||ps.title||'Mockup'), mockupNum:ps.mockupNum||'', savedAt:Date.now(), trigger:trigger||'edit', hash, thumb });
+    await dbSaveRaw('versionData', { id, pageState:ps });
+    // Prune to the newest VERSION_CAP for this mockup (existing is newest-first).
+    if(existing.length + 1 > VERSION_CAP){ for(const v of existing.slice(VERSION_CAP-1)) await _verDelete(v.id); }
+  } catch(_){ /* best-effort; never disrupt the studio */ }
+}
+
+// ── Version history UI ─────────────────────────────────────────────
+function _verFmtTime(ts){
+  const d=new Date(ts), mins=Math.floor((Date.now()-ts)/60000);
+  if(mins<1) return 'just now';
+  if(mins<60) return mins+'m ago';
+  const h=Math.floor(mins/60); if(h<24) return h+'h ago';
+  const days=Math.floor(h/24); if(days<7) return days+'d ago';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+function _ensureHistoryOverlay(){
+  let ov=document.getElementById('history-overlay');
+  if(ov) return ov;
+  ov=document.createElement('div');
+  ov.id='history-overlay'; ov.className='modal-bg';
+  ov.innerHTML='<div class="history-panel"><div class="history-hd"><span>Version history</span>'
+    +'<button class="hist-x" onclick="closeHistory()" title="Close">✕</button></div>'
+    +'<div class="history-sub" id="history-sub"></div>'
+    +'<div class="history-list" id="history-list"></div></div>';
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeHistory(); });
+  document.body.appendChild(ov);
+  return ov;
+}
+function closeHistory(){ const ov=document.getElementById('history-overlay'); if(ov) ov.style.display='none'; }
+async function openHistory(){
+  const pg=state.pages[state.currentPage]||{};
+  const rid=pg._savedRemoteId;
+  const ov=_ensureHistoryOverlay(); ov.style.display='flex';
+  const list=document.getElementById('history-list'), sub=document.getElementById('history-sub');
+  sub.textContent='';
+  if(!rid){ list.innerHTML='<div class="hist-empty">Save this mockup once and its versions start showing up here — a snapshot every time you open it or save an edit, so you can always roll back.</div>'; return; }
+  list.innerHTML='<div class="hist-empty">Loading…</div>';
+  let vers=[]; try{ vers=await _verList(rid); }catch(_){}
+  if(!vers.length){ list.innerHTML='<div class="hist-empty">No versions yet — they’ll appear as you open and save this mockup.</div>'; return; }
+  sub.textContent=vers.length+' version'+(vers.length===1?'':'s')+' kept · newest first';
+  list.innerHTML='';
+  vers.forEach((v,i)=>{
+    const badge = v.trigger==='save' ? 'saved edit' : (v.trigger==='open' ? 'opened' : v.trigger);
+    const row=document.createElement('div'); row.className='hist-item';
+    row.innerHTML='<div class="hist-thumb">'+(v.thumb?'<img src="'+v.thumb+'" alt=""/>':'')+'</div>'
+      +'<div class="hist-meta"><div class="hist-name">'+(v.name||'Mockup')+(i===0?' <span class="hist-cur">current</span>':'')+'</div>'
+      +'<div class="hist-time">'+_verFmtTime(v.savedAt)+' · '+badge+'</div></div>'
+      +'<button class="hist-restore">Restore</button>';
+    row.querySelector('.hist-restore').onclick=()=>restoreVersion(v.id);
+    list.appendChild(row);
+  });
+}
+async function restoreVersion(id){
+  try{
+    const rec=await dbGet('versionData',id);
+    if(!rec||!rec.pageState){ toast('Could not load that version','error'); return; }
+    const pgNow=state.pages[state.currentPage]||{};
+    const ps=JSON.parse(JSON.stringify(rec.pageState));
+    // Keep the live saved-identity so re-saving UPDATES the same mockup (no dupe).
+    ps._savedRemoteId=pgNow._savedRemoteId||ps._savedRemoteId||'';
+    ps._savedDbId=pgNow._savedDbId;
+    state.pages[state.currentPage]=ps;
+    loadPageIntoForm(); scheduleUpdate();
+    closeHistory();
+    toast('Version restored — review it, then Save to keep it','success');
+  }catch(e){ toast('Restore failed','error'); }
+}
 
 // ── Toast ──────────────────────────────────────────────────────────
 function toast(msg, type='') {
@@ -4099,6 +4234,7 @@ async function saveMockupToLibrary() {
     }
     toast(`"${name}" saved ✓`,'success');
     window._jpUnsaved = false;   // committed — drop the close-tab warning
+    saveMockupVersion(pg._savedRemoteId, name, pg, 'save');  // discreet history snapshot
     refreshClientSuggestions();
     loadProjects().catch(()=>{}); // refresh project cache so next mockup picks next letter
   }
@@ -4309,6 +4445,7 @@ async function loadMockup(id,e) {
   ps._savedRemoteId = item.remoteId || '';
   ps._savedDbId = item.id;
   state.pages[state.currentPage]=ps;
+  saveMockupVersion(item.remoteId, item.name, ps, 'open');  // snapshot the as-opened state
   loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
 }
 
