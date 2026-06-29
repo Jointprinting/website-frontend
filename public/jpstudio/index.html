@@ -2876,11 +2876,45 @@ async function saveMockupVersion(remoteId, name, pg, trigger){
     const existing = await _verList(remoteId);
     if(existing.length && existing[0].hash === hash) return;        // unchanged → no new version
     const thumb = await _verThumb(pg);
-    const id = await dbSaveRaw('versions', { mockupRemoteId:remoteId, name:(name||ps.title||'Mockup'), mockupNum:ps.mockupNum||'', savedAt:Date.now(), trigger:trigger||'edit', hash, thumb });
+    const meta = {
+      mockupRemoteId:remoteId, versionRemoteId:generateUUID(),
+      name:(name||ps.title||'Mockup'), mockupNum:ps.mockupNum||'', client:pg.client||ps.client||'',
+      savedAt:Date.now(), trigger:trigger||'edit', hash, thumb,
+    };
+    const id = await dbSaveRaw('versions', meta);
     await dbSaveRaw('versionData', { id, pageState:ps });
     // Prune to the newest VERSION_CAP for this mockup (existing is newest-first).
     if(existing.length + 1 > VERSION_CAP){ for(const v of existing.slice(VERSION_CAP-1)) await _verDelete(v.id); }
+    _pushVersionToCloud(meta, pg, ps);   // fire-and-forget durable mirror (survives a device wipe)
   } catch(_){ /* best-effort; never disrupt the studio */ }
+}
+
+// Push a version to the durable cloud store. Heavy composites are shrunk +
+// offloaded server-side to R2; the pageState ships trimmed of its base64 (like
+// the library sync) so the doc stays small. Local IndexedDB stays the source of
+// truth — a failed push just means this snapshot is local-only until next time.
+async function _pushVersionToCloud(meta, pg, ps){
+  const token = getStudioToken(); if(!token) return;
+  try {
+    const front = pg.frontCompositeBase64 || pg.frontBlankBase64 || null;
+    const back  = pg.backCompositeBase64  || pg.backBlankBase64  || null;
+    const [thumbnail, data] = await Promise.all([
+      _shrinkBase64ForSync(front, 1000, 0.8),
+      _shrinkBase64ForSync(back,  1000, 0.8),
+    ]);
+    await fetch(`${BACKEND}/api/studio/versions`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({
+        mockupRemoteId: meta.mockupRemoteId, versionRemoteId: meta.versionRemoteId,
+        name: meta.name, mockupNum: meta.mockupNum, client: meta.client,
+        trigger: meta.trigger, hash: meta.hash,
+        thumbnail: thumbnail || '', data: data || '',
+        pageState: _trimPageStateForSync(ps || _verClone(pg)),
+        savedAt: meta.savedAt,
+      }),
+    });
+  } catch(_){ /* best-effort durability */ }
 }
 
 // ── Version history UI ─────────────────────────────────────────────
@@ -2906,6 +2940,32 @@ function _ensureHistoryOverlay(){
   return ov;
 }
 function closeHistory(){ const ov=document.getElementById('history-overlay'); if(ov) ov.style.display='none'; }
+
+// Local versions + the cloud mirror, merged newest-first and de-duped (by the
+// version's remoteId, else its content hash) so a synced version isn't listed
+// twice. Local wins when both exist (it has the full, instantly-restorable
+// snapshot); cloud-only entries are tagged so Restore knows to fetch them.
+async function _mergedVersions(rid){
+  const local = await _verList(rid).catch(()=>[]);
+  let cloud = [];
+  const token = getStudioToken();
+  if(token){
+    try {
+      const r = await fetch(`${BACKEND}/api/studio/versions/${encodeURIComponent(rid)}`, { headers:{'Authorization':'Bearer '+token} });
+      if(r.ok) cloud = await r.json();
+    } catch(_){}
+  }
+  const haveRid = new Set(local.filter(v=>v.versionRemoteId).map(v=>v.versionRemoteId));
+  const haveHash = new Set(local.map(v=>v.hash).filter(Boolean));
+  const merged = local.map(v=>({ ...v, source:'local' }));
+  for(const c of (cloud||[])){
+    if(c.versionRemoteId && haveRid.has(c.versionRemoteId)) continue;
+    if(c.hash && haveHash.has(c.hash)) continue;
+    merged.push({ versionRemoteId:c.versionRemoteId, hash:c.hash, name:c.name, mockupNum:c.mockupNum, savedAt:c.savedAt, trigger:c.trigger, thumb:c.thumbnail, source:'cloud' });
+  }
+  merged.sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+  return merged;
+}
 async function openHistory(){
   const pg=state.pages[state.currentPage]||{};
   const rid=pg._savedRemoteId;
@@ -2914,18 +2974,20 @@ async function openHistory(){
   sub.textContent='';
   if(!rid){ list.innerHTML='<div class="hist-empty">Save this mockup once and its versions start showing up here — a snapshot every time you open it or save an edit, so you can always roll back.</div>'; return; }
   list.innerHTML='<div class="hist-empty">Loading…</div>';
-  let vers=[]; try{ vers=await _verList(rid); }catch(_){}
+  let vers=[]; try{ vers=await _mergedVersions(rid); }catch(_){ try{ vers=(await _verList(rid)).map(v=>({...v,source:'local'})); }catch(__){} }
   if(!vers.length){ list.innerHTML='<div class="hist-empty">No versions yet — they’ll appear as you open and save this mockup.</div>'; return; }
-  sub.textContent=vers.length+' version'+(vers.length===1?'':'s')+' kept · newest first';
+  const cloudCount=vers.filter(v=>v.source==='cloud').length;
+  sub.textContent=vers.length+' version'+(vers.length===1?'':'s')+' · newest first'+(cloudCount?' · ☁ synced':'');
   list.innerHTML='';
   vers.forEach((v,i)=>{
-    const badge = v.trigger==='save' ? 'saved edit' : (v.trigger==='open' ? 'opened' : v.trigger);
+    const badge = v.trigger==='save' ? 'saved edit' : (v.trigger==='open' ? 'opened' : (v.trigger||'snapshot'));
+    const cloudTag = v.source==='cloud' ? ' · ☁' : '';
     const row=document.createElement('div'); row.className='hist-item';
     row.innerHTML='<div class="hist-thumb">'+(v.thumb?'<img src="'+v.thumb+'" alt=""/>':'')+'</div>'
       +'<div class="hist-meta"><div class="hist-name">'+(v.name||'Mockup')+(i===0?' <span class="hist-cur">current</span>':'')+'</div>'
-      +'<div class="hist-time">'+_verFmtTime(v.savedAt)+' · '+badge+'</div></div>'
+      +'<div class="hist-time">'+_verFmtTime(v.savedAt)+' · '+badge+cloudTag+'</div></div>'
       +'<button class="hist-restore">Restore</button>';
-    row.querySelector('.hist-restore').onclick=()=>restoreVersion(v.id);
+    row.querySelector('.hist-restore').onclick=()=> v.source==='cloud' ? restoreCloudVersion(v.versionRemoteId) : restoreVersion(v.id);
     list.appendChild(row);
   });
 }
@@ -2942,6 +3004,28 @@ async function restoreVersion(id){
     loadPageIntoForm(); scheduleUpdate();
     closeHistory();
     toast('Version restored — review it, then Save to keep it','success');
+  }catch(e){ toast('Restore failed','error'); }
+}
+// Restore a cloud-only version: fetch the full snapshot, then rehydrate the
+// composites from the stored thumbnail/data (R2 URLs or base64) exactly the way
+// loadMockup does, so the canvas isn't blank.
+async function restoreCloudVersion(versionRemoteId){
+  const token=getStudioToken();
+  if(!versionRemoteId||!token){ toast('Could not load that version','error'); return; }
+  try{
+    const r=await fetch(`${BACKEND}/api/studio/version/${encodeURIComponent(versionRemoteId)}`, { headers:{'Authorization':'Bearer '+token} });
+    if(!r.ok){ toast('Could not load that version','error'); return; }
+    const rec=await r.json();
+    const ps=rec.pageState?JSON.parse(JSON.stringify(rec.pageState)):{};
+    if(!ps.frontCompositeBase64 && rec.thumbnail){ ps.frontCompositeBase64=rec.thumbnail; if(!ps.frontBlankBase64) ps.frontBlankBase64=rec.thumbnail; }
+    if(!ps.backCompositeBase64 && rec.data){ ps.backCompositeBase64=rec.data; if(!ps.backBlankBase64) ps.backBlankBase64=rec.data; }
+    const pgNow=state.pages[state.currentPage]||{};
+    ps._savedRemoteId=pgNow._savedRemoteId||ps._savedRemoteId||'';
+    ps._savedDbId=pgNow._savedDbId;
+    state.pages[state.currentPage]=ps;
+    loadPageIntoForm(); scheduleUpdate();
+    closeHistory();
+    toast('Version restored from cloud — review it, then Save to keep it','success');
   }catch(e){ toast('Restore failed','error'); }
 }
 
