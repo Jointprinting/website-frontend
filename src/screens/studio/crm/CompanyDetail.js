@@ -22,7 +22,6 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
-import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
@@ -353,7 +352,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onNewMockup }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
   // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -495,18 +494,6 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       {/* Progress / level — the dopamine spine. Lights up as the deal climbs the
           funnel; a Customer/Won earns the full green bar + a celebratory banner. */}
       <ProgressCard stage={client.stage} isCustomer={isCustomer} />
-
-      {/* Studio shortcut — jump straight into the Mockup Studio for THIS company,
-          pre-filled, so a new mockup is born wired to the right client. (The
-          lookbook isn't surfaced here — it's an optional tool in the studio for
-          when a client has several mockups.) */}
-      {onNewMockup && (
-        <Button onClick={onNewMockup} startIcon={<AddPhotoAlternateOutlinedIcon sx={{ fontSize: 17 }} />} fullWidth
-          sx={{ color: D.text, textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1,
-            border: `1px solid ${D.line}`, '&:hover': { color: D.green, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.03)' } }}>
-          New mockup
-        </Button>
-      )}
 
       {/* Business with this company — the money story: lifetime finance (reusing
           the same revenue/COGS/margin math as /api/finances) + linked POs. ONLY
