@@ -137,7 +137,7 @@ function EventChip({ ev, onOpen, onDragStart, onDragEnd, onPickReschedule, dragg
 }
 
 // One grid cell. `date` is null for padding slots (rendered blank + non-droppable).
-function DayCell({ date, isToday, events, selectedKeys, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell, onPickReschedule, onToggleSelect, bindCompany }) {
+function DayCell({ date, isToday, events, selectedKeys, onOpen, dragState, onDragStart, onDragEnd, onDrop, onDragOverCell, onDragLeaveCell, onPickReschedule, onToggleSelect, bindCompany, placing, onPlaceDay }) {
   // Padding slot — empty, inert, just keeps the grid rectangular.
   if (!date) {
     return <Box sx={{ minHeight: { xs: 76, sm: 104 }, borderRight: `1px solid ${D.line}`, borderBottom: `1px solid ${D.line}`, bgcolor: 'rgba(0,0,0,0.22)' }} />;
@@ -150,13 +150,17 @@ function DayCell({ date, isToday, events, selectedKeys, onOpen, dragState, onDra
       onDragOver={(e) => { e.preventDefault(); onDragOverCell(key); }}
       onDragLeave={() => onDragLeaveCell(key)}
       onDrop={(e) => { e.preventDefault(); onDrop(key); }}
+      onClick={placing ? (e) => { e.stopPropagation(); onPlaceDay(key); } : undefined}
+      title={placing ? 'Move the selected here' : undefined}
       sx={{
         minHeight: { xs: 76, sm: 104 }, p: 0.75,
         borderRight: `1px solid ${D.line}`, borderBottom: `1px solid ${D.line}`,
         bgcolor: isDropTarget ? 'rgba(74,222,128,0.1)' : 'transparent',
         outline: isDropTarget ? `2px solid ${D.green}` : 'none', outlineOffset: -2,
+        cursor: placing ? 'pointer' : 'default',
         transition: 'background 0.12s ease',
         display: 'flex', flexDirection: 'column', minWidth: 0,
+        ...(placing ? { '&:hover': { bgcolor: 'rgba(74,222,128,0.16)', outline: `2px solid ${D.green}`, outlineOffset: -2 } } : null),
       }}
     >
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
@@ -355,6 +359,22 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
   // Never leak the dwell timer if the view unmounts mid-drag.
   React.useEffect(() => () => { if (dwellRef.current) clearTimeout(dwellRef.current); }, []);
 
+  // ── Click-to-place (the dependable cross-month move) ─────────────────────────
+  // HTML5 drag across months (dwelling on the ‹ › arrows) is fiddly and easy to
+  // miss. The reliable path: select chip(s) → "Move to a day" → navigate to ANY
+  // month freely → click the target day. Works on trackpad/touch and reaches any
+  // future date. placingRef mirrors the state so the selection-prune effect can
+  // keep the carried set alive while you navigate months mid-placement.
+  const [placing, setPlacing] = React.useState(false);
+  const placingRef = React.useRef(false);
+  React.useEffect(() => { placingRef.current = placing; }, [placing]);
+  React.useEffect(() => {
+    if (!placing) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPlacing(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [placing]);
+
   // Prune the selection to what's actually on screen when the visible set changes
   // (month nav or refetch), so the owner can never silently bulk-move chips they
   // can't see. Skipped while a drag is in flight (draggedRef non-empty) so a mid-
@@ -363,6 +383,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       if ((draggedRef.current || []).length > 0) return prev; // don't disturb an in-flight drag
+      if (placingRef.current) return prev;                    // keep the carried set while placing across months
       let changed = false;
       const next = new Map();
       for (const [k, v] of prev) { if (visibleKeys.has(k)) next.set(k, v); else changed = true; }
@@ -412,6 +433,25 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     // Clear the selection only when this drag consumed it (a multi-move). A lone
     // unselected-chip move doesn't disturb whatever the owner had selected.
     if (wasSelection) clearSelection();
+  };
+
+  // Drop the selected chips onto a clicked day (click-to-place). Mirrors the drop
+  // logic but driven by a click after free month navigation — so any future date
+  // is reachable without a drag.
+  const placeOnDay = (key) => {
+    if (!key) return;
+    const moving = [...selected.values()];
+    setPlacing(false);
+    const toMove = moving.filter((ev) => dayKey(ev.nextFollowUp) !== key);
+    if (toMove.length === 0) { clearSelection(); return; }
+    if (toMove.length === 1) {
+      onReschedule(toMove[0].companyKey, key, toMove[0]);
+    } else if (onRescheduleMany) {
+      onRescheduleMany(toMove.map((ev) => ev.companyKey), key, toMove);
+    } else {
+      toMove.forEach((ev) => onReschedule(ev.companyKey, key, ev));
+    }
+    clearSelection();
   };
 
   const go = React.useCallback((delta) => {
@@ -469,6 +509,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
   React.useEffect(() => () => { if (marqueeCleanupRef.current) marqueeCleanupRef.current(); }, []);
 
   const onGridMouseDown = (e) => {
+    if (placing) return;                                  // click-to-place owns clicks while placing
     if (e.button !== 0) return;                           // left button only
     if (e.target.closest('[data-ck]')) return;            // a chip — let it click/drag
     if (e.target.closest('button, a, [role="button"], input')) return;
@@ -541,18 +582,51 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
       {/* Selection bar — appears only when chips are selected. Shows the count and
           a Clear; the hint tells the owner to drag any selected chip to move them
           all (across months via the arrows). */}
-      {selectedCount > 0 && (
+      {/* Placing mode — pick a day for the selected across ANY month. The reliable
+          cross-month move: navigate freely, then click a day. */}
+      {placing && (
+        <Stack direction="row" alignItems="center" spacing={1.5} sx={{
+          bgcolor: 'rgba(74,222,128,0.12)', border: `1px solid ${D.green}`, borderRadius: 2,
+          px: 1.5, py: 0.85,
+        }}>
+          <Box sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.green, whiteSpace: 'nowrap' }}>
+            Pick a day
+          </Box>
+          <Typography sx={{ color: D.text, fontSize: 12, minWidth: 0, flexGrow: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Click a day to move {selectedCount} there — change months freely first (‹ › or the month menu), then click. Esc to cancel.
+          </Typography>
+          <Button
+            onClick={() => setPlacing(false)} size="small" startIcon={<CloseIcon sx={{ fontSize: 14 }} />}
+            sx={{ textTransform: 'none', color: D.faint, fontWeight: 700, fontSize: 12, minWidth: 0,
+              '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.05)' } }}
+          >
+            Cancel
+          </Button>
+        </Stack>
+      )}
+
+      {/* Selection bar — when chips are selected and not yet placing. */}
+      {selectedCount > 0 && !placing && (
         <Stack direction="row" alignItems="center" spacing={1.5} sx={{
           bgcolor: 'rgba(74,222,128,0.08)', border: `1px solid ${D.lineHi}`, borderRadius: 2,
           px: 1.5, py: 0.85,
         }}>
-          <Box sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.green }}>
+          <Box sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.green, whiteSpace: 'nowrap' }}>
             {selectedCount} selected
           </Box>
           <Typography sx={{ color: D.muted, fontSize: 12, minWidth: 0, flexGrow: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            Drag any selected chip to a day to move them together — hover ‹ › to cross months.
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>
+            Move to any date — hit “Move to a day”, switch months, click a day. (Or drag a chip for a same-month nudge.)
           </Typography>
+          <Button
+            onClick={() => setPlacing(true)} size="small" variant="outlined"
+            startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 15 }} />}
+            sx={{ textTransform: 'none', color: D.green, borderColor: D.lineHi, fontWeight: 800, fontSize: 12, minWidth: 0,
+              '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}
+          >
+            Move to a day
+          </Button>
           <Button
             onClick={clearSelection} size="small" startIcon={<CloseIcon sx={{ fontSize: 14 }} />}
             sx={{ textTransform: 'none', color: D.faint, fontWeight: 700, fontSize: 12, minWidth: 0,
@@ -615,6 +689,8 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
                 onPickReschedule={onPickReschedule}
                 onToggleSelect={toggleSelect}
                 bindCompany={bindCompany}
+                placing={placing}
+                onPlaceDay={placeOnDay}
               />
             );
           }))}
@@ -624,7 +700,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
       {/* Legend / hint */}
       <Stack direction="row" alignItems="center" justifyContent="center" flexWrap="wrap" useFlexGap spacing={1.5}>
         <Typography sx={{ color: D.faint, fontSize: 11.5, textAlign: 'center' }}>
-          Drag a box over the grid to select many · click chips to add/remove · drag to a day to reschedule (selected chips move together) · hover ‹ › while dragging to cross months · ⟳ (or right-click) for any date.
+          Select chips (click, or drag a box) → <Box component="span" sx={{ color: D.muted, fontWeight: 700 }}>Move to a day</Box> → switch to any month → click the day. Drag a chip for a quick same-month nudge · ⟳ or right-click for any date.
         </Typography>
       </Stack>
     </Stack>
