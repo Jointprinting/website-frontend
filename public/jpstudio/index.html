@@ -489,6 +489,31 @@ select:focus-visible{
 .hist-restore{background:var(--s2);border:1px solid var(--bd2);color:var(--tx2);font-size:11px;font-weight:600;border-radius:7px;padding:6px 11px;cursor:pointer;flex-shrink:0;transition:all .15s}
 .hist-restore:hover{background:var(--ac);color:#0a1204;border-color:var(--ac)}
 
+/* ─── Overview (projects → mockups landing) ─────────────────────── */
+#overview-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow-y:auto;background:var(--bg)}
+#overview-view-wrapper.active{display:block}
+.ov-topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:13px 18px;background:rgba(8,9,16,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd)}
+.ov-title{font-weight:800;font-size:16px;color:var(--tx);letter-spacing:.2px;flex-shrink:0}
+.ov-search{flex:1;max-width:420px;background:var(--s2);border:1px solid var(--bd2);border-radius:9px;color:var(--tx);font-family:var(--f);font-size:13px;padding:9px 12px;outline:none;transition:border-color .15s}
+.ov-search:focus{border-color:var(--ac)}
+.ov-search::placeholder{color:var(--tx3)}
+.ov-body{padding:16px 18px 48px;max-width:1120px;margin:0 auto}
+.ov-empty{padding:64px 22px;text-align:center;color:var(--tx3);font-size:13.5px;line-height:1.7}
+.ov-proj{margin-bottom:26px}
+.ov-proj-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+.ov-proj-name{font-weight:700;font-size:14px;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-proj-count{font-family:var(--fm);font-size:10.5px;color:var(--tx3);letter-spacing:.04em;flex-shrink:0}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.ov-mk{display:flex;flex-direction:column;gap:7px;background:var(--s0);border:1px solid var(--bd);border-radius:11px;padding:8px;cursor:pointer;text-align:left;font:inherit;color:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}
+.ov-mk:hover{border-color:var(--ac2);transform:translateY(-2px);box-shadow:0 10px 26px -14px rgba(0,0,0,.7)}
+.ov-mk:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.ov-mk-thumb{position:relative;aspect-ratio:1/1;border-radius:7px;background:var(--s2);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.ov-mk-thumb img{width:100%;height:100%;object-fit:contain}
+.ov-mk-ph{font-size:26px;opacity:.45}
+.ov-mk-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 2px var(--s0)}
+.ov-mk-name{font-size:11.5px;font-weight:600;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.ov-num{font-family:var(--fm);font-size:9px;color:var(--ac);background:var(--ac-dim);border-radius:4px;padding:1px 4px;margin-right:5px}
+
 /* ─── Lookbook ────────────────────────────────────────────────── */
 #lookbook-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow:hidden}
 #lookbook-view-wrapper.active{display:flex}
@@ -1145,6 +1170,7 @@ select:focus-visible{
   </div>
   <div class="hdr-div"></div>
   <nav class="nav-tabs">
+    <button class="nav-tab" id="tab-overview-btn" onclick="switchTab('overview',this)">Overview</button>
     <button class="nav-tab active" onclick="switchTab('studio',this)">Studio</button>
     <button class="nav-tab" onclick="switchTab('lookbook',this)">Lookbook</button>
     <button class="nav-tab" onclick="switchTab('library',this)">Library</button>
@@ -1158,6 +1184,16 @@ select:focus-visible{
 </header>
 
 <div id="views">
+
+<!-- OVERVIEW -->
+<div id="overview-view-wrapper">
+  <div class="ov-topbar">
+    <div class="ov-title">Overview</div>
+    <input id="ov-search" class="ov-search" type="search" placeholder="Search mockups, clients, #…" oninput="renderOverview()" autocomplete="off"/>
+    <button class="btn btn-primary btn-sm" onclick="newMockupFromOverview()">+ New mockup</button>
+  </div>
+  <div id="ov-body" class="ov-body"></div>
+</div>
 
 <!-- STUDIO -->
 <div id="studio-view">
@@ -2537,6 +2573,16 @@ function initDB() {
     };
     req.onsuccess = e => {
       db = e.target.result; res(db);
+      // Fresh open with no deep-link → land on the Overview (projects → mockups).
+      // A deep-link (?mockup / ?project / ?filter) skips this and goes straight to
+      // its target, so Orders → a project → a mockup opens that mockup directly.
+      try {
+        const _p = new URLSearchParams(window.location.search);
+        if (!(_p.get('mockup') || _p.get('project') || _p.get('filter'))) {
+          const _b = document.getElementById('tab-overview-btn');
+          if (_b) switchTab('overview', _b);
+        }
+      } catch (_) {}
       setTimeout(async () => {
         // Auto-pull from cloud, then auto-push anything still pending. No
         // manual Sync button required — the user just hits Refresh on
@@ -2544,6 +2590,9 @@ function initDB() {
         try { _ensureAuthBanner(); } catch (_) {}
         try { await syncFromBackend(); } catch (_) {}
         try { await loadProjects(); } catch (_) {}
+        // Projects + any freshly-pulled mockups are in now — refresh the Overview
+        // so project labels resolve and cloud mockups appear without a manual nudge.
+        try { if (document.getElementById('overview-view-wrapper')?.classList.contains('active')) renderOverview(); } catch (_) {}
         try { await syncToCloud(); } catch (_) {}
         try { refreshSyncBadge(); } catch (_) {}
         try { _refreshSaveGate(); } catch (_) {}
@@ -2914,13 +2963,70 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('studio-view').classList.toggle('hidden', tab!=='studio');
+  const ov = document.getElementById('overview-view-wrapper');
   const lb = document.getElementById('lookbook-view-wrapper');
   const lib = document.getElementById('library-view-wrapper');
+  if (ov) ov.classList.toggle('active', tab==='overview');
   lb.classList.toggle('active', tab==='lookbook');
   lib.classList.toggle('active', tab==='library');
+  if (tab==='overview') renderOverview();
   if (tab==='lookbook') refreshLbGrid();
   if (tab==='library') refreshLibrary();
 }
+
+// ── Overview (projects → their mockups; the fresh-open landing) ─────
+// Groups saved mockups by their linked project (Order Tracker), newest project
+// first, so the whole studio is one click away. Renders straight from local
+// IndexedDB (instant); refines project labels once PROJECTS_CACHE has loaded.
+// Deep-links (?mockup / ?project / ?filter) bypass this entirely — see initDB.
+async function renderOverview(){
+  const body=document.getElementById('ov-body'); if(!body) return;
+  if(!db){ body.innerHTML='<div class="ov-empty">Loading…</div>'; return; }
+  let mockups=[]; try{ mockups=await dbGetAll('mockups'); }catch(_){}
+  const esc=(s)=>String(s==null?'':s).replace(/</g,'&lt;');
+  const term=(document.getElementById('ov-search')?.value||'').trim().toLowerCase();
+  const num=(m)=>(m.pageState&&m.pageState.mockupNum)||'';
+  const pid=(m)=>(m.pageState&&m.pageState.projectId)||'';
+  const pnum=(m)=>(m.pageState&&m.pageState.projectNumber)||'';
+  let items=mockups.slice();
+  if(term) items=items.filter(m=>[(m.name||''),(m.client||''),num(m),pnum(m)].join(' ').toLowerCase().includes(term));
+  const projById={}; (window.PROJECTS_CACHE||[]).forEach(p=>{ projById[p._id]=p; });
+  const groups=new Map();
+  for(const m of items){
+    const id=pid(m);
+    const key = id || (pnum(m)?('num:'+pnum(m)):'__unlinked');
+    if(!groups.has(key)){
+      const p=projById[id];
+      const label = p ? ('#'+(p.projectNumber||'?')+' · '+(p.companyName||p.clientName||'Untitled'))
+                      : (pnum(m) ? ('Project #'+pnum(m)) : 'Unlinked');
+      groups.set(key,{ label, items:[], unlinked:(!id&&!pnum(m)), order:(p?Number(p.projectNumber)||0:0) });
+    }
+    groups.get(key).items.push(m);
+  }
+  if(!groups.size){
+    body.innerHTML='<div class="ov-empty">'+(term
+      ? 'No mockups match “'+esc(term)+'”.'
+      : 'No mockups yet. Open the <b>Studio</b> tab to build your first — it’ll show up here grouped by project.')+'</div>';
+    return;
+  }
+  const arr=[...groups.values()].map(g=>{ g.items.sort((a,b)=>(b.savedAt||0)-(a.savedAt||0)); g.newest=g.items[0]?(g.items[0].savedAt||0):0; return g; });
+  arr.sort((a,b)=> (a.unlinked?1:0)-(b.unlinked?1:0) || b.newest-a.newest);
+  body.innerHTML=arr.map(g=>{
+    const cards=g.items.map(m=>{
+      const n=num(m); const numPill=n?'<span class="ov-num">#'+esc(String(n).replace(/^#/,''))+'</span>':'';
+      const synced=!!(m.cloudSyncedAt&&m.cloudSyncedAt>=(m.savedAt||0));
+      return '<button class="ov-mk" onclick="openMockupFromOverview('+m.id+')" title="'+esc(m.name||'Mockup')+'">'
+        +'<div class="ov-mk-thumb">'+(m.thumbnail?'<img src="'+m.thumbnail+'" alt=""/>':'<span class="ov-mk-ph">🎨</span>')+(synced?'':'<span class="ov-mk-dot" title="Not synced to cloud yet"></span>')+'</div>'
+        +'<div class="ov-mk-name">'+numPill+esc(m.name||'Mockup')+'</div></button>';
+    }).join('');
+    return '<section class="ov-proj"><div class="ov-proj-hd">'
+      +'<span class="ov-proj-name">'+esc(g.label)+'</span>'
+      +'<span class="ov-proj-count">'+g.items.length+' mockup'+(g.items.length===1?'':'s')+'</span></div>'
+      +'<div class="ov-grid">'+cards+'</div></section>';
+  }).join('');
+}
+function openMockupFromOverview(id){ loadMockup(id); }   // loadMockup hydrates + switches to Studio
+function newMockupFromOverview(){ const b=document.querySelector('.nav-tab[onclick*="studio"]'); if(b) switchTab('studio', b); }
 
 // ── Placement Side ─────────────────────────────────────────────────
 function setPlaceSide(side) {
