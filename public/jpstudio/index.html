@@ -454,6 +454,22 @@ select:focus-visible{
 .add-swatch{background:var(--s1);border:1px dashed var(--bd2);border-radius:var(--r);color:var(--tx3);font-size:12px;padding:5px;width:100%;cursor:pointer;transition:all .15s}
 .add-swatch:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-dim)}
 
+/* ─── Ink color intelligence (auto-detect from artwork) ──────────── */
+.ink-detect{display:inline-flex;align-items:center;gap:4px;background:var(--ac-dim);border:1px solid var(--ac2);border-radius:5px;color:var(--ac);font-family:var(--fm);font-size:9px;letter-spacing:.04em;padding:3px 8px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.ink-detect:hover{background:var(--ac);color:#0a1204;border-color:var(--ac)}
+.ink-detect:disabled{opacity:.5;cursor:default}
+.ink-detect .sp{width:9px;height:9px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
+.ink-msg{font-size:10px;line-height:1.45;color:var(--tx3);margin:0 0 7px;display:none}
+.ink-msg.show{display:block}
+.ink-msg.warn{color:var(--amber)}
+.ink-chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}
+.ink-chip{display:inline-flex;align-items:center;gap:6px;background:var(--s1);border:1px solid var(--bd2);border-radius:999px;padding:3px 9px 3px 4px;font-family:var(--fm);font-size:10px;color:var(--tx2);cursor:pointer;transition:border-color .15s,background .15s}
+.ink-chip:hover{border-color:var(--ac);background:var(--s2)}
+.ink-chip .dot{width:15px;height:15px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.ink-chip .pct{color:var(--tx3);font-size:9px}
+.ink-chip .swap{color:var(--tx3);font-size:10px;margin-left:1px}
+.ink-chip:hover .swap{color:var(--ac)}
+
 /* ─── Lookbook ────────────────────────────────────────────────── */
 #lookbook-view-wrapper{display:none;height:calc(100vh - var(--hh));overflow:hidden}
 #lookbook-view-wrapper.active{display:flex}
@@ -1298,14 +1314,22 @@ select:focus-visible{
       </div>
 
       <div class="psec">
-        <div class="psec-hdr"><span class="psec-lbl">Front Logo Colors</span></div>
+        <div class="psec-hdr"><span class="psec-lbl">Front Logo Colors</span>
+          <button type="button" class="ink-detect" id="ink-detect-front" onclick="autoDetectColors('front')" title="Scan the front artwork and auto-fill its ink colors">✨ Auto-detect</button>
+        </div>
         <p class="sec-note">Add a name to show labels in PDF</p>
+        <div class="ink-msg" id="ink-msg-front"></div>
+        <div class="ink-chips" id="ink-chips-front"></div>
         <div class="swatch-grid" id="front-colors"></div>
       </div>
 
       <div class="psec" id="section-back-colors">
-        <div class="psec-hdr"><span class="psec-lbl">Back Logo Colors</span></div>
+        <div class="psec-hdr"><span class="psec-lbl">Back Logo Colors</span>
+          <button type="button" class="ink-detect" id="ink-detect-back" onclick="autoDetectColors('back')" title="Scan the back artwork and auto-fill its ink colors">✨ Auto-detect</button>
+        </div>
         <p class="sec-note">Add a name to show labels in PDF</p>
+        <div class="ink-msg" id="ink-msg-back"></div>
+        <div class="ink-chips" id="ink-chips-back"></div>
         <div class="swatch-grid" id="back-colors"></div>
       </div>
 
@@ -2913,6 +2937,8 @@ function handleImageUpload(e, key) {
     updateThumb(key, b64);
     autoSaveToLibrary(key, file.name, b64);
     scheduleUpdate();
+    if (key==='frontLogo') _onArtworkChanged('front');
+    else if (key==='backLogo') _onArtworkChanged('back');
   };
   reader.readAsDataURL(file);
 }
@@ -2932,6 +2958,7 @@ function clearImage(key) {
   if (key==='frontBlank'||key==='frontLogo') pg.frontCompositeBase64=null;
   if (key==='backBlank' ||key==='backLogo')  pg.backCompositeBase64 =null;
   updateThumb(key,null); scheduleUpdate();
+  if (key==='frontLogo'||key==='backLogo'){ const side=key==='frontLogo'?'front':'back'; _inkPalette[side]=null; _renderInkChips(side); _inkMsg(side,'',''); }
 }
 async function autoSaveToLibrary(key, name, b64) {
   if (!db) return;
@@ -3113,6 +3140,169 @@ function updateColorHexText(side,idx,el,commit){
 function updateColorName(side,idx,val){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(typeof arr[idx]==='object')arr[idx].name=val;else arr[idx]={hex:arr[idx],name:val}; scheduleUpdate(); }
 function addColor(side){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; if(arr.length>=12){toast('Max 12 colors');return;} arr.push({hex:'#ffffff',name:''}); renderColorSwatches(side,arr); scheduleUpdate(); }
 function removeColor(side,idx){ const arr=side==='front'?state.pages[state.currentPage].frontColors:state.pages[state.currentPage].backColors; arr.splice(idx,1); renderColorSwatches(side,arr); scheduleUpdate(); }
+
+// ── Ink color intelligence ────────────────────────────────────────
+// Scans the uploaded artwork (the front/back "logo") for its real screen-
+// print ink colors: counts distinct flat colors, skips the transparent
+// background + anti-aliased edge pixels, caps the palette, and flags
+// photographic / too-complex art instead of dumping hundreds of near-
+// identical colors. Auto-fills the editable Logo Colors list (the color
+// call), and lets you swap any detected ink across the actual design.
+const INK = { scanMax:300, tol:22, mergeTol:34, minCoverage:0.005, maxInks:12, hardCap:80 };
+const _inkPalette = { front:null, back:null }; // last analysis per side
+
+function _inkHex2(n){ return Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0'); }
+function inkRgbToHex(r,g,b){ return ('#'+_inkHex2(r)+_inkHex2(g)+_inkHex2(b)).toUpperCase(); }
+function inkHexToRgb(h){ const m=/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(h||'').trim()); if(!m) return null; let s=m[1]; if(s.length===3) s=s.split('').map(c=>c+c).join(''); const i=parseInt(s,16); return [(i>>16)&255,(i>>8)&255,i&255]; }
+function _inkDist2(a,r,g,b){ const dr=a.r-r,dg=a.g-g,db=a.b-b; return 0.3*dr*dr+0.59*dg*dg+0.11*db*db; }
+
+function _inkQuantize(data,o){
+  const tol2=o.tol*o.tol, clusters=[], bins=new Map(); let inked=0, overflow=false;
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]<24) continue;                    // transparent / near-transparent ≠ ink
+    const r=data[i],g=data[i+1],b=data[i+2]; inked++;
+    const bk=((r>>3)<<10)|((g>>3)<<5)|(b>>3); bins.set(bk,(bins.get(bk)||0)+1);
+    let best=-1,bestD=Infinity;
+    for(let c=0;c<clusters.length;c++){ const d=_inkDist2(clusters[c],r,g,b); if(d<bestD){bestD=d;best=c;} }
+    if(best>=0&&bestD<=tol2){ const cl=clusters[best]; cl.sr+=r;cl.sg+=g;cl.sb+=b;cl.n++; cl.r=cl.sr/cl.n;cl.g=cl.sg/cl.n;cl.b=cl.sb/cl.n; }
+    else if(clusters.length<o.hardCap){ clusters.push({r,g,b,sr:r,sg:g,sb:b,n:1}); }
+    else { overflow=true; if(best>=0){const cl=clusters[best];cl.sr+=r;cl.sg+=g;cl.sb+=b;cl.n++;} }
+  }
+  const floor=Math.max(1,inked*0.004); let sigBins=0;   // distinct color regions ≥0.4%
+  for(const n of bins.values()) if(n>=floor) sigBins++;
+  return {clusters,inked,overflow,sigBins};
+}
+function _inkMerge(clusters,mergeTol){
+  const t2=mergeTol*mergeTol; let m=true;
+  while(m){ m=false;
+    for(let i=0;i<clusters.length;i++) for(let j=i+1;j<clusters.length;j++){
+      if(_inkDist2(clusters[i],clusters[j].r,clusters[j].g,clusters[j].b)<=t2){
+        const A=clusters[i],B=clusters[j],n=A.n+B.n;
+        A.r=(A.r*A.n+B.r*B.n)/n;A.g=(A.g*A.n+B.g*B.n)/n;A.b=(A.b*A.n+B.b*B.n)/n;A.n=n;
+        clusters.splice(j,1); m=true; j--;
+      }
+    }
+  }
+  return clusters;
+}
+function _inkLoad(src){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error('image load failed')); im.src=src; }); }
+
+// Analyze a base64 artwork → { colors:[{hex,rgb,coverage}], inked, isComplex, overflow }.
+async function analyzeArtwork(base64){
+  if(!base64) return null;
+  const img=await _inkLoad(base64);
+  const w0=img.naturalWidth||img.width, h0=img.naturalHeight||img.height;
+  if(!w0||!h0) return null;
+  const scale=Math.min(1, INK.scanMax/Math.max(w0,h0));
+  const w=Math.max(1,Math.round(w0*scale)), h=Math.max(1,Math.round(h0*scale));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.imageSmoothingEnabled=false;                 // nearest-neighbor: keep flat inks flat
+  cx.clearRect(0,0,w,h); cx.drawImage(img,0,0,w,h);
+  let id; try{ id=cx.getImageData(0,0,w,h); }catch(e){ return {error:'pixels unreadable'}; }
+  const q=_inkQuantize(id.data,INK); _inkMerge(q.clusters,INK.mergeTol);
+  const sig=q.clusters.map(c=>({r:Math.round(c.r),g:Math.round(c.g),b:Math.round(c.b),n:c.n,coverage:c.n/Math.max(1,q.inked)}))
+    .filter(c=>c.coverage>=INK.minCoverage).sort((a,b)=>b.n-a.n);
+  return {
+    colors: sig.map(c=>({hex:inkRgbToHex(c.r,c.g,c.b),rgb:[c.r,c.g,c.b],coverage:c.coverage})),
+    inked:q.inked, overflow:q.overflow, sigBins:q.sigBins,
+    isComplex: q.overflow || sig.length>INK.maxInks || q.sigBins>INK.maxInks,
+  };
+}
+
+// Scan a side's artwork and auto-fill its editable Logo Colors list.
+async function autoDetectColors(side, opts){
+  opts=opts||{};
+  const pg=state.pages[state.currentPage]; if(!pg) return;
+  const b64=pg[side+'LogoBase64'];
+  const btn=document.getElementById('ink-detect-'+side);
+  if(!b64){ if(!opts.auto) _inkMsg(side,'Upload the '+side+' artwork first, then I can read its colors.','warn'); return; }
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="sp"></span> Scanning'; }
+  let res; try{ res=await analyzeArtwork(b64); }catch(e){ res={error:'could not read the artwork'}; }
+  if(btn){ btn.disabled=false; btn.innerHTML='✨ Auto-detect'; }
+  if(!res||res.error){ _inkMsg(side, res&&res.error?('Couldn’t read that artwork ('+res.error+').'):'Nothing to scan.','warn'); return; }
+  _inkPalette[side]=res;
+  const top=res.colors.slice(0,INK.maxInks);
+  if(!top.length){ _inkMsg(side,'No solid colors found — the artwork may be empty or fully transparent.','warn'); _renderInkChips(side); return; }
+  pg[side+'Colors']=top.map(c=>({hex:c.hex.toLowerCase(),name:''}));
+  renderColorSwatches(side,pg[side+'Colors']);
+  _renderInkChips(side);
+  if(res.isComplex){
+    _inkMsg(side,'Looks like a complex / photographic design ('+(res.overflow?'lots of':res.colors.length+'+')+' colors). I filled the '+top.length+' most-used — review before quoting; it may not separate cleanly for screen print.','warn');
+  } else {
+    _inkMsg(side,'Found '+top.length+' ink color'+(top.length===1?'':'s')+' and filled them in. Tap a chip to swap that ink across the design.','');
+  }
+  scheduleUpdate();
+}
+function _inkMsg(side,text,kind){
+  const el=document.getElementById('ink-msg-'+side); if(!el) return;
+  el.textContent=text||''; el.className='ink-msg'+(text?' show':'')+(kind==='warn'?' warn':'');
+}
+function _renderInkChips(side){
+  const box=document.getElementById('ink-chips-'+side); if(!box) return;
+  const pal=_inkPalette[side]; box.innerHTML='';
+  if(!pal||!pal.colors||!pal.colors.length) return;
+  pal.colors.slice(0,INK.maxInks).forEach((c)=>{
+    const pct=Math.round(c.coverage*100);
+    const chip=document.createElement('button');
+    chip.type='button'; chip.className='ink-chip';
+    chip.title='Swap '+c.hex+' across the '+side+' artwork';
+    chip.onclick=()=>swapInkPrompt(side,c.hex);
+    chip.innerHTML='<span class="dot" style="background:'+c.hex+'"></span>'+c.hex+' <span class="pct">'+(pct<1?'<1':pct)+'%</span><span class="swap">⇄</span>';
+    box.appendChild(chip);
+  });
+}
+
+// Swap a detected ink across the ACTUAL artwork image (not just the label).
+function swapInkPrompt(side,fromHex){
+  const inp=document.createElement('input');
+  inp.type='color'; inp.value=fromHex; inp.style.cssText='position:fixed;left:-9999px;top:0';
+  document.body.appendChild(inp);
+  inp.addEventListener('change',async()=>{
+    const toHex=inp.value; if(inp.parentNode) document.body.removeChild(inp);
+    if(toHex && toHex.toLowerCase()!==fromHex.toLowerCase()) await recolorArtwork(side,fromHex,toHex);
+  });
+  inp.click();
+}
+async function recolorArtwork(side,fromHex,toHex){
+  const pg=state.pages[state.currentPage]; if(!pg) return;
+  const key=side+'Logo', b64=pg[key+'Base64']; if(!b64) return;
+  const from=inkHexToRgb(fromHex), to=inkHexToRgb(toHex); if(!from||!to) return;
+  let img; try{ img=await _inkLoad(b64); }catch(e){ toast('Could not load artwork to recolor','error'); return; }
+  const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(img,0,0);
+  let id; try{ id=cx.getImageData(0,0,w,h); }catch(e){ toast('Artwork can’t be edited (cross-origin)','error'); return; }
+  const d=id.data, t2=INK.mergeTol*INK.mergeTol, fr={r:from[0],g:from[1],b:from[2]}; let changed=0;
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]<24) continue;
+    if(_inkDist2(fr,d[i],d[i+1],d[i+2])<=t2){ d[i]=to[0]; d[i+1]=to[1]; d[i+2]=to[2]; changed++; }
+  }
+  if(!changed){ toast('No pixels matched that ink','error'); return; }
+  cx.putImageData(id,0,0);
+  const out=cv.toDataURL('image/png');
+  pg[key+'Base64']=out; pg[key+'Img']=null;
+  if(side==='front') pg.frontCompositeBase64=null; else pg.backCompositeBase64=null;
+  updateThumb(key,out);
+  // Sync the matching label swatch (from→to), keeping any name the user typed.
+  const arr=pg[side+'Colors']||[];
+  arr.forEach(c=>{ if(c&&typeof c==='object'&&(c.hex||'').toLowerCase()===fromHex.toLowerCase()) c.hex=toHex.toLowerCase(); });
+  renderColorSwatches(side,arr);
+  try{ _inkPalette[side]=await analyzeArtwork(out); }catch(e){}   // re-scan → refresh chips
+  _renderInkChips(side);
+  scheduleUpdate();
+  toast('Swapped '+fromHex+' → '+toHex.toUpperCase(),'success');
+}
+// First artwork upload auto-fills colors; a replacement refreshes the chips but
+// won't silently wipe colors you've already named — tap ✨ to refill.
+async function _onArtworkChanged(side){
+  const pg=state.pages[state.currentPage]; if(!pg) return;
+  const existing=pg[side+'Colors']||[];
+  if(existing.length===0){ await autoDetectColors(side,{auto:true}); return; }
+  try{ _inkPalette[side]=await analyzeArtwork(pg[side+'LogoBase64']); }catch(e){ _inkPalette[side]=null; }
+  _renderInkChips(side);
+  _inkMsg(side,'New artwork loaded. Tap ✨ Auto-detect to refill the ink colors from it.','');
+}
 
 // ── Logo Editor: print-placement constraints ──────────────────────
 // All of these are no-ops while the Product select is 'generic', so the
