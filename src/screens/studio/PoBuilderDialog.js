@@ -319,7 +319,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
                             role="button" tabIndex={0}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVendorCard(po.vendorName); } }}
                             title={`Open ${po.vendorName} card`}
-                            sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                            sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2, borderRadius: 2 } }}
                           >
                             {po.vendorName}
                           </Box>

@@ -649,7 +649,9 @@ function LeadRow({ lead, onOpen, selected, onToggleSelect }) {
       <Stack direction="row" spacing={1.5} alignItems="center">
         {onToggleSelect && (
           <Box
+            role="checkbox" tabIndex={0} aria-checked={selected}
             onClick={(e) => { e.stopPropagation(); onToggleSelect(lead._id); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggleSelect(lead._id); } }}
             sx={{
               flexShrink: 0, width: 18, height: 18, borderRadius: 0.5,
               border: `1.5px solid ${selected ? TERM.green : TERM.borderDim}`,
@@ -658,6 +660,7 @@ function LeadRow({ lead, onOpen, selected, onToggleSelect }) {
               color: TERM.greenDk, fontFamily: MONO, fontSize: 12, fontWeight: 700,
               cursor: 'pointer',
               '&:hover': { borderColor: TERM.green },
+              '&:focus-visible': { outline: `2px solid ${TERM.green}`, outlineOffset: 2 },
             }}
           >
             {selected ? '✓' : ''}
@@ -1758,16 +1761,17 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
                     const visibleIds = filteredLeads.map((l) => l._id);
                     const allSel = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
                     const someSel = !allSel && visibleIds.some((id) => selectedIds.has(id));
+                    const toggleAll = () => setSelectedIds((cur) => {
+                      const next = new Set(cur);
+                      if (allSel) visibleIds.forEach((id) => next.delete(id));
+                      else        visibleIds.forEach((id) => next.add(id));
+                      return next;
+                    });
                     return (
                       <Box
-                        onClick={() => {
-                          setSelectedIds((cur) => {
-                            const next = new Set(cur);
-                            if (allSel) visibleIds.forEach((id) => next.delete(id));
-                            else        visibleIds.forEach((id) => next.add(id));
-                            return next;
-                          });
-                        }}
+                        role="checkbox" tabIndex={0} aria-checked={allSel ? true : (someSel ? 'mixed' : false)}
+                        onClick={toggleAll}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAll(); } }}
                         sx={{
                           flexShrink: 0, width: 18, height: 18, borderRadius: 0.5,
                           border: `1.5px solid ${(allSel || someSel) ? TERM.green : TERM.borderDim}`,
@@ -1776,6 +1780,7 @@ export default function JpwReconTab({ token, onOpenColdCall }) {
                           color: TERM.greenDk, fontFamily: MONO, fontSize: 12, fontWeight: 700,
                           cursor: 'pointer',
                           '&:hover': { borderColor: TERM.green },
+                          '&:focus-visible': { outline: `2px solid ${TERM.green}`, outlineOffset: 2 },
                         }}
                       >{allSel ? '✓' : (someSel ? '−' : '')}</Box>
                     );

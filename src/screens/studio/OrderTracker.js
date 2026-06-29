@@ -752,6 +752,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                   border: `1px solid ${active ? B.green : 'rgba(255,255,255,0.08)'}`,
                   transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   '&:hover': { bgcolor: active ? B.green : 'rgba(255,255,255,0.08)' },
+                  '&.Mui-focusVisible': { outline: `2px solid ${B.green}`, outlineOffset: 1 },
                 }}
               />
             );
@@ -1742,7 +1743,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           const active = tab === t.id;
           return (
             <Box key={t.id} role="tab" aria-selected={active}
+              tabIndex={0}
               onClick={() => setTab(t.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTab(t.id); } }}
               sx={{
                 flex: { xs: 1, md: '0 0 auto' },
                 textAlign: 'center', cursor: 'pointer', userSelect: 'none',
@@ -1755,6 +1758,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   : 'inset 0 -2px 0 0 transparent',
                 transition: 'color 180ms ease, box-shadow 180ms ease',
                 '&:hover': { color: active ? B.green : B.white },
+                '&:focus-visible': { outline: `2px solid ${B.green}`, outlineOffset: -2 },
               }}>
               {t.label}
             </Box>

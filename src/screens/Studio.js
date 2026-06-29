@@ -769,6 +769,7 @@ function FilterPill({ active, label, count, onClick, color }) {
           color: active ? color : BRAND.white,
           transform: 'translateY(-1px)',
         },
+        '&:focus-visible': { outline: `2px solid ${color}`, outlineOffset: 2 },
       }}
     >
       {label}
@@ -789,6 +790,8 @@ function SubmissionRow({ item, onClick, formatDate }) {
   return (
     <Paper
       onClick={onClick}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       sx={{
         p: 2, borderRadius: 2, cursor: 'pointer',
         bgcolor: 'rgba(255,255,255,0.03)',
@@ -800,6 +803,7 @@ function SubmissionRow({ item, onClick, formatDate }) {
           transform: 'translateY(-2px)',
           boxShadow: `0 8px 24px -12px rgba(74,222,128,0.4)`,
         },
+        '&:focus-visible': { outline: `2px solid ${BRAND.green}`, outlineOffset: 2 },
         '&::before': {
           content: '""', position: 'absolute',
           left: 0, top: 0, bottom: 0, width: 3, bgcolor: meta.color,
@@ -1731,6 +1735,9 @@ function ColdCallTab({ token }) {
                 <React.Fragment key={`${id}-${i}`}>
                   <Box
                     onClick={isCurrent ? undefined : () => jumpToIndex(i)}
+                    role={isCurrent ? undefined : 'button'}
+                    tabIndex={isCurrent ? undefined : 0}
+                    onKeyDown={isCurrent ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIndex(i); } }}
                     sx={{
                       fontSize: 11.5, fontWeight: isCurrent ? 800 : 600,
                       color: isCurrent ? BRAND.green : BRAND.muted,
@@ -1739,6 +1746,7 @@ function ColdCallTab({ token }) {
                       bgcolor: isCurrent ? 'rgba(74,222,128,0.10)' : 'transparent',
                       transition: 'color 0.15s ease, background 0.15s ease',
                       '&:hover': isCurrent ? {} : { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
+                      '&:focus-visible': isCurrent ? {} : { outline: `2px solid ${BRAND.green}`, outlineOffset: 1 },
                     }}
                   >
                     {(n && n.stage) || id}

@@ -1349,6 +1349,7 @@ export default function RoadTripTab({ token }) {
                       border: `1.5px solid ${TERM.green}`,
                       display: 'flex', alignItems: 'center',
                       '&:hover': { opacity: 0.88 },
+                      '&:focus-visible': { outline: `2px solid ${TERM.amber}`, outlineOffset: 2 },
                     }}>
                     GO
                   </Box>
@@ -1369,6 +1370,7 @@ export default function RoadTripTab({ token }) {
                           cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
                           '&:last-child': { borderBottom: 'none' },
                           '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green },
+                          '&:focus-visible': { outline: `2px solid ${TERM.green}`, outlineOffset: -2 },
                         }}>
                         {f.place_name}
                       </Box>
