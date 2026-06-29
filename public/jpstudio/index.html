@@ -3148,13 +3148,16 @@ function removeColor(side,idx){ const arr=side==='front'?state.pages[state.curre
 // photographic / too-complex art instead of dumping hundreds of near-
 // identical colors. Auto-fills the editable Logo Colors list (the color
 // call), and lets you swap any detected ink across the actual design.
-const INK = { scanMax:300, tol:22, mergeTol:34, minCoverage:0.005, maxInks:12, hardCap:80 };
+const INK = { scanMax:300, tol:18, mergeTol:18, minCoverage:0.0035, maxInks:12, hardCap:80 };
 const _inkPalette = { front:null, back:null }; // last analysis per side
 
 function _inkHex2(n){ return Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0'); }
 function inkRgbToHex(r,g,b){ return ('#'+_inkHex2(r)+_inkHex2(g)+_inkHex2(b)).toUpperCase(); }
 function inkHexToRgb(h){ const m=/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(h||'').trim()); if(!m) return null; let s=m[1]; if(s.length===3) s=s.split('').map(c=>c+c).join(''); const i=parseInt(s,16); return [(i>>16)&255,(i>>8)&255,i&255]; }
-function _inkDist2(a,r,g,b){ const dr=a.r-r,dg=a.g-g,db=a.b-b; return 0.3*dr*dr+0.59*dg*dg+0.11*db*db; }
+// Plain RGB distance² — equal weight per channel so near-whites (cream vs white)
+// and other close-but-distinct inks stay separate. A luma weighting under-
+// separated them, merging real screen colors together.
+function _inkDist2(a,r,g,b){ const dr=a.r-r,dg=a.g-g,db=a.b-b; return dr*dr+dg*dg+db*db; }
 
 function _inkQuantize(data,o){
   const tol2=o.tol*o.tol, clusters=[], bins=new Map(); let inked=0, overflow=false;
