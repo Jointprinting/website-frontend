@@ -2039,7 +2039,7 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large 
           bgcolor: D.panel,
           border: `1px solid ${large ? D.lineHi : D.line}`,
           borderRadius: 3,
-          minHeight: large ? 188 : (muted ? 132 : 156),
+          minHeight: large ? 158 : (muted ? 132 : 156),
           transition: 'border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease',
           position: 'relative',
           overflow: 'hidden',
@@ -2230,10 +2230,12 @@ function TierLabel({ children }) {
   );
 }
 
-// Column templates per tier — primary is a roomy 3-up, secondary fills the row,
-// tucked is a tidy small row. All collapse to 2-up / 1-up on small screens.
+// Column templates per tier. Primary holds the two daily-core tiles, so it's a
+// clean 2-up that fills the row evenly (a 3-up left an orphan empty column and
+// made the tiles read tall-and-empty). Secondary fills the row; tucked is a tidy
+// small row. All collapse to 2-up / 1-up on small screens.
 const TIER_COLS = {
-  primary:   { xs: '1fr', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(3, 1fr)' },
+  primary:   { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
   secondary: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
 };
@@ -2273,16 +2275,33 @@ function AlertsPlaceholder() {
 
 // The live command-center panel: clickable rows for what needs attention, ordered
 // by urgency. Order rows (aging past the owner's 2–3 week turnaround) expand to list
-// the at-risk orders, each deep-linking to its project; follow-up + receipt rows jump
-// to the CRM Today queue / Finances. Falls back to the calm placeholder when clear.
+// the at-risk orders, each deep-linking to its project; follow-up rows jump to the
+// CRM Today queue. The backup nudge lives here too (it used to be a separate top
+// banner) with a ✕ to snooze it. Falls back to the calm placeholder when clear.
+// (Missing-receipt nudges live on the Finances page, not here — by design.)
 function SignalsPanel({ signals, onNavigate, onPick }) {
   const [open, setOpen] = React.useState({});
   const c = (signals && signals.counts) || {};
   const fu = (signals && signals.followUps) || {};
   const orders = (signals && signals.orders) || [];
-  const mr = (signals && signals.missingReceipts) || 0;
-  const total = (c.possibly_late || 0) + (c.running_long || 0) + (fu.overdue || 0) + (fu.dueToday || 0) + mr;
-  if (total <= 0) return <AlertsPlaceholder />;
+  const backup = (signals && signals.backup) || null;
+
+  // Backup nudge, folded into Signals. Two triggers, overdue first: an overdue
+  // weekly archive (backend isDue, snooze a week) and a gentler monthly "copy it
+  // to an external drive" reminder. Each remembers its last dismissal in
+  // localStorage so it doesn't re-nag on every load. ✕ snoozes; the row body
+  // opens the Backup tab.
+  const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
+  const [hddDismissedAt, setHddDismissedAt] = React.useState(() => readTs(K_HDD_REMINDER));
+  const now = Date.now();
+  const dismiss = (key, setter) => (e) => {
+    e.stopPropagation();
+    try { localStorage.setItem(key, String(Date.now())); } catch (_) {}
+    setter(Date.now());
+  };
+  const showOverdue = !!(backup && backup.isDue) && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
+  const showHdd = !showOverdue && (now - hddDismissedAt > REMIND_HDD_MS);
+
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const s = (n) => (n === 1 ? '' : 's');
 
@@ -2291,7 +2310,22 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
   if (c.running_long > 0) rows.push({ key: 'long', tone: D.amber, label: `${c.running_long} order${s(c.running_long)} running long · 2+ weeks`, flag: 'running_long' });
   if (fu.overdue > 0) rows.push({ key: 'overdue', tone: '#f87171', label: `${fu.overdue} follow-up${s(fu.overdue)} overdue`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
   if (fu.dueToday > 0) rows.push({ key: 'today', tone: D.green, label: `${fu.dueToday} follow-up${s(fu.dueToday)} due today`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
-  if (mr > 0) rows.push({ key: 'receipts', tone: D.amber, label: `${mr} order${s(mr)} need a receipt`, onClick: () => onPick && onPick('finances') });
+  if (showOverdue) rows.push({
+    key: 'backup', tone: D.amber,
+    label: backup.lastBackupAt
+      ? `Backup is ${backup.lastBackupDays} day${s(backup.lastBackupDays)} old — back it up`
+      : `You haven't backed up yet — back it up`,
+    onClick: () => onPick && onPick('backup'),
+    onDismiss: dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt),
+  });
+  else if (showHdd) rows.push({
+    key: 'backup', tone: '#60a5fa',
+    label: 'Monthly: copy the latest backup to an external drive',
+    onClick: () => onPick && onPick('backup'),
+    onDismiss: dismiss(K_HDD_REMINDER, setHddDismissedAt),
+  });
+
+  if (!rows.length) return <AlertsPlaceholder />;
 
   return (
     <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
@@ -2308,6 +2342,14 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: r.tone, flexShrink: 0, boxShadow: `0 0 8px ${r.tone}66` }} />
               <MuiTypography sx={{ color: D.text, fontSize: 13.5, fontWeight: 700, flexGrow: 1, minWidth: 0 }}>{r.label}</MuiTypography>
+              {r.onDismiss && (
+                <Box component="span" onClick={r.onDismiss} role="button" tabIndex={0} title="Dismiss"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); r.onDismiss(e); } }}
+                  sx={{ color: D.faint, fontSize: 15, lineHeight: 1, px: 0.75, py: 0.25, mr: -0.25,
+                    cursor: 'pointer', borderRadius: 1, '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.06)' } }}>
+                  ✕
+                </Box>
+              )}
               {expandable
                 ? <ExpandMoreIcon sx={{ fontSize: 20, color: D.faint, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
                 : <ChevronRightIcon sx={{ fontSize: 20, color: D.faint }} />}
@@ -2346,7 +2388,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries };
 
   return (
-    <Stack spacing={4}>
+    <Stack spacing={3.5}>
       {/* Command center — what needs attention, on arrival (above the launcher). */}
       <Box>
         <SectionHeader brand="Signals" tagline="What needs your attention" />
@@ -2488,11 +2530,12 @@ function StudioBody({ token, onLogout }) {
   const [nextResetAt, setNextResetAt]   = React.useState(null);
   const [unseenInquiries, setUnseenInquiries] = React.useState(0);
   // Command-center signals shown in the hub's Signals panel: orders aging past the
-  // owner's 2–3 week turnaround, overdue/due-today follow-ups, and orders missing a
-  // receipt. Each fetch fails silent — a down endpoint just drops its row.
+  // owner's 2–3 week turnaround, overdue/due-today follow-ups, and the backup nudge.
+  // Each fetch fails silent — a down endpoint just drops its row. (Missing-receipt
+  // nudges live on the Finances page, not here.)
   const [signals, setSignals] = React.useState({
     orders: [], counts: { possibly_late: 0, running_long: 0 },
-    followUps: { overdue: 0, dueToday: 0 }, missingReceipts: 0,
+    followUps: { overdue: 0, dueToday: 0 }, backup: null,
   });
   React.useEffect(() => {
     if (view !== 'hub') return;
@@ -2504,9 +2547,9 @@ function StudioBody({ token, onLogout }) {
     axios.get(`${config.backendUrl}/api/crm/today`, authH)
       .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, followUps: { overdue: r.data?.summary?.overdue || 0, dueToday: r.data?.summary?.dueToday || 0 } })); })
       .catch(() => { /* silent */ });
-    axios.get(`${config.backendUrl}/api/finances/missing-receipts`, authH)
-      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, missingReceipts: r.data?.count || 0 })); })
-      .catch(() => { /* silent */ });
+    axios.get(`${config.backendUrl}/api/admin/backup/status`, authH)
+      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, backup: r.data || null })); })
+      .catch(() => { /* silent — backup row just won't show */ });
     // Use /usage instead of /sweep/status. The sweep status doc gets
     // overwritten on every click, so a second click that hit the cap
     // (status='stopped', pairs_done=0) wipes out the morning's
@@ -2552,8 +2595,8 @@ function StudioBody({ token, onLogout }) {
   const handlePick = (tool) => {
     const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
     const innerView = typeof tool === 'object' && tool ? tool.view : null;
-    // 'mockup' now opens the React Mockups library (the studio's new home); the
-    // standalone canvas editor is reachable from there via "Open editor".
+    // 'mockup' opens the launcher tab, which hands off to the standalone /jpstudio
+    // canvas builder in a new tab.
     if (id === 'submissions' && unseenInquiries > 0) {
       setUnseenInquiries(0);
       axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, {},
@@ -2718,7 +2761,6 @@ function StudioBody({ token, onLogout }) {
       // approval page and builders use, so the hub feels part of the family.
       backgroundImage: 'radial-gradient(120% 60% at 50% -10%, rgba(74,222,128,0.06), rgba(11,20,16,0) 60%)',
     }}>
-      <BackupNagBanner token={token} onClick={() => setView('backup')} />
       {/* On the hub we want the wider 4-up grid; once you enter a tool, the
           existing tools were designed against the narrower md container so we
           keep that to avoid stretching tab UIs. */}
@@ -2873,21 +2915,19 @@ export default function Studio() {
     : <Login onAuthed={handleAuthed} />;
 }
 
-// ── BackupNagBanner ──────────────────────────────────────────────────────────
-// Sits at the top of the Studio hub. ONE dismissible nudge at a time, never two
-// stacked. Two independent triggers feed it, overdue taking priority:
+// ── Backup nudge state ───────────────────────────────────────────────────────
+// The backup nudge now lives as a row inside the hub's Signals panel (it used to
+// be a separate banner across the top). Two triggers, overdue first:
 //
-//   1. OVERDUE backup — driven by the backend (/admin/backup/status isDue): the
-//      weekly archive hasn't been taken in a while. Dismiss snoozes it a week.
-//      When overdue, the single banner folds in the hard-drive ask too, so the
-//      one line says "download it AND copy it to an external drive".
+//   1. OVERDUE backup — backend-driven (/admin/backup/status isDue): the weekly
+//      archive hasn't been taken in a while. Dismiss (✕) snoozes it a week.
 //   2. MONTHLY hard-drive reminder — a gentler heads-up to copy the latest
 //      archive onto an external drive (the third, fully-offline basket beyond
-//      the site DB and Google Drive). Purely client-side: it reappears ~30 days
-//      after it was last dismissed. Shown on its own only when NOT overdue.
+//      the site DB and Google Drive). Purely client-side: reappears ~30 days
+//      after it was last dismissed. Shown only when NOT overdue.
 //
-// Both store their last-dismissed time in localStorage so they don't re-nag on
-// every page load. Click the body to jump to the Backup tab; click ✕ to dismiss.
+// Each stores its last-dismissed time in localStorage so it doesn't re-nag on
+// every load. See SignalsPanel for the row that consumes these.
 const SNOOZE_OVERDUE_MS = 7  * 24 * 60 * 60 * 1000;   // a week
 const REMIND_HDD_MS     = 30 * 24 * 60 * 60 * 1000;   // ~monthly
 const K_OVERDUE_SNOOZE  = 'jpBackupOverdueSnoozedAt';
@@ -2896,86 +2936,4 @@ const K_HDD_REMINDER    = 'jpHddReminderDismissedAt';
 function readTs(key) {
   try { const v = parseInt(localStorage.getItem(key), 10); return Number.isFinite(v) ? v : 0; }
   catch (_) { return 0; }
-}
-
-function BackupNagBanner({ token, onClick }) {
-  const [info, setInfo] = React.useState(null);
-  // Re-read on mount so a fresh dismissal in a prior session is respected.
-  const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
-  const [hddDismissedAt, setHddDismissedAt]     = React.useState(() => readTs(K_HDD_REMINDER));
-
-  React.useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const res = await fetch(`${config.backendUrl}/api/admin/backup/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setInfo(data);
-      } catch (_) { /* silent */ }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [token]);
-
-  const now = Date.now();
-  const dismiss = (key, setter) => (e) => {
-    e.stopPropagation();
-    try { localStorage.setItem(key, String(Date.now())); } catch (_) {}
-    setter(Date.now());
-  };
-
-  const Banner = ({ tone, children, onDismiss }) => {
-    const c = tone === 'overdue' ? '#fbbf24' : '#60a5fa';
-    const bg = tone === 'overdue' ? 'rgba(251,191,36,0.10)' : 'rgba(96,165,250,0.10)';
-    const bgHover = tone === 'overdue' ? 'rgba(251,191,36,0.16)' : 'rgba(96,165,250,0.16)';
-    const bd = tone === 'overdue' ? 'rgba(251,191,36,0.25)' : 'rgba(96,165,250,0.25)';
-    return (
-      <Box onClick={onClick} sx={{
-        cursor: 'pointer', mx: 'auto', mt: -1, mb: 2, position: 'relative',
-        bgcolor: bg, borderTop: `1px solid ${bd}`, borderBottom: `1px solid ${bd}`,
-        color: c, textAlign: 'center', py: 1.1, px: 5, fontSize: 13, fontWeight: 600,
-        '&:hover': { bgcolor: bgHover },
-      }}>
-        {children}
-        <Box component="span" onClick={onDismiss} title="Dismiss"
-          sx={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-            opacity: 0.6, px: 0.8, '&:hover': { opacity: 1 } }}>
-          ✕
-        </Box>
-      </Box>
-    );
-  };
-
-  // 1. Overdue backup (backend-driven), unless snoozed in the last week.
-  const showOverdue = info && info.isDue && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
-  // 2. Monthly hard-drive reminder, unless dismissed in the last ~30 days.
-  //    First-run (never dismissed) shows it so the habit gets established.
-  const showHdd = (now - hddDismissedAt > REMIND_HDD_MS);
-
-  if (!showOverdue && !showHdd) return null;
-
-  // ONE banner, overdue first. When overdue, the message folds in the external-
-  // drive ask so we never stack a second backup banner underneath it. Only when
-  // the backup is current do we fall back to the gentler monthly HD reminder.
-  const overdueMsg = info && info.lastBackupAt
-    ? `Backup is ${info.lastBackupDays} days old — download it and copy to an external drive.`
-    : `You haven't backed up yet — download an archive and copy it to an external drive.`;
-
-  if (showOverdue) {
-    return (
-      <Banner tone="overdue" onDismiss={dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt)}>
-        ⚠ {overdueMsg} <Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
-      </Banner>
-    );
-  }
-
-  return (
-    <Banner tone="hdd" onDismiss={dismiss(K_HDD_REMINDER, setHddDismissedAt)}>
-      🗄 Monthly reminder: download the latest backup and copy it to an external hard drive.
-      {' '}<Box component="span" sx={{ textDecoration: 'underline', ml: 0.5 }}>Open Backup →</Box>
-    </Banner>
-  );
 }
