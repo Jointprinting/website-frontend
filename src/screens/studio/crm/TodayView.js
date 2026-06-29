@@ -89,7 +89,7 @@ function CallRow({ row, onOpen, onLog, onReschedule, bindCompany }) {
               }}>
                 {last.text}
               </Typography>
-              <Typography sx={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, flexShrink: 0, ...mono }}>
+              <Typography sx={{ color: D.faint, fontSize: 11, flexShrink: 0, ...mono }}>
                 · {fmtRelative(last.at)}
               </Typography>
             </Stack>

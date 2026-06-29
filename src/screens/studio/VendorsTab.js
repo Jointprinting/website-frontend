@@ -285,6 +285,7 @@ function rowOpenProps(target, onOpen) {
     boxSx: {
       cursor: 'pointer', transition: 'background-color 0.15s ease',
       '&:hover': { bgcolor: 'rgba(74,222,128,0.06)' },
+      '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: -2 },
     },
     handlers: {
       onClick: go,

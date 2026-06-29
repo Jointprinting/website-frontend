@@ -257,7 +257,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
             <Button onClick={addLine} startIcon={<AddCircleOutlineIcon />}
               sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
                 px: 2, transition: 'background-color 0.18s',
-                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' },
+                '&.Mui-focusVisible': { outline: `2px solid ${D.green}`, outlineOffset: 2 } }}>
               Add the first line
             </Button>
           </Box>

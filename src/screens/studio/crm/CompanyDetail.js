@@ -231,6 +231,7 @@ function OrderRow({ o, onOpen }) {
         cursor: canOpen ? 'pointer' : 'default',
         transition: 'background-color 0.15s ease',
         '&:hover': canOpen ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
+        '&:focus-visible': canOpen ? { outline: `2px solid ${D.green}`, outlineOffset: -2, bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
       }}>
       <ReceiptLongOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -296,6 +297,7 @@ function PoRow({ p, onOpen, onOpenVendor }) {
         cursor: canOpen ? 'pointer' : 'default',
         transition: 'background-color 0.15s ease',
         '&:hover': canOpen ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
+        '&:focus-visible': canOpen ? { outline: `2px solid ${D.green}`, outlineOffset: -2, bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
       }}>
       <DescriptionOutlinedIcon sx={{ fontSize: 18, color: D.faint, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
