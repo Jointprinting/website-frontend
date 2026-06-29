@@ -751,6 +751,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                   height: 24,
                   cursor: 'pointer',
                   border: `1px solid ${active ? B.green : 'rgba(255,255,255,0.08)'}`,
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   '&:hover': { bgcolor: active ? B.green : 'rgba(255,255,255,0.08)' },
                 }}
               />

@@ -20,6 +20,18 @@ code {
   }
 }
 
+/* Respect a system request for less motion, everywhere at once: near-instant
+   animations/transitions and no smooth-scroll. One place beats per-component
+   guards — covers the whole app (public site + studio) without touching JS. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Brand-green text selection — small, everywhere, unmistakably ours. */
 ::selection {
   background: #06752b;
