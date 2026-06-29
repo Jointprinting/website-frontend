@@ -269,18 +269,16 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
   const empty = !summary || (summary.income === 0 && summary.expense === 0 && txns.length === 0);
 
-  // #1 alarm: an order that was sold but lost money (revenue in, profit negative).
-  // Orders with no recorded sale yet (revenue 0) aren't losses — they're pending.
-  const losers = (orders || []).filter((o) => o.revenue > 0 && o.profit < 0);
-  const lossTotal = losers.reduce((s, o) => s + Math.abs(o.profit), 0);
-  // Banner shows ONLY when something needs you — pristine (no banner) when all's
-  // well. RED = a sold order lost money; AMBER = merch net negative.
-  const showBanner = losers.length > 0 || (summary && summary.net < 0);
-  const bannerState = losers.length > 0 ? 'red' : 'amber';
-  const bannerSig = `${year}|${bannerState}|${losers.map((o) => o.orderNumber).join(',')}`;
+  // The owner asked not to be alarmed about losses on OLD/finished orders — a loss on
+  // a delivered job is water under the bridge, not something he can act on, and a
+  // half-recorded in-flight order can read "negative" mid-job (a false alarm). So the
+  // per-order "lost money / underwater" RED banner is retired. Per-order losses are
+  // still visible — non-nagging — in the Profit-by-order table below. The only banner
+  // left is the current-period AMBER "merch is in the red" signal (dismissable).
+  const showBanner = !!(summary && summary.net < 0);
+  const bannerSig = `${year}|amber`;
   const today = new Date().toISOString().slice(0, 10);
-  // RED is critical — never dismissable (no ✕). AMBER clears for the day, returns.
-  const bannerHidden = bannerState !== 'red' && bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
+  const bannerHidden = bannerDismiss && bannerDismiss.sig === bannerSig && bannerDismiss.date === today;
   const dismissBanner = () => {
     const d = { sig: bannerSig, date: today };
     try { localStorage.setItem('jpFinBanner', JSON.stringify(d)); } catch (_) {}
@@ -394,36 +392,13 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             {showBanner && !bannerHidden && (
             <Box sx={{ position: 'relative',
               animation: bannerLeaving ? 'jpBannerOut 260ms ease forwards' : 'jpBannerIn 360ms cubic-bezier(.2,.7,.3,1) both' }}>
-              {bannerState !== 'red' && (
-                <IconButton size="small" title="Dismiss for today"
-                  onClick={() => { setBannerLeaving(true); setTimeout(() => { dismissBanner(); setBannerLeaving(false); }, 250); }}
-                  sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted,
-                    transition: 'transform 220ms ease, color 220ms ease',
-                    '&:hover': { color: B.white, transform: 'rotate(90deg) scale(1.12)' } }}>
-                  <CloseIcon sx={{ fontSize: 15 }} />
-                </IconButton>
-              )}
-            {losers.length > 0 ? (
-              <Box sx={{ border: '1px solid rgba(248,113,113,0.4)', bgcolor: 'rgba(248,113,113,0.07)', borderRadius: 2, px: 2, py: 1.25 }}>
-                <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.75 }}>
-                  <ErrorOutlineIcon sx={{ color: '#f87171' }} />
-                  <Typography sx={{ color: '#f87171', fontWeight: 800, fontSize: 14, flex: 1 }}>
-                    {losers.length} order{losers.length > 1 ? 's' : ''} lost money — {money(lossTotal)} underwater
-                  </Typography>
-                </Stack>
-                <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ pl: 4 }}>
-                  {losers.map((o) => (
-                    <Box key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
-                      sx={{ fontSize: 11, color: B.muted, bgcolor: 'rgba(255,255,255,0.04)', cursor: 'pointer',
-                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 1, px: 0.75, py: 0.25,
-                      '&:hover': { borderColor: 'rgba(248,113,113,0.55)' } }}>
-                      #{o.orderNumber}{o.client ? ` · ${o.client}` : ''}{' '}
-                      <Box component="span" sx={{ color: '#f87171', fontWeight: 700 }}>{money(o.profit)}</Box>
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            ) : (
+              <IconButton size="small" title="Dismiss for today"
+                onClick={() => { setBannerLeaving(true); setTimeout(() => { dismissBanner(); setBannerLeaving(false); }, 250); }}
+                sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted,
+                  transition: 'transform 220ms ease, color 220ms ease',
+                  '&:hover': { color: B.white, transform: 'rotate(90deg) scale(1.12)' } }}>
+                <CloseIcon sx={{ fontSize: 15 }} />
+              </IconButton>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, border: '1px solid rgba(251,191,36,0.4)',
                 bgcolor: 'rgba(251,191,36,0.06)', borderRadius: 2, px: 2, py: 1.25 }}>
                 <ErrorOutlineIcon sx={{ color: '#fbbf24', mt: 0.2 }} />
@@ -432,11 +407,10 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                     Merch is in the red — −{money(Math.abs(summary.net))} {year ? `in ${year}` : 'overall'}
                   </Typography>
                   <Typography sx={{ color: B.muted, fontSize: 12 }}>
-                    No single order lost money, but costs are outpacing sales this period.
+                    Costs are outpacing sales this period.
                   </Typography>
                 </Box>
               </Box>
-            )}
             </Box>
             )}
 

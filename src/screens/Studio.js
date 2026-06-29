@@ -2603,8 +2603,14 @@ function StudioBody({ token, onLogout }) {
   const handlePick = (tool) => {
     const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
     const innerView = typeof tool === 'object' && tool ? tool.view : null;
-    // 'mockup' opens the launcher tab, which hands off to the standalone /jpstudio
-    // canvas builder in a new tab.
+    // 'mockup' opens the standalone /jpstudio canvas builder. Open it DIRECTLY on
+    // this single hub click — the window.open runs inside the click gesture, so it
+    // isn't pop-up-blocked — instead of making the owner click again on the launcher
+    // screen. The launcher view still renders behind it as a fallback / re-open
+    // button in case a browser blocks the pop-up.
+    if (id === 'mockup') {
+      try { window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer'); } catch (_) {}
+    }
     if (id === 'submissions' && unseenInquiries > 0) {
       setUnseenInquiries(0);
       axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, {},

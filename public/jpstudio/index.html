@@ -1756,6 +1756,7 @@ if (document.readyState === 'loading') {
   wrap.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2) {
       isPinching = true; isPanning = false;
+      window.__pinchActive = true;   // pause the canvas refit watcher while pinching
       startDist = dist(e.touches[0], e.touches[1]);
       startScale = scale;
       const m = mid(e.touches[0], e.touches[1]);
@@ -1800,7 +1801,7 @@ if (document.readyState === 'loading') {
   }, { passive:false });
 
   wrap.addEventListener('touchend', (e) => {
-    if (e.touches.length < 2) isPinching = false;
+    if (e.touches.length < 2) { isPinching = false; window.__pinchActive = false; }
     if (e.touches.length === 0) {
       isPanning = false;
       if (scale <= 1.02) reset();
@@ -3056,6 +3057,9 @@ function switchTab(tab, btn) {
   if (tab==='overview') renderOverview();
   if (tab==='lookbook') refreshLbGrid();
   if (tab==='library') refreshLibrary();
+  // The studio canvas may have been painted while this tab was hidden (or before the
+  // window settled at full size) — re-fit it to the now-visible area next frame.
+  if (tab==='studio') setTimeout(_refitPreviewIfNeeded, 0);
 }
 
 // ── Overview (projects → their mockups; the fresh-open landing) ─────
@@ -4259,6 +4263,7 @@ let pdfJsDoc=null;
 let _renderInFlight = null;     // promise for the currently running render, or null
 let _renderPending = false;     // a follow-up render was requested while one was in flight
 let _activeRenderTask = null;   // current pdfjs renderTask (so we can cancel)
+let _lastRenderW = 0, _lastRenderH = 0;  // #canvas-area size the preview was last fit to
 
 async function renderPdfPreview() {
   if (_renderInFlight) {
@@ -4282,7 +4287,14 @@ async function renderPdfPreview() {
           pdfJsDoc=await pdfjsLib.getDocument({data:pdfBytes}).promise;
           const pdfPage=await pdfJsDoc.getPage(state.currentPage+1);
           const container=document.getElementById('canvas-area');
-          const scale=Math.min((container.clientWidth-50)/PAGE_WIDTH,(container.clientHeight-70)/PAGE_HEIGHT);
+          // Fit the page to whatever space the canvas area actually has RIGHT NOW.
+          // Record that size so the resize watcher (below) can re-render when the
+          // area later grows/shrinks — otherwise a preview first painted into a
+          // small/hidden container (e.g. rendered before the studio tab is shown, or
+          // before the window is maximized) would stay stuck tiny.
+          const cw = container.clientWidth, ch = container.clientHeight;
+          _lastRenderW = cw; _lastRenderH = ch;
+          const scale=Math.min((cw-50)/PAGE_WIDTH,(ch-70)/PAGE_HEIGHT);
           const vp=pdfPage.getViewport({scale:Math.max(scale,.4)});
           const canvas=document.getElementById('pdf-canvas');
           canvas.width=vp.width; canvas.height=vp.height;
@@ -4311,6 +4323,33 @@ async function renderPdfPreview() {
     _renderInFlight = null;
   }
 }
+
+// ── Keep the preview filling its space ────────────────────────────
+// The fit-scale in renderPdfPreview is measured from #canvas-area's LIVE size. If
+// that size changes after the last paint — the window is maximized/resized, a side
+// panel collapses, the device rotates, or the studio tab is shown after the preview
+// was first painted while hidden — the sheet would otherwise stay stuck at the old
+// (often too-small) scale. Re-render, debounced, whenever the area's size actually
+// changes from what we last fit to. Skipped during an active touch pinch-zoom so it
+// can't fight the gesture transform.
+let _fitTimer = null;
+function _refitPreviewIfNeeded() {
+  if (window.__pinchActive) return;
+  const area = document.getElementById('canvas-area');
+  if (!area || area.offsetParent === null) return;     // hidden (another tab) — nothing to fit
+  const w = area.clientWidth, h = area.clientHeight;
+  if (!w || !h) return;
+  if (Math.abs(w - _lastRenderW) < 8 && Math.abs(h - _lastRenderH) < 8) return;  // no real change
+  clearTimeout(_fitTimer);
+  _fitTimer = setTimeout(() => { try { renderPdfPreview(); } catch (_) {} }, 140);
+}
+(function initPreviewRefit(){
+  const area = document.getElementById('canvas-area');
+  if (!area) return;
+  if (window.ResizeObserver) { try { new ResizeObserver(_refitPreviewIfNeeded).observe(area); } catch (_) {} }
+  window.addEventListener('resize', _refitPreviewIfNeeded);
+  window.addEventListener('orientationchange', _refitPreviewIfNeeded);
+})();
 
 // ── Export PDF ────────────────────────────────────────────────────
 async function exportPdf() {
