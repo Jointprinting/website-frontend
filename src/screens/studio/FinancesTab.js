@@ -25,7 +25,7 @@ import axios from 'axios';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
-import { B, darkInput, scrollbar } from './_shared';
+import { B, darkInput, scrollbar, mono } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceRestartView from './FinanceRestartView';
@@ -548,7 +548,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                       const canClient = !!onNavigate && !!ck && !!o.client;
                       return (
                       <Box component="tr" key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
-                        sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                        sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
                         <Box component="td" sx={{ textAlign: 'left !important', color: canOrder ? B.green : B.muted }}>
                           <Box component="span"
                             onClick={canOrder ? (e) => { e.stopPropagation(); goOrder(o.orderNumber); } : undefined}
@@ -632,7 +632,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                             );
                           })()}
                         </Box>
-                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', color: isInflow(t) ? B.green : '#f87171' }}>
+                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', ...mono, whiteSpace: 'nowrap', color: isInflow(t) ? B.green : '#f87171' }}>
                           {isInflow(t) ? '+' : '−'}{money(t.amount)}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, width: 28, textAlign: 'center' }}>
@@ -734,7 +734,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
                   <Box component="td" sx={{ py: 0.7, px: 1, color: B.white, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.party || t.description || ''}
                   </Box>
-                  <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap',
+                  <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', ...mono, whiteSpace: 'nowrap',
                     color: isInflow(t) ? B.green : '#f87171' }}>
                     {isInflow(t) ? '+' : '−'}{money(t.amount)}
                   </Box>
@@ -804,7 +804,7 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
           <Box component="tbody">
             {rows.map((o) => (
               <Box component="tr" key={o.orderNumber}
-                sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+                sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
                 <Box component="td" sx={{ textAlign: 'left !important', color: onOpenOrder ? B.green : B.muted }}>
                   {onOpenOrder ? (
                     <Box component="span" onClick={() => onOpenOrder(o.orderNumber)} title="Open this order"
@@ -968,7 +968,7 @@ function TopClients({ clients, onClient }) {
           </Box>
           <Box component="tbody">
             {clients.slice(0, 20).map((c) => (
-              <Box component="tr" key={c.client} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' } }}>
+              <Box component="tr" key={c.client} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
                 <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {c.companyKey && onClient ? (
                     <Box component="span" onClick={() => onClient(c.companyKey)}
