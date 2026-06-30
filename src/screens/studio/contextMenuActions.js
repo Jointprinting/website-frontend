@@ -17,6 +17,9 @@
 //   • Copy actions use copyToClipboard and flash a toast when a flasher is given.
 
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
+import SmsOutlinedIcon from '@mui/icons-material/SmsOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
@@ -38,7 +41,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 
 import { copyToClipboard } from './ContextMenu';
-import { CRM_STAGES, PRE_CUSTOMER_STAGES, isClient, stageMeta, telHref, primaryPhone } from './crm/_crm';
+import { CRM_STAGES, PRE_CUSTOMER_STAGES, isClient, stageMeta, telHref, smsHref, primaryPhone } from './crm/_crm';
 import { STATUS_OPTIONS, hasConfirmation } from './_shared';
 
 // First usable email for a CRM record: its own, else the first contact with one.
@@ -99,6 +102,14 @@ export function buildCompanyMenu(c, handlers = {}) {
       key: 'call', label: `Call ${phone}`, icon: PhoneInTalkIcon, hint: 'tel',
       onClick: () => { const href = telHref(phone); if (href) window.location.href = href; },
     },
+    phone && {
+      key: 'text', label: 'Text', icon: SmsOutlinedIcon, hint: 'sms',
+      onClick: () => { const href = smsHref(phone); if (href) window.location.href = href; },
+    },
+    email && {
+      key: 'email', label: 'Email', icon: MailOutlineIcon, hint: 'mail',
+      onClick: () => { window.location.href = `mailto:${email}`; },
+    },
     handlers.onLog && { key: 'log', label: 'Log a touch', icon: EditNoteOutlinedIcon, onClick: () => handlers.onLog(target) },
     handlers.onReschedule && { key: 'resched', label: 'Reschedule follow-up', icon: EventRepeatOutlinedIcon, onClick: () => handlers.onReschedule(target) },
     handlers.onSetStage && {
@@ -113,9 +124,10 @@ export function buildCompanyMenu(c, handlers = {}) {
       })),
     },
     (handlers.onAddTag && hasTags) && { key: 'tag', label: 'Add tag…', icon: LocalOfferOutlinedIcon, onClick: () => handlers.onAddTag(key, tags) },
-    (phone || email) && { divider: true },
+    { divider: true },
     copyItem({ key: 'copy-phone', label: 'Copy phone', value: phone, flash: handlers.flash, toastLabel: 'Phone', icon: ContentCopyOutlinedIcon }),
     copyItem({ key: 'copy-email', label: 'Copy email', value: email, flash: handlers.flash, toastLabel: 'Email', icon: MailOutlineIcon }),
+    copyItem({ key: 'copy-name', label: 'Copy name', value: name, flash: handlers.flash, toastLabel: 'Name', icon: ContentCopyOutlinedIcon }),
     handlers.onArchive && { divider: true },
     handlers.onArchive && {
       // Archives immediately — no native confirm. The handler shows a few-second
@@ -176,8 +188,9 @@ export function buildOrderMenu(p, handlers = {}) {
         onClick: () => handlers.onSetStatus(p, s.value),
       })),
     },
-    num && { divider: true },
+    { divider: true },
     copyItem({ key: 'copy-order', label: 'Copy order #', value: num, flash: handlers.flash, toastLabel: 'Order #', icon: ContentCopyOutlinedIcon }),
+    copyItem({ key: 'copy-client', label: 'Copy client name', value: (p.companyName || p.clientName || ''), flash: handlers.flash, toastLabel: 'Client', icon: ContentCopyOutlinedIcon }),
   ];
   return items;
 }
@@ -220,7 +233,11 @@ export function buildVendorMenu(v, handlers = {}) {
     (handlers.onOpen && id) && { key: 'open', label: 'Open vendor card', icon: StorefrontOutlinedIcon, onClick: () => handlers.onOpen(id) },
     phone && {
       key: 'call', label: `Call ${phone}`, icon: PhoneInTalkIcon, hint: 'tel',
-      onClick: () => { const href = `tel:${String(phone).replace(/[^\d+]/g, '')}`; window.location.href = href; },
+      onClick: () => { const href = telHref(phone); if (href) window.location.href = href; },
+    },
+    phone && {
+      key: 'text', label: 'Text', icon: SmsOutlinedIcon, hint: 'sms',
+      onClick: () => { const href = smsHref(phone); if (href) window.location.href = href; },
     },
     email && {
       key: 'email', label: 'Email vendor', icon: MailOutlineIcon,
@@ -229,6 +246,7 @@ export function buildVendorMenu(v, handlers = {}) {
     (handlers.onSetNextPo && id) && { key: 'nextpo', label: 'Set next PO #', icon: TagOutlinedIcon, onClick: () => handlers.onSetNextPo(v) },
     (phone || email || contactBlock) && { divider: true },
     copyItem({ key: 'copy-contact', label: 'Copy contact', value: contactBlock, flash: handlers.flash, toastLabel: 'Contact', icon: ContentCopyOutlinedIcon }),
+    copyItem({ key: 'copy-phone', label: 'Copy phone', value: phone, flash: handlers.flash, toastLabel: 'Phone', icon: ContentCopyOutlinedIcon }),
     copyItem({ key: 'copy-email', label: 'Copy email', value: email, flash: handlers.flash, toastLabel: 'Email', icon: MailOutlineIcon }),
   ];
   return items;
@@ -249,6 +267,10 @@ export function buildTransactionMenu(t, handlers = {}) {
   const items = [
     { header: label },
     handlers.onEdit && { key: 'edit', label: 'Edit transaction', icon: EditOutlinedIcon, onClick: () => handlers.onEdit(t) },
+    // Deep links — only wired by the surface when the order # / client actually
+    // resolve to a navigable target (so we never offer a dead jump).
+    handlers.onOpenOrder && { key: 'open-order', label: `Open order #${t.orderNumber}`, icon: OpenInNewOutlinedIcon, onClick: () => handlers.onOpenOrder(t) },
+    handlers.onOpenClient && { key: 'open-client', label: 'Open client card', icon: PersonOutlineIcon, onClick: () => handlers.onOpenClient(t) },
     t.receiptUrl && {
       key: 'receipt', label: 'View receipt', icon: ReceiptLongOutlinedIcon,
       onClick: () => { window.open(t.receiptUrl, '_blank', 'noopener,noreferrer'); },
@@ -269,11 +291,15 @@ export function buildTransactionMenu(t, handlers = {}) {
 // A couple of always-useful niceties so a right-click on empty Studio chrome
 // does something instead of nothing. Never registered over text/inputs.
 //
-// handlers = { onSearch(), onBackToHub(), searchLabel?, searchHint? }
+// handlers = { onSearch(), onNew(), newLabel?, onBackToHub(), searchLabel?, searchHint? }
 export function buildFallbackMenu(handlers = {}) {
   const items = [
     { header: 'Studio' },
     handlers.onSearch && { key: 'search', label: handlers.searchLabel || 'Global search', icon: SearchIcon, hint: handlers.searchHint || '⌘K', onClick: () => handlers.onSearch() },
+    // The surface's primary create action (e.g. "Add company" / "Add transaction"),
+    // so a right-click on empty chrome can start new work, not just navigate.
+    handlers.onNew && { key: 'new', label: handlers.newLabel || 'Add new', icon: AddCircleOutlineIcon, onClick: () => handlers.onNew() },
+    (handlers.onSearch || handlers.onNew) && handlers.onBackToHub && { divider: true },
     handlers.onBackToHub && { key: 'hub', label: 'Back to hub', icon: HomeOutlinedIcon, onClick: () => handlers.onBackToHub() },
   ];
   return items;

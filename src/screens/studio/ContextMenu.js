@@ -199,6 +199,17 @@ function sanitizeItems(items) {
 // ── The rendered menu (portal) ────────────────────────────────────────────────
 // One instance per open menu. Submenus recurse through <MenuList/>.
 function ContextMenuSurface({ x, y, items, onClose }) {
+  // Remember what was focused BEFORE the menu rendered (captured during the first
+  // render, before MenuList grabs focus) so a keyboard user is handed back to it
+  // when the menu closes, instead of being dumped on <body>. An action that opens
+  // a dialog still wins focus — it runs on the next tick, after this restore.
+  const [prevFocused] = React.useState(
+    () => (typeof document !== 'undefined' ? document.activeElement : null),
+  );
+  React.useEffect(() => () => {
+    try { if (prevFocused && prevFocused.focus) prevFocused.focus({ preventScroll: true }); } catch (_) { /* detached node — ignore */ }
+  }, [prevFocused]);
+
   // Close on the "world moving": outside pointer-down, Escape, scroll, resize,
   // window blur. Pointerdown (not click) so it closes the instant you press
   // elsewhere, matching a native menu.
@@ -242,11 +253,15 @@ function ContextMenuSurface({ x, y, items, onClose }) {
 
 // A single menu panel positioned at (x, y), edge-flipped and clamped. Handles
 // its own keyboard focus ring and spawns child <MenuList/>s for submenus.
-function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
+function MenuList({ x, y, items, onClose, onExit, autoFocus, isRoot, parentRect }) {
   const ref = React.useRef(null);
   const [pos, setPos] = React.useState({ left: x, top: y, ready: false });
   const [active, setActive] = React.useState(-1);     // keyboard-highlighted index
   const [openSub, setOpenSub] = React.useState(-1);   // index with an open submenu
+  // True when the open submenu was entered via the KEYBOARD (→/Enter), so it
+  // should pull focus. A hover-opened submenu stays open but leaves focus on this
+  // panel, so the mouse and keyboard never fight over the focus ring.
+  const [subFocused, setSubFocused] = React.useState(false);
   const itemRefs = React.useRef([]);
 
   // Indices that are actually focusable (skip dividers & disabled).
@@ -284,10 +299,24 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
     setPos({ left, top, ready: true });
   }, [x, y, items.length, parentRect]);
 
-  // Focus the panel on mount so keyboard nav works immediately.
+  // Focus the panel when it's the root menu OR a keyboard-opened submenu, so
+  // keyboard nav works immediately and flows into submenus.
   React.useEffect(() => {
-    if (ref.current && isRoot) ref.current.focus({ preventScroll: true });
-  }, [isRoot]);
+    if (ref.current && (isRoot || autoFocus)) ref.current.focus({ preventScroll: true });
+  }, [isRoot, autoFocus]);
+
+  // When a submenu is entered by keyboard, highlight its first item right away.
+  React.useEffect(() => {
+    if (autoFocus && active < 0 && navigable.length) setActive(navigable[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFocus]);
+
+  // Open the submenu at row `i`. `viaKeyboard` pulls focus into it (and highlights
+  // its first item); a hover-open leaves focus on this panel.
+  const openSubmenu = (i, viaKeyboard) => {
+    setOpenSub(i);
+    setSubFocused(!!viaKeyboard);
+  };
 
   const move = (dir) => {
     if (!navigable.length) return;
@@ -297,12 +326,20 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
     else if (dir === 'last') next = navigable.length - 1;
     else if (curPos < 0) next = dir > 0 ? 0 : navigable.length - 1;
     else next = (curPos + dir + navigable.length) % navigable.length;
+    // Arrowing the list collapses any hover/keyboard-opened submenu.
+    setOpenSub(-1); setSubFocused(false);
     setActive(navigable[next]);
   };
 
   const run = (it) => {
     if (!it || it.disabled || it.divider) return;
-    if (it.items && it.items.length) { setOpenSub((s) => (s === items.indexOf(it) ? -1 : items.indexOf(it))); return; }
+    if (it.items && it.items.length) {
+      // Toggle the submenu (mouse path — focus stays on this panel).
+      const i = items.indexOf(it);
+      if (openSub === i) { setOpenSub(-1); setSubFocused(false); }
+      else openSubmenu(i, false);
+      return;
+    }
     // Close first so a handler that navigates / opens a dialog isn't fighting
     // the menu's own listeners, then fire on the next tick.
     onClose();
@@ -317,19 +354,29 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
       case 'ArrowUp': e.preventDefault(); move(-1); break;
       case 'Home': e.preventDefault(); move('first'); break;
       case 'End': e.preventDefault(); move('last'); break;
+      case 'Tab': {
+        // Trap focus in the menu — Tab / Shift+Tab cycle the items like arrows.
+        e.preventDefault(); move(e.shiftKey ? -1 : 1); break;
+      }
       case 'ArrowRight': {
         const it = items[active];
-        if (it && it.items && it.items.length) { e.preventDefault(); setOpenSub(active); }
+        if (it && it.items && it.items.length) { e.preventDefault(); openSubmenu(active, true); }
         break;
       }
       case 'ArrowLeft': {
-        if (!isRoot) { e.preventDefault(); onClose(); }
+        // Collapse just this submenu and hand focus back to the parent row — NOT
+        // close the whole menu (that's Escape's job, handled at the surface).
+        if (!isRoot) { e.preventDefault(); if (onExit) onExit(); }
         break;
       }
       case 'Enter':
       case ' ': {
         const it = items[active];
-        if (it) { e.preventDefault(); run(it); }
+        if (it) {
+          e.preventDefault();
+          if (it.items && it.items.length) openSubmenu(active, true);
+          else run(it);
+        }
         break;
       }
       default: break;
@@ -345,7 +392,7 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
     setSubParentRect(node ? node.getBoundingClientRect() : null);
   }, [openSub, pos.left, pos.top, pos.ready]);
 
-  return (
+  const panel = (
     <Box
       ref={ref}
       role="menu"
@@ -355,6 +402,7 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
       sx={{
         position: 'fixed',
+        zIndex: 2001,            // above the 2000 click-catcher (matters once portaled)
         left: pos.left, top: pos.top,
         minWidth: 224, maxWidth: 320,
         py: 0.75,
@@ -372,6 +420,8 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
         transform: pos.ready ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.98)',
         transformOrigin: 'top left',
         transition: 'opacity 0.12s ease, transform 0.12s ease',
+        // Respect reduced-motion: appear in place with no lift / scale / fade.
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none', transform: 'none' },
         // A faint top accent hairline echoes the brand glow on the builders.
         '&::before': {
           content: '""', position: 'absolute', top: 0, left: 10, right: 10, height: 2,
@@ -409,8 +459,10 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
             onMouseEnter={() => {
               if (disabled) return;
               setActive(i);
-              // Hovering a submenu row opens it; hovering a leaf closes any open one.
-              setOpenSub(hasSub ? i : -1);
+              // Hovering a submenu row opens it (focus stays here); hovering a leaf
+              // closes any open one.
+              if (hasSub) openSubmenu(i, false);
+              else { setOpenSub(-1); setSubFocused(false); }
             }}
             onClick={(e) => { e.stopPropagation(); run(it); }}
             sx={{
@@ -453,11 +505,26 @@ function MenuList({ x, y, items, onClose, isRoot, parentRect }) {
           y={subParentRect.top}
           items={sanitizeItems(items[openSub].items)}
           onClose={onClose}
+          onExit={() => {
+            // Collapse this submenu and return focus to its parent row.
+            const parentIdx = openSub;
+            setOpenSub(-1); setSubFocused(false); setActive(parentIdx);
+            if (ref.current) ref.current.focus({ preventScroll: true });
+          }}
+          autoFocus={subFocused}
           parentRect={subParentRect}
         />
       )}
     </Box>
   );
+
+  // A submenu must escape the transformed parent panel: a CSS transform turns the
+  // panel into the containing block for position:fixed children, so the submenu's
+  // viewport coordinates would otherwise be measured from the panel, not the screen
+  // (confirmed: a fixed child under transform:scale(1) resolves against the panel).
+  // Portaling each submenu to <body> keeps its fixed left/top true to the viewport;
+  // the root panel already lives in the (untransformed) click-catcher, so it stays.
+  return isRoot ? panel : ReactDOM.createPortal(panel, document.body);
 }
 
 // ── Shared clipboard helper ───────────────────────────────────────────────────
