@@ -422,6 +422,9 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     onOpen: (proj) => setActiveProject(proj),
     onOpenQuote: (proj) => setQuote(proj),
     onOpenConfirmation: (proj) => setConfirmation(proj),
+    // "Open POs" opens the project drawer and tells it to pop the PO dialog on
+    // mount — the same deep-link path used when arriving from a PO link.
+    onOpenPos: (proj) => { setActiveProject(proj); setOpenPosOnMount(true); },
     onSetStatus: setOrderStatus,
     flash: undefined,
   })), [bindMenu, setOrderStatus]);

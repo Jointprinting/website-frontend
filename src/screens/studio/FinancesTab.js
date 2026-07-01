@@ -241,13 +241,23 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 
   // ── Right-click menu wiring ───────────────────────────────────────────────
   // bindTxn(transaction) → props a ledger row spreads onto its <tr>. Edit reuses
-  // the existing edit dialog; delete uses the row-targeted helper above.
-  const bindTxn = (t) => bindMenu(() => buildTransactionMenu(t, {
-    onEdit: (txn) => setEditTxn(txn),
-    onDelete: deleteTxnById,
-  }));
+  // the existing edit dialog; delete uses the row-targeted helper above. The
+  // "Open order / client" jumps reuse the SAME deep links the row's inline order #
+  // and party name use — and are only offered when the target actually resolves.
+  const bindTxn = (t) => {
+    const k = normOrderNo(t.orderNumber);
+    const ck = ckByOrder[k];
+    return bindMenu(() => buildTransactionMenu(t, {
+      onEdit: (txn) => setEditTxn(txn),
+      onDelete: deleteTxnById,
+      onOpenOrder: (onNavigate && k) ? () => goOrder(t.orderNumber) : undefined,
+      onOpenClient: (onNavigate && ck && t.type === 'income' && t.party) ? () => goCompanyForOrder(t.orderNumber) : undefined,
+    }));
+  };
 
   useEffect(() => registerFallback(() => buildFallbackMenu({
+    onNew: () => setShowAdd(true),
+    newLabel: 'Add transaction',
     onBackToHub: onBack,
   })), [registerFallback, onBack]);
 

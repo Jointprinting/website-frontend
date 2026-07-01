@@ -350,6 +350,14 @@ export const telHref = (phone) => {
   return `tel:${plus}${s.replace(/[^\d]/g, '')}`;
 };
 
+// Same digit-cleaning as telHref, but for an sms: deep link (text the number).
+export const smsHref = (phone) => {
+  const s = String(phone || '').trim();
+  if (!s) return '';
+  const plus = s.startsWith('+') ? '+' : '';
+  return `sms:${plus}${s.replace(/[^\d]/g, '')}`;
+};
+
 // First usable phone for a record: its own phone, else the first contact with
 // a number.
 export const primaryPhone = (rec) => {

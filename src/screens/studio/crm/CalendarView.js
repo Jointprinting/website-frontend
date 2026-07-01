@@ -481,23 +481,35 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
   // asked for instead of clicking each chip. Selection updates live as the box grows;
   // a click on empty space (no real drag) clears the selection. Chip click/drag is
   // untouched (we bail when the mousedown lands on a chip or a control).
+  //
+  // SCROLL-SAFE: the box is anchored in GRID-CONTENT space (the cursor's offset
+  // within the grid, which scrolls together with its chips), not in fixed viewport
+  // coords. We recompute on every scroll and auto-scroll near the viewport edges, so
+  // scrolling EXTENDS the selection past the fold instead of sliding the box off the
+  // content and dropping everything already grabbed.
   const evByKey = React.useMemo(() => {
     const m = new Map();
     (events || []).forEach((e) => m.set(e.companyKey, e));
     return m;
   }, [events]);
   const gridRef = React.useRef(null);
-  const marqueeRef = React.useRef(null);                 // { x0, y0, moved } while boxing
+  const marqueeRef = React.useRef(null);                 // { ax, ay, cx, cy, moved } while boxing
   const marqueeCleanupRef = React.useRef(null);          // tear-down for an in-flight box
-  const [marquee, setMarquee] = React.useState(null);    // client-coord rect (or null)
+  const [marquee, setMarquee] = React.useState(null);    // GRID-SPACE rect (or null)
 
-  const selectWithinRect = React.useCallback((rect) => {
+  // Hit-test chips against `rect`, both expressed in GRID-CONTENT space (chip
+  // viewport rects are converted with the live grid rect), so any scroll that moved
+  // the chips since mousedown is already accounted for.
+  const selectWithinRect = React.useCallback((rect, gridRect) => {
     const root = gridRef.current;
     if (!root) return;
+    const g = gridRect || root.getBoundingClientRect();
     const next = new Map();
     root.querySelectorAll('[data-ck]').forEach((el) => {
-      const r = el.getBoundingClientRect();
-      const hit = !(r.right < rect.left || r.left > rect.right || r.bottom < rect.top || r.top > rect.bottom);
+      const c = el.getBoundingClientRect();
+      const left = c.left - g.left, top = c.top - g.top;
+      const right = c.right - g.left, bottom = c.bottom - g.top;
+      const hit = !(right < rect.left || left > rect.right || bottom < rect.top || top > rect.bottom);
       if (!hit) return;
       const ev = evByKey.get(el.getAttribute('data-ck'));
       if (ev) next.set(ev.companyKey, ev);
@@ -505,7 +517,7 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     setSelected(next);
   }, [evByKey]);
 
-  // Never leak the window listeners if the view unmounts mid-box.
+  // Never leak the window listeners / RAF if the view unmounts mid-box.
   React.useEffect(() => () => { if (marqueeCleanupRef.current) marqueeCleanupRef.current(); }, []);
 
   const onGridMouseDown = (e) => {
@@ -513,31 +525,69 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     if (e.button !== 0) return;                           // left button only
     if (e.target.closest('[data-ck]')) return;            // a chip — let it click/drag
     if (e.target.closest('button, a, [role="button"], input')) return;
-    if (!gridRef.current) return;
-    const start = { x0: e.clientX, y0: e.clientY, moved: false };
-    marqueeRef.current = start;
-    setMarquee({ left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY });
+    const root = gridRef.current;
+    if (!root) return;
+    const gr0 = root.getBoundingClientRect();
+    // Anchor = the cursor's offset INSIDE the grid. Because the grid and its chips
+    // scroll together, this point stays glued to the content beneath it.
+    const s = { ax: e.clientX - gr0.left, ay: e.clientY - gr0.top, cx: e.clientX, cy: e.clientY, moved: false };
+    marqueeRef.current = s;
+    setMarquee({ left: s.ax, top: s.ay, right: s.ax, bottom: s.ay });
     e.preventDefault();                                   // no text selection while boxing
 
-    const onMove = (me) => {
-      const s = marqueeRef.current;
-      if (!s) return;
-      if (Math.abs(me.clientX - s.x0) > 3 || Math.abs(me.clientY - s.y0) > 3) s.moved = true;
+    // Rebuild the box (and selection) from the last cursor position + the LIVE grid
+    // rect — called on mousemove AND on scroll, so the box keeps tracking the cursor
+    // as the page moves under it.
+    const recompute = () => {
+      const st = marqueeRef.current;
+      const rootEl = gridRef.current;
+      if (!st || !rootEl) return;
+      const gr = rootEl.getBoundingClientRect();
+      const mx = st.cx - gr.left;
+      const my = st.cy - gr.top;
       const rect = {
-        left: Math.min(s.x0, me.clientX), top: Math.min(s.y0, me.clientY),
-        right: Math.max(s.x0, me.clientX), bottom: Math.max(s.y0, me.clientY),
+        left: Math.min(st.ax, mx), top: Math.min(st.ay, my),
+        right: Math.max(st.ax, mx), bottom: Math.max(st.ay, my),
       };
+      if (rect.right - rect.left > 3 || rect.bottom - rect.top > 3) st.moved = true;
       setMarquee(rect);
-      if (s.moved) selectWithinRect(rect);
+      if (st.moved) selectWithinRect(rect, gr);
     };
+
+    // Edge auto-scroll: hold the cursor near the top/bottom of the viewport to
+    // rubber-band past the fold. Each scroll fires `recompute` (via the scroll
+    // listener), so the box + selection grow into the newly revealed rows.
+    let rafId = null;
+    const tick = () => {
+      const st = marqueeRef.current;
+      if (!st) { rafId = null; return; }
+      const margin = 64, maxSpeed = 20;
+      const vh = window.innerHeight;
+      let dy = 0;
+      if (st.cy < margin) dy = -Math.ceil(((margin - st.cy) / margin) * maxSpeed);
+      else if (st.cy > vh - margin) dy = Math.ceil(((st.cy - (vh - margin)) / margin) * maxSpeed);
+      if (dy !== 0) { window.scrollBy(0, dy); recompute(); }
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+
+    const onMove = (me) => {
+      const st = marqueeRef.current;
+      if (!st) return;
+      st.cx = me.clientX; st.cy = me.clientY;
+      recompute();
+    };
+    const onScroll = () => recompute();
     const cleanup = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('scroll', onScroll, true);
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
       marqueeCleanupRef.current = null;
     };
     function onUp() {
-      const s = marqueeRef.current;
-      if (s && !s.moved) clearSelection();                // a click on empty space clears
+      const st = marqueeRef.current;
+      if (st && !st.moved) clearSelection();              // a click on empty space clears
       marqueeRef.current = null;
       setMarquee(null);
       cleanup();
@@ -545,16 +595,13 @@ export default function CalendarView({ events, loading, cursor, onCursorChange, 
     marqueeCleanupRef.current = cleanup;
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('scroll', onScroll, true);    // capture: catches any scroller
   };
 
-  const marqueeBox = (() => {
-    if (!marquee || !marqueeRef.current?.moved || !gridRef.current) return null;
-    const gr = gridRef.current.getBoundingClientRect();
-    return {
-      left: marquee.left - gr.left, top: marquee.top - gr.top,
-      width: marquee.right - marquee.left, height: marquee.bottom - marquee.top,
-    };
-  })();
+  // `marquee` is already in grid space, so the absolutely-positioned box maps 1:1.
+  const marqueeBox = (marquee && marqueeRef.current?.moved)
+    ? { left: marquee.left, top: marquee.top, width: marquee.right - marquee.left, height: marquee.bottom - marquee.top }
+    : null;
 
   return (
     <Stack spacing={2}>

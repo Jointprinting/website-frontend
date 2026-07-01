@@ -194,6 +194,8 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // so another tool's fallback takes over.
   React.useEffect(() => registerFallback(() => buildFallbackMenu({
     onSearch: () => setSearchOpen(true),
+    onNew: () => setAddOpen(true),
+    newLabel: 'Add company',
     onBackToHub: onBack,
   })), [registerFallback, onBack]);
 
