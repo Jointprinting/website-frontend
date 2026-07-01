@@ -32,6 +32,7 @@ import {
   StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, PRE_CUSTOMER_STAGES, stageMeta,
   kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
 } from './_crm';
+import { StatusChip, enrollmentStatusMeta } from '../outreach/_outreach';
 
 // The COGS sub-hint under the Profit metric. The headline cost is the ACTUAL one
 // from the receipts linked to this company's orders (finance.cogs — what the
@@ -361,6 +362,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   const pos = data?.pos || [];
   // Finance summary computed server-side by reusing the /api/finances math.
   const finance = data?.finance || null;
+  // Cold-email sequences this company is (or was) enrolled in (server-joined).
+  const outreach = data?.outreach || [];
   // Authoritative "is a customer" from order reality (≥1 linked order), even if
   // the stored stage is stale. Server returns it at the top level and on client.
   const isCustomer = data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0);
@@ -496,6 +499,37 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       {/* Progress / level — the dopamine spine. Lights up as the deal climbs the
           funnel; a Customer/Won earns the full green bar + a celebratory banner. */}
       <ProgressCard stage={client.stage} isCustomer={isCustomer} />
+
+      {/* Outreach — cold-email sequences this company is (or was) in. Read-only
+          here (the actions live in the Outreach tab); the per-send touches are
+          already in the timeline below as 'email' entries. */}
+      {(outreach.length > 0 || client.doNotEmail) && (
+        <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+          <Typography sx={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase', color: D.faint, mb: 1 }}>
+            Outreach
+          </Typography>
+          {client.doNotEmail && (
+            <Typography sx={{ color: '#f87171', fontSize: 12, fontWeight: 700, mb: outreach.length ? 1 : 0 }}>
+              Do not email — they opted out; the engine will never email this company.
+            </Typography>
+          )}
+          <Stack spacing={0.75}>
+            {outreach.map((o) => {
+              const m = enrollmentStatusMeta(o.status);
+              return (
+                <Stack key={String(o.enrollmentId)} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700 }}>{o.campaignName || 'Campaign'}</Typography>
+                  <StatusChip meta={m} />
+                  <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>
+                    {o.sent}/{o.stepCount} sent{o.openCount ? ` · opened ×${o.openCount}` : ''}
+                    {o.repliedAt ? ` · replied ${fmtRelative(o.repliedAt)}` : ''}
+                  </Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+        </Box>
+      )}
 
       {/* Business with this company — the money story: lifetime finance (reusing
           the same revenue/COGS/margin math as /api/finances) + linked POs. ONLY
