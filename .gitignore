@@ -4,4 +4,6 @@ node_modules
 .env
 config.env
 /build
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/commands/
