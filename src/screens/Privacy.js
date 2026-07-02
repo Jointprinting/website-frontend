@@ -5,7 +5,7 @@
 import React from 'react';
 import { Box, Container, Typography } from '@mui/material';
 
-const LAST_UPDATED = 'May 24, 2026';
+const LAST_UPDATED = 'July 2, 2026';
 
 export default function Privacy() {
   return (
@@ -34,7 +34,9 @@ export default function Privacy() {
 
         <Section title="Cookies and tracking">
           The public site uses minimal session cookies for the contact form and admin login.
-          We do not run third-party advertising trackers.
+          We use Microsoft Clarity, an analytics tool, to understand how visitors use the
+          site in aggregate (pages viewed, clicks, scrolling) so we can improve it. We do
+          not run third-party advertising trackers or sell visitor data.
         </Section>
 
         <Section title="Your rights">
