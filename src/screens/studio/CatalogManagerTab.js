@@ -31,18 +31,8 @@ import LaunchIcon from '@mui/icons-material/Launch';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import config from '../../config.json';
+import { BRAND } from './_shared';
 import JpLoader from '../../common/JpLoader';
-
-const BRAND = {
-  bg:       '#0c1410',
-  panel:    '#162420',
-  border:   '#1a3d2b',
-  green:    '#4ade80',
-  greenDk:  '#1a3d2b',
-  white:    '#ffffff',
-  muted:    'rgba(255,255,255,0.65)',
-  faint:    'rgba(255,255,255,0.08)',
-};
 
 const darkInputSx = {
   '& .MuiOutlinedInput-root': {

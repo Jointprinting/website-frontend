@@ -32,15 +32,10 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import config from '../../config.json';
-import { D, mono, dropPrimaryBtn, dropGhostBtn } from './_shared';
+import { D, mono, dropPrimaryBtn, dropGhostBtn, money, money0 } from './_shared';
 
 const base = `${config.backendUrl}/api/orders/vendors/rebuild`;
 
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 
 // A single big number + label tile (mirrors ReconcileView's Stat).
 function Stat({ value, label, tone, Icon }) {

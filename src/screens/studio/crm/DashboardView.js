@@ -146,6 +146,67 @@ function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive }) {
   );
 }
 
+// ── Stage funnel ─────────────────────────────────────────────────────────────
+// Count + open $ per stage as CSS bars (no chart lib) — bar width ∝ count, $ on
+// the right. Fed by pipeline.stages ({ stage, count, value } in canonical order,
+// empty stages included). Each row is a DRILL-DOWN, not a static chart: tap →
+// onOpenStage(stage) → the Companies list filtered to that stage.
+function StageFunnel({ stages, onOpenStage }) {
+  const rows = stages || [];
+  if (rows.length === 0) return null;
+  const max = Math.max(1, ...rows.map((s) => s.count || 0));
+  const clickable = !!onOpenStage;
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 1.75, sm: 2 } }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
+        <Eyebrow>Stage funnel</Eyebrow>
+        {clickable && (
+          <Typography sx={{ color: D.faint, fontSize: 11 }}>tap a stage to see its companies</Typography>
+        )}
+      </Stack>
+      <Stack spacing={0.5}>
+        {rows.map((s) => {
+          const m = stageMeta(s.stage);
+          const count = s.count || 0;
+          return (
+            <Stack
+              key={s.stage} direction="row" alignItems="center" spacing={1.25}
+              onClick={clickable ? () => onOpenStage(s.stage) : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenStage(s.stage); } } : undefined}
+              title={clickable ? `See ${m.label} companies` : undefined}
+              sx={{
+                px: 0.75, py: 0.4, mx: -0.75, borderRadius: 1.5,
+                cursor: clickable ? 'pointer' : 'default',
+                transition: 'background-color 0.15s ease',
+                '&:hover': clickable ? { bgcolor: 'rgba(74,222,128,0.06)' } : undefined,
+                '&:focus-visible': clickable ? { outline: `2px solid ${D.green}`, outlineOffset: -2 } : undefined,
+              }}
+            >
+              <Typography sx={{ width: 88, flexShrink: 0, color: count > 0 ? m.color : D.faint, fontSize: 12, fontWeight: 800 }}>
+                {m.label}
+              </Typography>
+              <Box sx={{ flexGrow: 1, height: 16, borderRadius: 1, bgcolor: D.inset, position: 'relative', overflow: 'hidden' }}>
+                <Box sx={{ position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 1,
+                  width: `${Math.round((count / max) * 100)}%`, minWidth: count > 0 ? 4 : 0,
+                  bgcolor: m.color, opacity: 0.8, transition: 'width 0.4s ease' }} />
+              </Box>
+              <Typography sx={{ ...mono, width: 34, textAlign: 'right', color: count > 0 ? D.text : D.faint, fontSize: 12.5, fontWeight: 800, flexShrink: 0 }}>
+                {count}
+              </Typography>
+              <Typography sx={{ ...mono, width: 64, textAlign: 'right', color: (s.value || 0) > 0 ? D.green : D.faint, fontSize: 11.5, fontWeight: 700, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
+                {fmtMoney0(s.value || 0)}
+              </Typography>
+              {clickable && <ChevronRightIcon sx={{ color: D.faint, fontSize: 16, flexShrink: 0 }} />}
+            </Stack>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
+
 // A small card shell with an eyebrow header and optional right-side accessory.
 function WidgetCard({ title, right, children, sx = {} }) {
   return (
@@ -301,7 +362,7 @@ function TopDeals({ items, onOpen }) {
   );
 }
 
-export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onGoToday }) {
+export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onGoToday, onOpenStage }) {
   // Heads-up expander state — declared before any early return so hook order is
   // stable across the loading / loaded renders.
   const [showAll, setShowAll] = React.useState(false);
@@ -341,6 +402,10 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
           hint={`${totalCompanies} tracked`}
         />
       </Box>
+
+      {/* 2 — Stage funnel: count + $ per stage; each row drills into the
+          Companies list filtered to that stage. */}
+      <StageFunnel stages={pipeline.stages} onOpenStage={onOpenStage} />
 
       {/* Needs your attention (the centerpiece). The backend already
           down-ranks cold/never-worked leads, so this leads with overdue/hot. Each

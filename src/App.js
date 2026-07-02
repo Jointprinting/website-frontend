@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import theme from './theme';
 import AnnouncementBar from './common/AnnouncementBar';
@@ -18,7 +18,6 @@ import Contact from './screens/Contact';
 import FAQ from './screens/FAQ';
 import Terms from './screens/Terms';
 import Privacy from './screens/Privacy';
-import Customize from './screens/Customize';
 
 const Product       = lazy(() => import('./screens/Product'));
 const Products      = lazy(() => import('./screens/Products'));
@@ -42,7 +41,6 @@ const ROUTE_META = {
   '/product':   { title: 'Product | Joint Printing',                          desc: 'Product details, colors, and sizing.' },
   '/products':  { title: 'Products | Joint Printing',                         desc: 'Browse blank styles for your next custom merch run.' },
   '/faq':       { title: 'FAQ | Joint Printing',                              desc: 'Answers about pricing, turnaround, artwork, and shipping.' },
-  '/customize': { title: 'Free Mockup | Joint Printing',                      desc: 'Send us your logo and get a free mockup on real products.' },
   '/catalogs':  { title: 'Catalogs | Joint Printing',                         desc: 'Download our latest product catalogs.' },
   '/terms':     { title: 'Terms of Service | Joint Printing',                 desc: 'Joint Printing terms of service.' },
   '/privacy':   { title: 'Privacy Policy | Joint Printing',                   desc: 'Joint Printing privacy policy.' },
@@ -105,7 +103,8 @@ function AppShell() {
           <Route exact path="/product" element={<Product />} />
           <Route exact path="/products" element={<Products />} />
           <Route exact path="/faq" element={<FAQ />} />
-          <Route exact path="/customize" element={<Customize />} />
+          {/* Legacy mockup-request page — folded into the contact form. */}
+          <Route path="/customize" element={<Navigate to="/contact" replace />} />
           {/* Studio is the password-protected admin. /admin kept as an alias. */}
           <Route exact path="/studio" element={<Studio />} />
           <Route exact path="/admin" element={<Studio />} />

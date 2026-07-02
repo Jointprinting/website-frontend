@@ -20,11 +20,9 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
-import { D, mono } from '../_shared';
+import { D, mono, money, ymd } from '../_shared';
 
 const base = `${config.backendUrl}/api/crm`;
-const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const ymd = (d) => { const t = d ? new Date(d) : null; return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : ''; };
 
 function Section({ icon, title, count, children }) {
   if (!count) return null;

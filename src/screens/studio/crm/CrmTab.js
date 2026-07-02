@@ -121,6 +121,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // The active company segment (Clients / Active leads / Everyone else). Client-
   // side over the loaded book, so switching is instant. Defaults to Clients.
   const [segment, setSegment] = React.useState('clients');
+  // Dashboard funnel drill-down: a stage the Companies view narrows to (client-
+  // side, across all segments). null = off. Cleared by its ✕ chip or by picking
+  // a segment manually, so normal browsing is untouched.
+  const [companiesStageFilter, setCompaniesStageFilter] = React.useState(null);
 
   // Pipeline (Kanban) — its own filter pair so it doesn't fight the Companies
   // search box, plus the server-computed groups/summary/probability from
@@ -267,6 +271,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
 
   const loadDetail = React.useCallback(async (key) => {
     setDetailLoading(true);
+    // Keep the current card's data through a SAME-company refresh (a blur-commit
+    // refetch must not unmount the inline editors mid-typing); only a genuine
+    // company switch clears to the spinner.
+    setDetail((d) => (d && d.client && d.client.companyKey === key ? d : null));
     try {
       const res = await axios.get(`${base}/${encodeURIComponent(key)}`, authHdr);
       setDetail(res.data || null);
@@ -456,6 +464,20 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
       refreshAffected();
     } catch (e) {
       flash(e?.response?.data?.message || 'Could not delete that note.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  // Reword ONE logged touch (fix a typo without losing its timestamp/kind).
+  // Same addressing as delete: the entry's _id, or a numeric index for legacy
+  // id-less entries. Refreshes the open detail so the timeline updates.
+  const editLogEntry = React.useCallback(async (key, entryId, text) => {
+    try {
+      await axios.patch(`${base}/${encodeURIComponent(key)}/log/${encodeURIComponent(entryId)}`, { text }, authHdr);
+      flash('Note updated.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not update that note.', 'error');
       throw e;
     }
   }, [authHdr, flash, refreshAffected]);
@@ -898,6 +920,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
           onPatch={patchDetailField}
           onLog={openLogForDetail}
           onDeleteLog={(entryId) => detail?.client && deleteLogEntry(detail.client.companyKey, entryId)}
+          onEditLog={(entryId, text) => detail?.client && editLogEntry(detail.client.companyKey, entryId, text)}
           onArchive={() => detail?.client && archiveOne(detail.client.companyKey)}
           // Cross-tab deep links out of the company card (additive navigation):
           //   an order row → the Order Tracker project; a PO → that order's POs;
@@ -932,6 +955,16 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onReschedule={(item) => openResched({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
             onArchive={(item) => archiveOne(item.companyKey)}
             onGoToday={() => setView('today')}
+            // Funnel drill-down: tap a stage bar → the Companies list narrowed
+            // to that stage (client-side filter + a dismissible chip).
+            onOpenStage={(stage) => {
+              // A funnel tap means "show me THIS stage" — stale search/tag
+              // filters would silently shrink the list vs the funnel's count.
+              setQuery('');
+              setTagFilter('all');
+              setCompaniesStageFilter(stage);
+              setView('companies');
+            }}
           />
         );
       case 'today':
@@ -976,7 +1009,11 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             clients={clients} loading={companiesLoading}
             query={query} onQueryChange={setQuery}
             tag={tagFilter} onTagChange={setTagFilter} tagOptions={tagOptions}
-            segment={segment} onSegmentChange={setSegment}
+            // Picking a segment by hand exits a funnel drill-down (the stage
+            // filter cuts across segments, so the two don't stack confusingly).
+            segment={segment} onSegmentChange={(s) => { setCompaniesStageFilter(null); setSegment(s); }}
+            stageFilter={companiesStageFilter}
+            onClearStageFilter={() => setCompaniesStageFilter(null)}
             onAddCompany={() => setAddOpen(true)}
             onOpen={openCompany}
             bindCompany={bindCompany}

@@ -26,13 +26,9 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import config from '../../config.json';
-import { B } from './_shared';
+import { B, money } from './_shared';
 
 const base = `${config.backendUrl}/api/finances`;
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 // One record that will be renumbered: its kind + detail on the left, old # → new # right.
 function ChangeRow({ c }) {

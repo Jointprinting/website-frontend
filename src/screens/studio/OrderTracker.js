@@ -8,7 +8,7 @@ import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
   Dialog, DialogContent, DialogActions, Menu, ListItemIcon, ListItemText, Divider,
-  useMediaQuery, useTheme,
+  useMediaQuery, useTheme, Snackbar, Alert,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
 import AddIcon             from '@mui/icons-material/Add';
@@ -40,7 +40,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -78,11 +78,8 @@ const SECONDARY_FILTERS = [
   { value: 'cancelled',     label: 'Cancelled' },
 ];
 
-// Canonical order-number key — digits only, leading zeros stripped. The SAME
-// rule the backend (normalizeOrderNumber) and the finance/CRM surfaces use, so a
-// cross-tab deep link resolves the right project across "0000021" / "#21" /
-// "PO-021" variants and never mis-opens a different order. Empty/no-digit → ''.
-const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+// normOrderNo/deriveCompanyKey come from _shared — the ONE canonical key pair
+// (backend-mirrored) every cross-tab deep link resolves with.
 
 export default function OrderTracker({ token, onBack, onNavigate, initialOrder }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -126,6 +123,11 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     url: '', expiresAt: null, recipients: [], status: null,
     loading: false, busy: false, err: '', notice: '',
   });
+
+  // Snackbar toast — same pattern as the CRM tab (flash(msg, sev)) so feedback
+  // reads the same across Studio tools instead of jarring native alert()s.
+  const [toast, setToast] = useState({ open: false, msg: '', sev: 'success' });
+  const flash = useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -295,7 +297,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const companyMockupPool = useMemo(() => {
     const byCompany = {};
     projects.forEach(p => {
-      const key = (p.companyKey || (p.companyName || p.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, ''));
+      const key = (p.companyKey || deriveCompanyKey(p.companyName, p.clientName));
       if (!key) return;
       (p.mockupNumbers || []).forEach(n => {
         if (!byCompany[key]) byCompany[key] = [];
@@ -312,7 +314,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     return m;
   }, [logos]);
   const logoFor = (project) => {
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     return key ? logoMap[key] : null;
   };
 
@@ -333,7 +335,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           });
           resolve(r.data.logo);
         } catch (e) {
-          alert(`Logo upload failed: ${e.response?.data?.message || e.message}`);
+          flash(`Logo upload failed: ${e.response?.data?.message || e.message}`, 'error');
           reject(e);
         }
       };
@@ -343,14 +345,14 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   };
 
   const removeLogo = async (project) => {
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     if (!key) return;
     if (!window.confirm('Remove the logo for this company?')) return;
     try {
       await axios.delete(`${base}/client-logos/${encodeURIComponent(key)}`, authHdr);
       setLogos(prev => prev.filter(l => l.companyKey !== key));
     } catch (e) {
-      alert(`Couldn't remove: ${e.message}`);
+      flash(`Couldn't remove: ${e.message}`, 'error');
     }
   };
 
@@ -386,7 +388,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       await loadProjects();
       setActiveProject(r.data);
     } catch (e) {
-      alert(`Couldn't create project: ${e.message}`);
+      flash(`Couldn't create project: ${e.message}`, 'error');
     } finally {
       setCreating(false);
     }
@@ -401,7 +403,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     } catch (e) {
       // Let callers detect failure so they can avoid closing a dialog over
       // an unsaved change. Still surface the error to the user immediately.
-      alert(`Save failed: ${e.response?.data?.message || e.message}`);
+      flash(`Save failed: ${e.response?.data?.message || e.message}`, 'error');
       return null;
     }
   };
@@ -426,8 +428,8 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     // mount — the same deep-link path used when arriving from a PO link.
     onOpenPos: (proj) => { setActiveProject(proj); setOpenPosOnMount(true); },
     onSetStatus: setOrderStatus,
-    flash: undefined,
-  })), [bindMenu, setOrderStatus]);
+    flash,
+  })), [bindMenu, setOrderStatus, flash]);
 
   // Right-click on empty Order Tracker chrome → search (focus the box) + hub.
   useEffect(() => registerFallback(() => buildFallbackMenu({
@@ -444,7 +446,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       setProjects(prev => prev.filter(p => p._id !== id));
       setActiveProject(null);
     } catch (e) {
-      alert(`Delete failed: ${e.message}`);
+      flash(`Delete failed: ${e.message}`, 'error');
     }
   };
 
@@ -453,7 +455,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     if (!project) return;
     const saved = await handleSave(project._id, { mockupNumbers: selected });
     // Only close the picker if the save actually landed. handleSave returns
-    // null on failure (after alerting the user), so the dialog stays open
+    // null on failure (after toasting the error), so the dialog stays open
     // with the selection intact and they can retry without re-picking.
     if (saved) setPicker({ open: false, project: null });
   };
@@ -465,7 +467,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.get(`${base}/orders/cleanup-candidates`, authHdr);
       setCleanupData(r.data);
     } catch (e) {
-      alert(`Couldn't load cleanup: ${e.message}`);
+      flash(`Couldn't load cleanup: ${e.message}`, 'error');
       setCleanupOpen(false);
     } finally {
       setCleanupLoading(false);
@@ -478,7 +480,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       await axios.post(`${base}/orders/cleanup-delete`, { ids }, authHdr);
       await loadProjects();
       await handleOpenCleanup();   // refresh the list
-    } catch (e) { alert(`Delete failed: ${e.message}`); }
+    } catch (e) { flash(`Delete failed: ${e.message}`, 'error'); }
   };
   const handleMergeCompany = async (from, to) => {
     if (!from || !to || from === to) return;
@@ -487,8 +489,8 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.post(`${base}/orders/merge-company`, { from, to }, authHdr);
       await loadProjects();
       await handleOpenCleanup();
-      alert(`Merged.\nProjects updated: ${r.data.ordersUpdated}\nMockups updated: ${r.data.mockupsUpdated}\nLogos consolidated: ${r.data.logosMerged}`);
-    } catch (e) { alert(`Merge failed: ${e.response?.data?.message || e.message}`); }
+      flash(`Merged — projects updated: ${r.data.ordersUpdated} · mockups updated: ${r.data.mockupsUpdated} · logos consolidated: ${r.data.logosMerged}`, 'success');
+    } catch (e) { flash(`Merge failed: ${e.response?.data?.message || e.message}`, 'error'); }
   };
 
   const handleOpenClients = async () => {
@@ -498,7 +500,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.get(`${base}/orders/clients-summary`, authHdr);
       setClientsData(r.data);
     } catch (e) {
-      alert(`Couldn't load clients: ${e.message}`);
+      flash(`Couldn't load clients: ${e.message}`, 'error');
       setClientsOpen(false);
     } finally {
       setClientsLoading(false);
@@ -512,7 +514,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.get(`${base}/orders/analytics`, authHdr);
       setAnalyticsData(r.data);
     } catch (e) {
-      alert(`Couldn't load analytics: ${e.message}`);
+      flash(`Couldn't load analytics: ${e.message}`, 'error');
       setAnalyticsOpen(false);
     } finally {
       setAnalyticsLoading(false);
@@ -527,7 +529,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.post(`${base}/orders/mockups/auto-link`, { commit: false }, authHdr);
       setAutoLinkData(r.data);
     } catch (e) {
-      alert(`Couldn't scan the library: ${e.response?.data?.message || e.message}`);
+      flash(`Couldn't scan the library: ${e.response?.data?.message || e.message}`, 'error');
       setAutoLinkOpen(false);
     } finally {
       setAutoLinkLoading(false);
@@ -540,9 +542,9 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       await loadProjects();
       setAutoLinkOpen(false);
       const s = r.data.summary;
-      alert(`Linked ${s.mockupsLinked} mockup${s.mockupsLinked === 1 ? '' : 's'} across ${s.projectsAffected} project${s.projectsAffected === 1 ? '' : 's'}.`);
+      flash(`Linked ${s.mockupsLinked} mockup${s.mockupsLinked === 1 ? '' : 's'} across ${s.projectsAffected} project${s.projectsAffected === 1 ? '' : 's'}`, 'success');
     } catch (e) {
-      alert(`Apply failed: ${e.response?.data?.message || e.message}`);
+      flash(`Apply failed: ${e.response?.data?.message || e.message}`, 'error');
     } finally {
       setAutoLinkApplying(false);
     }
@@ -564,7 +566,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       await loadProjects();
       exitSelectMode();
     } catch (e) {
-      alert(`Bulk update failed: ${e.response?.data?.message || e.message}`);
+      flash(`Bulk update failed: ${e.response?.data?.message || e.message}`, 'error');
     } finally {
       setBulkSaving(false);
     }
@@ -604,7 +606,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const r = await axios.get(`${base}/orders/mockup-health`, authHdr);
       setHealthData(r.data);
     } catch (e) {
-      alert(`Couldn't load mockup health: ${e.message}`);
+      flash(`Couldn't load mockup health: ${e.message}`, 'error');
       setHealthOpen(false);
     } finally {
       setHealthLoading(false);
@@ -864,6 +866,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         onOpenConfirmation={() => setConfirmation(activeProject)}
         onOpenQuote={() => setQuote(activeProject)}
         onNavigate={onNavigate}
+        onToast={flash}
         // Open the PO dialog automatically when arrived via a "open PO" deep link.
         openPosOnMount={openPosOnMount}
         onPosOpened={() => setOpenPosOnMount(false)}
@@ -1065,6 +1068,22 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           </Button>
         </Box>
       )}
+
+      {/* Toast feedback — mirrors the CRM tab's snackbar so errors/confirmations
+          read the same across Studio tools. */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={toast.sev === 'error' ? 5000 : 3200}
+        onClose={() => setToast((t) => ({ ...t, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={toast.sev} variant="filled" onClose={() => setToast((t) => ({ ...t, open: false }))}
+          sx={{ borderRadius: 2, fontWeight: 600, alignItems: 'center' }}
+        >
+          {toast.msg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
@@ -1096,7 +1115,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
-    const companyKey = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const companyKey = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     const pool = (companyMockupPool && companyMockupPool[companyKey]) || [];
     const others = pool.slice(0, 4)
       .map(n => ({ num: n, item: lookupMockup(n) }))
@@ -1394,7 +1413,7 @@ function NextActionCard({ project, onRun }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, openPosOnMount, onPosOpened, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
@@ -1481,7 +1500,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // Load (or auto-create) the client profile for this project's company.
   useEffect(() => {
     if (!project) { setClient(null); return; }
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     if (!key) { setClient(null); return; }
     let cancelled = false;
     axios.get(`${base}/clients/${encodeURIComponent(key)}`, authHdr)
@@ -1517,7 +1536,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         { [field]: value }, authHdr);
       setClient(r.data.client);
     } catch (e) {
-      alert(`Couldn't save client field: ${e.message}`);
+      onToast(`Couldn't save client field: ${e.message}`, 'error');
     } finally {
       setClientSaving('');
     }
@@ -1608,7 +1627,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       const r = await axios.get(`${base}/orders/${project._id}`, authHdr);
       onSave(project._id, { files: r.data.files });
     } catch (err) {
-      alert(`Upload failed: ${err.message}`);
+      onToast(`Upload failed: ${err.message}`, 'error');
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -1642,7 +1661,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             // Canonical companyKey — the SAME derivation Order.companyKey uses, so
             // the jump lands on the exact CRM card. Link only when we have a real
             // name to key on AND a navigator; otherwise plain text (no dead-end).
-            const ck = local.companyKey || (local.companyName || local.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+            const ck = local.companyKey || deriveCompanyKey(local.companyName, local.clientName);
             const canOpen = !!onNavigate && !!ck && !!(local.companyName || local.clientName);
             return (
               <Typography
@@ -2056,7 +2075,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   a.remove();
                   setTimeout(() => URL.revokeObjectURL(url), 1000);
                 } catch (err) {
-                  alert(`Download failed: ${err.response?.data?.message || err.message}`);
+                  onToast(`Download failed: ${err.response?.data?.message || err.message}`, 'error');
                 }
               }}
               sx={{ color: B.white, fontSize: 12, textDecoration: 'none', flex: 1,
@@ -2162,7 +2181,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       {/* Client tracking timeline — shown to the client on the same approval
           link after they approve. Admin ticks off steps as the project moves
           and the client's open page updates within a minute. */}
-      <TrackingPanel project={local} authHdr={authHdr} onLocal={setLocal} />
+      <TrackingPanel project={local} authHdr={authHdr} onLocal={setLocal} onToast={onToast} />
       </>)}
 
       <PoBuilderDialog open={poOpen} project={project} authHdr={authHdr}
@@ -3609,7 +3628,7 @@ function ClientProfileSection({ client, saving, saveClient }) {
 // from the client. Useful when the blank vendor and printer are the same
 // place (hide one of those two), or when the client picks up in-person
 // (hide "On the way to you").
-function TrackingPanel({ project, authHdr, onLocal }) {
+function TrackingPanel({ project, authHdr, onLocal, onToast }) {
   const initial = (project && project.tracking && project.tracking.steps) || [];
   const [steps, setSteps] = React.useState(initial);
   const [saving, setSaving] = React.useState(false);
@@ -3645,12 +3664,12 @@ function TrackingPanel({ project, authHdr, onLocal }) {
       }
       setSavedAt(Date.now());
     } catch (e) {
-      alert(`Couldn't save tracking: ${e.response?.data?.message || e.message}`);
+      onToast(`Couldn't save tracking: ${e.response?.data?.message || e.message}`, 'error');
     } finally {
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?._id, authHdr, onLocal]);
+  }, [project?._id, authHdr, onLocal, onToast]);
 
   // Debounced save: many UI mutations in quick succession (typing a label,
   // dragging a date picker) become one network round-trip ~600ms after the
@@ -3688,7 +3707,7 @@ function TrackingPanel({ project, authHdr, onLocal }) {
       }
       setSavedAt(Date.now());
     } catch (e) {
-      alert(`Couldn't initialize tracking: ${e.response?.data?.message || e.message}`);
+      onToast(`Couldn't initialize tracking: ${e.response?.data?.message || e.message}`, 'error');
     } finally {
       setSaving(false);
     }

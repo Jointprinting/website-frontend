@@ -17,7 +17,7 @@ import {
   DialogContent, DialogActions, CircularProgress, MenuItem, InputAdornment,
 } from '@mui/material';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
-import { D, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
+import { D, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen, deriveCompanyKey } from '../_shared';
 import { CRM_STAGES, stageMeta } from './_crm';
 import useCompanyMatch from './useCompanyMatch';
 import CompanyMatchHint from './CompanyMatchHint';
@@ -29,9 +29,8 @@ const dialogPaper = {
   },
 };
 
-// IDENTITY key — byte-for-byte the server's deriveCompanyKey (models/Order.js):
-// lowercase, strip everything non-alphanumeric. Empty until there's a real name.
-const deriveCompanyKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+// IDENTITY key: deriveCompanyKey (imported from _shared) — byte-for-byte the
+// server's rule (models/Order.js). Empty until there's a real name.
 
 // onCreate(companyKey, patch) → Promise: the parent PATCH-upserts and refreshes.
 // onOpenExisting(companyKey): jump to an existing record (the dedup reuse path).

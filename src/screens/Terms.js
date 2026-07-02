@@ -58,7 +58,7 @@ export default function Terms() {
         </Section>
 
         <Section title="8. Contact">
-          Questions: <a href="mailto:hello@jointprinting.com" style={{ color: '#1a3d2b' }}>hello@jointprinting.com</a>.
+          Questions: <a href="mailto:nate@jointprinting.com" style={{ color: '#1a3d2b' }}>nate@jointprinting.com</a>.
         </Section>
       </Container>
     </Box>

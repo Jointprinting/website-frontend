@@ -51,15 +51,6 @@ export const STAGE_PROBABILITY = {
   won: 1, customer: 1, lost: 0, dormant: 0,
 };
 
-// Board column order. The "active" lane runs lead → … → won/customer; lost and
-// dormant are parked in a secondary lane the board shows collapsed by default.
-// NOTE (legacy): these are the OLD stage-keyed pipeline columns. The unified
-// order-centric board uses BOARD_COLUMNS below instead; PIPELINE_STAGES /
-// SECONDARY_STAGES stay exported because other screens (and the stage vocabulary)
-// still reference them — do not remove.
-export const PIPELINE_STAGES   = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer'];
-export const SECONDARY_STAGES  = ['lost', 'dormant'];
-
 // ── Unified order-centric board columns ──────────────────────────────────────
 // The pipeline is now "one client → many orders": lead/contacted columns are
 // pre-quote Client cards (no live order); quoting → … → delivered are ORDER cards
