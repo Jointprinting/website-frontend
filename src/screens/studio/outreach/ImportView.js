@@ -10,10 +10,12 @@
 import * as React from 'react';
 import {
   Box, Stack, Typography, Button, TextField, MenuItem, Link, Alert, CircularProgress,
+  Switch, Tooltip,
 } from '@mui/material';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
+import AutoModeOutlinedIcon from '@mui/icons-material/AutoModeOutlined';
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn } from '../_shared';
 import { Eyebrow } from '../crm/_crm';
 import { parseCsv, IMPORT_TARGETS, guessTarget, buildImportRows, FINDER_REGIONS, StatPill } from './_outreach';
@@ -32,12 +34,25 @@ const LICENSE_SOURCES = [
 ];
 
 // The free auto-finder: pick a region, the server does discovery + email scrape
-// + import. A preview (dry run) reports coverage before writing anything.
-function AutoFinder({ onFindLeads, onError, onGoCampaigns }) {
+// + import. A preview (dry run) reports coverage before writing anything. The
+// auto-pilot toggle hands the whole thing to the weekly frontier scheduler.
+function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onError, onGoCampaigns }) {
   const [region, setRegion] = React.useState('nj');
   const [busy, setBusy] = React.useState(false);
   const [preview, setPreview] = React.useState(null);
   const [result, setResult] = React.useState(null);
+  const [frontier, setFrontier] = React.useState(null); // { activeLabel, autoAdvance, lastResult }
+  const [autoBusy, setAutoBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (onFetchFinderStatus) {
+      onFetchFinderStatus()
+        .then((s) => { if (!cancelled) setFrontier(s.frontier || null); })
+        .catch(() => { /* silent — the panel still works without status */ });
+    }
+    return () => { cancelled = true; };
+  }, [onFetchFinderStatus]);
 
   const run = async (dryRun) => {
     setBusy(true);
@@ -49,6 +64,18 @@ function AutoFinder({ onFindLeads, onError, onGoCampaigns }) {
       onError(e.response?.data?.message || 'Lead finder failed — the discovery service may be busy, try again.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleAuto = async (enabled) => {
+    setAutoBusy(true);
+    try {
+      const s = await onSetAutoAdvance(enabled);
+      setFrontier(s.frontier || null);
+    } catch (e) {
+      onError(e.response?.data?.message || 'Could not update the auto-pilot.');
+    } finally {
+      setAutoBusy(false);
     }
   };
 
@@ -93,6 +120,39 @@ function AutoFinder({ onFindLeads, onError, onGoCampaigns }) {
         </Typography>
       )}
 
+      {/* Auto-pilot — the long-term system: works the frontier state weekly, then
+          rolls to the next once it runs dry. */}
+      {onSetAutoAdvance && (
+        <Box sx={{ mt: 1.75, pt: 1.5, borderTop: `1px solid ${D.line}` }}>
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <AutoModeOutlinedIcon sx={{ color: frontier?.autoAdvance ? D.green : D.faint, fontSize: 19 }} />
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13 }}>
+                Auto-pilot {frontier?.autoAdvance ? 'on' : 'off'}
+                {frontier?.activeLabel ? ` — frontier: ${frontier.activeLabel}` : ''}
+              </Typography>
+              <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+                {frontier?.autoAdvance
+                  ? 'Sweeps the frontier state weekly and rolls to the next once it runs dry.'
+                  : 'Turn on to keep finding new dispensaries automatically, state by state, forever.'}
+                {frontier?.lastResult ? ` · ${frontier.lastResult}` : ''}
+              </Typography>
+            </Box>
+            <Tooltip title={frontier?.autoAdvance ? 'Stop the weekly auto-finder' : 'Run the finder automatically, every week'}>
+              <span>
+                <Switch
+                  checked={!!frontier?.autoAdvance}
+                  disabled={autoBusy}
+                  onChange={(e) => toggleAuto(e.target.checked)}
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: D.green },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: D.green } }}
+                />
+              </span>
+            </Tooltip>
+          </Stack>
+        </Box>
+      )}
+
       {preview && !busy && (
         <Alert severity="info" variant="outlined" sx={{ mt: 1.5, borderColor: D.line, color: D.text,
           '& .MuiAlert-icon': { color: D.green } }}>
@@ -126,7 +186,7 @@ function AutoFinder({ onFindLeads, onError, onGoCampaigns }) {
   );
 }
 
-export default function ImportView({ onImport, onFindLeads, onError, onGoCampaigns }) {
+export default function ImportView({ onImport, onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onError, onGoCampaigns }) {
   const [csvText, setCsvText] = React.useState('');
   const [rows, setRows] = React.useState(null);        // parsed array-of-arrays
   const [mapping, setMapping] = React.useState([]);    // per-column target ids
@@ -189,7 +249,13 @@ export default function ImportView({ onImport, onFindLeads, onError, onGoCampaig
   return (
     <Stack spacing={2.5}>
       {/* Primary path — the free automated finder. */}
-      <AutoFinder onFindLeads={onFindLeads} onError={onError} onGoCampaigns={onGoCampaigns} />
+      <AutoFinder
+        onFindLeads={onFindLeads}
+        onFetchFinderStatus={onFetchFinderStatus}
+        onSetAutoAdvance={onSetAutoAdvance}
+        onError={onError}
+        onGoCampaigns={onGoCampaigns}
+      />
 
       <Box>
         <Eyebrow sx={{ mb: 1 }}>Or paste a state license list — manual fallback</Eyebrow>

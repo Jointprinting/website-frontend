@@ -155,6 +155,19 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     return data;
   };
 
+  const fetchFinderStatus = async () => {
+    const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
+    return data;
+  };
+
+  const setAutoAdvance = async (enabled) => {
+    const { data } = await axios.post(`${base}/find-leads/auto`, { enabled }, authHdr);
+    flash(enabled
+      ? 'Auto-pilot on — it works one state at a time, weekly, and moves on when a state runs dry.'
+      : 'Auto-pilot off.');
+    return data;
+  };
+
   const openCompany = (companyKey) => onNavigate && onNavigate({ view: 'crm', companyKey });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -196,6 +209,8 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
           <ImportView
             onImport={importLeads}
             onFindLeads={findLeads}
+            onFetchFinderStatus={fetchFinderStatus}
+            onSetAutoAdvance={setAutoAdvance}
             onError={(m) => flash(m, 'error')}
             onGoCampaigns={() => setView('campaigns')}
           />

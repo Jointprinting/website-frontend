@@ -1513,13 +1513,22 @@ const HUB_GROUPS = [
         ],
       },
       {
+        // Marketing / lead-gen tools — grouped so the two ways Nate fills the
+        // funnel (in-person sweeps + cold email) sit together, and so "More
+        // tools" stays a clean even row instead of wrapping one card onto its own.
+        id: 'growth',
+        label: 'Marketing · find leads',
+        tools: [
+          { id: 'roadtrip', label: 'Field Map', desc: 'Plan in-person sweeps',   Icon: ExploreOutlinedIcon },
+          { id: 'outreach', label: 'Outreach',  desc: 'Cold email → warm leads', Icon: ForwardToInboxOutlinedIcon },
+        ],
+      },
+      {
         id: 'secondary',
         label: 'More tools',
         tools: [
           { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
           { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
-          { id: 'roadtrip',    label: 'Field Map',    desc: 'Plan in-person sweeps',         Icon: ExploreOutlinedIcon },
-          { id: 'outreach',    label: 'Outreach',     desc: 'Cold email → warm leads',       Icon: ForwardToInboxOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
         ],
@@ -1789,7 +1798,10 @@ function TierLabel({ children }) {
 // small row. All collapse to 2-up / 1-up on small screens.
 const TIER_COLS = {
   primary:   { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
-  secondary: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
+  // Marketing pair — a clean 2-up, same rhythm as primary/tucked.
+  growth:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
+  // Four operational tools — one even row at desktop (no orphan wrap).
+  secondary: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
 };
 
