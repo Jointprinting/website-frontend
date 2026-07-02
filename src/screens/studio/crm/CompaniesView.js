@@ -12,6 +12,10 @@
 // The old "filter by area" and "filter by temperature" controls are gone on
 // purpose (the stages/segments already do that job) — fewer knobs, less noise.
 //
+// A dashboard-funnel drill-down can hand in a `stageFilter`: while set, the list
+// narrows (client-side) to that stage across ALL segments and shows a dismissible
+// "Stage: … ✕" chip; clearing it (or picking a segment) restores normal browsing.
+//
 // Doubles as the Archived recover surface: pass `archived` + an `onUnarchive`
 // handler and the view switches to a self-contained, client-side-filtered list of
 // archived records, each with a one-tap Restore.
@@ -31,7 +35,7 @@ import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import AddBusinessOutlinedIcon from '@mui/icons-material/AddBusinessOutlined';
 import { D, mono, dropInput, fmtRelative } from '../_shared';
 import {
-  StageChip, EmptyState, TagChips, stageMeta, followUpStatus,
+  StageChip, EmptyState, TagChips, STAGE_META, stageMeta, followUpStatus,
   primaryPhone, isWonStage, CRM_SEGMENTS, SEGMENT_META, segmentOf,
 } from './_crm';
 
@@ -148,6 +152,7 @@ export default function CompaniesView({
   clients, loading, query, onQueryChange,
   tag, onTagChange, tagOptions, onOpen, archived = false, onUnarchive, bindCompany,
   segment = 'clients', onSegmentChange, onAddCompany,
+  stageFilter = null, onClearStageFilter,
 }) {
   // Archived mode runs its own client-side search (the archived set is fetched
   // separately and isn't wired to the live ?q= companies fetch).
@@ -176,11 +181,17 @@ export default function CompaniesView({
     return acc;
   }, [clients, archived]);
 
-  // The shown list = the active segment's slice of the loaded set.
+  // The shown list = the active segment's slice of the loaded set — unless a
+  // dashboard-funnel drill-down (stageFilter) is active: stages cut ACROSS the
+  // three segments, so it narrows the whole book to that stage instead. Unknown
+  // stages bucket as 'lead', mirroring the dashboard's funnel math. Picking a
+  // segment manually clears the drill-down (the parent owns that), so normal
+  // segment browsing keeps working exactly as today.
   const segmented = React.useMemo(() => {
     if (archived) return archivedFiltered;
+    if (stageFilter) return (clients || []).filter((c) => (STAGE_META[c.stage] ? c.stage : 'lead') === stageFilter);
     return (clients || []).filter((c) => segmentOf(c) === segment);
-  }, [archived, archivedFiltered, clients, segment]);
+  }, [archived, archivedFiltered, clients, segment, stageFilter]);
 
   const list = segmented;
 
@@ -231,7 +242,8 @@ export default function CompaniesView({
   }
 
   const m = SEGMENT_META[segment] || SEGMENT_META.clients;
-  const anyFilter = query || tag !== 'all';
+  const anyFilter = query || tag !== 'all' || !!stageFilter;
+  const stageM = stageFilter ? stageMeta(stageFilter) : null;
 
   return (
     <Stack spacing={2}>
@@ -269,6 +281,24 @@ export default function CompaniesView({
         )}
       </Stack>
 
+      {/* Funnel drill-down chip — set by tapping a dashboard funnel row. While
+          active the list shows that stage across ALL segments; ✕ (or picking a
+          segment) returns to normal browsing. */}
+      {stageFilter && (
+        <Box>
+          <Chip
+            label={`Stage: ${stageM.label}`}
+            size="small"
+            onDelete={onClearStageFilter}
+            sx={{
+              bgcolor: stageM.bg, color: stageM.color, fontWeight: 800, fontSize: 11.5,
+              height: 24, border: `1px solid ${stageM.color}55`, letterSpacing: 0.2,
+              '& .MuiChip-deleteIcon': { color: `${stageM.color}b3`, '&:hover': { color: stageM.color } },
+            }}
+          />
+        </Box>
+      )}
+
       {/* Segment toggle — Clients / Active leads / Everyone else (instant) */}
       {onSegmentChange && (
         <SegmentTabs segment={segment} onSegmentChange={onSegmentChange} counts={counts} />
@@ -278,7 +308,9 @@ export default function CompaniesView({
         <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
           {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'company' : 'companies'}`}
         </Typography>
-        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{m.hint}</Typography>
+        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+          {stageFilter ? `Every ${stageM.label.toLowerCase()}-stage company, all segments` : m.hint}
+        </Typography>
       </Stack>
 
       {loading ? (

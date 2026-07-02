@@ -34,18 +34,10 @@ import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import config from '../../config.json';
-import { B } from './_shared';
+import { B, money, ymd } from './_shared';
 
 const base = `${config.backendUrl}/api/finances`;
 
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-const ymd = (d) => {
-  const t = d ? new Date(d) : null;
-  return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : '—';
-};
 
 // The small link chips (receipt / order link / invoice #) shown on a row and on the
 // merged result, so the owner SEES exactly which links are being preserved.

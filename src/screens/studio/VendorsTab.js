@@ -33,14 +33,13 @@ import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import {
-  D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative,
+  D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, money0,
 } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
 import RebuildPrintersView from './RebuildPrintersView';
 
 const base = `${config.backendUrl}/api`;
-const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 const fieldSx = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13.5, py: 1 } };
 
 // ── Vendor row in the list ────────────────────────────────────────────────────
@@ -138,6 +137,9 @@ function DupGroup({ group, onMerge }) {
         // eslint-disable-next-line no-await-in-loop
         await onMerge(survivor, m._id);
       }
+    } catch (_) {
+      // onMerge already surfaced the failure (the tab's alert pattern); stopping
+      // here leaves the remaining records unmerged rather than ploughing on.
     } finally { setBusy(false); }
   };
 
@@ -155,7 +157,7 @@ function DupGroup({ group, onMerge }) {
         </Typography>
         <Button onClick={doMerge} disabled={busy || others.length === 0} size="small"
           sx={{ ...dropPrimaryBtn, py: 0.5 }} startIcon={!busy ? <MergeTypeOutlinedIcon /> : null}>
-          {busy ? <CircularProgress size={16} sx={{ color: D.ink }} /> : 'Merge'}
+          {busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : 'Merge'}
         </Button>
       </Stack>
     </Box>
@@ -239,9 +241,22 @@ function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, dup
       {/* Duplicate-printer detection + one-tap merge (mirrors CRM cleanup). Only
           shows when the backend proposes groups; hidden on a clean book. */}
       {!query && <DuplicatesPanel groups={duplicates} onMerge={onMerge} />}
-      <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
-        {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'vendor' : 'vendors'}`}
-      </Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
+          {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'vendor' : 'vendors'}`}
+        </Typography>
+        {/* Quiet re-entry once the one-time rebuild has been applied and the big CTA
+            banner auto-hid — the surface has its own preview/confirm/revert safety,
+            so keeping it reachable is safe. */}
+        {!showRebuild && (
+          <Button onClick={onRebuild} size="small" startIcon={<CloudSyncOutlinedIcon sx={{ fontSize: 15 }} />}
+            title="Re-run the Drive rebuild (preview first — reversible)"
+            sx={{ color: D.faint, textTransform: 'none', fontWeight: 600, fontSize: 11.5, px: 0.75, py: 0.1, minWidth: 0,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+            Rebuild from Drive…
+          </Button>
+        )}
+      </Stack>
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: D.green }} /></Box>
       ) : list.length === 0 ? (
@@ -600,7 +615,11 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
       loadVendors();
       loadDuplicates();
     } catch (e) {
+      // Surface the failure (the tab's existing alert pattern) and rethrow so a
+      // multi-record merge STOPS at the failed record instead of ploughing on —
+      // the group's Merge button re-enables and can be retried.
       alert(`Merge failed: ${e.response?.data?.message || e.message}`);
+      throw e;
     }
   }, [authHdr, loadVendors, loadDuplicates]);
 

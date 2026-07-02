@@ -1,5 +1,5 @@
 // src/common/QuoteDialog.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Stack, TextField, Button, Typography, Box,
@@ -17,6 +17,9 @@ function isValidPhone(s) {
   return digits.length >= 7 && digits.length <= 15;
 }
 
+// Submit-time validation order — also determines which invalid field gets focus.
+const REQUIRED_FIELDS = ['name', 'companyName', 'email', 'phone', 'shipToState', 'quantity', 'inHandDate'];
+
 export default function QuoteDialog({ open, onClose, products = [] }) {
   const [localProducts, setLocalProducts] = useState([]);
   const [name, setName] = useState('');
@@ -30,6 +33,16 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
   const [files, setFiles] = useState([]);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const fieldRefs = useRef({});
+
+  const clearError = (field) =>
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
 
   // Sync product list from parent whenever the dialog opens
   useEffect(() => {
@@ -50,7 +63,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
   const reset = () => {
     setName(''); setCompanyName(''); setEmail(''); setPhone('');
     setShipToState(''); setQuantity(''); setInHandDate(''); setNotes(''); setFiles([]);
-    setSuccess(false); setSubmitting(false);
+    setSuccess(false); setSubmitting(false); setErrors({});
   };
 
   const handleClose = () => {
@@ -61,14 +74,20 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !companyName || !email || !phone || !shipToState || !quantity || !inHandDate) {
-      alert('Please fill out all required fields.');
+    const values = { name, companyName, email, phone, shipToState, quantity, inHandDate };
+    const nextErrors = {};
+    REQUIRED_FIELDS.forEach((field) => { if (!values[field]) nextErrors[field] = 'Required'; });
+    if (phone && !isValidPhone(phone)) nextErrors.phone = 'Enter 7–15 digits';
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      const firstInvalid = fieldRefs.current[REQUIRED_FIELDS.find((f) => nextErrors[f])];
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus({ preventScroll: true });
+      }
       return;
     }
-    if (!isValidPhone(phone)) {
-      alert('Please enter a valid phone number (at least 7 digits).');
-      return;
-    }
+    setErrors({});
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -169,44 +188,58 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
             <Grid item xs={12} sm={6}>
               <TextField
                 value={name} label="Your name *" variant="outlined" fullWidth size="small"
-                onChange={(e) => setName(e.target.value)} disabled={submitting || success}
+                error={!!errors.name} helperText={errors.name}
+                inputRef={(el) => { fieldRefs.current.name = el; }}
+                onChange={(e) => { setName(e.target.value); clearError('name'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 value={companyName} label="Company / Organization *" variant="outlined" fullWidth size="small"
-                onChange={(e) => setCompanyName(e.target.value)} disabled={submitting || success}
+                error={!!errors.companyName} helperText={errors.companyName}
+                inputRef={(el) => { fieldRefs.current.companyName = el; }}
+                onChange={(e) => { setCompanyName(e.target.value); clearError('companyName'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 type="email" value={email} label="Email *" variant="outlined" fullWidth size="small"
-                onChange={(e) => setEmail(e.target.value)} disabled={submitting || success}
+                error={!!errors.email} helperText={errors.email}
+                inputRef={(el) => { fieldRefs.current.email = el; }}
+                onChange={(e) => { setEmail(e.target.value); clearError('email'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 value={phone} label="Phone *" placeholder="(856) 555-1234" variant="outlined" fullWidth size="small"
-                onChange={(e) => setPhone(e.target.value)} disabled={submitting || success}
+                error={!!errors.phone} helperText={errors.phone}
+                inputRef={(el) => { fieldRefs.current.phone = el; }}
+                onChange={(e) => { setPhone(e.target.value); clearError('phone'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 value={shipToState} label="Ship-to state *" variant="outlined" fullWidth size="small"
-                onChange={(e) => setShipToState(e.target.value)} disabled={submitting || success}
+                error={!!errors.shipToState} helperText={errors.shipToState}
+                inputRef={(el) => { fieldRefs.current.shipToState = el; }}
+                onChange={(e) => { setShipToState(e.target.value); clearError('shipToState'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small"
-                onChange={(e) => setQuantity(e.target.value)} disabled={submitting || success}
+                error={!!errors.quantity} helperText={errors.quantity}
+                inputRef={(el) => { fieldRefs.current.quantity = el; }}
+                onChange={(e) => { setQuantity(e.target.value); clearError('quantity'); }} disabled={submitting || success}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 type="date" value={inHandDate} label="In-hand date *" variant="outlined" fullWidth size="small"
                 InputLabelProps={{ shrink: true }}
-                onChange={(e) => setInHandDate(e.target.value)} disabled={submitting || success}
+                error={!!errors.inHandDate} helperText={errors.inHandDate}
+                inputRef={(el) => { fieldRefs.current.inHandDate = el; }}
+                onChange={(e) => { setInHandDate(e.target.value); clearError('inHandDate'); }} disabled={submitting || success}
               />
             </Grid>
 

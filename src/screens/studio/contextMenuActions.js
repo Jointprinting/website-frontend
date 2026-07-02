@@ -271,6 +271,7 @@ export function buildTransactionMenu(t, handlers = {}) {
     // resolve to a navigable target (so we never offer a dead jump).
     handlers.onOpenOrder && { key: 'open-order', label: `Open order #${t.orderNumber}`, icon: OpenInNewOutlinedIcon, onClick: () => handlers.onOpenOrder(t) },
     handlers.onOpenClient && { key: 'open-client', label: 'Open client card', icon: PersonOutlineIcon, onClick: () => handlers.onOpenClient(t) },
+    handlers.onOpenVendor && { key: 'open-vendor', label: 'Open vendor card', icon: StorefrontOutlinedIcon, onClick: () => handlers.onOpenVendor(t) },
     t.receiptUrl && {
       key: 'receipt', label: 'View receipt', icon: ReceiptLongOutlinedIcon,
       onClick: () => { window.open(t.receiptUrl, '_blank', 'noopener,noreferrer'); },

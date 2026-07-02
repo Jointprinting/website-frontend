@@ -33,6 +33,9 @@ function isValidPhone(s) {
   return digits.length >= 7 && digits.length <= 15;
 }
 
+// Submit-time validation order — also determines which invalid field gets focus.
+const REQUIRED_FIELDS = ['name', 'companyName', 'email', 'phone', 'shipToState', 'quantity', 'inHandDate'];
+
 function Contact() {
   const [searchParams] = useSearchParams();
   const isReferralContext = searchParams.get('topic') === 'referral';
@@ -52,6 +55,16 @@ function Contact() {
   const [files, setFiles] = React.useState([]);
   const [success, setSuccess] = React.useState(false);
   const [selectedProducts, setSelectedProducts] = React.useState([]);
+  const [errors, setErrors] = React.useState({});
+  const fieldRefs = React.useRef({});
+
+  const clearError = (field) =>
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
 
   React.useEffect(() => {
     try {
@@ -74,14 +87,20 @@ function Contact() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !companyName || !email || !phone || !shipToState || !quantity || !inHandDate) {
-      alert('Please fill out all required fields.');
+    const values = { name, companyName, email, phone, shipToState, quantity, inHandDate };
+    const nextErrors = {};
+    REQUIRED_FIELDS.forEach((field) => { if (!values[field]) nextErrors[field] = 'Required'; });
+    if (phone && !isValidPhone(phone)) nextErrors.phone = 'Enter 7–15 digits';
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      const firstInvalid = fieldRefs.current[REQUIRED_FIELDS.find((f) => nextErrors[f])];
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus({ preventScroll: true });
+      }
       return;
     }
-    if (!isValidPhone(phone)) {
-      alert('Please enter a valid phone number with at least 7 digits.');
-      return;
-    }
+    setErrors({});
     try {
       const formData = new FormData();
       formData.append('name', name);
@@ -179,13 +198,22 @@ function Contact() {
                 <Stack spacing={2.5}>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <TextField value={name} label="Name *" variant="outlined" fullWidth size="small" onChange={(e) => setName(e.target.value)} />
+                      <TextField value={name} label="Name *" variant="outlined" fullWidth size="small"
+                        error={!!errors.name} helperText={errors.name}
+                        inputRef={(el) => { fieldRefs.current.name = el; }}
+                        onChange={(e) => { setName(e.target.value); clearError('name'); }} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField value={companyName} label="Company Name *" variant="outlined" fullWidth size="small" onChange={(e) => setCompanyName(e.target.value)} />
+                      <TextField value={companyName} label="Company Name *" variant="outlined" fullWidth size="small"
+                        error={!!errors.companyName} helperText={errors.companyName}
+                        inputRef={(el) => { fieldRefs.current.companyName = el; }}
+                        onChange={(e) => { setCompanyName(e.target.value); clearError('companyName'); }} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField type="email" value={email} label="Email *" variant="outlined" fullWidth size="small" onChange={(e) => setEmail(e.target.value)} />
+                      <TextField type="email" value={email} label="Email *" variant="outlined" fullWidth size="small"
+                        error={!!errors.email} helperText={errors.email}
+                        inputRef={(el) => { fieldRefs.current.email = el; }}
+                        onChange={(e) => { setEmail(e.target.value); clearError('email'); }} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <TextField
@@ -195,17 +223,29 @@ function Contact() {
                         variant="outlined"
                         fullWidth
                         size="small"
-                        onChange={(e) => setPhone(e.target.value)}
+                        error={!!errors.phone}
+                        helperText={errors.phone}
+                        inputRef={(el) => { fieldRefs.current.phone = el; }}
+                        onChange={(e) => { setPhone(e.target.value); clearError('phone'); }}
                       />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField value={shipToState} label="Ship-to state / province *" variant="outlined" fullWidth size="small" onChange={(e) => setShipToState(e.target.value)} />
+                      <TextField value={shipToState} label="Ship-to state / province *" variant="outlined" fullWidth size="small"
+                        error={!!errors.shipToState} helperText={errors.shipToState}
+                        inputRef={(el) => { fieldRefs.current.shipToState = el; }}
+                        onChange={(e) => { setShipToState(e.target.value); clearError('shipToState'); }} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small" onChange={(e) => setQuantity(e.target.value)} />
+                      <TextField value={quantity} label="Quantity per item *" variant="outlined" fullWidth size="small"
+                        error={!!errors.quantity} helperText={errors.quantity}
+                        inputRef={(el) => { fieldRefs.current.quantity = el; }}
+                        onChange={(e) => { setQuantity(e.target.value); clearError('quantity'); }} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField type="date" value={inHandDate} label="In-hand date *" variant="outlined" fullWidth size="small" InputLabelProps={{ shrink: true }} onChange={(e) => setInHandDate(e.target.value)} />
+                      <TextField type="date" value={inHandDate} label="In-hand date *" variant="outlined" fullWidth size="small" InputLabelProps={{ shrink: true }}
+                        error={!!errors.inHandDate} helperText={errors.inHandDate}
+                        inputRef={(el) => { fieldRefs.current.inHandDate = el; }}
+                        onChange={(e) => { setInHandDate(e.target.value); clearError('inHandDate'); }} />
                     </Grid>
                   </Grid>
 

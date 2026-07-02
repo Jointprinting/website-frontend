@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem, CircularProgress,
-  Dialog, DialogContent, TextField,
+  Dialog, DialogContent, TextField, ToggleButton, ToggleButtonGroup, Autocomplete,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
@@ -25,7 +25,7 @@ import axios from 'axios';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
-import { B, darkInput, scrollbar, mono } from './_shared';
+import { B, darkInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceRestartView from './FinanceRestartView';
@@ -33,42 +33,44 @@ import FinanceDedupeView from './FinanceDedupeView';
 import OrderReconcileView from './OrderReconcileView';
 
 const base = `${config.backendUrl}/api`;
-// money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
-// to a finite number first (Number(n) || 0 turns NaN/undefined/null/'' → 0), so no
-// odd/missing value can ever render "$NaN" or white-screen the finance tab.
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-// A percentage for display — finite-guarded the same way (a bad value shows 0%).
+// money/ymd/round(=roundCents)/normOrderNo come from _shared — the ONE definition
+// every tab renders with (finite-guarded, backend-mirrored). pct stays local: a
+// display guard for an already-computed percentage (a bad value shows 0%).
 const pct = (n) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
-// Mirror the backend round2 EXACTLY (it adds Number.EPSILON) so the previewed
-// processing fee equals the cent the backend books — without the epsilon, certain
-// half-cent amounts (e.g. a 1% ACH fee on $14.50) would preview a cent low.
-const round = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
-// Safe YYYY-MM-DD for display — new Date(bad).toISOString() THROWS, which would
-// white-screen the whole tab over one row with a missing/garbage date. Returns an
-// em dash for anything unparseable so the ledger always renders.
-const ymd = (d) => {
-  const t = d ? new Date(d) : null;
-  return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : '—';
-};
+// Finance vocabulary — the OFFLINE FALLBACK for GET /api/finances/config. The live
+// values (served straight from the backend Transaction model) are fetched on mount
+// and used everywhere below; these mirrors only apply while that fetch fails, so
+// keep them matching the backend all the same.
 const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Processing Fee', 'Software', 'Marketing', 'Accounting', 'Travel/Field',
   'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
-// COGS categories that net against an order's revenue — MUST match the backend
-// Transaction.COGS_CATEGORIES so the drill-in profit reconciles with by-order.
+// COGS categories that net against an order's revenue — offline fallback for
+// /api/finances/config (cogsCategories); mirrors backend Transaction.COGS_CATEGORIES
+// so the drill-in profit reconciles with by-order even when the config fetch fails.
 const COGS_CATEGORIES = ['Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission', 'Processing Fee'];
-// Merchant processing-fee rates (fractions of the payment) — MUST match the backend
+// Merchant processing-fee rates (fractions of the payment) — offline fallback for
+// /api/finances/config (processingFeeRates); mirrors backend
 // Transaction.PROCESSING_FEE_RATES so the fee the UI previews equals the one booked.
 const PROCESSING_FEE_RATES = { cc: 0.0299, ach: 0.01, none: 0 };
-const FEE_METHOD_LABEL = { cc: 'Credit card (2.99%)', ach: 'ACH / bank (1%)', none: 'No fee (cash / check)' };
-// Canonical order-number key — strips non-digits AND leading zeros, mirroring the
-// backend controllers/finances.js normalizeOrderNumber so the drill-in groups a
-// "0000021" row and a "21" row into the one order the by-order list keys by.
-const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+// Payment-method labels derived from the LIVE fee rates, so a negotiated rate
+// change server-side shows its true percentage the moment the config loads.
+const feeMethodLabels = (rates) => ({
+  cc: `Credit card (${+(((rates && rates.cc) || 0) * 100).toFixed(2)}%)`,
+  ach: `ACH / bank (${+(((rates && rates.ach) || 0) * 100).toFixed(2)}%)`,
+  none: 'No fee (cash / check)',
+});
+// Year picker range: 2024 (the first ledger year) through next year — computed so
+// the picker never goes stale at a year rollover (was a hardcoded list).
+const YEAR_OPTIONS = (() => {
+  const ys = [];
+  for (let y = 2024, end = new Date().getFullYear() + 1; y <= end; y += 1) ys.push(y);
+  return ys;
+})();
+// Shown when the AI receipt scan errors or reads nothing usable — the upload
+// itself still succeeded, so the owner just fills the fields by hand.
+const SCAN_FAIL_NOTE = 'Couldn’t read the receipt — fill the fields in manually. The file is still attached.';
 // Signed amount within a row's type bucket (credit reverses direction) — matches
 // backend signed(): an income credit nets revenue down, an expense credit nets cost down.
 const signedAmt = (t) => (t && t.isCredit ? -(Number(t.amount) || 0) : (Number(t.amount) || 0));
@@ -105,6 +107,18 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [prefill, setPrefill] = useState(null);
   const [editTxn, setEditTxn] = useState(null);
   const [openOrder, setOpenOrder] = useState(null);
+  // Live finance vocabulary from /api/finances/config (categories / COGS set /
+  // processing-fee rates) — the anti-drift source of truth. Starts as the
+  // hardcoded mirrors (offline fallback) and is replaced by the served values.
+  const [finCfg, setFinCfg] = useState({
+    categories: CATEGORIES, cogsCategories: COGS_CATEGORIES, processingFeeRates: PROCESSING_FEE_RATES,
+  });
+  // "Profit by …" lens on the P&L table: 'order' (default — unchanged, incl. its
+  // drill-in dialog) or 'project' (the same P&L folded up by projectNumber via
+  // /api/finances/by-project). Project rows are fetched on first switch and
+  // cached per year; load() clears the cache so edits refresh it.
+  const [pnlMode, setPnlMode] = useState('order');
+  const [projCache, setProjCache] = useState({});
   // The "Restart finances from my budgets" surface (preview→confirm→apply, reversible).
   // A full-screen sub-view, mirroring the CRM ReconcileView pattern.
   const [showRestart, setShowRestart] = useState(false);
@@ -187,6 +201,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setClients(arr(c.data && c.data.clients));
       setGaps(g.data || null);
       setNeedsReceipts(nr.data || null);
+      setProjCache({});   // the by-project fold is stale after any reload — refetch lazily
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -195,6 +210,40 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   useEffect(() => { loadRestartStatus(); }, [loadRestartStatus]);
   useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
   useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
+
+  // Live finance config on mount (alongside the other loads). Year-independent and
+  // cheap; a failure just keeps the hardcoded mirrors — same numbers as before.
+  useEffect(() => {
+    let cancelled = false;
+    axios.get(`${base}/finances/config`, authHdr).then((r) => {
+      if (cancelled || !r.data) return;
+      const d = r.data;
+      setFinCfg({
+        categories: Array.isArray(d.categories) && d.categories.length ? d.categories : CATEGORIES,
+        cogsCategories: Array.isArray(d.cogsCategories) && d.cogsCategories.length ? d.cogsCategories : COGS_CATEGORIES,
+        processingFeeRates: (d.processingFeeRates && typeof d.processingFeeRates === 'object') ? d.processingFeeRates : PROCESSING_FEE_RATES,
+      });
+    }).catch(() => { /* keep the hardcoded fallback */ });
+    return () => { cancelled = true; };
+  }, [authHdr]);
+
+  // Fetch the by-project rows the first time the lens flips to 'project' for this
+  // year, then serve from the cache. A failure caches [] so the table shows its
+  // empty state instead of spinning forever.
+  const projKey = String(year);
+  const projRows = projCache[projKey];
+  useEffect(() => {
+    if (pnlMode !== 'project' || projCache[projKey]) return undefined;
+    let cancelled = false;
+    axios.get(`${base}/finances/by-project`, { ...authHdr, params: { year } })
+      .then((r) => {
+        if (cancelled) return;
+        const rows = (r.data && Array.isArray(r.data.projects)) ? r.data.projects.filter(Boolean) : [];
+        setProjCache((prev) => ({ ...prev, [projKey]: rows }));
+      })
+      .catch(() => { if (!cancelled) setProjCache((prev) => ({ ...prev, [projKey]: [] })); });
+    return () => { cancelled = true; };
+  }, [pnlMode, projKey, projCache, authHdr, year]);
 
   const exportCsv = async () => {
     try {
@@ -252,6 +301,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       onDelete: deleteTxnById,
       onOpenOrder: (onNavigate && k) ? () => goOrder(t.orderNumber) : undefined,
       onOpenClient: (onNavigate && ck && t.type === 'income' && t.party) ? () => goCompanyForOrder(t.orderNumber) : undefined,
+      onOpenVendor: (onNavigate && t.type === 'expense' && t.vendorId) ? () => goVendor(t.vendorId) : undefined,
     }));
   };
 
@@ -290,6 +340,13 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const goCompanyByKey = useCallback((ck) => {
     if (!onNavigate || !ck) return;
     onNavigate({ view: 'crm', companyKey: ck });
+  }, [onNavigate]);
+  // An expense row that carries a hard vendor link (vendorId, resolved/set on the
+  // backend) deep-links to that Vendor card — the supplier-side twin of the
+  // income→CRM jump above. Studio resolves the id directly.
+  const goVendor = useCallback((vendorId) => {
+    if (!onNavigate || !vendorId) return;
+    onNavigate({ view: 'vendors', vendorId });
   }, [onNavigate]);
 
   const expenses = summary ? Object.entries(summary.expenseByCategory || {}).sort((a, b) => b[1] - a[1]) : [];
@@ -390,7 +447,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         <FormControl size="small" sx={{ minWidth: 90 }}>
           <Select value={year} onChange={(e) => setYear(e.target.value)}
             sx={{ color: B.white, fontSize: 13, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.04)', '& .MuiSvgIcon-root': { color: B.muted } }}>
-            {[2024, 2025, 2026, 2027].map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+            {YEAR_OPTIONS.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
             <MenuItem value="">All</MenuItem>
           </Select>
         </FormControl>
@@ -406,15 +463,23 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         )}
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
-        {/* "Restart from budgets" is a one-time, destructive rebuild. Before it's
-            ever applied it's a prominent button; once applied it's hidden — leaving a
-            mystery ↻ circle in the daily finance bar was just clutter. (Still fully
-            available + reversible; resurface it on request if you ever need to re-run.) */}
+        {/* "Restart from budgets" is a one-time, destructive-but-reversible rebuild.
+            Before it's ever applied it's a prominent button; once applied it demotes
+            to a quiet ghost link below — reachable (it's fully reversible server-side)
+            without cluttering the daily finance bar. */}
         {!restartApplied && (
           <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
             title="Rebuild your finances from your budget trackers (preview first — reversible)"
             sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
             Restart from budgets
+          </Button>
+        )}
+        {restartApplied && (
+          <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />}
+            title="Re-run the budget restart (preview first — reversible)"
+            sx={{ color: B.muted, opacity: 0.65, textTransform: 'none', fontWeight: 600, fontSize: 11, minWidth: 'auto', px: 0.75,
+              '&:hover': { opacity: 1, color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+            Budget restart…
           </Button>
         )}
       </Box>
@@ -546,7 +611,102 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             <TopClients clients={clients} onClient={goCompanyByKey} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Profit by order ({orders.length})</Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ px: 1.5, pt: 1.25, pb: 0.5 }}>
+                <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {pnlMode === 'project'
+                    ? `Profit by project${projRows ? ` (${projRows.length})` : ''}`
+                    : `Profit by order (${orders.length})`}
+                </Typography>
+                {/* By order (default — unchanged, incl. the drill-in dialog) ⇄ by
+                    project: the same P&L folded up by projectNumber, so a deposit +
+                    balance + reprint read as ONE piece of work. */}
+                <ToggleButtonGroup exclusive size="small" value={pnlMode}
+                  onChange={(_, v) => { if (v) setPnlMode(v); }}
+                  sx={{ '& .MuiToggleButton-root': {
+                    color: B.muted, border: `1px solid ${B.border}`, textTransform: 'none',
+                    fontSize: 10.5, fontWeight: 700, lineHeight: 1.5, px: 1, py: 0.2,
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                    '&.Mui-selected': { color: B.green, bgcolor: 'rgba(74,222,128,0.10)', '&:hover': { bgcolor: 'rgba(74,222,128,0.14)' } },
+                  } }}>
+                  <ToggleButton value="order">By order</ToggleButton>
+                  <ToggleButton value="project">By project</ToggleButton>
+                </ToggleButtonGroup>
+              </Stack>
+              {pnlMode === 'project' ? (
+                !projRows ? (
+                  <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={18} sx={{ color: B.green }} /></Box>
+                ) : projRows.length === 0 ? (
+                  <Typography sx={{ color: B.muted, fontSize: 12, px: 1.5, pb: 1.5 }}>No project rows for {year || 'any year'} yet.</Typography>
+                ) : (
+                  <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+                    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                      <Box component="thead">
+                        <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+                          <Box component="th" sx={{ textAlign: 'left !important' }}>Project</Box>
+                          <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
+                          <Box component="th" sx={{ textAlign: 'left !important' }}>Orders</Box>
+                          <Box component="th">Revenue</Box><Box component="th">Cost</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
+                        </Box>
+                      </Box>
+                      <Box component="tbody">
+                        {projRows.map((p) => {
+                          const nums = Array.isArray(p.orderNumbers) ? p.orderNumbers.filter(Boolean) : [];
+                          const first = nums[0] || '';
+                          const hasProj = !!p.projectNumber;
+                          // The project # jumps to the Order Tracker's project page;
+                          // an unresolved row (projectNumber '') falls back to its
+                          // order # via the SAME goOrder path the by-order rows use.
+                          const canOpen = !!onNavigate && !!(hasProj || normOrderNo(first));
+                          const openRow = () => {
+                            if (hasProj) onNavigate({ view: 'clients', projectNumber: p.projectNumber });
+                            else goOrder(first);
+                          };
+                          const canClient = !!onNavigate && !!p.companyKey && !!p.client;
+                          const joined = nums.map((n2) => `#${n2}`).join(', ');
+                          return (
+                            <Box component="tr" key={hasProj ? `p${p.projectNumber}` : `o${first}`}
+                              sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
+                              {/* Row with no project # keeps the order # as its label,
+                                  in a subtle "no project" tint (still a working link). */}
+                              <Box component="td" sx={{ textAlign: 'left !important', color: hasProj && canOpen ? B.green : B.muted }}>
+                                <Box component="span"
+                                  onClick={canOpen ? openRow : undefined}
+                                  title={canOpen ? (hasProj ? 'Open this project' : 'No project # — open the order') : undefined}
+                                  sx={{ cursor: canOpen ? 'pointer' : 'inherit', '&:hover': canOpen ? { textDecoration: 'underline' } : undefined }}>
+                                  #{hasProj ? p.projectNumber : first}
+                                </Box>
+                                {!hasProj && (
+                                  <Box component="span" sx={{ ml: 0.6, px: 0.5, py: 0.1, borderRadius: 1, fontSize: 8.5, fontWeight: 800,
+                                    letterSpacing: 0.4, textTransform: 'uppercase', color: B.muted, bgcolor: 'rgba(255,255,255,0.06)', fontFamily: 'inherit' }}>
+                                    no project
+                                  </Box>
+                                )}
+                              </Box>
+                              <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {canClient ? (
+                                  <Box component="span"
+                                    onClick={() => goCompanyByKey(p.companyKey)}
+                                    title="Open this client's CRM card"
+                                    sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                    {p.client}
+                                  </Box>
+                                ) : (p.client || '—')}
+                              </Box>
+                              <Box component="td" sx={{ textAlign: 'left !important', color: B.muted, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }} title={joined}>
+                                {joined || '—'}
+                              </Box>
+                              <Box component="td" sx={{ color: B.white }}>{money(p.revenue)}</Box>
+                              <Box component="td" sx={{ color: '#f87171' }}>{money(p.cost)}</Box>
+                              <Box component="td" sx={{ color: p.profit >= 0 ? B.green : '#f87171' }}>{money(p.profit)}</Box>
+                              <Box component="td" sx={{ color: pct(p.margin) >= 0 ? B.green : '#f87171' }}>{pct(p.margin)}%</Box>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  </Box>
+                )
+              ) : (
               <Box sx={{ overflowX: 'auto', ...scrollbar }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="thead">
@@ -596,6 +756,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                   </Box>
                 </Box>
               </Box>
+              )}
             </Box>
 
             {/* Transactions log + receipts */}
@@ -624,10 +785,22 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                             const canOrder = !!onNavigate && !!normOrderNo(t.orderNumber);
                             const ck = ckByOrder[normOrderNo(t.orderNumber)];
                             const canClient = !!onNavigate && !!ck && t.type === 'income' && !!t.party;
+                            // An expense's party links to its Vendor card when the
+                            // row carries a hard vendorId link (auto-resolved or
+                            // explicitly set server-side) — the supplier-side twin
+                            // of the income→CRM jump.
+                            const canVendor = !!onNavigate && t.type === 'expense' && !!t.vendorId && !!t.party;
                             const nameNode = canClient ? (
                               <Box component="span"
                                 onClick={(e) => { e.stopPropagation(); goCompanyForOrder(t.orderNumber); }}
                                 title="Open this client's CRM card"
+                                sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                {t.party}
+                              </Box>
+                            ) : canVendor ? (
+                              <Box component="span"
+                                onClick={(e) => { e.stopPropagation(); goVendor(t.vendorId); }}
+                                title="Open this vendor's card"
                                 sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                                 {t.party}
                               </Box>
@@ -671,14 +844,19 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 
       {(showAdd || prefill) && (
         <TxnDialog token={token} prefill={prefill}
+          categories={finCfg.categories} feeRates={finCfg.processingFeeRates}
           onClose={() => { setShowAdd(false); setPrefill(null); }}
           onSave={async (form) => { await addTxn(form); setPrefill(null); }} />
       )}
-      {editTxn && <TxnDialog token={token} txn={editTxn} onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
-      {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} onClose={() => setOpenOrder(null)}
+      {editTxn && <TxnDialog token={token} txn={editTxn}
+        categories={finCfg.categories} feeRates={finCfg.processingFeeRates}
+        onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
+      {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} cogsCategories={finCfg.cogsCategories}
+        onClose={() => setOpenOrder(null)}
         onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }}
         onOpenOrderPage={onNavigate ? () => { setOpenOrder(null); goOrder(openOrder); } : undefined}
-        onOpenClient={(onNavigate && ckByOrder[normOrderNo(openOrder)]) ? () => { setOpenOrder(null); goCompanyForOrder(openOrder); } : undefined} />}
+        onOpenClient={(onNavigate && ckByOrder[normOrderNo(openOrder)]) ? () => { setOpenOrder(null); goCompanyForOrder(openOrder); } : undefined}
+        onOpenVendor={onNavigate ? (t) => { setOpenOrder(null); goVendor(t.vendorId); } : undefined} />}
     </Box>
   );
 }
@@ -686,7 +864,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 // Click any order (Profit-by-order row, or a red "lost money" chip) to see every
 // transaction tagged to it — revenue and every cost — with in/out/net. Tap a line
 // to jump into editing it (e.g. fix a wrong date that parked an order in December).
-function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, onOpenClient }) {
+function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, onOpenClient, onOpenVendor, cogsCategories = COGS_CATEGORIES }) {
   // Match on the CANONICAL number (leading zeros stripped, both sides) so the
   // drill-in shows the same rows the by-order grouping rolled up — a "0000021"
   // ledger row lines up with the "21" order the user clicked. (C2)
@@ -703,7 +881,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
   // Net. (Cash In/Out above stays a separate lens; profit is the margin number.)
   const revenue = rows.filter((t) => t.type === 'income' && t.category === 'Customer Sales')
     .reduce((s, t) => s + signedAmt(t), 0);
-  const cost = rows.filter((t) => t.type === 'expense' && COGS_CATEGORIES.includes(t.category))
+  const cost = rows.filter((t) => t.type === 'expense' && cogsCategories.includes(t.category))
     .reduce((s, t) => s + signedAmt(t), 0);
   const profit = revenue - cost;
   const client = (rows.find((t) => t.type === 'income' && t.party) || rows.find((t) => t.party) || {}).party || '—';
@@ -751,7 +929,16 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
                     {t.isCredit && <CreditBadge />}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 1, color: B.white, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.party || t.description || ''}
+                    {/* Same vendor deep link as the main ledger: an expense's party
+                        with a hard vendorId link opens the Vendor card. */}
+                    {(onOpenVendor && t.type === 'expense' && t.vendorId && t.party) ? (
+                      <Box component="span"
+                        onClick={(e) => { e.stopPropagation(); onOpenVendor(t); }}
+                        title="Open this vendor's card"
+                        sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                        {t.party}
+                      </Box>
+                    ) : (t.party || t.description || '')}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', ...mono, whiteSpace: 'nowrap',
                     color: isInflow(t) ? B.green : '#f87171' }}>
@@ -1013,7 +1200,10 @@ function TopClients({ clients, onClient }) {
   );
 }
 
-function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
+// `categories` / `feeRates` are the LIVE values from /api/finances/config, handed
+// down by the tab (defaulting to the hardcoded mirrors so the dialog stays safe
+// standalone / while the config fetch is in flight).
+function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories = CATEGORIES, feeRates = PROCESSING_FEE_RATES }) {
   const edit = !!txn;
   // `prefill` (from "record payment for this order") seeds a NEW entry already set
   // to the client's payment — Income · Customer Sales · the order's client + amount.
@@ -1027,6 +1217,11 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
   const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
   const [party, setParty] = useState(seed?.party || '');
+  // Hard vendor link on an EXPENSE: set when a vendor is picked from the party
+  // suggestions (or preloaded when editing a linked row); cleared the moment the
+  // party is free-typed, so the server auto-resolves the name instead (it never
+  // guesses on ambiguity).
+  const [vendorId, setVendorId] = useState(seed?.vendorId ? String(seed.vendorId) : '');
   const [description, setDescription] = useState(seed?.description || '');
   const [isCredit, setIsCredit] = useState(!!txn?.isCredit);
   // Payment method on a CLIENT PAYMENT (income · Customer Sales) → drives the
@@ -1037,13 +1232,30 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   const [receiptDataUrl, setReceiptDataUrl] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState('');
+  // Inline notice when the AI scan errors / reads nothing usable — instead of the
+  // fields just staying blank in silence. Cleared on the next upload/scan.
+  const [scanErr, setScanErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  // Vendor list for the expense party picker (the same GET /api/orders/vendors
+  // the PO builder loads). Fetched once, lazily — only when the dialog is (or
+  // becomes) an expense. null = not loaded yet; [] = loaded (possibly empty).
+  const [vendors, setVendors] = useState(null);
+  useEffect(() => {
+    if (type !== 'expense' || vendors !== null) return undefined;
+    let cancelled = false;
+    axios.get(`${base}/orders/vendors`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => { if (!cancelled) setVendors((r.data && r.data.vendors) || []); })
+      .catch(() => { if (!cancelled) setVendors([]); });
+    return () => { cancelled = true; };
+  }, [type, vendors, token]);
 
   const pickReceipt = (file) => {
     if (!file) return;
     setReceiptName(file.name);
     setScanNote('');
+    setScanErr('');
     const r = new FileReader();
     r.onload = () => {
       setReceiptDataUrl(r.result);
@@ -1057,12 +1269,14 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   };
 
   const scanReceipt = async (dataUrl) => {
-    setScanning(true); setErr('');
+    setScanning(true); setErr(''); setScanErr('');
     try {
       const authHdr = { headers: { Authorization: `Bearer ${token}` } };
       const res = await axios.post(`${base}/receipts/scan`, { dataUrl }, authHdr);
       const f = res.data && res.data.configured && res.data.fields;
-      if (!f) { setScanning(false); return; }
+      // Nothing usable came back (not configured / unreadable file) — say so
+      // instead of leaving the fields silently blank. The upload still stands.
+      if (!f) { setScanErr(SCAN_FAIL_NOTE); return; }
       if (f.type) { setType(f.type); setCategory(f.category || (f.type === 'income' ? 'Customer Sales' : 'Other')); }
       if (f.party) setParty(f.party);
       if (f.amount !== '' && f.amount != null) setAmount(String(f.amount));
@@ -1074,7 +1288,9 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
         ? 'Looks like a credit / return — I marked it as a credit. Double-check the direction before saving.'
         : 'Auto-filled from the receipt — double-check it before saving.');
     } catch (_) {
-      // leave fields as-is; the receipt is still attached for manual entry
+      // Fields stay as-is; the receipt is still attached for manual entry — but
+      // say so, so a failed scan doesn't read as the AI silently doing nothing.
+      setScanErr(SCAN_FAIL_NOTE);
     } finally { setScanning(false); }
   };
   // A real CLIENT PAYMENT (money IN for a sale, not a refund) — the only row a
@@ -1082,8 +1298,10 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
   // and the fee preview show.
   const isClientPayment = type === 'income' && category === 'Customer Sales' && !isCredit;
   // What the processor will take, previewed live so the owner sees it before saving.
-  // Mirrors the backend computeProcessingFee exactly (amount × rate, 2dp).
-  const feeRate = PROCESSING_FEE_RATES[paymentMethod] || 0;
+  // Mirrors the backend computeProcessingFee exactly (amount × rate, 2dp) — using
+  // the LIVE rates from /api/finances/config, so the preview equals the booked fee.
+  const feeRate = feeRates[paymentMethod] || 0;
+  const feeLabels = feeMethodLabels(feeRates);
   const feeAmount = isClientPayment ? round((Number(amount) || 0) * feeRate) : 0;
 
   // One-tap "this is a refund": set Income · Customer Sales · Credit so it books as
@@ -1107,6 +1325,9 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
     }
     setSaving(true); setErr('');
     const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit };
+    // A vendor PICKED from the suggestions sends its hard link; free-typed text
+    // sends none, so the server auto-resolves from the party name instead.
+    if (type === 'expense' && vendorId) form.vendorId = vendorId;
     // Tag the payment method on a client payment so the backend auto-books the
     // Processing Fee as a linked cost on the same order. Sent on edits too, so
     // changing/removing the method re-syncs (or clears) the fee row.
@@ -1162,13 +1383,52 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
           <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1 }}>
             <FormControl size="small" sx={fld}>
               <Select value={category} onChange={(e) => setCategory(e.target.value)} sx={sel}>
-                {CATEGORIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                {/* Live categories from /api/finances/config; keep an off-list saved
+                    category selectable so editing an old row can't blank the field. */}
+                {(categories.includes(category) ? categories : [...categories, category])
+                  .map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
               </Select>
             </FormControl>
             <TextField size="small" type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} sx={fld} />
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-            <TextField size="small" placeholder={type === 'income' ? 'Client' : 'Vendor'} value={party} onChange={(e) => setParty(e.target.value)} sx={fld} />
+            {type === 'expense' ? (
+              /* Free-solo vendor picker (the PO builder's pattern): typing stays
+                 free-text; picking a suggestion sets the party to the vendor's name
+                 AND its hard vendorId link. Retyping clears the link so the server
+                 re-resolves the name (never guessing on ambiguity). */
+              <Autocomplete
+                freeSolo selectOnFocus handleHomeEndKeys
+                options={vendors || []}
+                value={party}
+                getOptionLabel={(o) => (typeof o === 'string' ? o : (o?.name || ''))}
+                isOptionEqualToValue={(o, val) =>
+                  (typeof o === 'string' ? o : o?.name) === (typeof val === 'string' ? val : val?.name)}
+                filterOptions={(opts, state) => {
+                  const q = state.inputValue.trim().toLowerCase();
+                  if (!q) return opts;
+                  return opts.filter((o) =>
+                    [o.name, o.contactName, o.address].filter(Boolean).join(' ').toLowerCase().includes(q));
+                }}
+                onChange={(_e, val) => {
+                  if (val && typeof val === 'object') { setParty(val.name || ''); setVendorId(val._id || ''); }
+                  else { setParty(typeof val === 'string' ? val : ''); setVendorId(''); }
+                }}
+                onInputChange={(_e, val, reason) => { if (reason === 'input') { setParty(val); setVendorId(''); } }}
+                renderOption={(props, o) => (
+                  <Box component="li" {...props} key={o._id} sx={{ fontSize: 13 }}>{o.name}</Box>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} size="small" placeholder="Vendor" sx={fld} />
+                )}
+                componentsProps={{ paper: { sx: {
+                  bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`,
+                  '& .MuiAutocomplete-option': { '&[aria-selected="true"], &.Mui-focused': { bgcolor: 'rgba(74,222,128,0.10)' } },
+                } } }}
+              />
+            ) : (
+              <TextField size="small" placeholder="Client" value={party} onChange={(e) => setParty(e.target.value)} sx={fld} />
+            )}
             <TextField size="small" placeholder={isRefundMode ? 'Order # (required)' : 'Order #'} value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)}
               sx={isRefundMode && !String(orderNumber).replace(/[^0-9]/g, '')
                 ? { ...fld, '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(251,113,133,0.6)' } }
@@ -1186,7 +1446,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
               </Stack>
               <FormControl size="small" sx={{ ...fld, width: '100%' }}>
                 <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} sx={sel}>
-                  {['none', 'cc', 'ach'].map((m) => <MenuItem key={m} value={m}>{FEE_METHOD_LABEL[m]}</MenuItem>)}
+                  {['none', 'cc', 'ach'].map((m) => <MenuItem key={m} value={m}>{feeLabels[m]}</MenuItem>)}
                 </Select>
               </FormControl>
               {feeAmount > 0 ? (
@@ -1234,6 +1494,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete }) {
             <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
           </Button>
           {scanNote && <Typography sx={{ color: B.green, fontSize: 11 }}>{scanNote}</Typography>}
+          {scanErr && <Typography sx={{ color: '#fbbf24', fontSize: 11, opacity: 0.9 }}>{scanErr}</Typography>}
           {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
           <Stack direction="row" justifyContent="flex-end" gap={1} alignItems="center">
             {edit && onDelete && (
