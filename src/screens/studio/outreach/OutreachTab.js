@@ -20,7 +20,7 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
-import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import QueryStatsOutlinedIcon from '@mui/icons-material/QueryStatsOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
@@ -31,13 +31,12 @@ import ImportView from './ImportView';
 import AnalyticsView from './AnalyticsView';
 
 const base = `${config.backendUrl}/api/outreach`;
-const crmBase = `${config.backendUrl}/api/crm`;
 
 const NAV = [
   { id: 'overview',  label: 'Overview',     Icon: SpaceDashboardOutlinedIcon },
   { id: 'campaigns', label: 'Campaigns',    Icon: ForwardToInboxOutlinedIcon },
   { id: 'queue',     label: 'Queue',        Icon: ScheduleOutlinedIcon },
-  { id: 'import',    label: 'Import leads', Icon: UploadFileOutlinedIcon },
+  { id: 'import',    label: 'Find leads',   Icon: TravelExploreOutlinedIcon },
   { id: 'analytics', label: 'Analytics',    Icon: QueryStatsOutlinedIcon },
 ];
 
@@ -157,13 +156,6 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     return data;
   };
 
-  // ── Lead import (reuses the CRM's battle-tested import endpoint) ──────────
-  const importLeads = async (rows, { dryRun }) => {
-    const { data } = await axios.post(`${crmBase}/import`, { rows, dryRun }, authHdr);
-    if (!dryRun) flash(`Imported: ${data.created} new, ${data.updated} updated.`);
-    return data;
-  };
-
   // ── Free auto-finder (OSM dispensary discovery → email scrape → import) ───
   const findLeads = async (region, { dryRun }) => {
     const { data } = await axios.post(`${base}/find-leads`, { region, dryRun }, authHdr);
@@ -228,7 +220,6 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
       case 'import':
         return (
           <ImportView
-            onImport={importLeads}
             onFindLeads={findLeads}
             onFetchFinderStatus={fetchFinderStatus}
             onSetAutoAdvance={setAutoAdvance}
