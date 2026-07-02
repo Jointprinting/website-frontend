@@ -94,7 +94,7 @@ jointprinting.com`,
 
 Circling back — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
 
-If it helps to see our work first, here's gear we've made for other shops: jointprinting.com
+If it helps to see our work first, here's our dispensary promo catalog: https://www.jointprinting.com/catalogs/dispo-promos.pdf
 
 Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started.
 
