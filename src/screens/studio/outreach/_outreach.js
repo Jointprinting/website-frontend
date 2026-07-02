@@ -36,7 +36,8 @@ export const enrollmentStatusMeta = (s) =>
 // Templates support {{field}} and {{field|fallback}} (fallback used when the
 // company record doesn't carry the field).
 export const MERGE_FIELDS = [
-  { token: '{{firstName|there}}', hint: 'Contact’s first name ("there" when unknown)' },
+  { token: '{{greeting}}',        hint: 'Smart opener — "Hey Sam," with a name, plain "Hey," without' },
+  { token: '{{firstName}}',       hint: 'Contact’s first name (blank when unknown)' },
   { token: '{{companyName}}',     hint: 'The company / shop name' },
   { token: '{{city|your area}}',  hint: 'City parsed from the address' },
   { token: '{{clientName}}',      hint: 'Full contact name' },
@@ -60,6 +61,7 @@ export const SAMPLE_CONTEXT = {
   companyName: 'Green Leaf Dispensary',
   clientName: 'Sam Rivera',
   firstName: 'Sam',
+  greeting: 'Hey Sam,',
   city: 'Trenton',
 };
 
@@ -71,7 +73,7 @@ export const DEFAULT_SEQUENCE = [
   {
     offsetDays: 0,
     subject: 'custom merch for {{companyName}}',
-    body: `Hey {{firstName|there}},
+    body: `{{greeting}}
 
 I run Joint Printing — we make custom apparel and promo merch for dispensaries: staff tees and hoodies, branded hats, and the counter stuff that moves (lighters, grinders, totes, stickers).
 
@@ -90,7 +92,7 @@ jointprinting.com`,
   {
     offsetDays: 3,
     subject: 'free mockups for {{companyName}}?',
-    body: `Hey {{firstName|there}},
+    body: `{{greeting}}
 
 Circling back — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
 
@@ -103,7 +105,7 @@ Even a quick "here's our logo, show me hoodies and hats" is enough for me to get
   {
     offsetDays: 7,
     subject: 'should I close this out?',
-    body: `Hey {{firstName|there}},
+    body: `{{greeting}}
 
 I don't want to crowd your inbox, so this is my last note. If branded merch ever lands on the list for {{companyName}} — staff apparel, a customer drop, event giveaways — I'm your guy, and the mockups are always free.
 
