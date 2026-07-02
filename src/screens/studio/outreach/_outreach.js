@@ -94,9 +94,9 @@ jointprinting.com`,
 
 Circling back — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
 
-Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started. Worst case, you walk away with a few ideas for later.
+If it helps to see our work first, here's gear we've made for other shops: jointprinting.com
 
-What would you want to see first?
+Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started.
 
 — Nate, Joint Printing`,
   },

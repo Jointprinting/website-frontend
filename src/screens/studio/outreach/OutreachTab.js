@@ -21,12 +21,14 @@ import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlin
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import QueryStatsOutlinedIcon from '@mui/icons-material/QueryStatsOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import OverviewView from './OverviewView';
 import CampaignsView from './CampaignsView';
 import QueueView from './QueueView';
 import ImportView from './ImportView';
+import AnalyticsView from './AnalyticsView';
 
 const base = `${config.backendUrl}/api/outreach`;
 const crmBase = `${config.backendUrl}/api/crm`;
@@ -36,6 +38,7 @@ const NAV = [
   { id: 'campaigns', label: 'Campaigns',    Icon: ForwardToInboxOutlinedIcon },
   { id: 'queue',     label: 'Queue',        Icon: ScheduleOutlinedIcon },
   { id: 'import',    label: 'Import leads', Icon: UploadFileOutlinedIcon },
+  { id: 'analytics', label: 'Analytics',    Icon: QueryStatsOutlinedIcon },
 ];
 
 export default function OutreachTab({ token, onBack, onNavigate }) {
@@ -48,6 +51,9 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
 
   const [queue, setQueue] = React.useState([]);
   const [queueLoading, setQueueLoading] = React.useState(true);
+
+  const [analytics, setAnalytics] = React.useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = React.useState(true);
 
   const [snack, setSnack] = React.useState(null); // { msg, severity }
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
@@ -77,8 +83,21 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     }
   }, [authHdr]);
 
+  const loadAnalytics = React.useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const { data } = await axios.get(`${base}/analytics`, authHdr);
+      setAnalytics(data);
+    } catch (e) {
+      flash(e.response?.data?.message || 'Could not load analytics', 'error');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [authHdr]);
+
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
   React.useEffect(() => { if (view === 'queue') loadQueue(); }, [view, loadQueue]);
+  React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
   const createCampaign = async (payload) => {
@@ -204,6 +223,8 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
             onOpenCompany={openCompany}
           />
         );
+      case 'analytics':
+        return <AnalyticsView analytics={analytics} loading={analyticsLoading} />;
       case 'import':
         return (
           <ImportView

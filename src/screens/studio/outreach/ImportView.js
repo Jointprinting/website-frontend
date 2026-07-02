@@ -156,8 +156,9 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
       {preview && !busy && (
         <Alert severity="info" variant="outlined" sx={{ mt: 1.5, borderColor: D.line, color: D.text,
           '& .MuiAlert-icon': { color: D.green } }}>
-          {preview.label}: <b>{preview.found}</b> dispensaries found, <b>{preview.withEmail}</b> have a reachable
-          email — <b>{preview.willImport}</b> ready to import. Nothing’s been written yet.
+          {preview.label}: <b>{preview.found}</b> dispensaries found, <b>{preview.withEmail}</b> have an email
+          {preview.verified != null ? <>, <b>{preview.verified}</b> verified deliverable</> : null} — <b>{preview.willImport}</b> ready
+          to import. Nothing’s been written yet.
         </Alert>
       )}
 
@@ -172,7 +173,8 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
             sx={{ borderColor: D.green, color: D.text, '& .MuiAlert-icon': { color: D.green } }}>
             {result.label}: imported <b>{result.created} new</b> lead{result.created === 1 ? '' : 's'}
             {result.updated ? `, ${result.updated} updated` : ''} ({result.enriched} email
-            {result.enriched === 1 ? '' : 's'} pulled from shop websites). They’re tagged
+            {result.enriched === 1 ? '' : 's'} scraped from shop sites, {result.verified ?? result.withEmail} verified
+            deliverable). They’re tagged
             <Box component="code" sx={{ ...mono, mx: 0.5 }}>dispensary</Box> and sourced Cold Outreach.
             <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
               <Button onClick={onGoCampaigns} sx={{ ...dropPrimaryBtn, px: 2, py: 0.5, fontSize: 12.5 }}>
