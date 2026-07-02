@@ -39,7 +39,6 @@ const LICENSE_SOURCES = [
 function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onError, onGoCampaigns }) {
   const [region, setRegion] = React.useState('nj');
   const [busy, setBusy] = React.useState(false);
-  const [preview, setPreview] = React.useState(null);
   const [result, setResult] = React.useState(null);
   const [frontier, setFrontier] = React.useState(null); // { activeLabel, autoAdvance, lastResult }
   const [autoBusy, setAutoBusy] = React.useState(false);
@@ -54,12 +53,10 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
     return () => { cancelled = true; };
   }, [onFetchFinderStatus]);
 
-  const run = async (dryRun) => {
+  const run = async () => {
     setBusy(true);
     try {
-      const data = await onFindLeads(region, { dryRun });
-      if (dryRun) { setPreview(data); setResult(null); }
-      else { setResult(data); setPreview(null); }
+      setResult(await onFindLeads(region, { dryRun: false }));
     } catch (e) {
       onError(e.response?.data?.message || 'Lead finder failed — the discovery service may be busy, try again.');
     } finally {
@@ -103,11 +100,7 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
             <MenuItem key={r.id} value={r.id}>{r.label}{r.id === 'nj' ? ' (start here)' : ''}</MenuItem>
           ))}
         </TextField>
-        <Button onClick={() => run(true)} disabled={busy}
-          sx={{ ...dropGhostBtn, px: 2, py: 0.6, fontSize: 12.5 }}>
-          {busy ? 'Working…' : 'Preview coverage'}
-        </Button>
-        <Button onClick={() => run(false)} disabled={busy}
+        <Button onClick={run} disabled={busy}
           startIcon={busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <TravelExploreOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ ...dropPrimaryBtn, px: 2.5, py: 0.6, fontSize: 12.5 }}>
           {busy ? 'Finding…' : `Find & import ${regionLabel}`}
@@ -151,15 +144,6 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
             </Tooltip>
           </Stack>
         </Box>
-      )}
-
-      {preview && !busy && (
-        <Alert severity="info" variant="outlined" sx={{ mt: 1.5, borderColor: D.line, color: D.text,
-          '& .MuiAlert-icon': { color: D.green } }}>
-          {preview.label}: <b>{preview.found}</b> dispensaries found, <b>{preview.withEmail}</b> have an email
-          {preview.verified != null ? <>, <b>{preview.verified}</b> verified deliverable</> : null} — <b>{preview.willImport}</b> ready
-          to import. Nothing’s been written yet.
-        </Alert>
       )}
 
       {result && !busy && (
