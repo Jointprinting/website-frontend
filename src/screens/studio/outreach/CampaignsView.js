@@ -7,7 +7,7 @@ import * as React from 'react';
 import {
   Box, Stack, Typography, CircularProgress, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, IconButton, Tooltip, Checkbox,
-  MenuItem, Chip,
+  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -166,7 +166,6 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [q, setQ] = React.useState('');
-  const [stage, setStage] = React.useState('');
   const [includeContacted, setIncludeContacted] = React.useState(false);
   const [checked, setChecked] = React.useState(() => new Set());
   const [enrolling, setEnrolling] = React.useState(false);
@@ -175,7 +174,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     if (!campaign) return;
     setLoading(true);
     try {
-      const list = await fetchCandidates({ campaignId: campaign._id, q, stage, includeContacted });
+      const list = await fetchCandidates({ campaignId: campaign._id, q, includeContacted });
       setRows(list);
       setChecked(new Set());
     } catch (e) {
@@ -183,7 +182,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     } finally {
       setLoading(false);
     }
-  }, [campaign, q, stage, includeContacted, fetchCandidates, onError]);
+  }, [campaign, q, includeContacted, fetchCandidates, onError]);
 
   React.useEffect(() => { if (open) load(); }, [open, load]);
 
@@ -223,13 +222,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
             <TextField placeholder="Search name / email / address…" value={q}
               onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load(); }}
               size="small" fullWidth sx={dropInput} />
-            <TextField select value={stage} onChange={(e) => setStage(e.target.value)} size="small"
-              sx={{ ...dropInput, minWidth: 140 }} SelectProps={{ displayEmpty: true }}>
-              <MenuItem value="">Lead + Contacted</MenuItem>
-              <MenuItem value="lead">Lead only</MenuItem>
-              <MenuItem value="contacted">Contacted only</MenuItem>
-            </TextField>
-            <Button onClick={load} sx={{ ...dropGhostBtn, px: 2, flexShrink: 0 }}>Filter</Button>
+            <Button onClick={load} sx={{ ...dropGhostBtn, px: 2, flexShrink: 0 }}>Search</Button>
           </Stack>
           <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: -0.5 }}>
             <Checkbox size="small" checked={includeContacted}
