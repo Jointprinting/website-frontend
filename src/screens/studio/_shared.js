@@ -21,6 +21,20 @@ export const B = {
   faint:   'rgba(255,255,255,0.06)',
 };
 
+// Hub/launcher palette — the Studio home screen, login, and the utility tabs
+// (Catalog Manager) paint with this slightly warmer variant of `B` (brighter
+// muted/faint). ONE definition here; do not re-declare it per tab.
+export const BRAND = {
+  bg:       '#0c1410',
+  panel:    '#162420',
+  border:   '#1a3d2b',
+  green:    '#4ade80',
+  greenDk:  '#1a3d2b',
+  white:    '#ffffff',
+  muted:    'rgba(255,255,255,0.65)',
+  faint:    'rgba(255,255,255,0.08)',
+};
+
 // ── "Drop" tokens ─────────────────────────────────────────────────────────────
 // The refined dark palette the client approval page (ApprovalView) is built on.
 // Richer, deeper, more tactile than the base `B` set above — use these to bring
@@ -139,6 +153,40 @@ export const scrollbar = {
 
 export const fmt = (n) =>
   `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// money()/money0() are the ONLY places a raw ledger number should reach the
+// screen — they hard-coerce to a finite number first (NaN/undefined/null/'' → 0)
+// so a bad value can never render "$NaN" or white-screen a tab. `money` = cents
+// ($1,234.56) for ledgers/totals; `money0` = whole dollars ($1,235) for dense
+// rollups (PO totals, lifetime spend). One definition for every tab — the same
+// figure must read identically on Finances, Vendors, and the rebuild/cleanup views.
+export const money = (n) => {
+  const v = Number(n);
+  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+export const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+
+// Safe YYYY-MM-DD for display — new Date(bad).toISOString() THROWS, which would
+// white-screen a whole tab over one row with a garbage date. Returns an em dash
+// for anything unparseable so lists always render.
+export const ymd = (d) => {
+  const t = d ? new Date(d) : null;
+  return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : '—';
+};
+
+// Canonical ORDER-NUMBER key — strips non-digits AND leading zeros, mirroring the
+// backend controllers/finances.js normalizeOrderNumber, so every surface (Order
+// Tracker deep-link resolution, finance drill-ins, vendor cards) groups a
+// "0000021" row and a "21" row as the SAME order.
+export const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+
+// Canonical companyKey — the ONE derivation rule, shared with the backend
+// (models/Order.js deriveCompanyKey): companyName first, clientName as the
+// fallback, lowercased with everything but [a-z0-9] squeezed out. Every
+// cross-tool link (Order Tracker ⇄ CRM ⇄ Finances) must key on THIS so a
+// deep-link never lands on a near-miss card.
+export const deriveCompanyKey = (companyName, clientName = '') =>
+  String(companyName || clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 // ── Confirmation-derived money ────────────────────────────────────────────────
 // The confirmation page (the APPROVED doc) is the source of truth for an order's

@@ -25,7 +25,7 @@ import axios from 'axios';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
-import { B, darkInput, scrollbar, mono } from './_shared';
+import { B, darkInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceRestartView from './FinanceRestartView';
@@ -33,26 +33,10 @@ import FinanceDedupeView from './FinanceDedupeView';
 import OrderReconcileView from './OrderReconcileView';
 
 const base = `${config.backendUrl}/api`;
-// money()/pct() are the ONLY places a number reaches the screen — they hard-coerce
-// to a finite number first (Number(n) || 0 turns NaN/undefined/null/'' → 0), so no
-// odd/missing value can ever render "$NaN" or white-screen the finance tab.
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-// A percentage for display — finite-guarded the same way (a bad value shows 0%).
+// money/ymd/round(=roundCents)/normOrderNo come from _shared — the ONE definition
+// every tab renders with (finite-guarded, backend-mirrored). pct stays local: a
+// display guard for an already-computed percentage (a bad value shows 0%).
 const pct = (n) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
-// Mirror the backend round2 EXACTLY (it adds Number.EPSILON) so the previewed
-// processing fee equals the cent the backend books — without the epsilon, certain
-// half-cent amounts (e.g. a 1% ACH fee on $14.50) would preview a cent low.
-const round = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
-// Safe YYYY-MM-DD for display — new Date(bad).toISOString() THROWS, which would
-// white-screen the whole tab over one row with a missing/garbage date. Returns an
-// em dash for anything unparseable so the ledger always renders.
-const ymd = (d) => {
-  const t = d ? new Date(d) : null;
-  return t && !isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : '—';
-};
 const CATEGORIES = [
   'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Processing Fee', 'Software', 'Marketing', 'Accounting', 'Travel/Field',
@@ -65,10 +49,6 @@ const COGS_CATEGORIES = ['Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commi
 // Transaction.PROCESSING_FEE_RATES so the fee the UI previews equals the one booked.
 const PROCESSING_FEE_RATES = { cc: 0.0299, ach: 0.01, none: 0 };
 const FEE_METHOD_LABEL = { cc: 'Credit card (2.99%)', ach: 'ACH / bank (1%)', none: 'No fee (cash / check)' };
-// Canonical order-number key — strips non-digits AND leading zeros, mirroring the
-// backend controllers/finances.js normalizeOrderNumber so the drill-in groups a
-// "0000021" row and a "21" row into the one order the by-order list keys by.
-const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
 // Signed amount within a row's type bucket (credit reverses direction) — matches
 // backend signed(): an income credit nets revenue down, an expense credit nets cost down.
 const signedAmt = (t) => (t && t.isCredit ? -(Number(t.amount) || 0) : (Number(t.amount) || 0));

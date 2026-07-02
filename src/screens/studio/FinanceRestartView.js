@@ -30,14 +30,10 @@ import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalance
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import config from '../../config.json';
-import { B, scrollbar } from './_shared';
+import { B, scrollbar, money } from './_shared';
 
 const base = `${config.backendUrl}/api/finances`;
 
-const money = (n) => {
-  const v = Number(n);
-  return `$${(Number.isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 // A single big number + label tile (mirrors ReconcileView's Stat).
 function Stat({ value, label, tone, Icon, sub }) {

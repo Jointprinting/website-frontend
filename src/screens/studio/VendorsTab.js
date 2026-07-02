@@ -33,14 +33,13 @@ import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import {
-  D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative,
+  D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, money0,
 } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
 import RebuildPrintersView from './RebuildPrintersView';
 
 const base = `${config.backendUrl}/api`;
-const money0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 const fieldSx = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13.5, py: 1 } };
 
 // ── Vendor row in the list ────────────────────────────────────────────────────

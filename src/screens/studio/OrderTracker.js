@@ -40,7 +40,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -78,11 +78,8 @@ const SECONDARY_FILTERS = [
   { value: 'cancelled',     label: 'Cancelled' },
 ];
 
-// Canonical order-number key — digits only, leading zeros stripped. The SAME
-// rule the backend (normalizeOrderNumber) and the finance/CRM surfaces use, so a
-// cross-tab deep link resolves the right project across "0000021" / "#21" /
-// "PO-021" variants and never mis-opens a different order. Empty/no-digit → ''.
-const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, '').replace(/^0+/, '');
+// normOrderNo/deriveCompanyKey come from _shared — the ONE canonical key pair
+// (backend-mirrored) every cross-tab deep link resolves with.
 
 export default function OrderTracker({ token, onBack, onNavigate, initialOrder }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -295,7 +292,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const companyMockupPool = useMemo(() => {
     const byCompany = {};
     projects.forEach(p => {
-      const key = (p.companyKey || (p.companyName || p.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, ''));
+      const key = (p.companyKey || deriveCompanyKey(p.companyName, p.clientName));
       if (!key) return;
       (p.mockupNumbers || []).forEach(n => {
         if (!byCompany[key]) byCompany[key] = [];
@@ -312,7 +309,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     return m;
   }, [logos]);
   const logoFor = (project) => {
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     return key ? logoMap[key] : null;
   };
 
@@ -343,7 +340,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   };
 
   const removeLogo = async (project) => {
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     if (!key) return;
     if (!window.confirm('Remove the logo for this company?')) return;
     try {
@@ -1096,7 +1093,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
-    const companyKey = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const companyKey = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     const pool = (companyMockupPool && companyMockupPool[companyKey]) || [];
     const others = pool.slice(0, 4)
       .map(n => ({ num: n, item: lookupMockup(n) }))
@@ -1481,7 +1478,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // Load (or auto-create) the client profile for this project's company.
   useEffect(() => {
     if (!project) { setClient(null); return; }
-    const key = project.companyKey || (project.companyName || project.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     if (!key) { setClient(null); return; }
     let cancelled = false;
     axios.get(`${base}/clients/${encodeURIComponent(key)}`, authHdr)
@@ -1642,7 +1639,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             // Canonical companyKey — the SAME derivation Order.companyKey uses, so
             // the jump lands on the exact CRM card. Link only when we have a real
             // name to key on AND a navigator; otherwise plain text (no dead-end).
-            const ck = local.companyKey || (local.companyName || local.clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+            const ck = local.companyKey || deriveCompanyKey(local.companyName, local.clientName);
             const canOpen = !!onNavigate && !!ck && !!(local.companyName || local.clientName);
             return (
               <Typography
