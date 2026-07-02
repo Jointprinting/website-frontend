@@ -308,12 +308,14 @@ function Login({ onAuthed }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Mockup Studio launcher — opens /jpstudio/ in a new tab (no inline preview)
 // ─────────────────────────────────────────────────────────────────────────────
-function MockupLauncherTab({ token }) {
-  const src = `/jpstudio/?t=${encodeURIComponent(token)}`;
+function MockupLauncherTab() {
+  // The studio token is NOT put in the URL — Mockup Studio (/jpstudio, same origin)
+  // reads the saved session from localStorage. Keeping the token out of the URL
+  // avoids leaking it via server access logs / browser history.
   const [opened, setOpened] = React.useState(false);
 
   const launch = () => {
-    window.open(src, '_blank', 'noopener,noreferrer');
+    window.open('/jpstudio/', '_blank', 'noopener,noreferrer');
     setOpened(true);
     setTimeout(() => setOpened(false), 2200);
   };
@@ -2166,7 +2168,9 @@ function StudioBody({ token, onLogout }) {
     // screen. The launcher view still renders behind it as a fallback / re-open
     // button in case a browser blocks the pop-up.
     if (id === 'mockup') {
-      try { window.open(`/jpstudio/?t=${encodeURIComponent(token)}`, '_blank', 'noopener,noreferrer'); } catch (_) {}
+      // No token in the URL — /jpstudio reads the studio session from localStorage
+      // (same origin), so the token never lands in server logs or browser history.
+      try { window.open('/jpstudio/', '_blank', 'noopener,noreferrer'); } catch (_) {}
     }
     if (id === 'submissions' && unseenInquiries > 0) {
       setUnseenInquiries(0);
@@ -2438,7 +2442,7 @@ function StudioBody({ token, onLogout }) {
                 <Box>
                   {view === 'submissions' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
-                  {view === 'mockup'      && <MockupLauncherTab token={token} />}
+                  {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
                 </Box>
