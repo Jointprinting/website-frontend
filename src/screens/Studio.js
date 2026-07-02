@@ -70,6 +70,8 @@ import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
 import CrmTab from './studio/crm/CrmTab';
+import OutreachTab from './studio/outreach/OutreachTab';
+import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
@@ -1975,6 +1977,7 @@ const HUB_GROUPS = [
           { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
           { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
           { id: 'roadtrip',    label: 'Field Map',    desc: 'Plan in-person sweeps',         Icon: ExploreOutlinedIcon },
+          { id: 'outreach',    label: 'Outreach',     desc: 'Cold email → warm leads',       Icon: ForwardToInboxOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
         ],
@@ -2746,6 +2749,12 @@ function StudioBody({ token, onLogout }) {
         onNavigate={navigate}
       />
     );
+  }
+
+  if (view === 'outreach') {
+    // Full-viewport like the CRM: the tab owns its own slim header + sub-nav.
+    // Warm leads deep-link back into the CRM company card via `navigate`.
+    return <OutreachTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
   }
 
   if (view === 'backup') {
