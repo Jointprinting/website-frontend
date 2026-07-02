@@ -114,8 +114,9 @@ export default function QueueView({ queue, loading, engine, onRunTick, onStop, o
       )}
 
       <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
-        The engine sends automatically Mon–Fri, 9a–5p ET, a few at a time, capped by the warm-up ramp
-        {engine ? ` (week ${engine.rampWeek}: ${engine.dailyCap}/day, growing to ${engine.dailyCapMax})` : ''}.
+        The engine sends automatically Mon–Fri, 9a–5p ET, a few at a time. The daily cap DOUBLES each week
+        (10 → 20 → 40 → 80 …){engine ? ` — you’re in week ${engine.rampWeek} at ${engine.dailyCap}/day, climbing to ${engine.dailyCapMax}` : ''}.
+        Starting low and doubling is what keeps a new sending domain out of spam while it scales.
         Follow-ups pace themselves off each company’s previous send.
       </Typography>
     </Stack>
