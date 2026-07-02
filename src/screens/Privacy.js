@@ -44,7 +44,7 @@ export default function Privacy() {
         </Section>
 
         <Section title="Contact">
-          Privacy questions: <a href="mailto:hello@jointprinting.com" style={{ color: '#1a3d2b' }}>hello@jointprinting.com</a>.
+          Privacy questions: <a href="mailto:nate@jointprinting.com" style={{ color: '#1a3d2b' }}>nate@jointprinting.com</a>.
         </Section>
       </Container>
     </Box>

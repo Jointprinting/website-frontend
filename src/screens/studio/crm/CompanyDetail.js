@@ -3,8 +3,10 @@
 //   • Editable header: company name + an inline grid of stage / area / interest /
 //     deal value / next follow-up. Each field commits its own PATCH on change
 //     (selects immediately, text on blur), so editing is a single tap, no "save".
-//   • Contacts list (tap-to-call / mail each).
-//   • Log timeline — newest first, kind icon per entry. "Log a touch" appends.
+//   • Contacts — inline-editable rows (add / edit / delete / ★ main); every
+//     change PATCHes the whole contacts array. Tap-to-call / mail stay.
+//   • Log timeline — newest first, kind icon per entry. "Log a touch" appends;
+//     entries edit inline (click the text) and delete on hover.
 //   • Linked Orders pulled from the same endpoint.
 // The parent owns the PATCH transport (patchCompany) so optimistic refreshes and
 // list invalidation stay in one place; this view calls it and re-pulls itself.
@@ -12,19 +14,21 @@
 import * as React from 'react';
 import {
   Box, Stack, Typography, TextField, MenuItem, IconButton, Button, Divider,
-  CircularProgress, InputAdornment, Link as MuiLink,
+  CircularProgress, InputAdornment, Link as MuiLink, Tooltip,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
+import StarRoundedIcon from '@mui/icons-material/StarRounded';
+import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
 import {
   D, mono, dropInput, fmt, fmtDate, fmtRelative, STATUS_META,
 } from '../_shared';
@@ -63,41 +67,159 @@ function Field({ label, children }) {
 
 const fieldSx = { ...dropInput, '& .MuiInputBase-input': { ...dropInput['& .MuiInputBase-input'], fontSize: 13.5, py: 1 } };
 
-function ContactCard({ c }) {
+// Compact inline-edit inputs for a contact row — the detail card's field styling
+// at a slightly denser size so name/role/phone/email fit a side-column card.
+const contactFieldSx = {
+  ...dropInput,
+  '& .MuiInputBase-input': { ...dropInput['& .MuiInputBase-input'], fontSize: 12.5, py: 0.7, px: 1 },
+};
+
+// One EDITABLE contact — name / role / phone / email, each committing on blur
+// (same tap-to-edit rhythm as the header fields). The ★ toggle marks the MAIN
+// contact: the backend mirrors their phone/email to the record's top level, which
+// is what every list row / Call / Text action reads. Tap-to-call / mail stay as
+// quick actions when the values exist.
+function ContactRow({ c, onField, onCommit, onStar, onDelete }) {
+  const starred = !!c.isPrimary;
   return (
     <Box sx={{
-      bgcolor: D.inset, border: `1px solid ${D.line}`, borderRadius: 2, p: 1.5,
-      display: 'flex', alignItems: 'center', gap: 1.25,
+      bgcolor: D.inset, border: `1px solid ${starred ? 'rgba(251,191,36,0.45)' : D.line}`,
+      borderRadius: 2, p: 1.25,
     }}>
-      <Box sx={{
-        width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-        bgcolor: 'rgba(74,222,128,0.1)', color: D.green,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <PersonOutlineIcon sx={{ fontSize: 18 }} />
-      </Box>
-      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {c.name || 'Unnamed contact'}{c.role ? <Box component="span" sx={{ color: D.faint, fontWeight: 600 }}> · {c.role}</Box> : null}
-        </Typography>
-        <Typography sx={{ color: D.muted, fontSize: 12, ...mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact info'}
-        </Typography>
-      </Box>
-      <Stack direction="row" spacing={0.5} flexShrink={0}>
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+        <Tooltip title={starred ? 'Main contact — tap to unstar' : 'Make main contact'}>
+          <IconButton
+            onClick={onStar} size="small" aria-label={starred ? 'Unstar main contact' : 'Make main contact'}
+            sx={{ p: 0.4, flexShrink: 0, color: starred ? D.amber : D.faint,
+              '&:hover': { color: D.amber, bgcolor: 'rgba(251,191,36,0.1)' } }}
+          >
+            {starred ? <StarRoundedIcon sx={{ fontSize: 19 }} /> : <StarBorderRoundedIcon sx={{ fontSize: 19 }} />}
+          </IconButton>
+        </Tooltip>
+        <TextField
+          value={c.name} onChange={(e) => onField('name', e.target.value)} onBlur={() => onCommit('name')}
+          size="small" fullWidth placeholder="Name" sx={contactFieldSx}
+        />
+        <TextField
+          value={c.role} onChange={(e) => onField('role', e.target.value)} onBlur={() => onCommit('role')}
+          size="small" placeholder="Role" sx={{ ...contactFieldSx, width: 104, flexShrink: 0 }}
+        />
+        <IconButton
+          onClick={onDelete} size="small" aria-label="Delete contact"
+          sx={{ p: 0.4, flexShrink: 0, color: D.faint,
+            '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.1)' } }}
+        >
+          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Stack>
+      <Stack direction="row" spacing={0.75} alignItems="center">
+        <TextField
+          value={c.phone} onChange={(e) => onField('phone', e.target.value)} onBlur={() => onCommit('phone')}
+          size="small" fullWidth placeholder="Phone" sx={contactFieldSx}
+        />
+        <TextField
+          value={c.email} onChange={(e) => onField('email', e.target.value)} onBlur={() => onCommit('email')}
+          size="small" fullWidth placeholder="Email" sx={contactFieldSx}
+        />
         {c.phone && (
           <IconButton component="a" href={telHref(c.phone)} size="small"
-            sx={{ color: D.green, '&:hover': { bgcolor: 'rgba(74,222,128,0.12)' } }}>
-            <PhoneInTalkIcon sx={{ fontSize: 17 }} />
+            sx={{ flexShrink: 0, color: D.green, '&:hover': { bgcolor: 'rgba(74,222,128,0.12)' } }}>
+            <PhoneInTalkIcon sx={{ fontSize: 16 }} />
           </IconButton>
         )}
         {c.email && (
           <IconButton component="a" href={`mailto:${c.email}`} size="small"
-            sx={{ color: D.muted, '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.05)' } }}>
-            <MailOutlineIcon sx={{ fontSize: 17 }} />
+            sx={{ flexShrink: 0, color: D.muted, '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.05)' } }}>
+            <MailOutlineIcon sx={{ fontSize: 16 }} />
           </IconButton>
         )}
       </Stack>
+      {starred && (
+        <Typography sx={{ ...mono, color: D.amber, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', mt: 0.6 }}>
+          ★ Main — their phone &amp; email front this company
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+// Contacts editor — inline-editable rows + add/delete + the ★ main toggle. Every
+// commit path PATCHes the WHOLE contacts array through the parent's field-patch
+// (the server trims, drops all-blank rows, and keeps at most one isPrimary).
+// Same optimistic convention as TagEditor below: the local copy is authoritative
+// during edits (re-synced only when the open company changes), so a fast second
+// edit isn't clobbered by the first PATCH's refetch.
+function ContactsEditor({ contacts, companyKey, onSave }) {
+  const incoming = React.useMemo(
+    () => (Array.isArray(contacts) ? contacts : []).map((c) => ({
+      name: (c && c.name) || '', role: (c && c.role) || '',
+      phone: (c && c.phone) || '', email: (c && c.email) || '',
+      isPrimary: !!(c && c.isPrimary),
+    })),
+    [contacts],
+  );
+  const [list, setList] = React.useState(incoming);
+  // What we last sent/loaded — blur only PATCHes when a field actually changed,
+  // so tabbing through rows doesn't spray no-op writes.
+  const committedRef = React.useRef(incoming);
+  React.useEffect(() => { setList(incoming); committedRef.current = incoming; }, [companyKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setField = (i, field, value) => setList((l) => l.map((c, j) => (j === i ? { ...c, [field]: value } : c)));
+
+  const commitField = (i, field) => {
+    const cur = (list[i] && list[i][field]) || '';
+    const was = (committedRef.current[i] && committedRef.current[i][field]) || '';
+    if (cur === was) return;
+    committedRef.current = list;
+    onSave(list);
+  };
+
+  // ★ toggle — one tap. Starring makes this row the ONLY primary; tapping the
+  // filled star un-stars everyone. Commits immediately (like the selects).
+  const toggleStar = (i) => {
+    const on = !(list[i] && list[i].isPrimary);
+    const next = list.map((c, j) => ({ ...c, isPrimary: on && j === i }));
+    setList(next);
+    committedRef.current = next;
+    onSave(next);
+  };
+
+  const removeAt = (i) => {
+    const next = list.filter((_, j) => j !== i);
+    setList(next);
+    committedRef.current = next;
+    onSave(next);
+  };
+
+  // Append a blank editable row. No PATCH yet — the server drops all-blank rows,
+  // so the row only persists once the owner types something and blurs.
+  const add = () => setList((l) => [...l, { name: '', role: '', phone: '', email: '', isPrimary: false }]);
+
+  return (
+    <Box>
+      {list.length === 0 ? (
+        <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No contacts on file.</Typography>
+      ) : (
+        <Stack spacing={1}>
+          {list.map((c, i) => (
+            <ContactRow
+              key={i}
+              c={c}
+              onField={(f, v) => setField(i, f, v)}
+              onCommit={(f) => commitField(i, f)}
+              onStar={() => toggleStar(i)}
+              onDelete={() => removeAt(i)}
+            />
+          ))}
+        </Stack>
+      )}
+      <Button
+        onClick={add} size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+        sx={{ mt: 1, textTransform: 'none', color: D.green, fontSize: 12, fontWeight: 700,
+          '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}
+      >
+        Add contact
+      </Button>
     </Box>
   );
 }
@@ -169,9 +291,22 @@ function TagEditor({ tags, companyKey, onChange, saving }) {
   );
 }
 
-function LogEntry({ entry, last, onDelete }) {
+function LogEntry({ entry, last, onDelete, onEdit }) {
   const { Icon, color, label } = kindMeta(entry.kind);
   const [hover, setHover] = React.useState(false);
+  // Inline edit — click the text (or the hover pencil) to reword a logged touch.
+  // Enter / blur saves through the log PATCH; Escape cancels; an emptied draft is
+  // treated as a cancel (delete is the removal path, matching the server's 400).
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const startEdit = () => { setDraft(entry.text || ''); setEditing(true); };
+  const cancelEdit = () => setEditing(false);
+  const saveEdit = () => {
+    const t = draft.trim();
+    setEditing(false);
+    if (!t || t === (entry.text || '')) return;
+    Promise.resolve(onEdit(t)).catch(() => {}); // parent already toasts failures
+  };
   return (
     <Box
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -193,10 +328,42 @@ function LogEntry({ entry, last, onDelete }) {
             {fmtDate(entry.at)} · {fmtRelative(entry.at)}
           </Typography>
         </Stack>
-        <Typography sx={{ color: D.text, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{entry.text}</Typography>
+        {editing ? (
+          <TextField
+            value={draft} onChange={(e) => setDraft(e.target.value)}
+            autoFocus multiline fullWidth size="small" sx={fieldSx}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+              if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+            }}
+            onBlur={saveEdit}
+          />
+        ) : (
+          <Typography
+            onClick={onEdit ? startEdit : undefined}
+            title={onEdit ? 'Click to edit' : undefined}
+            sx={{ color: D.text, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              ...(onEdit ? { cursor: 'text', borderRadius: 1, mx: -0.5, px: 0.5,
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } } : {}) }}
+          >
+            {entry.text}
+          </Typography>
+        )}
       </Box>
-      {/* Delete this single entry. Visible on hover (always visible on touch via
-          the tap target). Owner asked to be able to remove a note from the card. */}
+      {/* Edit / delete this single entry. Visible on hover (always visible on
+          touch via the tap target). Owner asked to fix typos + remove notes. */}
+      {onEdit && !editing && (
+        <IconButton
+          onClick={startEdit} size="small" aria-label="Edit note"
+          sx={{
+            flexShrink: 0, color: D.faint, opacity: { xs: 1, sm: hover ? 1 : 0 },
+            transition: 'opacity 0.15s ease, color 0.15s ease',
+            '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.1)' },
+          }}
+        >
+          <EditOutlinedIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      )}
       {onDelete && (
         <IconButton
           onClick={onDelete} size="small" aria-label="Delete note"
@@ -354,7 +521,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
   // data = { client, orders, pos, finance, isCustomer }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -369,6 +536,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   const [name, setName] = React.useState('');
   const [dealValue, setDealValue] = React.useState('');
   const [addressText, setAddressText] = React.useState('');
+  const [notesText, setNotesText] = React.useState('');
   const [savingField, setSavingField] = React.useState('');
 
   React.useEffect(() => {
@@ -378,6 +546,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
     // Prefer the exact address; fall back to the legacy area so an existing
     // region still shows (the owner can overwrite it with a real address).
     setAddressText(client.address || client.area || '');
+    setNotesText(client.notes || '');
   }, [client]);
 
   if (loading || !client) {
@@ -397,8 +566,11 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   };
 
   const log = Array.isArray(client.log) ? [...client.log].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)) : [];
-  const contacts = client.contacts || [];
   const fu = followUpStatus(client.nextFollowUp);
+
+  // Delete/edit target one log entry by stable _id when present; legacy entries
+  // (no id) address their position in the ORIGINAL (unsorted) log array.
+  const logEntryId = (e) => (e._id != null ? e._id : (client.log || []).indexOf(e));
 
   return (
     <Stack spacing={2.5}>
@@ -579,9 +751,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 key={e._id || i}
                 entry={e}
                 last={i === log.length - 1}
-                // Delete by stable _id when present; legacy entries (no id) delete
-                // by their position in the ORIGINAL (unsorted) log array.
-                onDelete={onDeleteLog ? () => onDeleteLog(e._id != null ? e._id : (client.log || []).indexOf(e)) : undefined}
+                onDelete={onDeleteLog ? () => onDeleteLog(logEntryId(e)) : undefined}
+                onEdit={onEditLog ? (text) => onEditLog(logEntryId(e), text) : undefined}
               />
             ))}</Box>
           )}
@@ -590,12 +761,14 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
         {/* Side column */}
         <Stack spacing={2}>
           <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
-            <Eyebrow sx={{ mb: 1.5, display: 'block' }}>Contacts</Eyebrow>
-            {contacts.length === 0 ? (
-              <Typography sx={{ color: D.faint, fontSize: 12.5, py: 1 }}>No contacts on file.</Typography>
-            ) : (
-              <Stack spacing={1}>{contacts.map((c, i) => <ContactCard key={i} c={c} />)}</Stack>
-            )}
+            <Eyebrow sx={{ mb: 1.5, display: 'block' }}>
+              {savingField === 'contacts' ? 'Contacts · saving…' : 'Contacts'}
+            </Eyebrow>
+            <ContactsEditor
+              contacts={client.contacts}
+              companyKey={client.companyKey}
+              onSave={(next) => commit('contacts', next)}
+            />
             {(client.email || client.phone) && (
               <>
                 <Divider sx={{ borderColor: D.line, my: 1.5 }} />
@@ -657,12 +830,20 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             </Box>
           )}
 
-          {client.notes && (
-            <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
-              <Eyebrow sx={{ mb: 1, display: 'block' }}>Notes</Eyebrow>
-              <Typography sx={{ color: D.muted, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{client.notes}</Typography>
-            </Box>
-          )}
+          {/* Sticky internal notes — ALWAYS present + editable (not just when
+              text already exists). Commits { notes } on blur, same PATCH path as
+              every other field. */}
+          <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+            <Eyebrow sx={{ mb: 1, display: 'block' }}>
+              {savingField === 'notes' ? 'Notes · saving…' : 'Notes'}
+            </Eyebrow>
+            <TextField
+              value={notesText} onChange={(e) => setNotesText(e.target.value)}
+              onBlur={() => { if ((client.notes || '') !== notesText) commit('notes', notesText); }}
+              multiline minRows={3} fullWidth size="small" sx={fieldSx}
+              placeholder="Internal notes that follow this client…"
+            />
+          </Box>
         </Stack>
       </Box>
 
