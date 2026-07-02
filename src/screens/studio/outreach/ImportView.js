@@ -154,7 +154,8 @@ function AutoFinder({ onFindLeads, onFetchFinderStatus, onSetAutoAdvance, onErro
             {result.label}: imported <b>{result.created} new</b> lead{result.created === 1 ? '' : 's'}
             {result.updated ? `, ${result.updated} updated` : ''} ({result.enriched} email
             {result.enriched === 1 ? '' : 's'} scraped from shop sites, {result.verified ?? result.withEmail} verified
-            deliverable). They’re tagged
+            deliverable{result.skippedChains ? `, ${result.skippedChains} big-chain location${result.skippedChains === 1 ? '' : 's'} skipped` : ''}).
+            They’re independents, tagged
             <Box component="code" sx={{ ...mono, mx: 0.5 }}>dispensary</Box> and sourced Cold Outreach.
             <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
               <Button onClick={onGoCampaigns} sx={{ ...dropPrimaryBtn, px: 2, py: 0.5, fontSize: 12.5 }}>
