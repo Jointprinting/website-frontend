@@ -57,3 +57,7 @@ half-done PR. If a change spans both repos, ship them together.
 - **The Studio** (`/studio`) is the private admin: CRM, Order Tracker, Vendors,
   Finances, Mockup Studio, Backup. Everything else is the public marketing site.
 - Studio dark theme + shared UI primitives come from `_shared.js` / `_crm.js` — use them.
+- **Know the business before advising on it:** `website-backend/docs/BUSINESS-MODEL.md`
+  (who pays, how money is made, funnel, integrations, open questions) and
+  `website-backend/docs/ECOSYSTEM.md` (canonical order flow + owner decisions). Read them
+  at the start of any non-trivial task.
