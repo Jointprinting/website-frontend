@@ -615,7 +615,7 @@ function SubmissionsTab({ token, onOpenClients }) {
                 <>
                   <Divider sx={{ borderColor: BRAND.faint }} />
                   <Box>
-                    <MuiTypography variant="caption" sx={{ color: BRAND.muted }}>Customer notes</MuiTypography>
+                    <MuiTypography variant="caption" sx={{ color: BRAND.muted }}>Client notes</MuiTypography>
                     <Paper variant="outlined" sx={{
                       p: 1.5, mt: 0.5, whiteSpace: 'pre-wrap', fontSize: 14,
                       bgcolor: 'rgba(255,255,255,0.03)',
