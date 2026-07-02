@@ -23,20 +23,23 @@ import { D, mono } from '../_shared';
 // Mirrors models/Client.js CRM_STAGES — keep the order + values in sync. Each
 // stage carries a color used for chips and the row accent rail. The pipeline
 // order also lets later phases (Kanban) reuse this single source of truth.
-export const CRM_STAGES = ['lead', 'contacted', 'quoting', 'sampling', 'won', 'customer', 'lost', 'dormant'];
+// 'sampling' was retired (owner: not useful) — existing records were migrated to
+// 'quoting' by a one-time server boot repair. 'customer' stays the STORED value
+// (order-reality promotion, isCustomer, etc. key on it) but every LABEL reads
+// "Client" — the owner's word for a company that placed an order.
+export const CRM_STAGES = ['lead', 'contacted', 'quoting', 'won', 'customer', 'lost', 'dormant'];
 
 // Once a company is a real CUSTOMER (has placed an order) it stays one — "even if
 // they go cold." These early funnel stages are a DEMOTION below customer, so they're
 // locked off for a customer and the stored stage can never disagree with order reality.
-export const PRE_CUSTOMER_STAGES = ['lead', 'contacted', 'quoting', 'sampling'];
+export const PRE_CUSTOMER_STAGES = ['lead', 'contacted', 'quoting'];
 
 export const STAGE_META = {
   lead:      { label: 'Lead',      color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
   contacted: { label: 'Contacted', color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
   quoting:   { label: 'Quoting',   color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
-  sampling:  { label: 'Sampling',  color: '#f97316', bg: 'rgba(249,115,22,0.14)' },
   won:       { label: 'Won',       color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
-  customer:  { label: 'Customer',  color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
+  customer:  { label: 'Client',    color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
   lost:      { label: 'Lost',      color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
   dormant:   { label: 'Dormant',   color: '#6b7280', bg: 'rgba(107,114,128,0.14)' },
 };
@@ -47,7 +50,7 @@ export const stageMeta = (s) => STAGE_META[s] || STAGE_META.lead;
 // fallback map lets the UI label per-stage odds without a round-trip and keeps a
 // single visible source of truth on the client. Keep in sync with the backend.
 export const STAGE_PROBABILITY = {
-  lead: 0.1, contacted: 0.25, quoting: 0.5, sampling: 0.7,
+  lead: 0.1, contacted: 0.25, quoting: 0.5,
   won: 1, customer: 1, lost: 0, dormant: 0,
 };
 
@@ -114,7 +117,7 @@ export const BOARD_COLUMN_TO_ORDER_STATUS = {
 // climbs. Won and Customer are the same victory rung (Customer = Won + has an
 // order), so the bar fills completely for either. lost/dormant aren't on the
 // ladder (they're off-ramps), so they read as 0 progress with a muted treatment.
-export const FUNNEL_STEPS = ['lead', 'contacted', 'quoting', 'sampling', 'won'];
+export const FUNNEL_STEPS = ['lead', 'contacted', 'quoting', 'won'];
 
 // 0-based level of a stage on the ladder; customer collapses onto won's rung.
 export const stageLevel = (s) => {
@@ -162,7 +165,7 @@ export const SEGMENT_META = {
 export const isClient = (c) => !!(c && (c.isCustomer || isWonStage(c.stage)));
 
 // Warm / in-pipeline lead (and NOT already a client).
-const ACTIVE_LEAD_STAGES = ['contacted', 'quoting', 'sampling'];
+const ACTIVE_LEAD_STAGES = ['contacted', 'quoting'];
 export const isActiveLead = (c) => {
   if (!c || isClient(c)) return false;
   if (ACTIVE_LEAD_STAGES.includes(c.stage)) return true;
@@ -418,7 +421,7 @@ export function StageProgress({ stage, height = 6, showLabel = false, sx = {} })
             {closed ? stageMeta(stage).label : `Level ${Math.max(0, lvl) + 1} of ${FUNNEL_STEPS.length}`}
           </Typography>
           <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 800, color: won ? STAGE_META.won.color : m.color, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-            {won ? '★ Customer' : `${Math.round(stageProgress(stage) * 100)}%`}
+            {won ? '★ Client' : `${Math.round(stageProgress(stage) * 100)}%`}
           </Typography>
         </Stack>
       )}

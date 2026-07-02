@@ -293,7 +293,7 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
           <Stack direction="row" spacing={1} alignItems="baseline">
             <EmojiEventsOutlinedIcon sx={{ fontSize: 18, color: stageMeta('customer').color }} />
             <Typography sx={{ ...mono, color: D.text, fontSize: 16, fontWeight: 800 }}>{customers}</Typography>
-            <Typography sx={{ color: D.muted, fontSize: 12.5 }}>customers of {total}</Typography>
+            <Typography sx={{ color: D.muted, fontSize: 12.5 }}>clients of {total}</Typography>
           </Stack>
           <Box sx={{ mt: 1.25 }}>
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.4 }}>
@@ -398,7 +398,7 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         <MetricCard label="Overdue" value={overdue} accent={overdue > 0 ? '#f87171' : D.muted} />
         <MetricCard label="Due today" value={dueToday} accent={dueToday > 0 ? D.amber : D.muted} />
         <MetricCard
-          label="Customers" value={customersWithOrders} accent={stageMeta('customer').color}
+          label="Clients" value={customersWithOrders} accent={stageMeta('customer').color}
           hint={`${totalCompanies} tracked`}
         />
       </Box>

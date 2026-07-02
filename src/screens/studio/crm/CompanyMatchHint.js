@@ -46,7 +46,7 @@ function MatchRow({ c, onPick }) {
       ) : null}
       <Box sx={{ flexGrow: 1 }} />
       <Chip
-        label={customer ? 'Customer' : stageMeta(c.stage).label}
+        label={customer ? 'Client' : stageMeta(c.stage).label}
         size="small"
         sx={{ ...mono, height: 18, fontSize: 10, fontWeight: 700, bgcolor: 'transparent',
           color: customer ? stageMeta('customer').color : D.muted,

@@ -513,7 +513,7 @@ function PoRow({ p, onOpen, onOpenVendor }) {
 // no celebration banner / glow; the bar + chip say where the deal stands.
 function ProgressCard({ stage, isCustomer }) {
   const won = isWonStage(stage) || isCustomer;
-  const headline = won ? (isCustomer ? 'Customer' : 'Won') : stageMeta(stage).label;
+  const headline = won ? (isCustomer ? 'Client' : 'Won') : stageMeta(stage).label;
 
   return (
     <Box sx={{
