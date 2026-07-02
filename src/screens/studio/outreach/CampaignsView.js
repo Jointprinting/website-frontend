@@ -167,6 +167,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
   const [loading, setLoading] = React.useState(false);
   const [q, setQ] = React.useState('');
   const [stage, setStage] = React.useState('');
+  const [includeContacted, setIncludeContacted] = React.useState(false);
   const [checked, setChecked] = React.useState(() => new Set());
   const [enrolling, setEnrolling] = React.useState(false);
 
@@ -174,7 +175,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     if (!campaign) return;
     setLoading(true);
     try {
-      const list = await fetchCandidates({ campaignId: campaign._id, q, stage });
+      const list = await fetchCandidates({ campaignId: campaign._id, q, stage, includeContacted });
       setRows(list);
       setChecked(new Set());
     } catch (e) {
@@ -182,7 +183,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     } finally {
       setLoading(false);
     }
-  }, [campaign, q, stage, fetchCandidates, onError]);
+  }, [campaign, q, stage, includeContacted, fetchCandidates, onError]);
 
   React.useEffect(() => { if (open) load(); }, [open, load]);
 
@@ -214,8 +215,9 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
       <DialogContent>
         <Stack spacing={1.5} sx={{ mt: 0.5 }}>
           <Typography sx={{ color: D.faint, fontSize: 12.5 }}>
-            Only companies with an email, not opted out, not already customers, and not already in this
-            campaign show here. Cold-outreach audience = Lead + Contacted stages.
+            Only genuinely <b>cold</b> companies show here — has an email, <b>never personally contacted by you</b>,
+            not a customer, not opted out, not already enrolled. Anyone you’ve called, texted, or visited is hidden
+            so they never get a stranger’s cold intro.
           </Typography>
           <Stack direction="row" spacing={1}>
             <TextField placeholder="Search name / email / address…" value={q}
@@ -228,6 +230,14 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
               <MenuItem value="contacted">Contacted only</MenuItem>
             </TextField>
             <Button onClick={load} sx={{ ...dropGhostBtn, px: 2, flexShrink: 0 }}>Filter</Button>
+          </Stack>
+          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: -0.5 }}>
+            <Checkbox size="small" checked={includeContacted}
+              onChange={(e) => { setIncludeContacted(e.target.checked); }}
+              sx={{ p: 0.5, color: D.muted, '&.Mui-checked': { color: D.amber } }} />
+            <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+              Include leads I’ve already contacted (override — use only if you mean to re-warm someone)
+            </Typography>
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1}>
