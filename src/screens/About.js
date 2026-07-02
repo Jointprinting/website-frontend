@@ -8,18 +8,12 @@ import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import Typography from '../modules/components/Typography';
 
-// Hero: woman wearing branded merch — focus on the merch on her.
-// Swap this URL for your own product photography whenever you have it.
-const heroImg =
-  'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1600&q=80';
-
-const processImg =
-  'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=1600&q=80';
-// folded branded apparel / merch
-
-const teamImg =
-  'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=80';
-// person working at a desk / creative work
+// Self-hosted (public/about/) — the owner uploaded these so the page has no
+// external image dependency (the previous Unsplash URLs could vanish upstream).
+// Swap for real product photography whenever it exists.
+const heroImg = '/about/merch-hero.jpg';       // person wearing branded merch
+const processImg = '/about/folded-apparel.jpg'; // folded branded apparel
+const teamImg = '/about/studio-work.jpg';       // working at the counter/desk
 
 const stats = [
   { number: '30,000+', label: 'Units delivered' },
