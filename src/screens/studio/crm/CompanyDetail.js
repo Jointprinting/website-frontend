@@ -81,15 +81,17 @@ const contactFieldSx = {
 // quick actions when the values exist.
 function ContactRow({ c, onField, onCommit, onStar, onDelete }) {
   const starred = !!c.isPrimary;
+  const blank = !(c.name || c.role || c.phone || c.email);
   return (
     <Box sx={{
       bgcolor: D.inset, border: `1px solid ${starred ? 'rgba(251,191,36,0.45)' : D.line}`,
       borderRadius: 2, p: 1.25,
     }}>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
-        <Tooltip title={starred ? 'Main contact — tap to unstar' : 'Make main contact'}>
+        <Tooltip title={blank ? 'Add their details first' : (starred ? 'Main contact — tap to unstar' : 'Make main contact')}>
           <IconButton
-            onClick={onStar} size="small" aria-label={starred ? 'Unstar main contact' : 'Make main contact'}
+            onClick={blank ? undefined : onStar} size="small" disabled={blank}
+            aria-label={starred ? 'Unstar main contact' : 'Make main contact'}
             sx={{ p: 0.4, flexShrink: 0, color: starred ? D.amber : D.faint,
               '&:hover': { color: D.amber, bgcolor: 'rgba(251,191,36,0.1)' } }}
           >
@@ -166,29 +168,38 @@ function ContactsEditor({ contacts, companyKey, onSave }) {
 
   const setField = (i, field, value) => setList((l) => l.map((c, j) => (j === i ? { ...c, [field]: value } : c)));
 
+  // A just-added row the owner hasn't typed into yet. It lives ONLY locally:
+  // every PATCH sends persistable(list) so the server (which drops blanks)
+  // never sees it — otherwise starring it, or any other field's blur, would
+  // silently vanish the row (and could burn the one ★ on a row about to drop).
+  const isBlank = (c) => !(c && (c.name || c.role || c.phone || c.email));
+  const persistable = (l) => l.filter((c) => !isBlank(c));
+
   const commitField = (i, field) => {
     const cur = (list[i] && list[i][field]) || '';
     const was = (committedRef.current[i] && committedRef.current[i][field]) || '';
     if (cur === was) return;
     committedRef.current = list;
-    onSave(list);
+    onSave(persistable(list));
   };
 
   // ★ toggle — one tap. Starring makes this row the ONLY primary; tapping the
   // filled star un-stars everyone. Commits immediately (like the selects).
+  // Blank rows can't take the star (nothing to point the ecosystem at yet).
   const toggleStar = (i) => {
+    if (isBlank(list[i])) return;
     const on = !(list[i] && list[i].isPrimary);
     const next = list.map((c, j) => ({ ...c, isPrimary: on && j === i }));
     setList(next);
     committedRef.current = next;
-    onSave(next);
+    onSave(persistable(next));
   };
 
   const removeAt = (i) => {
     const next = list.filter((_, j) => j !== i);
     setList(next);
     committedRef.current = next;
-    onSave(next);
+    onSave(persistable(next));
   };
 
   // Append a blank editable row. No PATCH yet — the server drops all-blank rows,
@@ -539,17 +550,26 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   const [notesText, setNotesText] = React.useState('');
   const [savingField, setSavingField] = React.useState('');
 
+  // Which inline field has focus right now — a refetch that lands mid-typing
+  // must not reset THAT field's draft (the others re-sync as usual). Set/cleared
+  // by each field's onFocus/onBlur below.
+  const editingFieldRef = React.useRef(null);
+
   React.useEffect(() => {
     if (!client) return;
-    setName(client.companyName || client.clientName || '');
-    setDealValue(client.dealValue != null && client.dealValue !== 0 ? String(client.dealValue) : '');
+    const ef = editingFieldRef.current;
+    if (ef !== 'name') setName(client.companyName || client.clientName || '');
+    if (ef !== 'dealValue') setDealValue(client.dealValue != null && client.dealValue !== 0 ? String(client.dealValue) : '');
     // Prefer the exact address; fall back to the legacy area so an existing
     // region still shows (the owner can overwrite it with a real address).
-    setAddressText(client.address || client.area || '');
-    setNotesText(client.notes || '');
+    if (ef !== 'address') setAddressText(client.address || client.area || '');
+    if (ef !== 'notes') setNotesText(client.notes || '');
   }, [client]);
 
-  if (loading || !client) {
+  // Spinner only while there is nothing to show (first open / company switch).
+  // A same-company refresh keeps the card mounted so blur-commit editors never
+  // lose in-progress typing to the refetch.
+  if (!client) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
         <CircularProgress sx={{ color: D.green }} />
@@ -588,7 +608,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
           <Box sx={{ minWidth: 0 }}>
             <TextField
               value={name} onChange={(e) => setName(e.target.value)}
-              onBlur={() => { if ((client.companyName || '') !== name) commit('companyName', name); }}
+              onFocus={() => { editingFieldRef.current = 'name'; }}
+              onBlur={() => { editingFieldRef.current = null; if ((client.companyName || '') !== name) commit('companyName', name); }}
               variant="standard" placeholder="Company name"
               sx={{
                 '& .MuiInputBase-input': { color: D.text, fontWeight: 800, fontSize: 22, p: 0 },
@@ -648,7 +669,9 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
         </Field>
         <Field label={savingField === 'dealValue' ? 'Deal value · saving…' : 'Deal value'}>
           <TextField value={dealValue} onChange={(e) => setDealValue(e.target.value.replace(/[^\d.]/g, ''))}
+            onFocus={() => { editingFieldRef.current = 'dealValue'; }}
             onBlur={() => {
+              editingFieldRef.current = null;
               const n = Number(dealValue) || 0;
               if ((client.dealValue || 0) !== n) commit('dealValue', n);
             }}
@@ -795,7 +818,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             <Divider sx={{ borderColor: D.line, my: 1.5 }} />
             <Field label={savingField === 'address' ? 'Address · saving…' : 'Address'}>
               <TextField value={addressText} onChange={(e) => setAddressText(e.target.value)}
-                onBlur={() => { if ((client.address || '') !== addressText) commit('address', addressText); }}
+                onFocus={() => { editingFieldRef.current = 'address'; }}
+                onBlur={() => { editingFieldRef.current = null; if ((client.address || '') !== addressText) commit('address', addressText); }}
                 size="small" fullWidth sx={fieldSx} placeholder="e.g. 123 Main St, Newark NJ" />
             </Field>
           </Box>
@@ -839,7 +863,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             </Eyebrow>
             <TextField
               value={notesText} onChange={(e) => setNotesText(e.target.value)}
-              onBlur={() => { if ((client.notes || '') !== notesText) commit('notes', notesText); }}
+              onFocus={() => { editingFieldRef.current = 'notes'; }}
+              onBlur={() => { editingFieldRef.current = null; if ((client.notes || '') !== notesText) commit('notes', notesText); }}
               multiline minRows={3} fullWidth size="small" sx={fieldSx}
               placeholder="Internal notes that follow this client…"
             />

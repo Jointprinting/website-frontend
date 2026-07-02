@@ -271,6 +271,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
 
   const loadDetail = React.useCallback(async (key) => {
     setDetailLoading(true);
+    // Keep the current card's data through a SAME-company refresh (a blur-commit
+    // refetch must not unmount the inline editors mid-typing); only a genuine
+    // company switch clears to the spinner.
+    setDetail((d) => (d && d.client && d.client.companyKey === key ? d : null));
     try {
       const res = await axios.get(`${base}/${encodeURIComponent(key)}`, authHdr);
       setDetail(res.data || null);
@@ -953,7 +957,14 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onGoToday={() => setView('today')}
             // Funnel drill-down: tap a stage bar → the Companies list narrowed
             // to that stage (client-side filter + a dismissible chip).
-            onOpenStage={(stage) => { setCompaniesStageFilter(stage); setView('companies'); }}
+            onOpenStage={(stage) => {
+              // A funnel tap means "show me THIS stage" — stale search/tag
+              // filters would silently shrink the list vs the funnel's count.
+              setQuery('');
+              setTagFilter('all');
+              setCompaniesStageFilter(stage);
+              setView('companies');
+            }}
           />
         );
       case 'today':
