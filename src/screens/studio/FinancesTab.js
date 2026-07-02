@@ -22,13 +22,11 @@ import CheckIcon from '@mui/icons-material/Check';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import axios from 'axios';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
 import { B, darkInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
-import FinanceRestartView from './FinanceRestartView';
 import FinanceDedupeView from './FinanceDedupeView';
 import OrderReconcileView from './OrderReconcileView';
 
@@ -119,14 +117,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // cached per year; load() clears the cache so edits refresh it.
   const [pnlMode, setPnlMode] = useState('order');
   const [projCache, setProjCache] = useState({});
-  // The "Restart finances from my budgets" surface (preview→confirm→apply, reversible).
-  // A full-screen sub-view, mirroring the CRM ReconcileView pattern.
-  const [showRestart, setShowRestart] = useState(false);
-  // "Restart from my budgets" is a ONE-TIME tool. Once it's applied (a finance
-  // restart batch exists), the prominent header button auto-hides — it stays
-  // reachable as a small, quiet link tucked next to the year picker. null = unknown
-  // (treated as "not yet applied" so the button shows until we hear otherwise).
-  const [restartApplied, setRestartApplied] = useState(false);
   // The "Review duplicate transactions" surface (merge cross-source dupes the budget
   // restart left behind; preview→confirm→apply, reversible). A full-screen sub-view,
   // mirroring the CRM CleanupView pattern. Its entry point auto-HIDES when there are
@@ -140,16 +130,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   });
   const [bannerLeaving, setBannerLeaving] = useState(false);
   const fileRef = useRef(null);
-
-  // Has a finance restart ever been applied? Cheap status check on mount; a failure
-  // just leaves the button visible (safe default). Re-checked when the restart view
-  // closes (so applying it this session hides the prominent button right after).
-  const loadRestartStatus = useCallback(async () => {
-    try {
-      const r = await axios.get(`${base}/finances/restart/status`, authHdr);
-      setRestartApplied(!!(r.data && r.data.applied));
-    } catch (_) { /* leave as-is; the button stays available */ }
-  }, [authHdr]);
 
   // How many cross-source duplicate pairs are in the ledger right now? Drives whether
   // the "Review duplicates" entry shows at all (auto-hidden at zero). Cheap preview
@@ -207,8 +187,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   }, [authHdr, year]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadRestartStatus(); }, [loadRestartStatus]);
-  useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
+    useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
   useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
 
   // Live finance config on mount (alongside the other loads). Year-independent and
@@ -368,17 +347,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     setBannerDismiss(d);
   };
 
-  // The restart surface takes over the whole tab (its own back button returns
-  // here). On apply it reloads the finance data so the page shows the new truth.
-  if (showRestart) {
-    return (
-      <FinanceRestartView
-        token={token}
-        onBack={() => { setShowRestart(false); loadRestartStatus(); }}
-        onApplied={() => { load(); loadRestartStatus(); }}
-      />
-    );
-  }
 
   // The "Review duplicate transactions" surface also takes over the whole tab. On a
   // merge it reloads the finance data (the merged amount now counts once) and the
@@ -463,25 +431,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         )}
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
           sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
-        {/* "Restart from budgets" is a one-time, destructive-but-reversible rebuild.
-            Before it's ever applied it's a prominent button; once applied it demotes
-            to a quiet ghost link below — reachable (it's fully reversible server-side)
-            without cluttering the daily finance bar. */}
-        {!restartApplied && (
-          <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
-            title="Rebuild your finances from your budget trackers (preview first — reversible)"
-            sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
-            Restart from budgets
-          </Button>
-        )}
-        {restartApplied && (
-          <Button onClick={() => setShowRestart(true)} size="small" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />}
-            title="Re-run the budget restart (preview first — reversible)"
-            sx={{ color: B.muted, opacity: 0.65, textTransform: 'none', fontWeight: 600, fontSize: 11, minWidth: 'auto', px: 0.75,
-              '&:hover': { opacity: 1, color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
-            Budget restart…
-          </Button>
-        )}
       </Box>
 
       <Box data-ctx-chrome sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
