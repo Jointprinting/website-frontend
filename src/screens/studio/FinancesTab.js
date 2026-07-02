@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem, CircularProgress,
-  Dialog, DialogContent, TextField, ToggleButton, ToggleButtonGroup, Autocomplete,
+  Dialog, DialogContent, TextField, Autocomplete,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
@@ -111,12 +111,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [finCfg, setFinCfg] = useState({
     categories: CATEGORIES, cogsCategories: COGS_CATEGORIES, processingFeeRates: PROCESSING_FEE_RATES,
   });
-  // "Profit by …" lens on the P&L table: 'order' (default — unchanged, incl. its
-  // drill-in dialog) or 'project' (the same P&L folded up by projectNumber via
-  // /api/finances/by-project). Project rows are fetched on first switch and
-  // cached per year; load() clears the cache so edits refresh it.
-  const [pnlMode, setPnlMode] = useState('order');
-  const [projCache, setProjCache] = useState({});
   // The "Review duplicate transactions" surface (merge cross-source dupes the budget
   // restart left behind; preview→confirm→apply, reversible). A full-screen sub-view,
   // mirroring the CRM CleanupView pattern. Its entry point auto-HIDES when there are
@@ -181,7 +175,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setClients(arr(c.data && c.data.clients));
       setGaps(g.data || null);
       setNeedsReceipts(nr.data || null);
-      setProjCache({});   // the by-project fold is stale after any reload — refetch lazily
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -205,24 +198,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     }).catch(() => { /* keep the hardcoded fallback */ });
     return () => { cancelled = true; };
   }, [authHdr]);
-
-  // Fetch the by-project rows the first time the lens flips to 'project' for this
-  // year, then serve from the cache. A failure caches [] so the table shows its
-  // empty state instead of spinning forever.
-  const projKey = String(year);
-  const projRows = projCache[projKey];
-  useEffect(() => {
-    if (pnlMode !== 'project' || projCache[projKey]) return undefined;
-    let cancelled = false;
-    axios.get(`${base}/finances/by-project`, { ...authHdr, params: { year } })
-      .then((r) => {
-        if (cancelled) return;
-        const rows = (r.data && Array.isArray(r.data.projects)) ? r.data.projects.filter(Boolean) : [];
-        setProjCache((prev) => ({ ...prev, [projKey]: rows }));
-      })
-      .catch(() => { if (!cancelled) setProjCache((prev) => ({ ...prev, [projKey]: [] })); });
-    return () => { cancelled = true; };
-  }, [pnlMode, projKey, projCache, authHdr, year]);
 
   const exportCsv = async () => {
     try {
@@ -560,102 +535,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             <TopClients clients={clients} onClient={goCompanyByKey} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ px: 1.5, pt: 1.25, pb: 0.5 }}>
-                <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {pnlMode === 'project'
-                    ? `Profit by project${projRows ? ` (${projRows.length})` : ''}`
-                    : `Profit by order (${orders.length})`}
-                </Typography>
-                {/* By order (default — unchanged, incl. the drill-in dialog) ⇄ by
-                    project: the same P&L folded up by projectNumber, so a deposit +
-                    balance + reprint read as ONE piece of work. */}
-                <ToggleButtonGroup exclusive size="small" value={pnlMode}
-                  onChange={(_, v) => { if (v) setPnlMode(v); }}
-                  sx={{ '& .MuiToggleButton-root': {
-                    color: B.muted, border: `1px solid ${B.border}`, textTransform: 'none',
-                    fontSize: 10.5, fontWeight: 700, lineHeight: 1.5, px: 1, py: 0.2,
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
-                    '&.Mui-selected': { color: B.green, bgcolor: 'rgba(74,222,128,0.10)', '&:hover': { bgcolor: 'rgba(74,222,128,0.14)' } },
-                  } }}>
-                  <ToggleButton value="order">By order</ToggleButton>
-                  <ToggleButton value="project">By project</ToggleButton>
-                </ToggleButtonGroup>
-              </Stack>
-              {pnlMode === 'project' ? (
-                !projRows ? (
-                  <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={18} sx={{ color: B.green }} /></Box>
-                ) : projRows.length === 0 ? (
-                  <Typography sx={{ color: B.muted, fontSize: 12, px: 1.5, pb: 1.5 }}>No project rows for {year || 'any year'} yet.</Typography>
-                ) : (
-                  <Box sx={{ overflowX: 'auto', ...scrollbar }}>
-                    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                      <Box component="thead">
-                        <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
-                          <Box component="th" sx={{ textAlign: 'left !important' }}>Project</Box>
-                          <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
-                          <Box component="th" sx={{ textAlign: 'left !important' }}>Orders</Box>
-                          <Box component="th">Revenue</Box><Box component="th">Cost</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
-                        </Box>
-                      </Box>
-                      <Box component="tbody">
-                        {projRows.map((p) => {
-                          const nums = Array.isArray(p.orderNumbers) ? p.orderNumbers.filter(Boolean) : [];
-                          const first = nums[0] || '';
-                          const hasProj = !!p.projectNumber;
-                          // The project # jumps to the Order Tracker's project page;
-                          // an unresolved row (projectNumber '') falls back to its
-                          // order # via the SAME goOrder path the by-order rows use.
-                          const canOpen = !!onNavigate && !!(hasProj || normOrderNo(first));
-                          const openRow = () => {
-                            if (hasProj) onNavigate({ view: 'clients', projectNumber: p.projectNumber });
-                            else goOrder(first);
-                          };
-                          const canClient = !!onNavigate && !!p.companyKey && !!p.client;
-                          const joined = nums.map((n2) => `#${n2}`).join(', ');
-                          return (
-                            <Box component="tr" key={hasProj ? `p${p.projectNumber}` : `o${first}`}
-                              sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
-                              {/* Row with no project # keeps the order # as its label,
-                                  in a subtle "no project" tint (still a working link). */}
-                              <Box component="td" sx={{ textAlign: 'left !important', color: hasProj && canOpen ? B.green : B.muted }}>
-                                <Box component="span"
-                                  onClick={canOpen ? openRow : undefined}
-                                  title={canOpen ? (hasProj ? 'Open this project' : 'No project # — open the order') : undefined}
-                                  sx={{ cursor: canOpen ? 'pointer' : 'inherit', '&:hover': canOpen ? { textDecoration: 'underline' } : undefined }}>
-                                  #{hasProj ? p.projectNumber : first}
-                                </Box>
-                                {!hasProj && (
-                                  <Box component="span" sx={{ ml: 0.6, px: 0.5, py: 0.1, borderRadius: 1, fontSize: 8.5, fontWeight: 800,
-                                    letterSpacing: 0.4, textTransform: 'uppercase', color: B.muted, bgcolor: 'rgba(255,255,255,0.06)', fontFamily: 'inherit' }}>
-                                    no project
-                                  </Box>
-                                )}
-                              </Box>
-                              <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {canClient ? (
-                                  <Box component="span"
-                                    onClick={() => goCompanyByKey(p.companyKey)}
-                                    title="Open this client's CRM card"
-                                    sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-                                    {p.client}
-                                  </Box>
-                                ) : (p.client || '—')}
-                              </Box>
-                              <Box component="td" sx={{ textAlign: 'left !important', color: B.muted, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }} title={joined}>
-                                {joined || '—'}
-                              </Box>
-                              <Box component="td" sx={{ color: B.white }}>{money(p.revenue)}</Box>
-                              <Box component="td" sx={{ color: '#f87171' }}>{money(p.cost)}</Box>
-                              <Box component="td" sx={{ color: p.profit >= 0 ? B.green : '#f87171' }}>{money(p.profit)}</Box>
-                              <Box component="td" sx={{ color: pct(p.margin) >= 0 ? B.green : '#f87171' }}>{pct(p.margin)}%</Box>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    </Box>
-                  </Box>
-                )
-              ) : (
+              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>
+                Profit by order ({orders.length})
+              </Typography>
               <Box sx={{ overflowX: 'auto', ...scrollbar }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="thead">
@@ -705,7 +587,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                   </Box>
                 </Box>
               </Box>
-              )}
             </Box>
 
             {/* Transactions log + receipts */}
