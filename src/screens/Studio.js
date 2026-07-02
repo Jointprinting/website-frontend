@@ -2712,7 +2712,7 @@ function StudioBody({ token, onLogout }) {
             SIGN OUT
           </Button>
         </Stack>
-        <RoadTripTab token={token} />
+        <RoadTripTab token={token} onNavigate={navigate} />
       </Box>
     );
   }
