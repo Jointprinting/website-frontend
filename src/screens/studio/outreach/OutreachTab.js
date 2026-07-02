@@ -22,6 +22,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import QueryStatsOutlinedIcon from '@mui/icons-material/QueryStatsOutlined';
+import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
 import OverviewView from './OverviewView';
@@ -29,13 +30,16 @@ import CampaignsView from './CampaignsView';
 import QueueView from './QueueView';
 import ImportView from './ImportView';
 import AnalyticsView from './AnalyticsView';
+import RepliesView from './RepliesView';
 
 const base = `${config.backendUrl}/api/outreach`;
+const triageBase = `${config.backendUrl}/api/triage`;
 
 const NAV = [
   { id: 'overview',  label: 'Overview',     Icon: SpaceDashboardOutlinedIcon },
   { id: 'campaigns', label: 'Campaigns',    Icon: ForwardToInboxOutlinedIcon },
   { id: 'queue',     label: 'Queue',        Icon: ScheduleOutlinedIcon },
+  { id: 'replies',   label: 'Replies',      Icon: MarkEmailUnreadOutlinedIcon },
   { id: 'import',    label: 'Find leads',   Icon: TravelExploreOutlinedIcon },
   { id: 'analytics', label: 'Analytics',    Icon: QueryStatsOutlinedIcon },
 ];
@@ -53,6 +57,10 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
 
   const [analytics, setAnalytics] = React.useState(null);
   const [analyticsLoading, setAnalyticsLoading] = React.useState(true);
+
+  const [replies, setReplies] = React.useState([]);
+  const [repliesLoading, setRepliesLoading] = React.useState(true);
+  const [showIgnored, setShowIgnored] = React.useState(false);
 
   const [snack, setSnack] = React.useState(null); // { msg, severity }
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
@@ -94,9 +102,22 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     }
   }, [authHdr]);
 
+  const loadReplies = React.useCallback(async () => {
+    setRepliesLoading(true);
+    try {
+      const { data } = await axios.get(`${triageBase}/replies`, { ...authHdr, params: { includeIgnored: showIgnored } });
+      setReplies(data.replies || []);
+    } catch (e) {
+      flash(e.response?.data?.message || 'Could not load replies', 'error');
+    } finally {
+      setRepliesLoading(false);
+    }
+  }, [authHdr, showIgnored]);
+
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
   React.useEffect(() => { if (view === 'queue') loadQueue(); }, [view, loadQueue]);
   React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
+  React.useEffect(() => { if (view === 'replies') loadReplies(); }, [view, loadReplies]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
   const createCampaign = async (payload) => {
@@ -179,6 +200,31 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     return data;
   };
 
+  // ── Reply triage actions ──────────────────────────────────────────────────
+  const setReplyStatus = async (id, status) => {
+    const { data } = await axios.patch(`${triageBase}/replies/${id}`, { status }, authHdr);
+    flash('Reply updated.');
+    if (data.sideEffectWarning) flash(`Updated, but the linked-company change hit a snag: ${data.sideEffectWarning}`, 'warning');
+    await loadReplies();
+  };
+
+  const addReply = async (payload) => {
+    const { data } = await axios.post(`${triageBase}/replies`, payload, authHdr);
+    if (data.added) flash(`Reply added — ${data.replies?.[0]?.matched ? 'matched to a company.' : 'unmatched (still shown).'}`);
+    else flash('Looked like a bounce/auto-reply or your own mail — nothing added.', 'warning');
+    await loadReplies();
+    return data;
+  };
+
+  const syncGmail = async () => {
+    const { data } = await axios.post(`${triageBase}/sync`, {}, authHdr);
+    flash(data.message || 'Sync complete.', data.configured ? 'success' : 'warning');
+    if (data.imported) await loadReplies();
+    return data;
+  };
+
+  const toggleIgnored = () => setShowIgnored((v) => !v);
+
   const openCompany = (companyKey) => onNavigate && onNavigate({ view: 'crm', companyKey });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -213,6 +259,18 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
             onRunTick={runTick}
             onStop={stopEnrollment}
             onOpenCompany={openCompany}
+          />
+        );
+      case 'replies':
+        return (
+          <RepliesView
+            replies={replies} loading={repliesLoading}
+            showIgnored={showIgnored} onToggleIgnored={toggleIgnored}
+            onSetStatus={setReplyStatus}
+            onAddReply={addReply}
+            onSync={syncGmail}
+            onOpenCompany={openCompany}
+            onError={(m) => flash(m, 'error')}
           />
         );
       case 'analytics':
