@@ -40,7 +40,7 @@ const pct = (n) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
 // and used everywhere below; these mirrors only apply while that fetch fails, so
 // keep them matching the backend all the same.
 const CATEGORIES = [
-  'Customer Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
+  'Client Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Processing Fee', 'Software', 'Marketing', 'Accounting', 'Travel/Field',
   'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
@@ -101,7 +101,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
   // Prefill for "record payment for this order" — opens the Add-transaction
-  // modal already set to Income · Customer Sales · the order's client + amount.
+  // modal already set to Income · Client Sales · the order's client + amount.
   const [prefill, setPrefill] = useState(null);
   const [editTxn, setEditTxn] = useState(null);
   const [openOrder, setOpenOrder] = useState(null);
@@ -488,7 +488,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               onOpenClient={onNavigate ? (orderNumber) => goCompanyForOrder(orderNumber) : undefined}
               canOpenClient={(orderNumber) => !!ckByOrder[normOrderNo(orderNumber)]}
               onRecord={(row) => setPrefill({
-              type: 'income', category: 'Customer Sales',
+              type: 'income', category: 'Client Sales',
               party: row.client && row.client !== '—' ? row.client : '',
               amount: row.outstanding > 0 ? row.outstanding : (row.billed > 0 ? row.billed : ''),
               orderNumber: row.orderNumber,
@@ -709,7 +709,7 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
   // Profit reconciles EXACTLY with the by-order list (M6): the SAME definition —
   // signed Customer-Sales revenue minus signed COGS — not the all-categories cash
   // Net. (Cash In/Out above stays a separate lens; profit is the margin number.)
-  const revenue = rows.filter((t) => t.type === 'income' && t.category === 'Customer Sales')
+  const revenue = rows.filter((t) => t.type === 'income' && t.category === 'Client Sales')
     .reduce((s, t) => s + signedAmt(t), 0);
   const cost = rows.filter((t) => t.type === 'expense' && cogsCategories.includes(t.category))
     .reduce((s, t) => s + signedAmt(t), 0);
@@ -1036,14 +1036,14 @@ function TopClients({ clients, onClient }) {
 function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories = CATEGORIES, feeRates = PROCESSING_FEE_RATES }) {
   const edit = !!txn;
   // `prefill` (from "record payment for this order") seeds a NEW entry already set
-  // to the client's payment — Income · Customer Sales · the order's client + amount.
+  // to the client's payment — Income · Client Sales · the order's client + amount.
   const seed = txn || prefill || null;
   const [type, setType] = useState(seed?.type || 'expense');
   const [date, setDate] = useState(() => {
     const d = txn && txn.date ? new Date(txn.date) : null;
     return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
   });
-  const [category, setCategory] = useState(seed?.category || (seed?.type === 'income' ? 'Customer Sales' : 'Printer COGS'));
+  const [category, setCategory] = useState(seed?.category || (seed?.type === 'income' ? 'Client Sales' : 'Printer COGS'));
   const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
   const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
   const [party, setParty] = useState(seed?.party || '');
@@ -1054,7 +1054,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   const [vendorId, setVendorId] = useState(seed?.vendorId ? String(seed.vendorId) : '');
   const [description, setDescription] = useState(seed?.description || '');
   const [isCredit, setIsCredit] = useState(!!txn?.isCredit);
-  // Payment method on a CLIENT PAYMENT (income · Customer Sales) → drives the
+  // Payment method on a CLIENT PAYMENT (income · Client Sales) → drives the
   // auto-booked Processing Fee. Defaults to the saved method when editing, else
   // 'none' so a NEW payment never silently adds a fee until the owner picks CC/ACH.
   const [paymentMethod, setPaymentMethod] = useState(seed?.paymentMethod || 'none');
@@ -1107,7 +1107,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
       // Nothing usable came back (not configured / unreadable file) — say so
       // instead of leaving the fields silently blank. The upload still stands.
       if (!f) { setScanErr(SCAN_FAIL_NOTE); return; }
-      if (f.type) { setType(f.type); setCategory(f.category || (f.type === 'income' ? 'Customer Sales' : 'Other')); }
+      if (f.type) { setType(f.type); setCategory(f.category || (f.type === 'income' ? 'Client Sales' : 'Other')); }
       if (f.party) setParty(f.party);
       if (f.amount !== '' && f.amount != null) setAmount(String(f.amount));
       if (f.date) setDate(f.date);
@@ -1126,7 +1126,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   // A real CLIENT PAYMENT (money IN for a sale, not a refund) — the only row a
   // merchant Processing Fee applies to. Drives whether the payment-method picker
   // and the fee preview show.
-  const isClientPayment = type === 'income' && category === 'Customer Sales' && !isCredit;
+  const isClientPayment = type === 'income' && category === 'Client Sales' && !isCredit;
   // What the processor will take, previewed live so the owner sees it before saving.
   // Mirrors the backend computeProcessingFee exactly (amount × rate, 2dp) — using
   // the LIVE rates from /api/finances/config, so the preview equals the booked fee.
@@ -1134,13 +1134,13 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   const feeLabels = feeMethodLabels(feeRates);
   const feeAmount = isClientPayment ? round((Number(amount) || 0) * feeRate) : 0;
 
-  // One-tap "this is a refund": set Income · Customer Sales · Credit so it books as
+  // One-tap "this is a refund": set Income · Client Sales · Credit so it books as
   // contra-revenue against the order (the owner never has to reason about the
   // Credit toggle). The order # is what links it to the right order, so we surface
   // that the field is required right here.
   const makeRefund = () => {
     setType('income');
-    setCategory('Customer Sales');
+    setCategory('Client Sales');
     setIsCredit(true);
     setPaymentMethod('none');     // a refund is never charged a processing fee
     setErr('');
@@ -1161,7 +1161,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
     // Tag the payment method on a client payment so the backend auto-books the
     // Processing Fee as a linked cost on the same order. Sent on edits too, so
     // changing/removing the method re-syncs (or clears) the fee row.
-    if (type === 'income' && category === 'Customer Sales') form.paymentMethod = isCredit ? 'none' : paymentMethod;
+    if (type === 'income' && category === 'Client Sales') form.paymentMethod = isCredit ? 'none' : paymentMethod;
     if (receiptDataUrl) form.receiptDataUrl = receiptDataUrl;
     try { await onSave(form); } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
   };
@@ -1184,7 +1184,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
       <DialogContent sx={{ p: 2.5 }}>
         <Stack gap={1.25}>
           {/* Quick actions on a NEW entry — so the owner doesn't have to remember the
-              Income/Customer Sales/Credit combo. "Refund a customer" sets it all up
+              Income/Client Sales/Credit combo. "Refund a customer" sets it all up
               and just asks for the order #. Hidden once already in refund mode. */}
           {!edit && !isRefundMode && (
             <Button onClick={makeRefund} startIcon={<ReplayIcon sx={{ fontSize: 14 }} />} size="small"
@@ -1203,7 +1203,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
           )}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
             <FormControl size="small" sx={fld}>
-              <Select value={type} onChange={(e) => { setType(e.target.value); setCategory(e.target.value === 'income' ? 'Customer Sales' : 'Printer COGS'); }} sx={sel}>
+              <Select value={type} onChange={(e) => { setType(e.target.value); setCategory(e.target.value === 'income' ? 'Client Sales' : 'Printer COGS'); }} sx={sel}>
                 <MenuItem value="expense">Expense</MenuItem>
                 <MenuItem value="income">Income</MenuItem>
               </Select>
@@ -1266,7 +1266,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
           </Box>
           <TextField size="small" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} sx={fld} />
           {/* Payment method → auto-books the merchant Processing Fee as a cost on
-              this order. Only on a real client payment (income · Customer Sales, not
+              this order. Only on a real client payment (income · Client Sales, not
               a refund). The fee is previewed live so the owner sees what's deducted. */}
           {isClientPayment && (
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, px: 1.25, py: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
