@@ -1423,7 +1423,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // Open the Mockup Studio (/jpstudio) deep-linked to THIS project, so every
   // mockup saved there auto-links to this project (the studio's smart workflow).
   const goStudio = () => project && window.open(
-    `/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}`,
+    // No token in the URL — /jpstudio picks up the studio session from localStorage
+    // (same origin). Only the non-secret project id is passed, for deep-linking.
+    `/jpstudio/?project=${encodeURIComponent(project._id)}`,
     '_blank', 'noopener,noreferrer',
   );
   // Receipt-derived ACTUAL cost for this order — the real source of truth (the
@@ -1857,7 +1859,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     // mockup's remoteId (UUID, same value local + cloud).
                     const remoteId = t.item?.remoteId || '';
                     const editUrl = t.item
-                      ? `/jpstudio/?t=${encodeURIComponent(token || '')}&project=${encodeURIComponent(project._id)}&mockup=${encodeURIComponent(remoteId)}`
+                      // No token in the URL — /jpstudio reads the session from
+                      // localStorage (same origin); only non-secret ids are passed.
+                      ? `/jpstudio/?project=${encodeURIComponent(project._id)}&mockup=${encodeURIComponent(remoteId)}`
                       : null;
                     return (
                     <Box key={i} onClick={() => editUrl && window.open(editUrl, '_blank', 'noopener,noreferrer')}

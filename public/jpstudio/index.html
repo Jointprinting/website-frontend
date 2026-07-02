@@ -74,8 +74,15 @@
       window.history.replaceState({}, '', url.toString());
       return urlT;
     }
-    // 2. sessionStorage (subsequent loads in same tab)
-    try { return sessionStorage.getItem('jpStudioToken'); } catch (_) { return null; }
+    // 2. sessionStorage (subsequent loads in same tab), then the Studio app's saved
+    //    login in localStorage (same origin). The localStorage fallback is what lets
+    //    the parent open this tab WITHOUT putting the token in the URL (which would
+    //    leak via server access logs / browser history). Mirrors getStudioToken()
+    //    further down, which the tool's API calls already rely on.
+    try {
+      return sessionStorage.getItem('jpStudioToken')
+          || localStorage.getItem('jpStudioToken');
+    } catch (_) { return null; }
   }
 
   async function verifyAndProceed() {

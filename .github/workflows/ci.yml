@@ -1,0 +1,23 @@
+name: CI
+
+# Compile the app on every PR and on pushes to main. Runs under CI=true, so any
+# ESLint warning fails the build — the same strict mode Vercel uses for prod.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          CI: true
