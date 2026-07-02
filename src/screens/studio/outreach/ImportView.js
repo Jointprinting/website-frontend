@@ -1,20 +1,22 @@
 // src/screens/studio/outreach/ImportView.js
-// The lead machine: paste (or upload) a state license-list CSV, map its columns
-// once, preview, and import straight into the CRM as 'Cold Outreach' leads —
-// through the SAME /api/crm/import endpoint the field-tracker uses (fill-blanks
-// merge, dedupe, never clobbers owner edits). Dispensaries are one of the only
-// industries where every prospect is on a public government list; this turns
-// those lists into enrollable leads in two clicks.
+// The lead machine. TWO ways in:
+//   1. AUTO-FIND (primary, free): pick a region → the server sweeps OpenStreetMap
+//      for every dispensary, scrapes each shop's site for a contact email, and
+//      imports the emailable ones as Cold Outreach leads. $0, no API key.
+//   2. PASTE a CSV (fallback): a state license list → map columns → import via
+//      the SAME /api/crm/import path (fill-blanks merge, dedupe, never clobbers).
+// Both land leads you can immediately enroll in a campaign.
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, Button, TextField, MenuItem, Link, Alert,
+  Box, Stack, Typography, Button, TextField, MenuItem, Link, Alert, CircularProgress,
 } from '@mui/material';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn } from '../_shared';
 import { Eyebrow } from '../crm/_crm';
-import { parseCsv, IMPORT_TARGETS, guessTarget, buildImportRows } from './_outreach';
+import { parseCsv, IMPORT_TARGETS, guessTarget, buildImportRows, FINDER_REGIONS, StatPill } from './_outreach';
 
 // Free official sources — every dispensary prospect, straight from the regulator.
 const LICENSE_SOURCES = [
@@ -29,7 +31,102 @@ const LICENSE_SOURCES = [
   { label: 'All-states directory', url: 'https://cannabispromotions.com/license-lookup' },
 ];
 
-export default function ImportView({ onImport, onError, onGoCampaigns }) {
+// The free auto-finder: pick a region, the server does discovery + email scrape
+// + import. A preview (dry run) reports coverage before writing anything.
+function AutoFinder({ onFindLeads, onError, onGoCampaigns }) {
+  const [region, setRegion] = React.useState('nj');
+  const [busy, setBusy] = React.useState(false);
+  const [preview, setPreview] = React.useState(null);
+  const [result, setResult] = React.useState(null);
+
+  const run = async (dryRun) => {
+    setBusy(true);
+    try {
+      const data = await onFindLeads(region, { dryRun });
+      if (dryRun) { setPreview(data); setResult(null); }
+      else { setResult(data); setPreview(null); }
+    } catch (e) {
+      onError(e.response?.data?.message || 'Lead finder failed — the discovery service may be busy, try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const regionLabel = (FINDER_REGIONS.find((r) => r.id === region) || {}).label || region;
+
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.lineHi}`, borderRadius: 2.5, p: 2 }}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+        <TravelExploreOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15 }}>Auto-find dispensaries</Typography>
+        <Box sx={{ px: 1, py: 0.2, borderRadius: 999, bgcolor: 'rgba(74,222,128,0.14)', border: `1px solid ${D.line}` }}>
+          <Typography sx={{ ...mono, color: D.green, fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>FREE</Typography>
+        </Box>
+      </Stack>
+      <Typography sx={{ color: D.muted, fontSize: 12.5, mb: 1.5 }}>
+        Sweeps OpenStreetMap for every dispensary in a region, scrapes each shop’s own website for a
+        contact email, and imports the reachable ones as Cold Outreach leads — no cost, no API key.
+        Start with New Jersey; expand outward once you’ve worked through it.
+      </Typography>
+
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        <TextField select size="small" value={region} onChange={(e) => setRegion(e.target.value)}
+          sx={{ ...dropInput, minWidth: 170 }}>
+          {FINDER_REGIONS.map((r) => (
+            <MenuItem key={r.id} value={r.id}>{r.label}{r.id === 'nj' ? ' (start here)' : ''}</MenuItem>
+          ))}
+        </TextField>
+        <Button onClick={() => run(true)} disabled={busy}
+          sx={{ ...dropGhostBtn, px: 2, py: 0.6, fontSize: 12.5 }}>
+          {busy ? 'Working…' : 'Preview coverage'}
+        </Button>
+        <Button onClick={() => run(false)} disabled={busy}
+          startIcon={busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <TravelExploreOutlinedIcon sx={{ fontSize: 16 }} />}
+          sx={{ ...dropPrimaryBtn, px: 2.5, py: 0.6, fontSize: 12.5 }}>
+          {busy ? 'Finding…' : `Find & import ${regionLabel}`}
+        </Button>
+      </Stack>
+
+      {busy && (
+        <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 1 }}>
+          Scanning + scraping can take a minute or two for a full region — hang tight.
+        </Typography>
+      )}
+
+      {preview && !busy && (
+        <Alert severity="info" variant="outlined" sx={{ mt: 1.5, borderColor: D.line, color: D.text,
+          '& .MuiAlert-icon': { color: D.green } }}>
+          {preview.label}: <b>{preview.found}</b> dispensaries found, <b>{preview.withEmail}</b> have a reachable
+          email — <b>{preview.willImport}</b> ready to import. Nothing’s been written yet.
+        </Alert>
+      )}
+
+      {result && !busy && (
+        <Box sx={{ mt: 1.5 }}>
+          <Stack direction="row" spacing={1.25} sx={{ mb: 1.25 }}>
+            <StatPill value={result.found} label="Found" tone={D.text} />
+            <StatPill value={result.withEmail} label="With email" tone={D.green} />
+            <StatPill value={result.created} label="New leads" tone={D.green} />
+          </Stack>
+          <Alert icon={<CheckCircleOutlineIcon />} severity="success" variant="outlined"
+            sx={{ borderColor: D.green, color: D.text, '& .MuiAlert-icon': { color: D.green } }}>
+            {result.label}: imported <b>{result.created} new</b> lead{result.created === 1 ? '' : 's'}
+            {result.updated ? `, ${result.updated} updated` : ''} ({result.enriched} email
+            {result.enriched === 1 ? '' : 's'} pulled from shop websites). They’re tagged
+            <Box component="code" sx={{ ...mono, mx: 0.5 }}>dispensary</Box> and sourced Cold Outreach.
+            <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+              <Button onClick={onGoCampaigns} sx={{ ...dropPrimaryBtn, px: 2, py: 0.5, fontSize: 12.5 }}>
+                Enroll them in a campaign →
+              </Button>
+            </Stack>
+          </Alert>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+export default function ImportView({ onImport, onFindLeads, onError, onGoCampaigns }) {
   const [csvText, setCsvText] = React.useState('');
   const [rows, setRows] = React.useState(null);        // parsed array-of-arrays
   const [mapping, setMapping] = React.useState([]);    // per-column target ids
@@ -91,12 +188,15 @@ export default function ImportView({ onImport, onError, onGoCampaigns }) {
 
   return (
     <Stack spacing={2.5}>
+      {/* Primary path — the free automated finder. */}
+      <AutoFinder onFindLeads={onFindLeads} onError={onError} onGoCampaigns={onGoCampaigns} />
+
       <Box>
-        <Eyebrow sx={{ mb: 1 }}>Free lead lists — every dispensary is on a public register</Eyebrow>
+        <Eyebrow sx={{ mb: 1 }}>Or paste a state license list — manual fallback</Eyebrow>
         <Typography sx={{ color: D.muted, fontSize: 13, mb: 1 }}>
-          Download the licensee spreadsheet for a state on your route, paste it below, map the columns,
-          and it lands in the CRM as filterable <b>Cold Outreach</b> leads (deduped, never overwriting
-          your edits). Where a list has no email, the shop’s website almost always has an info@.
+          For a state the auto-finder hasn’t reached (or to top up its coverage): download a licensee
+          spreadsheet, paste it below, map the columns, and it lands in the CRM as filterable
+          <b> Cold Outreach</b> leads (deduped, never overwriting your edits).
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           {LICENSE_SOURCES.map((s) => (

@@ -145,6 +145,16 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     return data;
   };
 
+  // ── Free auto-finder (OSM dispensary discovery → email scrape → import) ───
+  const findLeads = async (region, { dryRun }) => {
+    const { data } = await axios.post(`${base}/find-leads`, { region, dryRun }, authHdr);
+    if (!dryRun) {
+      flash(`${data.label}: found ${data.found}, ${data.withEmail} with email — ${data.created} new lead${data.created === 1 ? '' : 's'} imported.`);
+      await loadOverview();
+    }
+    return data;
+  };
+
   const openCompany = (companyKey) => onNavigate && onNavigate({ view: 'crm', companyKey });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -185,6 +195,7 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
         return (
           <ImportView
             onImport={importLeads}
+            onFindLeads={findLeads}
             onError={(m) => flash(m, 'error')}
             onGoCampaigns={() => setView('campaigns')}
           />

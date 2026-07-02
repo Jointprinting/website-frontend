@@ -114,6 +114,18 @@ jointprinting.com`,
   },
 ];
 
+// Region options for the free auto-finder — MIRRORS services/dispensaryFinder.js
+// REGIONS (keep in sync). NJ leads; the rest are the staged expansion.
+export const FINDER_REGIONS = [
+  { id: 'nj', label: 'New Jersey' },
+  { id: 'ny', label: 'New York' },
+  { id: 'pa', label: 'Pennsylvania' },
+  { id: 'ct', label: 'Connecticut' },
+  { id: 'de', label: 'Delaware' },
+  { id: 'md', label: 'Maryland' },
+  { id: 'ma', label: 'Massachusetts' },
+];
+
 // ── CSV helpers (the license-list importer) ───────────────────────────────────
 // Small, quote-aware CSV parser: handles "quoted, cells", escaped quotes ("")
 // and newlines inside quotes. Returns array-of-arrays.
