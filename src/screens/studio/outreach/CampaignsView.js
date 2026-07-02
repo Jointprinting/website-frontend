@@ -215,8 +215,9 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
         <Stack spacing={1.5} sx={{ mt: 0.5 }}>
           <Typography sx={{ color: D.faint, fontSize: 12.5 }}>
             Only genuinely <b>cold</b> companies show here — has an email, <b>never personally contacted by you</b>,
-            not a customer, not opted out, not already enrolled. Anyone you’ve called, texted, or visited is hidden
-            so they never get a stranger’s cold intro.
+            not a customer, not opted out, not already enrolled. Anyone you’ve called, texted, or visited is hidden,
+            big chains are skipped at import, and <b>no email address appears twice</b> — so one inbox never gets
+            two cold emails.
           </Typography>
           <Stack direction="row" spacing={1}>
             <TextField placeholder="Search name / email / address…" value={q}
