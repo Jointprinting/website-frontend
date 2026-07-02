@@ -11,7 +11,7 @@ import {
   Box, Stack, Button, IconButton, Menu, MenuItem, Divider, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Table, TableBody, TableCell, TableHead, TableRow,
-  CircularProgress, Typography,
+  ToggleButton, ToggleButtonGroup, CircularProgress, Typography,
 } from '@mui/material';
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
@@ -25,15 +25,18 @@ import {
   TRIAGE_STATUSES, triageStatusMeta,
   TRIAGE_ACTIONS,
 } from './_outreach';
+import WorklistPanel from './WorklistPanel';
 
 const cellSx = { color: D.text, borderColor: D.line, fontSize: 12.5, py: 1, verticalAlign: 'top' };
 const headSx = { color: D.faint, borderColor: D.line, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', py: 1, whiteSpace: 'nowrap' };
 
 export default function RepliesView({
   replies = [], loading, showIgnored, onToggleIgnored,
+  worklist, worklistLoading,
   onSetStatus, onAddReply, onSync, onOpenCompany, onError,
 }) {
   const fullScreen = useMobileFullScreen();
+  const [mode, setMode] = React.useState('worklist'); // 'worklist' = command center, 'all' = full inbox
   const [cat, setCat] = React.useState('');
   const [status, setStatus] = React.useState('');
   const [menu, setMenu] = React.useState(null);     // { anchor, row }
@@ -62,46 +65,21 @@ export default function RepliesView({
     try { await onSync?.(); } finally { setSyncing(false); }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress sx={{ color: D.green }} />
-      </Box>
-    );
-  }
-
   return (
     <Stack spacing={2}>
-      {/* Summary strip */}
-      <Stack direction="row" spacing={1.25}>
-        <StatPill value={counts.unhandled} label="New" tone={counts.unhandled > 0 ? D.amber : D.muted} />
-        <StatPill value={counts.hot} label="Buying signals" tone={counts.hot > 0 ? D.green : D.muted} />
-        <StatPill value={counts.matched} label="Matched" tone={D.text} />
-        <StatPill value={counts.total} label="Replies" tone={D.text} />
-      </Stack>
-
-      {/* Toolbar: filters + actions */}
+      {/* Mode toggle (Worklist = command center, All = full inbox) + always-on actions */}
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-        <TextField
-          select value={cat} onChange={(e) => setCat(e.target.value)} size="small"
-          sx={{ ...dropInput, minWidth: 150 }} SelectProps={{ displayEmpty: true }}
+        <ToggleButtonGroup
+          exclusive size="small" value={mode}
+          onChange={(_e, v) => { if (v) setMode(v); }}
+          sx={{
+            '& .MuiToggleButton-root': { color: D.muted, borderColor: D.line, textTransform: 'none', fontWeight: 700, fontSize: 12.5, px: 1.75, py: 0.4 },
+            '& .Mui-selected': { color: `${D.green} !important`, bgcolor: 'rgba(74,222,128,0.12) !important' },
+          }}
         >
-          <MenuItem value="">All categories</MenuItem>
-          {TRIAGE_CATEGORIES.map((c) => <MenuItem key={c} value={c}>{triageCategoryMeta(c).label}</MenuItem>)}
-        </TextField>
-        <TextField
-          select value={status} onChange={(e) => setStatus(e.target.value)} size="small"
-          sx={{ ...dropInput, minWidth: 140 }} SelectProps={{ displayEmpty: true }}
-        >
-          <MenuItem value="">All statuses</MenuItem>
-          {TRIAGE_STATUSES.map((s) => <MenuItem key={s} value={s}>{triageStatusMeta(s).label}</MenuItem>)}
-        </TextField>
-        <Button
-          onClick={onToggleIgnored} size="small"
-          sx={{ ...dropGhostBtn, color: showIgnored ? D.green : D.muted }}
-        >
-          {showIgnored ? 'Hide bounces/auto' : 'Show bounces/auto'}
-        </Button>
+          <ToggleButton value="worklist">Worklist</ToggleButton>
+          <ToggleButton value="all">All replies</ToggleButton>
+        </ToggleButtonGroup>
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Gmail auto-sync isn't wired yet — add replies manually for now">
           <span>
@@ -121,8 +99,53 @@ export default function RepliesView({
         </Button>
       </Stack>
 
-      {/* Table */}
-      {rows.length === 0 ? (
+      {/* Worklist = the Follow-Up Command Center */}
+      {mode === 'worklist' && (
+        <WorklistPanel
+          worklist={worklist} loading={worklistLoading}
+          onSetStatus={onSetStatus} onOpenCompany={onOpenCompany} onError={onError}
+        />
+      )}
+
+      {/* All replies = the full triage inbox */}
+      {mode === 'all' && (loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: D.green }} /></Box>
+      ) : (
+        <Stack spacing={2}>
+          {/* Summary strip */}
+          <Stack direction="row" spacing={1.25}>
+            <StatPill value={counts.unhandled} label="New" tone={counts.unhandled > 0 ? D.amber : D.muted} />
+            <StatPill value={counts.hot} label="Buying signals" tone={counts.hot > 0 ? D.green : D.muted} />
+            <StatPill value={counts.matched} label="Matched" tone={D.text} />
+            <StatPill value={counts.total} label="Replies" tone={D.text} />
+          </Stack>
+
+          {/* Filters */}
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <TextField
+              select value={cat} onChange={(e) => setCat(e.target.value)} size="small"
+              sx={{ ...dropInput, minWidth: 150 }} SelectProps={{ displayEmpty: true }}
+            >
+              <MenuItem value="">All categories</MenuItem>
+              {TRIAGE_CATEGORIES.map((c) => <MenuItem key={c} value={c}>{triageCategoryMeta(c).label}</MenuItem>)}
+            </TextField>
+            <TextField
+              select value={status} onChange={(e) => setStatus(e.target.value)} size="small"
+              sx={{ ...dropInput, minWidth: 140 }} SelectProps={{ displayEmpty: true }}
+            >
+              <MenuItem value="">All statuses</MenuItem>
+              {TRIAGE_STATUSES.map((s) => <MenuItem key={s} value={s}>{triageStatusMeta(s).label}</MenuItem>)}
+            </TextField>
+            <Button
+              onClick={onToggleIgnored} size="small"
+              sx={{ ...dropGhostBtn, color: showIgnored ? D.green : D.muted }}
+            >
+              {showIgnored ? 'Hide bounces/auto' : 'Show bounces/auto'}
+            </Button>
+          </Stack>
+
+          {/* Table */}
+          {rows.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 7, border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.panel }}>
           <MarkEmailUnreadOutlinedIcon sx={{ fontSize: 34, color: D.faint }} />
           <Typography sx={{ color: D.muted, fontWeight: 700, mt: 1 }}>No replies here yet</Typography>
@@ -195,7 +218,9 @@ export default function RepliesView({
             </TableBody>
           </Table>
         </Box>
-      )}
+          )}
+        </Stack>
+      ))}
 
       {/* Row action menu */}
       <Menu

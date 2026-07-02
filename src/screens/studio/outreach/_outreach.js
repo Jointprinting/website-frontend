@@ -67,6 +67,16 @@ export const TRIAGE_STATUS_META = {
 };
 export const triageStatusMeta = (s) => TRIAGE_STATUS_META[s] || TRIAGE_STATUS_META.new;
 
+// The Follow-Up Command Center buckets (order = priority top-to-bottom). Mirrors
+// the buckets GET /api/triage/worklist returns.
+export const WORKLIST_BUCKETS = [
+  { key: 'needsResponse',    label: 'Needs a response',              hint: 'New buyer replies to answer — buying signals first',    tone: '#60a5fa' },
+  { key: 'quoteRequested',   label: 'Quote requested',              hint: 'They asked about pricing — send a quote',                tone: '#a78bfa' },
+  { key: 'mockupRequested',  label: 'Mockup requested',             hint: 'They asked to see a mockup / proof',                     tone: '#2dd4bf' },
+  { key: 'followUp',         label: 'Follow up',                    hint: 'You flagged these to circle back on',                    tone: '#fbbf24' },
+  { key: 'untriagedReplied', label: 'Marked replied — not triaged', hint: 'You marked these replied but haven’t triaged the reply',  tone: '#4ade80' },
+];
+
 // The status actions offered on a reply row (menu label + the status it sets), in
 // workflow order. 'do_not_contact' also flips the matched company's doNotEmail and
 // stops its active sequences on the backend (the existing unsubscribe/bounce path).

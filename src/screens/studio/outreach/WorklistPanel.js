@@ -1,0 +1,155 @@
+// src/screens/studio/outreach/WorklistPanel.js
+// Follow-Up Command Center (Release 2) — the action worklist inside the Replies
+// tab. It turns triaged replies into a "what needs doing now" list grouped into
+// buckets (needs a response / quote requested / mockup requested / follow up),
+// plus a bridge bucket of leads you marked replied but haven't triaged yet. Each
+// card jumps to the CRM company and offers the same one-click triage actions.
+// Presentational — OutreachTab owns data + transport.
+
+import * as React from 'react';
+import {
+  Box, Stack, Button, IconButton, Menu, MenuItem, Divider, Typography, CircularProgress, Chip,
+} from '@mui/material';
+import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
+import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
+import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import { D, mono, fmtDate } from '../_shared';
+import { StatusChip, StatPill, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTIONS } from './_outreach';
+
+export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCompany, onError }) {
+  const [menu, setMenu] = React.useState(null); // { anchor, row }
+  const closeMenu = () => setMenu(null);
+
+  const pickStatus = async (row, next) => {
+    closeMenu();
+    try { await onSetStatus(row._id, next); } catch (e) { onError?.(e.response?.data?.message || 'Could not update the reply'); }
+  };
+
+  if (loading) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: D.green }} /></Box>;
+  }
+
+  const counts = worklist?.counts || {};
+  const total = counts.total || 0;
+
+  if (!total) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 8, border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.panel }}>
+        <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 40, color: D.green }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, mt: 1 }}>You’re all caught up</Typography>
+        <Typography sx={{ color: D.faint, fontSize: 12.5, mt: 0.5 }}>
+          No replies are waiting on a next step. New replies land here as they’re triaged.
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Stack spacing={2}>
+      {/* Bucket counts */}
+      <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+        {WORKLIST_BUCKETS.map((b) => (
+          <StatPill key={b.key} value={counts[b.key] || 0} label={b.label} tone={(counts[b.key] || 0) > 0 ? b.tone : D.muted} />
+        ))}
+      </Stack>
+
+      {WORKLIST_BUCKETS.map((b) => {
+        const items = (worklist[b.key] || []);
+        if (!items.length) return null;
+        const bridge = b.key === 'untriagedReplied';
+        return (
+          <Box key={b.key}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: b.tone }} />
+              <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 }}>
+                {b.label}
+              </Typography>
+              <Chip label={items.length} size="small" sx={{ height: 18, fontSize: 10.5, fontWeight: 800, bgcolor: `${b.tone}22`, color: b.tone }} />
+            </Stack>
+            <Typography sx={{ color: D.faint, fontSize: 11.5, mb: 1 }}>{b.hint}</Typography>
+
+            <Stack spacing={0.75}>
+              {items.map((r) => {
+                const canOpen = r.matched && r.companyKey;
+                return (
+                  <Stack
+                    key={r._id} direction="row" spacing={1} alignItems="flex-start"
+                    sx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: D.panel, border: `1px solid ${D.line}`,
+                      '&:hover': { borderColor: D.lineHi } }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Typography
+                          onClick={canOpen ? () => onOpenCompany(r.companyKey) : undefined}
+                          sx={{ fontSize: 13, fontWeight: 700, color: canOpen ? D.green : D.text,
+                            cursor: canOpen ? 'pointer' : 'default', '&:hover': canOpen ? { textDecoration: 'underline' } : {} }}
+                        >
+                          {r.companyName || r.fromEmail || 'Unknown company'}
+                          {canOpen && <OpenInNewOutlinedIcon sx={{ fontSize: 12, ml: 0.4, verticalAlign: '-2px' }} />}
+                        </Typography>
+                        {!bridge && r.category && <StatusChip meta={triageCategoryMeta(r.category)} />}
+                      </Stack>
+                      {bridge ? (
+                        <Typography sx={{ fontSize: 11.5, color: D.muted, mt: 0.3 }}>
+                          Marked replied {r.repliedAt ? fmtDate(r.repliedAt) : ''} — no triaged reply yet. Open the company, then log the reply.
+                        </Typography>
+                      ) : (
+                        <>
+                          {r.subject && <Typography sx={{ fontSize: 12, color: D.text, mt: 0.3, fontWeight: 600 }}>{r.subject}</Typography>}
+                          {r.snippet && (
+                            <Typography sx={{ fontSize: 11.5, color: D.muted, mt: 0.2,
+                              display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {r.snippet}
+                            </Typography>
+                          )}
+                          {r.suggestedAction && (
+                            <Typography sx={{ fontSize: 11, color: b.tone, mt: 0.3, fontWeight: 700 }}>→ {r.suggestedAction}</Typography>
+                          )}
+                        </>
+                      )}
+                    </Box>
+                    {bridge ? (
+                      canOpen && (
+                        <Button size="small" onClick={() => onOpenCompany(r.companyKey)}
+                          sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none', '&:hover': { color: D.green } }}>
+                          Open in CRM
+                        </Button>
+                      )
+                    ) : (
+                      <IconButton size="small" onClick={(e) => setMenu({ anchor: e.currentTarget, row: r })}
+                        sx={{ color: D.muted, '&:hover': { color: D.green } }}>
+                        <MoreVertOutlinedIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    )}
+                  </Stack>
+                );
+              })}
+            </Stack>
+          </Box>
+        );
+      })}
+
+      <Menu
+        anchorEl={menu?.anchor} open={!!menu} onClose={closeMenu}
+        PaperProps={{ sx: { bgcolor: D.panelHi, border: `1px solid ${D.line}`, color: D.text, minWidth: 190 } }}
+      >
+        {menu?.row?.matched && menu?.row?.companyKey && [
+          <MenuItem key="crm" onClick={() => { const k = menu.row.companyKey; closeMenu(); onOpenCompany(k); }}
+            sx={{ fontSize: 13, fontWeight: 700, color: D.green }}>
+            <OpenInNewOutlinedIcon sx={{ fontSize: 16, mr: 1 }} /> Open in CRM
+          </MenuItem>,
+          <Divider key="div" sx={{ borderColor: D.line }} />,
+        ]}
+        {TRIAGE_ACTIONS.map((a) => (
+          <MenuItem
+            key={a.status} onClick={() => pickStatus(menu.row, a.status)}
+            disabled={menu?.row?.status === a.status}
+            sx={{ fontSize: 13, color: a.status === 'do_not_contact' ? '#f87171' : D.text }}
+          >
+            {a.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </Stack>
+  );
+}

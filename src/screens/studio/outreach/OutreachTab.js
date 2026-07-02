@@ -61,6 +61,8 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
   const [replies, setReplies] = React.useState([]);
   const [repliesLoading, setRepliesLoading] = React.useState(true);
   const [showIgnored, setShowIgnored] = React.useState(false);
+  const [worklist, setWorklist] = React.useState(null);
+  const [worklistLoading, setWorklistLoading] = React.useState(true);
 
   const [snack, setSnack] = React.useState(null); // { msg, severity }
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
@@ -114,10 +116,22 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
     }
   }, [authHdr, showIgnored]);
 
+  const loadWorklist = React.useCallback(async () => {
+    setWorklistLoading(true);
+    try {
+      const { data } = await axios.get(`${triageBase}/worklist`, authHdr);
+      setWorklist(data);
+    } catch (e) {
+      flash(e.response?.data?.message || 'Could not load the follow-up worklist', 'error');
+    } finally {
+      setWorklistLoading(false);
+    }
+  }, [authHdr]);
+
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
   React.useEffect(() => { if (view === 'queue') loadQueue(); }, [view, loadQueue]);
   React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
-  React.useEffect(() => { if (view === 'replies') loadReplies(); }, [view, loadReplies]);
+  React.useEffect(() => { if (view === 'replies') { loadReplies(); loadWorklist(); } }, [view, loadReplies, loadWorklist]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
   const createCampaign = async (payload) => {
@@ -201,25 +215,27 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
   };
 
   // ── Reply triage actions ──────────────────────────────────────────────────
+  const refreshTriage = () => Promise.all([loadReplies(), loadWorklist()]);
+
   const setReplyStatus = async (id, status) => {
     const { data } = await axios.patch(`${triageBase}/replies/${id}`, { status }, authHdr);
     flash('Reply updated.');
     if (data.sideEffectWarning) flash(`Updated, but the linked-company change hit a snag: ${data.sideEffectWarning}`, 'warning');
-    await loadReplies();
+    await refreshTriage();
   };
 
   const addReply = async (payload) => {
     const { data } = await axios.post(`${triageBase}/replies`, payload, authHdr);
     if (data.added) flash(`Reply added — ${data.replies?.[0]?.matched ? 'matched to a company.' : 'unmatched (still shown).'}`);
     else flash('Looked like a bounce/auto-reply or your own mail — nothing added.', 'warning');
-    await loadReplies();
+    await refreshTriage();
     return data;
   };
 
   const syncGmail = async () => {
     const { data } = await axios.post(`${triageBase}/sync`, {}, authHdr);
     flash(data.message || 'Sync complete.', data.configured ? 'success' : 'warning');
-    if (data.imported) await loadReplies();
+    if (data.imported) await refreshTriage();
     return data;
   };
 
@@ -265,6 +281,7 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
         return (
           <RepliesView
             replies={replies} loading={repliesLoading}
+            worklist={worklist} worklistLoading={worklistLoading}
             showIgnored={showIgnored} onToggleIgnored={toggleIgnored}
             onSetStatus={setReplyStatus}
             onAddReply={addReply}
