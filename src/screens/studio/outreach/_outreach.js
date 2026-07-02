@@ -31,6 +31,55 @@ export const ENROLLMENT_STATUS_META = {
 export const enrollmentStatusMeta = (s) =>
   ENROLLMENT_STATUS_META[s] || { label: s || '—', color: D.muted, bg: 'rgba(255,255,255,0.06)' };
 
+// ── Reply-triage vocabulary ───────────────────────────────────────────────────
+// Mirrors services/replyTriage.js CATEGORIES / STATUSES (the backend is the source
+// of truth for classification) — keep in sync.
+export const TRIAGE_CATEGORIES = [
+  'hot_lead', 'needs_response', 'asked_pricing', 'asked_mockups',
+  'follow_up_later', 'not_interested', 'wrong_person', 'unsubscribe', 'bounce_auto_ignore',
+];
+export const TRIAGE_CATEGORY_META = {
+  hot_lead:           { label: 'Hot lead',        color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
+  asked_pricing:      { label: 'Asked pricing',   color: '#4ade80', bg: 'rgba(74,222,128,0.14)' },
+  asked_mockups:      { label: 'Asked mockups',   color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
+  needs_response:     { label: 'Needs response',  color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+  follow_up_later:    { label: 'Follow up later', color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  wrong_person:       { label: 'Wrong person',    color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
+  not_interested:     { label: 'Not interested',  color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+  unsubscribe:        { label: 'Unsubscribe',     color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
+  bounce_auto_ignore: { label: 'Bounce / auto',   color: '#6b7280', bg: 'rgba(107,114,128,0.16)' },
+};
+export const triageCategoryMeta = (c) => TRIAGE_CATEGORY_META[c] || TRIAGE_CATEGORY_META.needs_response;
+
+// Mirrors services/replyTriage.js STATUSES — keep in sync.
+export const TRIAGE_STATUSES = [
+  'new', 'handled', 'follow_up', 'mockup_requested', 'quote_requested', 'not_interested', 'do_not_contact', 'ignored',
+];
+export const TRIAGE_STATUS_META = {
+  new:              { label: 'New',            color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+  handled:          { label: 'Handled',        color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
+  follow_up:        { label: 'Follow-up',      color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  mockup_requested: { label: 'Mockup req.',    color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
+  quote_requested:  { label: 'Quote req.',     color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
+  not_interested:   { label: 'Not interested', color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+  do_not_contact:   { label: 'Do not contact', color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
+  ignored:          { label: 'Ignored',        color: '#6b7280', bg: 'rgba(107,114,128,0.16)' },
+};
+export const triageStatusMeta = (s) => TRIAGE_STATUS_META[s] || TRIAGE_STATUS_META.new;
+
+// The status actions offered on a reply row (menu label + the status it sets), in
+// workflow order. 'do_not_contact' also flips the matched company's doNotEmail and
+// stops its active sequences on the backend (the existing unsubscribe/bounce path).
+export const TRIAGE_ACTIONS = [
+  { status: 'handled',          label: 'Mark handled' },
+  { status: 'follow_up',        label: 'Follow-up needed' },
+  { status: 'mockup_requested', label: 'Mockup requested' },
+  { status: 'quote_requested',  label: 'Quote requested' },
+  { status: 'not_interested',   label: 'Not interested' },
+  { status: 'do_not_contact',   label: 'Do not contact' },
+  { status: 'ignored',          label: 'Ignore' },
+];
+
 // ── Merge fields ──────────────────────────────────────────────────────────────
 // Mirrors buildMergeContext in services/outreachEngine.js — keep in sync.
 // Templates support {{field}} and {{field|fallback}} (fallback used when the
