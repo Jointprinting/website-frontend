@@ -63,44 +63,54 @@ export const SAMPLE_CONTEXT = {
   city: 'Trenton',
 };
 
-// A ready-to-edit starter sequence for the dispensary pitch — short (cold email
-// converts best under ~80 words), personal, one clear ask, with a clean exit.
+// The approved 3-touch dispensary sequence — evergreen (no seasonal hook),
+// persuasive, and built around the ONE ask that lets Nate quote/mockup: product
+// + quantity + design. Short on purpose (cold email converts best well under
+// ~120 words). Stops automatically if they reply; touch 3 is a clean exit.
 export const DEFAULT_SEQUENCE = [
   {
     offsetDays: 0,
-    subject: 'merch for {{companyName}}',
+    subject: 'custom merch for {{companyName}}',
     body: `Hey {{firstName|there}},
 
-I run Joint Printing — we do custom merch and apparel for dispensaries (tees, hoodies, hats, brand-matched gear your budtenders will actually wear).
+I run Joint Printing — we make custom apparel and promo merch for dispensaries: staff tees and hoodies, branded hats, and the counter stuff that moves (lighters, grinders, totes, stickers).
 
-I'd love to put together a couple of free mockups with {{companyName}}'s branding so you can see it on real product. Want me to send them over? No charge, no strings.
+Here's why I'm reaching out: I'll design free mockups with {{companyName}}'s branding so you can see real product before spending a dollar. Shops use them for staff uniforms or a customer drop.
 
-— Nate
-Joint Printing · jointprinting.com`,
+If you're open to it, just reply with:
+1. What you're thinking (tees, hoodies, hats, promo items…)
+2. A rough quantity (we start at 50 per design)
+3. Any logo or art you'd want to see on it
+
+I'll get our artists on the mockups this week — clear pricing up front, always.
+
+— Nate, Joint Printing
+jointprinting.com`,
   },
   {
-    offsetDays: 4,
-    subject: 'mockups for {{companyName}}?',
+    offsetDays: 3,
+    subject: 'free mockups for {{companyName}}?',
     body: `Hey {{firstName|there}},
 
-Floating this back up — I can have free mockups of {{companyName}} gear in your inbox this week. Worst case, you get some ideas for later.
+Circling back — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
 
-Any interest?
+Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started. Worst case, you walk away with a few ideas for later.
 
-— Nate
-Joint Printing · jointprinting.com`,
+What would you want to see first?
+
+— Nate, Joint Printing`,
   },
   {
-    offsetDays: 6,
-    subject: 'last one from me',
+    offsetDays: 7,
+    subject: 'should I close this out?',
     body: `Hey {{firstName|there}},
 
-I'll stop here so I'm not clogging your inbox. If merch ever makes it onto the list for {{companyName}}, I'm around — and the mockups are always free.
+I don't want to crowd your inbox, so this is my last note. If branded merch ever lands on the list for {{companyName}} — staff apparel, a customer drop, event giveaways — I'm your guy, and the mockups are always free.
 
-Good luck with everything in {{city|your area}}!
+Reply anytime and I'll pick it right back up. Good luck out in {{city|your area}}.
 
-— Nate
-Joint Printing · jointprinting.com`,
+— Nate, Joint Printing
+jointprinting.com`,
   },
 ];
 

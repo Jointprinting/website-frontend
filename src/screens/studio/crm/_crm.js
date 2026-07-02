@@ -196,6 +196,10 @@ export const TEMP_META = {
   won:           { label: 'Won',          color: '#4ade80', dot: '#4ade80' },
   'meta-ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
   'meta ad':     { label: 'Meta ad',      color: '#818cf8', dot: '#818cf8' },
+  // Stamped on every company enrolled in a cold-email campaign (Outreach tool),
+  // so a reply — which also earns 'warm' — is unmistakably traceable to the merge.
+  'cold-email':  { label: 'Cold email',   color: '#38bdf8', dot: '#38bdf8' },
+  'cold email':  { label: 'Cold email',   color: '#38bdf8', dot: '#38bdf8' },
 };
 export const tempMeta = (t) => TEMP_META[String(t || '').toLowerCase().trim()] || null;
 
