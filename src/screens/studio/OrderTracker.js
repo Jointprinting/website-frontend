@@ -1684,8 +1684,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         </Box>
         <Box sx={{ flex: 1 }} />
         {(() => {
-          const total = Number(local.totalValue) || 0;
-          const estCogs = Number(local.cogs) || 0;
+          // SAME source as the Total/Est-COGS fields below: once a confirmation
+          // exists it is the truth for revenue + estimated COGS — the stored
+          // totalValue/cogs can lag it (a stale cogs here once showed a -215%
+          // margin while the visible Est COGS read $0.00).
+          const hasConf = hasConfirmation(local.confirmation);
+          const total = hasConf ? confRevenue(local.confirmation) : (Number(local.totalValue) || 0);
+          const estCogs = hasConf ? confCogs(local.confirmation) : (Number(local.cogs) || 0);
           // The receipts are the source of truth: when any COGS receipt is linked,
           // the margin headline uses the ACTUAL cost; otherwise it falls back to
           // the estimate (and we flag that no receipts are in yet). hasActual gates
