@@ -64,6 +64,15 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const [worklist, setWorklist] = React.useState(null);
   const [worklistLoading, setWorklistLoading] = React.useState(true);
 
+  // Find-leads state lives HERE, not inside ImportView, so an in-flight scan and
+  // its results survive switching tabs and back — a sweep can take a minute+, and
+  // it used to vanish (and lose the result) the moment you clicked away.
+  const [importRegion, setImportRegion] = React.useState('nj');
+  const [importBusy, setImportBusy] = React.useState(false);
+  const [importResult, setImportResult] = React.useState(null);
+  const [importFrontier, setImportFrontier] = React.useState(null);
+  const [importAutoBusy, setImportAutoBusy] = React.useState(false);
+
   const [snack, setSnack] = React.useState(null); // { msg, severity }
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
 
@@ -149,6 +158,21 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data.campaign;
   };
 
+  // One-click go: activate + kick a send tick immediately, so touch 1 leaves now
+  // (in-window) and the follow-ups drip on their own. The response tells us what
+  // actually happened so the toast is honest instead of a hopeful "done".
+  const launchCampaign = async (id) => {
+    const { data } = await axios.post(`${base}/campaigns/${id}/launch`, {}, authHdr);
+    const t = data.tick || {};
+    if (t.sent > 0) flash(`Launched — ${t.sent} email${t.sent === 1 ? '' : 's'} going out now. The rest drip automatically.`);
+    else if (t.skipped === 'outside-window') flash('Launched & active — sends begin in the window (Mon–Fri 9a–5p ET).');
+    else if (t.skipped === 'daily-cap') flash("Launched — today's warm-up cap is used up; more goes out tomorrow.");
+    else if (t.sent === 0 && t.skipped) flash('Launched & active — no emails were due to send this minute; the engine will send as they come due.');
+    else flash('Launched — the engine will start sending due emails.');
+    await loadOverview();
+    return data;
+  };
+
   const fetchCandidates = async (params) => {
     const { data } = await axios.get(`${base}/candidates`, { ...authHdr, params });
     return data.candidates || [];
@@ -191,26 +215,45 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   };
 
   // ── Free auto-finder (OSM dispensary discovery → email scrape → import) ───
-  const findLeads = async (region, { dryRun }) => {
-    const { data } = await axios.post(`${base}/find-leads`, { region, dryRun }, authHdr);
-    if (!dryRun) {
+  // All finder state is owned here so it survives tab switches (see the import*
+  // state above). runImport drives the scan; its result lands in importResult
+  // even if the user has navigated to another sub-tab while it ran.
+  const loadFinderStatus = React.useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
+      setImportFrontier(data.frontier || null);
+    } catch { /* the panel still works without status */ }
+  }, [authHdr]);
+
+  React.useEffect(() => { loadFinderStatus(); }, [loadFinderStatus]);
+
+  const runImport = async () => {
+    setImportBusy(true);
+    try {
+      const { data } = await axios.post(`${base}/find-leads`, { region: importRegion, dryRun: false }, authHdr);
+      setImportResult(data);
       flash(`${data.label}: found ${data.found}, ${data.withEmail} with email — ${data.created} new lead${data.created === 1 ? '' : 's'} imported.`);
-      await loadOverview();
+      await Promise.all([loadOverview(), loadFinderStatus()]);
+    } catch (e) {
+      flash(e.response?.data?.message || 'Lead finder failed — the discovery service may be busy, try again.', 'error');
+    } finally {
+      setImportBusy(false);
     }
-    return data;
   };
 
-  const fetchFinderStatus = async () => {
-    const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
-    return data;
-  };
-
-  const setAutoAdvance = async (enabled) => {
-    const { data } = await axios.post(`${base}/find-leads/auto`, { enabled }, authHdr);
-    flash(enabled
-      ? 'Auto-pilot on — it works one state at a time, weekly, and moves on when a state runs dry.'
-      : 'Auto-pilot off.');
-    return data;
+  const toggleImportAuto = async (enabled) => {
+    setImportAutoBusy(true);
+    try {
+      const { data } = await axios.post(`${base}/find-leads/auto`, { enabled }, authHdr);
+      setImportFrontier(data.frontier || null);
+      flash(enabled
+        ? 'Auto-pilot on — it refills the lead pool across states as you send, so you never run dry.'
+        : 'Auto-pilot off.');
+    } catch (e) {
+      flash(e.response?.data?.message || 'Could not update the auto-pilot.', 'error');
+    } finally {
+      setImportAutoBusy(false);
+    }
   };
 
   // ── Reply triage actions ──────────────────────────────────────────────────
@@ -277,6 +320,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             overview={overview} loading={overviewLoading}
             onCreate={createCampaign}
             onUpdate={updateCampaign}
+            onLaunch={launchCampaign}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
@@ -298,10 +342,10 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
       case 'import':
         return (
           <ImportView
-            onFindLeads={findLeads}
-            onFetchFinderStatus={fetchFinderStatus}
-            onSetAutoAdvance={setAutoAdvance}
-            onError={(m) => flash(m, 'error')}
+            region={importRegion} onRegion={setImportRegion}
+            busy={importBusy} result={importResult}
+            frontier={importFrontier} autoBusy={importAutoBusy}
+            onRun={runImport} onToggleAuto={toggleImportAuto}
             onGoCampaigns={() => setView('campaigns')}
           />
         );
