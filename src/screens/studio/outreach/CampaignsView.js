@@ -12,6 +12,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
+import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -294,7 +295,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, onCreate, onUpdate, onLaunch, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, onCreate, onUpdate, onLaunch, onUnenrollAll, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
 
@@ -363,6 +364,19 @@ export default function CampaignsView({ overview, loading, onCreate, onUpdate, o
                         Enroll
                       </Button>
                     </Tooltip>
+                    {onUnenrollAll && c.stats.enrolled > 0 && (
+                      <Tooltip title="Remove everyone from this campaign so you can re-enroll fresh leads (keeps anyone already emailed)">
+                        <Button
+                          onClick={() => {
+                            // eslint-disable-next-line no-alert
+                            if (window.confirm(`Unenroll all ${c.stats.enrolled} from "${c.name}"? Anyone already emailed is kept.`)) onUnenrollAll(c._id);
+                          }}
+                          startIcon={<PersonRemoveOutlinedIcon sx={{ fontSize: 16 }} />}
+                          sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
+                          Unenroll all
+                        </Button>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Edit the sequence">
                       <Button onClick={() => setEditor({ campaign: c })} startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
                         sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12 }}>

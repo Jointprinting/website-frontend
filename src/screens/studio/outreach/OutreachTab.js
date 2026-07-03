@@ -71,6 +71,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const [importBusy, setImportBusy] = React.useState(false);
   const [importResult, setImportResult] = React.useState(null);
   const [importFrontier, setImportFrontier] = React.useState(null);
+  const [importRegions, setImportRegions] = React.useState([]); // per-region swept status
   const [importAutoBusy, setImportAutoBusy] = React.useState(false);
 
   const [snack, setSnack] = React.useState(null); // { msg, severity }
@@ -173,6 +174,15 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
+  // Clear a campaign's whole roster so it can be re-enrolled fresh (e.g. after
+  // enrolling leads that had no email). Keeps anyone already emailed.
+  const unenrollAll = async (campaignId) => {
+    const { data } = await axios.post(`${base}/campaigns/${campaignId}/unenroll-all`, {}, authHdr);
+    flash(`Unenrolled ${data.removed} compan${data.removed === 1 ? 'y' : 'ies'}${data.keptSent ? ' (kept any already emailed)' : ''}.`);
+    await loadOverview();
+    return data;
+  };
+
   const fetchCandidates = async (params) => {
     const { data } = await axios.get(`${base}/candidates`, { ...authHdr, params });
     return data.candidates || [];
@@ -222,6 +232,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     try {
       const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
       setImportFrontier(data.frontier || null);
+      setImportRegions(data.regions || []);
     } catch { /* the panel still works without status */ }
   }, [authHdr]);
 
@@ -321,6 +332,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onCreate={createCampaign}
             onUpdate={updateCampaign}
             onLaunch={launchCampaign}
+            onUnenrollAll={unenrollAll}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
@@ -344,7 +356,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
           <ImportView
             region={importRegion} onRegion={setImportRegion}
             busy={importBusy} result={importResult}
-            frontier={importFrontier} autoBusy={importAutoBusy}
+            frontier={importFrontier} regions={importRegions} autoBusy={importAutoBusy}
             onRun={runImport} onToggleAuto={toggleImportAuto}
             onGoCampaigns={() => setView('campaigns')}
           />
