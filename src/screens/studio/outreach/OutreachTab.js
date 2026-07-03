@@ -183,6 +183,20 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
+  // Auto-enroll: keep the chosen active campaign topped up from the cold-lead
+  // reserve automatically (only one campaign at a time; enabling fills once now).
+  const setAutoEnroll = async (campaignId, enabled) => {
+    const { data } = await axios.post(`${base}/campaigns/${campaignId}/auto-enroll`, { enabled }, authHdr);
+    if (enabled) {
+      const n = (data.filled && data.filled.enrolled) || 0;
+      flash(`Auto-enroll on — new leads flow into this campaign automatically${n ? ` (${n} enrolled now)` : ''}.`);
+    } else {
+      flash('Auto-enroll off — you’ll enroll leads manually.');
+    }
+    await loadOverview();
+    return data;
+  };
+
   const fetchCandidates = async (params) => {
     const { data } = await axios.get(`${base}/candidates`, { ...authHdr, params });
     return data.candidates || [];
@@ -329,10 +343,12 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
         return (
           <CampaignsView
             overview={overview} loading={overviewLoading}
+            autoEnrollCampaignId={overview.autoEnrollCampaignId || null}
             onCreate={createCampaign}
             onUpdate={updateCampaign}
             onLaunch={launchCampaign}
             onUnenrollAll={unenrollAll}
+            onAutoEnroll={setAutoEnroll}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
