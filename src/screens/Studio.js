@@ -62,7 +62,6 @@ import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
-import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND } from './studio/_shared';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
@@ -1807,39 +1806,6 @@ const TIER_COLS = {
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
 };
 
-// Future-phase placeholder. Intentionally inert — a calm, labeled slot on the
-// hub reserved for smart alerts. No data, no logic; just reserves the space
-// and signals intent so the layout doesn't jump when alerts land later.
-function AlertsPlaceholder() {
-  return (
-    <Box sx={{
-      borderRadius: 3, p: { xs: 2, sm: 2.25 },
-      border: `1px dashed ${D.line}`, bgcolor: D.inset,
-      display: 'flex', alignItems: 'center', gap: 1.75,
-    }}>
-      <Box sx={{
-        width: 38, height: 38, borderRadius: 2, flexShrink: 0,
-        bgcolor: 'rgba(255,255,255,0.04)', color: D.faint,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <NotificationsNoneOutlinedIcon sx={{ fontSize: 20 }} />
-      </Box>
-      <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-        <MuiTypography sx={{ color: D.muted, fontWeight: 700, fontSize: 13, lineHeight: 1.25 }}>
-          Alerts
-        </MuiTypography>
-        <MuiTypography sx={{ color: D.faint, fontSize: 11.5, lineHeight: 1.35 }}>
-          Smart notifications will surface here. Nothing needs your attention right now.
-        </MuiTypography>
-      </Box>
-      <Chip label="Coming soon" size="small" sx={{
-        bgcolor: 'rgba(255,255,255,0.05)', color: D.faint, fontWeight: 700,
-        fontSize: 10, height: 20, border: `1px solid ${D.line}`, flexShrink: 0,
-      }} />
-    </Box>
-  );
-}
-
 // The live command-center panel: clickable rows for what needs attention, ordered
 // by urgency. Order rows (aging past the owner's 2–3 week turnaround) expand to list
 // the at-risk orders, each deep-linking to its project; follow-up rows jump to the
@@ -1892,10 +1858,14 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
     onDismiss: dismiss(K_HDD_REMINDER, setHddDismissedAt),
   });
 
-  if (!rows.length) return <AlertsPlaceholder />;
+  // Nothing needs attention → render nothing (the whole Signals section, header
+  // included, disappears — no dead "coming soon" placeholder cluttering the hub).
+  if (!rows.length) return null;
 
   return (
-    <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
+    <Box>
+      <SectionHeader brand="Signals" tagline="What needs your attention" />
+      <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
       {rows.map((r, i) => {
         const expandable = !!r.flag;
         const expanded = !!open[r.key];
@@ -1939,6 +1909,7 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
           </Box>
         );
       })}
+      </Box>
     </Box>
   );
 }
@@ -1956,11 +1927,9 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
   return (
     <Stack spacing={3.5}>
-      {/* Command center — what needs attention, on arrival (above the launcher). */}
-      <Box>
-        <SectionHeader brand="Signals" tagline="What needs your attention" />
-        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} />
-      </Box>
+      {/* Command center — what needs attention, on arrival. Hidden entirely (header
+          and all) when nothing needs attention — no dead placeholder. */}
+      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} />
 
       {live.map((group) => (
         <Box key={group.brand}>

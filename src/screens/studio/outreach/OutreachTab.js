@@ -19,9 +19,7 @@ import {
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
-import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
-import QueryStatsOutlinedIcon from '@mui/icons-material/QueryStatsOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
@@ -35,19 +33,19 @@ import RepliesView from './RepliesView';
 const base = `${config.backendUrl}/api/outreach`;
 const triageBase = `${config.backendUrl}/api/triage`;
 
+// Four tabs: the engine dashboard (overview + send queue + analytics stacked),
+// campaigns, the reply command center, and lead finding.
 const NAV = [
-  { id: 'overview',  label: 'Overview',     Icon: SpaceDashboardOutlinedIcon },
-  { id: 'campaigns', label: 'Campaigns',    Icon: ForwardToInboxOutlinedIcon },
-  { id: 'queue',     label: 'Queue',        Icon: ScheduleOutlinedIcon },
-  { id: 'replies',   label: 'Replies',      Icon: MarkEmailUnreadOutlinedIcon },
-  { id: 'import',    label: 'Find leads',   Icon: TravelExploreOutlinedIcon },
-  { id: 'analytics', label: 'Analytics',    Icon: QueryStatsOutlinedIcon },
+  { id: 'dashboard', label: 'Dashboard',  Icon: SpaceDashboardOutlinedIcon },
+  { id: 'campaigns', label: 'Campaigns',  Icon: ForwardToInboxOutlinedIcon },
+  { id: 'replies',   label: 'Replies',    Icon: MarkEmailUnreadOutlinedIcon },
+  { id: 'import',    label: 'Find leads', Icon: TravelExploreOutlinedIcon },
 ];
 
 export default function OutreachTab({ token, onBack, onNavigate }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
-  const [view, setView] = React.useState('overview');
+  const [view, setView] = React.useState('dashboard');
 
   const [overview, setOverview] = React.useState(null);
   const [overviewLoading, setOverviewLoading] = React.useState(true);
@@ -129,8 +127,7 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
   }, [authHdr]);
 
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
-  React.useEffect(() => { if (view === 'queue') loadQueue(); }, [view, loadQueue]);
-  React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
+  React.useEffect(() => { if (view === 'dashboard') { loadQueue(); loadAnalytics(); } }, [view, loadQueue, loadAnalytics]);
   React.useEffect(() => { if (view === 'replies') { loadReplies(); loadWorklist(); } }, [view, loadReplies, loadWorklist]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
@@ -246,16 +243,31 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
   // ── Render ────────────────────────────────────────────────────────────────
   const renderView = () => {
     switch (view) {
-      case 'overview':
+      case 'dashboard':
         return (
-          <OverviewView
-            overview={overview} loading={overviewLoading}
-            onOpenCompany={openCompany}
-            onMarkReplied={markReplied}
-            onStop={stopEnrollment}
-            onGoCampaigns={() => setView('campaigns')}
-            onGoImport={() => setView('import')}
-          />
+          <Stack spacing={3.5}>
+            <OverviewView
+              overview={overview} loading={overviewLoading}
+              onOpenCompany={openCompany}
+              onMarkReplied={markReplied}
+              onStop={stopEnrollment}
+              onGoCampaigns={() => setView('campaigns')}
+              onGoImport={() => setView('import')}
+            />
+            <Box>
+              <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Send queue</MuiTypography>
+              <QueueView
+                queue={queue} loading={queueLoading} engine={overview?.engine}
+                onRunTick={runTick}
+                onStop={stopEnrollment}
+                onOpenCompany={openCompany}
+              />
+            </Box>
+            <Box>
+              <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Analytics</MuiTypography>
+              <AnalyticsView analytics={analytics} loading={analyticsLoading} />
+            </Box>
+          </Stack>
         );
       case 'campaigns':
         return (
@@ -266,15 +278,6 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
-          />
-        );
-      case 'queue':
-        return (
-          <QueueView
-            queue={queue} loading={queueLoading} engine={overview?.engine}
-            onRunTick={runTick}
-            onStop={stopEnrollment}
-            onOpenCompany={openCompany}
           />
         );
       case 'replies':
@@ -290,8 +293,6 @@ export default function OutreachTab({ token, onBack, onNavigate }) {
             onError={(m) => flash(m, 'error')}
           />
         );
-      case 'analytics':
-        return <AnalyticsView analytics={analytics} loading={analyticsLoading} />;
       case 'import':
         return (
           <ImportView
