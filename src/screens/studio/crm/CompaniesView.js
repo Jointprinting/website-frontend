@@ -39,6 +39,27 @@ import {
   primaryPhone, isWonStage, CRM_SEGMENTS, SEGMENT_META, segmentOf,
 } from './_crm';
 
+// A tiny lead-quality badge (A–D) — how actionable this lead is for cold email +
+// road visits (scored server-side in services/leadScore.js). Hover shows why.
+// Shown on leads/prospects, not existing customers (their lead stage is behind them).
+const GRADE_TONE = { A: D.green, B: D.amber, C: D.muted, D: '#f87171' };
+function LeadGradeChip({ grade, reasons }) {
+  if (!grade) return null;
+  const tone = GRADE_TONE[grade] || D.faint;
+  const title = reasons && reasons.length
+    ? `Lead quality ${grade} — ${reasons.join(', ')}`
+    : `Lead quality ${grade}`;
+  return (
+    <Box
+      component="span" title={title}
+      sx={{ ...mono, fontSize: 11, fontWeight: 800, color: tone, border: `1px solid ${tone}66`,
+        borderRadius: 1, px: 0.6, lineHeight: 1.6, letterSpacing: 0.3, flexShrink: 0 }}
+    >
+      {grade}
+    </Box>
+  );
+}
+
 function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
   const name = c.companyName || c.clientName || c.companyKey;
   const phone = primaryPhone(c);
@@ -69,6 +90,7 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
             {customer && <StarRateRoundedIcon sx={{ fontSize: 16, color: stageMeta('customer').color }} />}
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0 }}>{name}</Typography>
             <StageChip stage={c.stage} glow />
+            {!customer && <LeadGradeChip grade={c.leadGrade} reasons={c.leadReasons} />}
           </Stack>
           <Typography sx={{ color: D.muted, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {[
@@ -157,6 +179,9 @@ export default function CompaniesView({
   // Archived mode runs its own client-side search (the archived set is fetched
   // separately and isn't wired to the live ?q= companies fetch).
   const [localQuery, setLocalQuery] = React.useState('');
+  // "Best leads first" — sort the shown list by the server's lead-quality score
+  // (highest first) so cold email + road visits target the most actionable leads.
+  const [bestFirst, setBestFirst] = React.useState(false);
 
   const archivedFiltered = React.useMemo(() => {
     if (!archived) return clients || [];
@@ -193,7 +218,14 @@ export default function CompaniesView({
     return (clients || []).filter((c) => segmentOf(c) === segment);
   }, [archived, archivedFiltered, clients, segment, stageFilter]);
 
-  const list = segmented;
+  // "Best leads first" re-sorts the shown segment by lead-quality score (desc),
+  // tie-broken by name; off, it keeps the server's A–Z order.
+  const list = React.useMemo(() => {
+    if (!bestFirst) return segmented;
+    return [...segmented].sort((a, b) =>
+      (b.leadScore || 0) - (a.leadScore || 0) ||
+      String(a.companyName || '').localeCompare(String(b.companyName || '')));
+  }, [segmented, bestFirst]);
 
   // ── Archived recover surface ────────────────────────────────────────────────
   if (archived) {
@@ -304,11 +336,25 @@ export default function CompaniesView({
         <SegmentTabs segment={segment} onSegmentChange={onSegmentChange} counts={counts} />
       )}
 
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
-          {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'company' : 'companies'}`}
-        </Typography>
-        <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+          <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono, flexShrink: 0 }}>
+            {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'company' : 'companies'}`}
+          </Typography>
+          <Box
+            component="button" type="button" onClick={() => setBestFirst((v) => !v)}
+            title="Sort by lead quality — most actionable leads (email + address) first"
+            sx={{ cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
+              border: `1px solid ${bestFirst ? D.green : D.line}`, borderRadius: 999,
+              bgcolor: bestFirst ? 'rgba(74,222,128,0.12)' : 'transparent',
+              color: bestFirst ? D.green : D.faint, fontWeight: 800, fontSize: 11.5,
+              px: 1, py: 0.25, display: 'inline-flex', alignItems: 'center', gap: 0.4,
+              '&:hover': { borderColor: bestFirst ? D.green : D.lineHi } }}
+          >
+            <StarRateRoundedIcon sx={{ fontSize: 14 }} /> Best leads first
+          </Box>
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11.5, display: { xs: 'none', sm: 'block' } }}>
           {stageFilter ? `Every ${stageM.label.toLowerCase()}-stage company, all segments` : m.hint}
         </Typography>
       </Stack>
