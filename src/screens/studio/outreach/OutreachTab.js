@@ -36,10 +36,12 @@ const triageBase = `${config.backendUrl}/api/triage`;
 // Four tabs: the engine dashboard (overview + send queue + analytics stacked),
 // campaigns, the reply command center, and lead finding.
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard',  Icon: SpaceDashboardOutlinedIcon },
-  { id: 'campaigns', label: 'Campaigns',  Icon: ForwardToInboxOutlinedIcon },
-  { id: 'replies',   label: 'Replies',    Icon: MarkEmailUnreadOutlinedIcon },
-  { id: 'import',    label: 'Find leads', Icon: TravelExploreOutlinedIcon },
+  { id: 'dashboard', label: 'Dashboard',   Icon: SpaceDashboardOutlinedIcon },
+  { id: 'campaigns', label: 'Campaigns',   Icon: ForwardToInboxOutlinedIcon },
+  { id: 'replies',   label: 'Replies',     Icon: MarkEmailUnreadOutlinedIcon },
+  // Progress readout only — the lead engine runs itself (id stays 'import' so
+  // existing deep links keep working).
+  { id: 'import',    label: 'Lead engine', Icon: TravelExploreOutlinedIcon },
 ];
 
 export default function OutreachTab({ token, onBack, onNavigate, initialView }) {
@@ -64,15 +66,11 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const [worklist, setWorklist] = React.useState(null);
   const [worklistLoading, setWorklistLoading] = React.useState(true);
 
-  // Find-leads state lives HERE, not inside ImportView, so an in-flight scan and
-  // its results survive switching tabs and back — a sweep can take a minute+, and
-  // it used to vanish (and lose the result) the moment you clicked away.
-  const [importRegion, setImportRegion] = React.useState('nj');
+  // Lead-engine state lives HERE, not inside ImportView, so an in-flight sweep
+  // survives switching tabs and back — a forced refill can take a minute+.
   const [importBusy, setImportBusy] = React.useState(false);
-  const [importResult, setImportResult] = React.useState(null);
   const [importFrontier, setImportFrontier] = React.useState(null);
   const [importRegions, setImportRegions] = React.useState([]); // per-region swept status
-  const [importAutoBusy, setImportAutoBusy] = React.useState(false);
 
   const [snack, setSnack] = React.useState(null); // { msg, severity }
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
@@ -253,10 +251,9 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
-  // ── Free auto-finder (OSM dispensary discovery → email scrape → import) ───
-  // All finder state is owned here so it survives tab switches (see the import*
-  // state above). runImport drives the scan; its result lands in importResult
-  // even if the user has navigated to another sub-tab while it ran.
+  // ── Lead engine (always-on OSM discovery → email scrape → import) ─────────
+  // The engine runs itself on the API (queue-aware, state by state). The Studio
+  // only reads progress — plus one "Refill now" that forces a sweep early.
   const loadFinderStatus = React.useCallback(async () => {
     try {
       const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
@@ -267,32 +264,36 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
 
   React.useEffect(() => { loadFinderStatus(); }, [loadFinderStatus]);
 
-  const runImport = async () => {
+  const runRefillNow = async () => {
     setImportBusy(true);
     try {
-      const { data } = await axios.post(`${base}/find-leads`, { region: importRegion, dryRun: false }, authHdr);
-      setImportResult(data);
-      flash(`${data.label}: found ${data.found}, ${data.withEmail} with email — ${data.created} new lead${data.created === 1 ? '' : 's'} imported.`);
+      const { data } = await axios.post(`${base}/find-leads/auto/run`, {}, authHdr);
+      const n = data.imported || 0;
+      flash(n
+        ? `Refilled — ${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
+        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'} — nothing new there yet; the engine keeps working the map on its own.`);
       await Promise.all([loadOverview(), loadFinderStatus()]);
     } catch (e) {
-      flash(e.response?.data?.message || 'Lead finder failed — the discovery service may be busy, try again.', 'error');
+      flash(e.response?.data?.message || 'Refill failed — the discovery service may be busy, try again.', 'error');
     } finally {
       setImportBusy(false);
     }
   };
 
-  const toggleImportAuto = async (enabled) => {
-    setImportAutoBusy(true);
+  // AuthFixPanel's "I added it — re-check now": bypass the API's 1h DNS cache,
+  // then reload the overview so the chips/pills repaint from the fresh result.
+  const recheckAuth = async () => {
     try {
-      const { data } = await axios.post(`${base}/find-leads/auto`, { enabled }, authHdr);
-      setImportFrontier(data.frontier || null);
-      flash(enabled
-        ? 'Auto-pilot on — it refills the lead pool across states as you send, so you never run dry.'
-        : 'Auto-pilot off.');
+      const { data } = await axios.post(`${base}/auth-recheck`, {}, authHdr);
+      const lvl = data.auth && data.auth.level;
+      if (lvl === 'green') flash('Authentication passing — SPF, DKIM and DMARC all check out. You’re set.');
+      else if (lvl === 'amber') flash('Getting there — essentials pass, one item left (see the panel).', 'info');
+      else flash('Still missing a required record — DNS can take up to an hour to propagate.', 'warning');
+      await loadOverview();
+      return data;
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not update the auto-pilot.', 'error');
-    } finally {
-      setImportAutoBusy(false);
+      flash(e.response?.data?.message || 'Could not re-check DNS right now.', 'error');
+      throw e;
     }
   };
 
@@ -339,6 +340,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               onGoCampaigns={() => setView('campaigns')}
               onGoImport={() => setView('import')}
               onTestSend={sendTest}
+              onRecheckAuth={recheckAuth}
             />
             <Box>
               <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Send queue</MuiTypography>
@@ -386,10 +388,9 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
       case 'import':
         return (
           <ImportView
-            region={importRegion} onRegion={setImportRegion}
-            busy={importBusy} result={importResult}
-            frontier={importFrontier} regions={importRegions} autoBusy={importAutoBusy}
-            onRun={runImport} onToggleAuto={toggleImportAuto}
+            busy={importBusy}
+            frontier={importFrontier} regions={importRegions}
+            onRefillNow={runRefillNow}
             onGoCampaigns={() => setView('campaigns')}
           />
         );

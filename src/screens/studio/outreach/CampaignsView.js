@@ -120,6 +120,15 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
                   <Stack spacing={1}>
                     <TextField label="Subject" value={s.subject} onChange={(e) => patchStep(i, { subject: e.target.value })}
                       size="small" fullWidth sx={dropInput} />
+                    {/* Subject A/B — only where the subject is actually used
+                        (touch 1; follow-ups thread as "Re: …" and ignore it). */}
+                    {(i === 0 || s.freshSubject) && (
+                      <TextField label="Subject B — A/B test (optional)" value={s.subjectB || ''}
+                        onChange={(e) => patchStep(i, { subjectB: e.target.value })}
+                        size="small" fullWidth sx={dropInput}
+                        helperText="Half the shops get this subject instead — results show on the campaign card."
+                        FormHelperTextProps={{ sx: { color: D.faint, fontSize: 10.5, mx: 0.5 } }} />
+                    )}
                     <TextField label="Body" value={s.body} onChange={(e) => patchStep(i, { body: e.target.value })}
                       multiline minRows={4} fullWidth sx={dropInput} />
                   </Stack>
@@ -145,13 +154,18 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
                   {renderPreview(preview.body, SAMPLE_CONTEXT, `seed${previewIdx}:body`)}
                 </Typography>
                 <Typography sx={{ color: '#999', fontSize: 10.5, mt: 2, pt: 1.25, borderTop: '1px solid #e2e2de' }}>
-                  Joint Printing · New Jersey, USA — Unsubscribe
+                  Joint Printing · jointprinting.com — Unsubscribe
                 </Typography>
               </Box>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
                 {hasSpintax(`${preview.subject} ${preview.body}`) && (
                   <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 700 }}>
                     ✦ Varies per recipient (spintax) — each shop gets a different wording
+                  </Typography>
+                )}
+                {String(preview.subjectB || '').trim() && (previewIdx === 0 || preview.freshSubject) && (
+                  <Typography sx={{ color: '#c084fc', fontSize: 11, fontWeight: 700 }}>
+                    ⚖ A/B — half get: “{renderPreview(preview.subjectB, SAMPLE_CONTEXT, `seed${previewIdx}:subjB`)}”
                   </Typography>
                 )}
                 {previewIdx > 0 && !preview.freshSubject && (
@@ -164,9 +178,22 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
                 The address + unsubscribe footer is added automatically to every send (legally required).
               </Typography>
 
-              {/* Live deliverability check for this step — advisory, never blocks. */}
+              {/* Live deliverability check for this step — advisory, never blocks.
+                  A B-subject is linted through the same subject rules, tagged so
+                  the owner knows which arm tripped. */}
               {(() => {
                 const lint = lintContent({ subject: preview.subject, body: preview.body });
+                if (String(preview.subjectB || '').trim()) {
+                  const bIssues = lintContent({ subject: preview.subjectB, body: 'x' }).issues
+                    .filter((iss) => iss.code.startsWith('subject') || iss.code === 'spam-words')
+                    .map((iss) => ({ ...iss, code: `B-${iss.code}`, msg: `Subject B: ${iss.msg}` }));
+                  if (bIssues.length) {
+                    lint.issues = [...lint.issues, ...bIssues];
+                    const penalty = lint.issues.reduce((n, x) => n + (x.level === 'warn' ? 15 : 5), 0);
+                    lint.score = Math.max(0, 100 - penalty);
+                    lint.level = lint.score >= 80 ? 'ok' : lint.score >= 55 ? 'warn' : 'action';
+                  }
+                }
                 const tone = lint.level === 'ok' ? D.green : lint.level === 'warn' ? '#fbbf24' : '#f87171';
                 return (
                   <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 2, border: `1px solid ${tone}44`, bgcolor: `${tone}14` }}>
@@ -205,7 +232,6 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [q, setQ] = React.useState('');
-  const [includeContacted, setIncludeContacted] = React.useState(false);
   const [checked, setChecked] = React.useState(() => new Set());
   const [enrolling, setEnrolling] = React.useState(false);
 
@@ -213,7 +239,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     if (!campaign) return;
     setLoading(true);
     try {
-      const list = await fetchCandidates({ campaignId: campaign._id, q, includeContacted });
+      const list = await fetchCandidates({ campaignId: campaign._id, q });
       setRows(list);
       setChecked(new Set());
     } catch (e) {
@@ -221,7 +247,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
     } finally {
       setLoading(false);
     }
-  }, [campaign, q, includeContacted, fetchCandidates, onError]);
+  }, [campaign, q, fetchCandidates, onError]);
 
   React.useEffect(() => { if (open) load(); }, [open, load]);
 
@@ -264,15 +290,6 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
               size="small" fullWidth sx={dropInput} />
             <Button onClick={load} sx={{ ...dropGhostBtn, px: 2, flexShrink: 0 }}>Search</Button>
           </Stack>
-          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: -0.5 }}>
-            <Checkbox size="small" checked={includeContacted}
-              onChange={(e) => { setIncludeContacted(e.target.checked); }}
-              sx={{ p: 0.5, color: D.muted, '&.Mui-checked': { color: D.amber } }} />
-            <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
-              Include leads I’ve already contacted (override — use only if you mean to re-warm someone)
-            </Typography>
-          </Stack>
-
           <Stack direction="row" alignItems="center" spacing={1}>
             <Checkbox
               checked={allChecked}
@@ -291,7 +308,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
             </Box>
           ) : rows.length === 0 ? (
             <EmptyState icon={<GroupAddOutlinedIcon />} title="No eligible leads"
-              hint="Import leads (with emails) first, or widen the filter." />
+              hint="The lead engine is stacking cold leads in the background — check its progress under Lead engine, or hit Refill now there." />
           ) : (
             <Stack spacing={0.5} sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
               {rows.map((r) => (
@@ -364,7 +381,7 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
 
       {campaigns.length === 0 ? (
         <EmptyState icon={<ForwardToInboxOutlinedIcon />} title="No campaigns yet"
-          hint="“New campaign” starts you off with a proven 3-step dispensary sequence — edit and activate." />
+          hint={`“New campaign” starts you off with the ${DEFAULT_SEQUENCE.length}-touch dispensary sequence — edit and activate.`} />
       ) : (
         <Stack spacing={1.5}>
           {campaigns.map((c) => {
