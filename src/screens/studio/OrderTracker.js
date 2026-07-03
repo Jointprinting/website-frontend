@@ -2262,7 +2262,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 
       {/* Footer actions — visible on every tab */}
       <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.bg, borderTop: `1px solid ${B.border}`,
-        px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 1 }}>
         <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
           Updated {fmtRelative(local.updatedAt)}
         </Typography>
@@ -3195,11 +3195,12 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
         borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
         <PeopleAltOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           Clients · {clients.length}
         </Typography>
         <TextField size="small" placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)}
-          sx={{ ...darkInput, width: 180 }} />
+          sx={{ ...darkInput, width: { xs: 120, sm: 180 } }} />
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>

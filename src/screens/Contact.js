@@ -257,9 +257,9 @@ function Contact() {
                     {files.length > 0 && (
                       <Stack spacing={0.5} mt={1}>
                         {files.map((file, idx) => (
-                          <Stack key={idx} direction="row" alignItems="center" spacing={1}>
-                            <MuiTypography variant="body2" color="text.secondary">{file.name}</MuiTypography>
-                            <IconButton size="small" onClick={() => handleRemoveFile(idx)}><DeleteIcon fontSize="small" /></IconButton>
+                          <Stack key={idx} direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+                            <MuiTypography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>{file.name}</MuiTypography>
+                            <IconButton size="small" onClick={() => handleRemoveFile(idx)} sx={{ flexShrink: 0 }}><DeleteIcon fontSize="small" /></IconButton>
                           </Stack>
                         ))}
                       </Stack>

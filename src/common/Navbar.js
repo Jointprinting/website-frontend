@@ -200,7 +200,8 @@ function Navbar() {
             Joint Printing
           </Typography>
         </Stack>
-        <Box sx={{ flexGrow: 1 }} />
+        {/* One grow region per side (left spacer above, this box below) so the
+            logo/wordmark sits at true center next to the hamburger. */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', flex: 1 }}>
           <DrawerComponent />
         </Box>

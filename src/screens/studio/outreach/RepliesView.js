@@ -113,7 +113,7 @@ export default function RepliesView({
       ) : (
         <Stack spacing={2}>
           {/* Summary strip */}
-          <Stack direction="row" spacing={1.25}>
+          <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
             <StatPill value={counts.unhandled} label="New" tone={counts.unhandled > 0 ? D.amber : D.muted} />
             <StatPill value={counts.hot} label="Buying signals" tone={counts.hot > 0 ? D.green : D.muted} />
             <StatPill value={counts.matched} label="Matched" tone={D.text} />

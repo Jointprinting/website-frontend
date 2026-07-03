@@ -142,6 +142,9 @@ function ProductValues() {
           >
             Ready to see what your brand looks like on merch?
           </MuiTypography>
+          {/* Two CTAs — side by side on desktop, cleanly stacked on phones. */}
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2,
+            justifyContent: 'center', alignItems: 'center' }}>
           <Button
             component={RouterLink}
             to="/products"
@@ -155,7 +158,6 @@ function ProductValues() {
               fontSize: 16,
               fontWeight: 700,
               textTransform: 'none',
-              mr: 2,
             }}
           >
             Get a free mockup & quote
@@ -181,6 +183,7 @@ function ProductValues() {
           >
             Book a call
           </Button>
+          </Box>
         </Box>
 
       </Container>
