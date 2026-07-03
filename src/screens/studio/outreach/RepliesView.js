@@ -2,9 +2,10 @@
 // Gmail Reply Triage — the detection-only inbox for buyer replies to cold outreach.
 // Presentational (OutreachTab owns data + transport): a clean table of detected /
 // imported replies, each auto-classified + matched to its CRM company, with a
-// per-row action menu to triage it. No auto-send, no AI, no auto-CRM-migration —
-// the owner decides what moves deeper. V1 ingests replies manually / by paste;
-// Gmail auto-sync is a later, opt-in step (the Sync button says so until then).
+// per-row action menu to triage it. No auto-send, no AI. Replies flow in three
+// ways — paste/import, the "Sync Gmail" button, and (once GMAIL_* is configured)
+// an automatic read-only pull every 10 min — and a matched human reply auto-stops
+// the drip + warms the CRM.
 
 import * as React from 'react';
 import {
@@ -81,7 +82,7 @@ export default function RepliesView({
           <ToggleButton value="all">All replies</ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ flex: 1 }} />
-        <Tooltip title="Gmail auto-sync isn't wired yet — add replies manually for now">
+        <Tooltip title="Pull new replies from Gmail now — read-only, and auto-syncs every 10 min once GMAIL_* is configured on the API">
           <span>
             <Button
               onClick={runSync} size="small" disabled={syncing}
