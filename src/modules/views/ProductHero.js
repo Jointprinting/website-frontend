@@ -13,7 +13,7 @@ export default function ProductHero() {
     <ProductHeroLayout
       sxBackground={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundColor: '#0e1511',
+        backgroundColor: '#111816',
         backgroundPosition: 'center',
       }}
     >

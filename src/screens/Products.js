@@ -13,12 +13,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import config from '../config.json';
 import QuoteDialog from '../common/QuoteDialog';
 import JpLoader from '../common/JpLoader';
+import JP from '../brand';
 
-const SIDEBAR_BG  = '#0c1a11';
-const GREEN       = '#4ade80';
+const SIDEBAR_BG  = '#111816';   // brand Ink dark surface (was ad-hoc #0c1a11)
+const GREEN       = '#4ade80';   // brand Emerald accent
 const MUTED       = 'rgba(255,255,255,0.55)';
 const SIDEBAR_W   = 230;
-const DISPLAY_SERIF = "'Fraunces', 'Playfair Display', Georgia, serif";
+const DISPLAY_FONT = JP.fontDisplay; // brand display type — Fraunces retired
 const NAVBAR_H    = 64;
 
 const GARMENT_CATEGORIES = [
@@ -123,7 +124,7 @@ function ProductCard({ item, isSelected, onToggle, onNavigate }) {
           )}
         </Stack>
         <Typography sx={{
-          fontFamily: DISPLAY_SERIF, fontWeight: 600,
+          fontFamily: DISPLAY_FONT, fontWeight: 600,
           fontSize: { xs: 15, sm: 16.5 }, lineHeight: 1.2,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           minHeight: { xs: 36, sm: 42 }, color: '#1a1a1a',
@@ -194,7 +195,7 @@ function Sidebar({ category, setCategory, genderType, setGenderType, onClose }) 
       {!onClose && (
         <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 3 }}>
           <Typography sx={{
-            fontFamily: DISPLAY_SERIF, fontWeight: 900, fontSize: 24, lineHeight: 1,
+            fontFamily: DISPLAY_FONT, fontWeight: 900, fontSize: 24, lineHeight: 1,
             color: '#fff', letterSpacing: -0.5,
           }}>
             jp<Box component="span" sx={{ color: GREEN }}>.</Box>
@@ -462,7 +463,7 @@ const [loading,    setLoading]    = useState(true);
           </Typography>
           <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap>
             <Typography sx={{
-              fontFamily: DISPLAY_SERIF, fontWeight: 900,
+              fontFamily: DISPLAY_FONT, fontWeight: 900,
               fontSize: { xs: 30, sm: 44 }, lineHeight: 1, letterSpacing: -0.5,
               color: '#1a1a1a',
             }}>
@@ -538,7 +539,7 @@ const [loading,    setLoading]    = useState(true);
                     textTransform: 'uppercase',
                   }}>Featured</Typography>
                   <Typography sx={{
-                    fontFamily: DISPLAY_SERIF, fontWeight: 700,
+                    fontFamily: DISPLAY_FONT, fontWeight: 700,
                     fontSize: { xs: 20, sm: 26 }, lineHeight: 1.1, mt: 0.5, letterSpacing: -0.3,
                   }}>
                     Curated picks across brands
@@ -712,7 +713,7 @@ const [loading,    setLoading]    = useState(true);
                           }}>#{item.style}</Typography>
                         </Stack>
                         <Typography sx={{
-                          fontFamily: DISPLAY_SERIF, fontWeight: 700, fontSize: 15.5, lineHeight: 1.2,
+                          fontFamily: DISPLAY_FONT, fontWeight: 700, fontSize: 15.5, lineHeight: 1.2,
                           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                           minHeight: 38, color: '#1a1a1a',
                         }}>{item.name}</Typography>

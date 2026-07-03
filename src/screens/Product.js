@@ -11,6 +11,7 @@ import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import QuoteDialog from '../common/QuoteDialog';
 import JpLoader from '../common/JpLoader';
 import config from '../config.json';
+import JP from '../brand';
 
 const getTagCode = (tag) => {
   switch (tag) {
@@ -329,7 +330,7 @@ function Product() {
               {productTitle && (
                 <>
                   <Typography sx={{
-                    fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                    fontFamily: JP.fontDisplay,
                     fontSize: { xs: 28, sm: 38 }, fontWeight: 900,
                     color: '#1a1a1a', lineHeight: 1.1, letterSpacing: -0.5,
                   }}>

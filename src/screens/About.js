@@ -216,7 +216,7 @@ function About() {
                     label={ind}
                     sx={{
                       bgcolor: '#e5f4ea',
-                      color: '#045625',
+                      color: '#1a3d2b',
                       fontWeight: 600,
                       fontSize: 13,
                       '&:hover': { bgcolor: '#1a3d2b', color: 'white' },
