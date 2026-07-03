@@ -1861,7 +1861,7 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
       rows.push({
         key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, items, expandable,
         onClick: expandable ? null
-          : g.kind === 'triage' ? () => onPick && onPick('outreach')
+          : g.kind === 'triage' ? () => onPick && onPick({ target: 'outreach', view: 'replies' })
           : g.kind === 'crm' ? () => onPick && onPick({ target: 'crm', view: 'today' })
           : null,
       });
@@ -2101,6 +2101,9 @@ function StudioBody({ token, onLogout }) {
   // owner's 2–3 week turnaround, overdue/due-today follow-ups, and the backup nudge.
   // Each fetch fails silent — a down endpoint just drops its row. (Missing-receipt
   // nudges live on the Finances page, not here.)
+  // Which Outreach sub-view to open when the tool is entered (e.g. the hub's reply
+  // alert jumps straight to Replies). Null → the Outreach dashboard on a plain open.
+  const [outreachView, setOutreachView] = React.useState(null);
   const [signals, setSignals] = React.useState({
     groups: { critical: [], warning: [], info: [] }, counts: {}, backup: null,
   });
@@ -2184,6 +2187,7 @@ function StudioBody({ token, onLogout }) {
     // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
     if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
+    if (id === 'outreach') setOutreachView(innerView || null);
     setView(id);
   };
 
@@ -2312,7 +2316,7 @@ function StudioBody({ token, onLogout }) {
   if (view === 'outreach') {
     // Full-viewport like the CRM: the tab owns its own slim header + sub-nav.
     // Warm leads deep-link back into the CRM company card via `navigate`.
-    return <OutreachTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
+    return <OutreachTab token={token} onBack={() => setView('hub')} onNavigate={navigate} initialView={outreachView} />;
   }
 
   if (view === 'backup') {
