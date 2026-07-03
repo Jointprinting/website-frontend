@@ -3,9 +3,12 @@
 // Conversion landing for the dispensary vertical (Joint Printing's primary
 // cold-outreach + road-visit target). Leads with the angle that actually lands
 // with dispensaries: cannabis brands can't buy Google/Meta ads, so merch is the
-// marketing they ARE allowed to run. Reuses the public brand tokens + shared
-// process/CTA sections; wrapped by the site Navbar/Footer via App.js. Honest
-// claims only — every stat mirrors the homepage.
+// marketing they ARE allowed to run. Now anchored by REAL work — the hero shows
+// an actual dispensary hoodie we produced, and a "Real work" gallery proves it
+// with mockups from real dispensary clients (Premier High Life, Shaggy's Baggy).
+// Reuses the public brand tokens + shared process/CTA sections; wrapped by the
+// site Navbar/Footer via App.js. Honest claims only — every stat mirrors the
+// homepage.
 
 import * as React from 'react';
 import { Box, Container, Grid, Typography, Button, Stack } from '@mui/material';
@@ -41,45 +44,49 @@ const MAKES = [
   { Icon: LoyaltyOutlinedIcon, t: 'Loyalty & VIP gear', d: 'Reward your regulars with merch they actually want to keep.' },
 ];
 
+// Real mockups we produced for real dispensary clients — the proof that makes
+// this page land. Files live in public/work/. Captions are factual (who / where
+// / what was made); no invented metrics or testimonials.
+const WORK = [
+  { src: '/work/premier-high-life-hoodie.png', client: 'Premier High Life', loc: 'Las Cruces, NM', item: 'Branded pullover hoodie', span: true },
+  { src: '/work/shaggys-baggy-local-drop.png', client: "Shaggy's Baggy", loc: 'Auburn, ME', item: 'Local-drop tee' },
+  { src: '/work/shaggys-baggy-flower-tee.png', client: "Shaggy's Baggy", loc: 'Auburn, ME', item: 'Retail customer tee' },
+  { src: '/work/premier-staff-tee.png', client: 'Premier High Life', loc: 'Las Cruces, NM', item: 'Staff tee' },
+  { src: '/work/dispensary-trucker-cap.png', client: 'Dispensary drop', loc: '', item: 'Embroidered trucker cap' },
+];
+
 const STATS = [
   { n: '30,000+', l: 'units delivered' },
   { n: 'Free', l: 'mockups, every time' },
   { n: '24 hr', l: 'mockup turnaround' },
-  { n: 'Local', l: 'South Jersey, hands-on' },
+  { n: 'Nationwide', l: 'we ship anywhere' },
 ];
 
-// A small stylized "merch lineup" — three garment tags with a placeholder brand
-// mark. Reads as a product preview without needing real photography.
-function MerchLineup() {
-  const items = [
-    { Icon: CheckroomOutlinedIcon, k: 'Staff', v: 'Embroidered polo' },
-    { Icon: LocalMallOutlinedIcon, k: 'Customer', v: 'Premium hoodie' },
-    { Icon: GroupsOutlinedIcon, k: 'Event', v: 'Trucker cap' },
-  ];
+// The hero product shot: a real dispensary hoodie in a soft card with a small
+// "real client" tag — reads as proof, not a stock placeholder.
+function HeroMockup() {
   return (
-    <Stack spacing={1.5}>
-      {items.map((it, i) => (
-        <Box key={it.k} sx={{
-          display: 'flex', alignItems: 'center', gap: 2, p: 2,
-          borderRadius: `${JP.radius.card}px`, bgcolor: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(244,248,245,0.12)',
-          ml: { md: `${i * 22}px` }, transition: 'transform .2s',
-        }}>
-          <Box sx={{ width: 46, height: 46, flexShrink: 0, borderRadius: 2, display: 'grid', placeItems: 'center',
-            bgcolor: JP.emeraldSoft(0.14), color: JP.emerald }}>
-            <it.Icon sx={{ fontSize: 26 }} />
-          </Box>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: JP.onDarkMuted, fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 700 }}>{it.k}</Typography>
-            <Typography sx={{ color: JP.onDark, fontSize: 16, fontWeight: 700 }}>{it.v}</Typography>
-          </Box>
-          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: JP.emerald }} />
-            <Typography sx={{ color: JP.onDarkMuted, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' }}>YOUR LOGO</Typography>
-          </Box>
-        </Box>
-      ))}
-    </Stack>
+    <Box sx={{ position: 'relative', maxWidth: 440, mx: 'auto' }}>
+      <Box sx={{
+        borderRadius: `${JP.radius.card + 6}px`, overflow: 'hidden', bgcolor: JP.white,
+        border: '1px solid rgba(244,248,245,0.12)', boxShadow: '0 30px 60px -30px rgba(0,0,0,0.6)',
+      }}>
+        <Box component="img" src="/work/premier-high-life-hoodie.png"
+          alt="Custom branded hoodie we printed for Premier High Life, a cannabis dispensary"
+          sx={{ display: 'block', width: '100%', height: 'auto' }} />
+      </Box>
+      <Box sx={{
+        position: 'absolute', bottom: -14, left: -10,
+        bgcolor: JP.ink, border: '1px solid rgba(244,248,245,0.16)',
+        borderRadius: 999, px: 2, py: 0.9, display: 'flex', alignItems: 'center', gap: 1,
+        boxShadow: '0 12px 24px -12px rgba(0,0,0,0.7)',
+      }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: JP.emerald }} />
+        <Typography sx={{ color: JP.onDark, fontSize: 12.5, fontWeight: 700 }}>
+          Real client · Premier High Life
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -89,9 +96,9 @@ export default function Dispensaries() {
       {/* Hero */}
       <Box sx={{ bgcolor: JP.ink, color: JP.onDark, py: { xs: 7, md: 13 }, overflow: 'hidden' }}>
         <Container maxWidth="lg">
-          <Grid container spacing={{ xs: 5, md: 6 }} alignItems="center">
+          <Grid container spacing={{ xs: 6, md: 6 }} alignItems="center">
             <Grid item xs={12} md={7}>
-              <Typography sx={{ ...eyebrow, color: JP.emerald }}>For dispensaries · South Jersey</Typography>
+              <Typography sx={{ ...eyebrow, color: JP.emerald }}>For dispensaries</Typography>
               <Typography variant="h2" sx={{ ...headline, color: JP.onDark, mt: 2, mb: 2.5, fontSize: { xs: 32, sm: 42, md: 54 }, fontWeight: 700 }}>
                 The marketing your dispensary is actually allowed to run.
               </Typography>
@@ -103,16 +110,16 @@ export default function Dispensaries() {
                   sx={{ borderRadius: 999, px: 4, py: 1.6, textTransform: 'none', fontWeight: 700, fontSize: 16 }}>
                   Get a free mockup →
                 </Button>
-                <Button component={RouterLink} to="/products" variant="outlined" size="large"
+                <Button component="a" href="#work" variant="outlined" size="large"
                   sx={{ borderRadius: 999, px: 4, py: 1.6, textTransform: 'none', fontWeight: 700, fontSize: 16,
                     color: JP.onDark, borderColor: 'rgba(244,248,245,0.4)',
                     '&:hover': { borderColor: JP.onDark, bgcolor: 'rgba(255,255,255,0.06)' } }}>
-                  See what we make
+                  See real work
                 </Button>
               </Stack>
             </Grid>
             <Grid item xs={12} md={5}>
-              <MerchLineup />
+              <HeroMockup />
             </Grid>
           </Grid>
         </Container>
@@ -141,6 +148,40 @@ export default function Dispensaries() {
           ))}
         </Grid>
       </Container>
+
+      {/* Real work — the proof. Product mockups from real dispensary clients. */}
+      <Box id="work" sx={{ bgcolor: JP.paper, borderTop: `1px solid ${JP.pale}`, borderBottom: `1px solid ${JP.pale}` }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
+          <Typography sx={{ ...eyebrow, color: JP.forest }}>Real work</Typography>
+          <Typography variant="h3" sx={{ ...headline, mt: 1.5, mb: 1.5, fontSize: { xs: 26, md: 40 }, maxWidth: 720 }}>
+            Merch we've actually made for dispensaries.
+          </Typography>
+          <Typography sx={{ color: JP.charcoal, opacity: 0.72, maxWidth: 640, mb: 5, fontSize: { xs: 16, md: 17 } }}>
+            Real clients, real drops — staff apparel, customer merch, and event gear, printed and shipped nationwide. Yours is next.
+          </Typography>
+          <Grid container spacing={{ xs: 2, md: 3 }}>
+            {WORK.map((w) => (
+              <Grid item xs={12} sm={6} md={w.span ? 6 : 3} key={w.src}>
+                <Box sx={{ height: '100%', borderRadius: `${JP.radius.card}px`, overflow: 'hidden',
+                  border: `1px solid ${JP.pale}`, bgcolor: JP.white, display: 'flex', flexDirection: 'column' }}>
+                  <Box sx={{ bgcolor: JP.white, display: 'grid', placeItems: 'center', p: { xs: 2, md: 2.5 } }}>
+                    <Box component="img" src={w.src}
+                      alt={`${w.item} for ${w.client}${w.loc ? ` — ${w.loc}` : ''}`}
+                      loading="lazy"
+                      sx={{ width: '100%', height: w.span ? { xs: 260, md: 340 } : { xs: 220, md: 240 }, objectFit: 'contain' }} />
+                  </Box>
+                  <Box sx={{ px: 2.5, py: 2, borderTop: `1px solid ${JP.pale}`, mt: 'auto' }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 15.5 }}>{w.client}</Typography>
+                    <Typography sx={{ color: JP.charcoal, opacity: 0.66, fontSize: 13.5 }}>
+                      {w.item}{w.loc ? ` · ${w.loc}` : ''}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      </Box>
 
       {/* What we make — dark band */}
       <Box sx={{ bgcolor: JP.ink, color: JP.onDark, py: { xs: 8, md: 12 } }}>
@@ -173,7 +214,7 @@ export default function Dispensaries() {
         <Grid container spacing={{ xs: 3, md: 3 }}>
           {STATS.map((s) => (
             <Grid item xs={6} md={3} key={s.l} sx={{ textAlign: 'center' }}>
-              <Typography sx={{ fontFamily: JP.fontDisplay, fontWeight: 700, fontSize: { xs: 30, md: 46 }, color: JP.forest, lineHeight: 1 }}>{s.n}</Typography>
+              <Typography sx={{ fontFamily: JP.fontDisplay, fontWeight: 700, fontSize: { xs: 28, md: 44 }, color: JP.forest, lineHeight: 1 }}>{s.n}</Typography>
               <Typography sx={{ color: JP.charcoal, opacity: 0.7, fontSize: 13, mt: 1, textTransform: 'uppercase', letterSpacing: 1.2 }}>{s.l}</Typography>
             </Grid>
           ))}
