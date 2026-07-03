@@ -186,6 +186,20 @@ export default function OverviewView({
                   <StatusChip meta={campaignStatusMeta(c.status)} />
                 </Stack>
                 <FunnelStrip stats={c.stats} />
+                {/* When a campaign is active but not sending, say exactly why —
+                    right here on the dashboard, in red, no digging required. */}
+                {c.health && c.health.level !== 'ok' && (
+                  <Box sx={{ mt: 1, p: 1, borderRadius: 2, display: 'flex', gap: 1, alignItems: 'flex-start',
+                    bgcolor: c.health.level === 'action' ? 'rgba(248,113,113,0.10)' : 'rgba(251,191,36,0.08)',
+                    border: `1px solid ${c.health.level === 'action' ? 'rgba(248,113,113,0.4)' : 'rgba(251,191,36,0.3)'}` }}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', mt: '5px', flexShrink: 0,
+                      bgcolor: c.health.level === 'action' ? '#f87171' : '#fbbf24' }} />
+                    <Typography sx={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                      <Box component="span" sx={{ color: c.health.level === 'action' ? '#f87171' : '#fbbf24', fontWeight: 800 }}>{c.health.label}</Box>
+                      <Box component="span" sx={{ color: D.muted }}> — {c.health.hint}</Box>
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             ))}
           </Stack>

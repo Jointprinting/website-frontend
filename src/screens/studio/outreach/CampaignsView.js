@@ -291,7 +291,10 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
 }
 
 // ── Main view ─────────────────────────────────────────────────────────────────
-export default function CampaignsView({ overview, loading, onCreate, onUpdate, fetchCandidates, onEnroll, onError }) {
+// Health-signal color (mirrors backend campaignHealth levels).
+const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
+
+export default function CampaignsView({ overview, loading, onCreate, onUpdate, onLaunch, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
 
@@ -337,9 +340,21 @@ export default function CampaignsView({ overview, loading, onCreate, onUpdate, f
                     </Stack>
                     <Typography sx={{ color: D.faint, fontSize: 12, mt: 0.4 }}>
                       {(c.steps || []).length} step{(c.steps || []).length === 1 ? '' : 's'} ·{' '}
-                      {c.stats.enrolled} enrolled · {c.stats.replied} replied
+                      {c.stats.enrolled} enrolled · {c.stats.sent} sent · {c.stats.replied} replied
                       {c.description ? ` — ${c.description}` : ''}
                     </Typography>
+                    {/* The "why isn't it sending?" signal — names the exact blocker
+                        (e.g. "48 missing email") instead of leaving a wall of zeros. */}
+                    {c.health && (
+                      <Stack direction="row" spacing={0.75} alignItems="flex-start" sx={{ mt: 0.6 }}>
+                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', mt: '5px', flexShrink: 0,
+                          bgcolor: HEALTH_TONE[c.health.level] || D.faint }} />
+                        <Typography sx={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                          <Box component="span" sx={{ color: HEALTH_TONE[c.health.level] || D.text, fontWeight: 800 }}>{c.health.label}</Box>
+                          {c.health.hint ? <Box component="span" sx={{ color: D.faint }}> — {c.health.hint}</Box> : null}
+                        </Typography>
+                      </Stack>
+                    )}
                   </Box>
                   <Stack direction="row" spacing={0.75} flexShrink={0}>
                     <Tooltip title="Enroll CRM leads into this sequence">
@@ -354,15 +369,15 @@ export default function CampaignsView({ overview, loading, onCreate, onUpdate, f
                         Edit
                       </Button>
                     </Tooltip>
-                    <Tooltip title={active ? 'Pause — nothing more sends' : 'Go live'}>
+                    <Tooltip title={active ? 'Pause — nothing more sends' : 'Launch — activate and send the first touch now'}>
                       <Button
-                        onClick={() => onUpdate(c._id, { status: active ? 'paused' : 'active' })}
+                        onClick={() => (active ? onUpdate(c._id, { status: 'paused' }) : onLaunch(c._id))}
                         startIcon={active ? <PauseRoundedIcon sx={{ fontSize: 16 }} /> : <PlayArrowRoundedIcon sx={{ fontSize: 17 }} />}
                         sx={active
                           ? { ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: D.amber }
                           : { ...dropPrimaryBtn, px: 1.5, py: 0.4, fontSize: 12 }}
                       >
-                        {active ? 'Pause' : 'Activate'}
+                        {active ? 'Pause' : 'Launch'}
                       </Button>
                     </Tooltip>
                   </Stack>
