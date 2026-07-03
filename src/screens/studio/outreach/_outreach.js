@@ -101,7 +101,9 @@ export const MERGE_FIELDS = [
   { token: '{{firstName}}',       hint: 'Contact’s first name (blank when unknown)' },
   { token: '{{companyName}}',     hint: 'The company / shop name' },
   { token: '{{city|your area}}',  hint: 'City parsed from the address' },
+  { token: '{{state|dispensary}}', hint: 'US state parsed from the address (e.g. NJ)' },
   { token: '{{clientName}}',      hint: 'Full contact name' },
+  { token: '{{senderName}}',      hint: 'Who the email signs off as (set on the API)' },
 ];
 
 // Client-side mirror of the backend's renderTemplate (services/outreachEngine.js)
@@ -117,6 +119,32 @@ export function renderTemplate(tpl, ctx = {}) {
   );
 }
 
+// Mirror of services/outreachContent.js (hashStr + applySpintax) — so the editor
+// preview resolves {a|b|c} spintax the exact way a real send will. Keep in sync.
+export function hashStr(s) {
+  let h = 2166136261;
+  const str = String(s == null ? '' : s);
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+// Single-brace guard (lookbehind/lookahead) so a {{merge|fallback}} token is
+// never treated as a spin group. Mirrors services/outreachContent.js.
+const SPIN_RE = /(?<!\{)\{([^{}]*\|[^{}]*)\}(?!\})/g;
+export function applySpintax(tpl, seed = '') {
+  let i = 0;
+  return String(tpl == null ? '' : tpl).replace(SPIN_RE, (_, group) => {
+    const opts = group.split('|');
+    return opts[hashStr(`${seed}:${i++}`) % opts.length];
+  });
+}
+export const hasSpintax = (tpl) => new RegExp(SPIN_RE.source).test(String(tpl || ''));
+
+// Preview EXACTLY what sends: merge first, then resolve spintax (same order as
+// the engine). `seed` picks a stable spin variant; default 'preview'.
+export function renderPreview(tpl, ctx = {}, seed = 'preview') {
+  return applySpintax(renderTemplate(tpl, ctx), seed);
+}
+
 // The sample company the editor previews against.
 export const SAMPLE_CONTEXT = {
   companyName: 'Green Leaf Dispensary',
@@ -124,21 +152,27 @@ export const SAMPLE_CONTEXT = {
   firstName: 'Sam',
   greeting: 'Hey Sam,',
   city: 'Trenton',
+  state: 'NJ',
+  senderName: 'Nate',
 };
 
-// The approved 3-touch dispensary sequence — evergreen (no seasonal hook),
-// persuasive, and built around the ONE ask that lets Nate quote/mockup: product
-// + quantity + design. Short on purpose (cold email converts best well under
-// ~120 words). Stops automatically if they reply; touch 3 is a clean exit.
+// The approved 4-touch dispensary sequence — evergreen (no seasonal hook),
+// value-first, and built around the ONE ask that lets us quote/mockup: product +
+// quantity + design. Short on purpose (cold email converts best well under ~120
+// words). Every touch carries {a|b} spintax so no two recipients get a
+// byte-identical email, and {{senderName}} keeps the sign-off out of the copy.
+// Follow-ups THREAD into the first email automatically (Re: … + references), so
+// their subject lines below are fallbacks. Stops the instant they reply; the
+// day-14 touch is a clean exit.
 export const DEFAULT_SEQUENCE = [
   {
     offsetDays: 0,
-    subject: 'custom merch for {{companyName}}',
+    subject: '{custom merch|branded merch} for {{companyName}}',
     body: `{{greeting}}
 
-I run Joint Printing — we make custom apparel and promo merch for dispensaries: staff tees and hoodies, branded hats, and the counter stuff that moves (lighters, grinders, totes, stickers).
+{I run|I'm with} Joint Printing — we make custom apparel and promo merch for dispensaries: staff tees and hoodies, branded hats, and the counter stuff that moves (lighters, grinders, totes, stickers).
 
-Here's why I'm reaching out: I'll design free mockups with {{companyName}}'s branding so you can see real product before spending a dollar. Shops use them for staff uniforms or a customer drop.
+Here's why I'm reaching out: I'll design {free|no-cost} mockups with {{companyName}}'s branding so you can see real product before spending a dollar. Shops use them for staff uniforms or a customer drop.
 
 If you're open to it, just reply with:
 1. What you're thinking (tees, hoodies, hats, promo items…)
@@ -147,7 +181,7 @@ If you're open to it, just reply with:
 
 I'll get our artists on the mockups this week — clear pricing up front, always.
 
-— Nate, Joint Printing
+— {{senderName}}, Joint Printing
 jointprinting.com`,
   },
   {
@@ -155,16 +189,27 @@ jointprinting.com`,
     subject: 'free mockups for {{companyName}}?',
     body: `{{greeting}}
 
-Circling back — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
+{Circling back|Following up} — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
 
 If it helps to see our work first, here's our dispensary promo catalog: https://www.jointprinting.com/catalogs/dispo-promos.pdf
 
 Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started.
 
-— Nate, Joint Printing`,
+— {{senderName}}, Joint Printing`,
   },
   {
     offsetDays: 7,
+    subject: 'how most {{state|dispensary}} shops start',
+    body: `{{greeting}}
+
+{One more thought|Quick one}: most shops we work with start with a small staff-apparel run, see how it lands, then do a customer drop. Low risk — and the branded gear markets the shop for you every time someone wears it out.
+
+Happy to put {{companyName}}'s logo on a few pieces so you can see it — still free, still no obligation.
+
+— {{senderName}}, Joint Printing`,
+  },
+  {
+    offsetDays: 14,
     subject: 'should I close this out?',
     body: `{{greeting}}
 
@@ -172,7 +217,7 @@ I don't want to crowd your inbox, so this is my last note. If branded merch ever
 
 Reply anytime and I'll pick it right back up. Good luck out in {{city|your area}}.
 
-— Nate, Joint Printing
+— {{senderName}}, Joint Printing
 jointprinting.com`,
   },
 ];
