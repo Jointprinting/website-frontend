@@ -5,7 +5,7 @@
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, CircularProgress, Button, Tooltip, IconButton, Alert,
+  Box, Stack, Typography, CircularProgress, Button, Tooltip, IconButton, Alert, TextField,
 } from '@mui/material';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
@@ -13,6 +13,10 @@ import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import { D, mono, fmtRelative } from '../_shared';
 import { EmptyState, Eyebrow } from '../crm/_crm';
 import { StatusChip, StatPill, campaignStatusMeta, enrollmentStatusMeta } from './_outreach';
@@ -132,8 +136,197 @@ function NextActions({ actions = [], onGoCampaigns, onGoImport }) {
   );
 }
 
+// One SPF/DKIM/DMARC record as a pass/fail chip — the live DNS check the wizard
+// leans on, straight off engine.auth (from the backend's dnsAuth preflight).
+function AuthChip({ label, ok }) {
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.35, borderRadius: 999,
+      bgcolor: D.inset, border: `1px solid ${ok ? 'rgba(74,222,128,0.35)' : 'rgba(248,113,113,0.35)'}` }}>
+      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ok ? D.green : '#f87171' }} />
+      <Typography sx={{ ...mono, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, color: ok ? D.green : '#f87171' }}>{label}</Typography>
+    </Box>
+  );
+}
+
+// One wizard step: a numbered / checked marker + a title, then (only for the
+// active, not-yet-done step) an expanded action area.
+function WizStep({ n, title, done, active, statusText, children, last }) {
+  return (
+    <Stack direction="row" spacing={1.5} sx={{ position: 'relative' }}>
+      {/* Marker + connector rail */}
+      <Stack alignItems="center" sx={{ flexShrink: 0 }}>
+        <Box sx={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
+          bgcolor: done ? 'rgba(74,222,128,0.16)' : active ? 'rgba(74,222,128,0.10)' : D.inset,
+          border: `1.5px solid ${done ? D.green : active ? D.green : D.line}`, transition: 'all 0.2s ease' }}>
+          {done
+            ? <CheckCircleRoundedIcon sx={{ fontSize: 18, color: D.green }} />
+            : <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: active ? D.green : D.faint }}>{n}</Typography>}
+        </Box>
+        {!last && <Box sx={{ flexGrow: 1, width: 2, my: 0.5, bgcolor: done ? 'rgba(74,222,128,0.4)' : D.line, minHeight: 14 }} />}
+      </Stack>
+      {/* Body */}
+      <Box sx={{ flexGrow: 1, minWidth: 0, pb: last ? 0 : 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Typography sx={{ color: done || active ? D.text : D.muted, fontWeight: 800, fontSize: 14 }}>{title}</Typography>
+          {done && <Typography sx={{ ...mono, fontSize: 10.5, fontWeight: 800, color: D.green, letterSpacing: 0.5 }}>DONE</Typography>}
+        </Stack>
+        {statusText && (
+          <Typography sx={{ color: D.faint, fontSize: 12, mt: 0.25 }}>{statusText}</Typography>
+        )}
+        {active && children && <Box sx={{ mt: 1.25 }}>{children}</Box>}
+      </Box>
+    </Stack>
+  );
+}
+
+// First-run "Launch in 3 steps" guide. Reads the same overview payload as the
+// rest of the dashboard, so every step checks itself off from live data:
+//   1 Sender   — OUTREACH_EMAIL_FROM set + SMTP + not auth-red; live SPF/DKIM/DMARC
+//                chips + a "send a test to yourself" button (the real send path).
+//   2 Leads    — cold reserve or anyone enrolled.
+//   3 Launch   — an active campaign.
+// It only shows one open step at a time (the first unfinished one) and vanishes
+// on its own once all three are green; a quiet "Hide" persists a dismissal.
+function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
+  const [hidden, setHidden] = React.useState(() => {
+    try { return localStorage.getItem('jp_outreach_hide_setup') === '1'; } catch { return false; }
+  });
+  const [testTo, setTestTo] = React.useState('');
+  const [testing, setTesting] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const engine = overview.engine || {};
+  const campaigns = overview.campaigns || [];
+  const coldReserve = overview.coldReserve || 0;
+  const enrolledTotal = campaigns.reduce((a, c) => a + ((c.stats && c.stats.enrolled) || 0), 0);
+  const auth = engine.auth || null;
+
+  const senderReady = !!engine.senderConfigured && !!engine.smtpConfigured;
+  const authRed = !!(auth && auth.level === 'red');
+  const step1Done = senderReady && !authRed;              // amber/green/unknown all clear the gate
+  const step2Done = coldReserve > 0 || enrolledTotal > 0;
+  const step3Done = campaigns.some((c) => c.status === 'active');
+  const steps = [step1Done, step2Done, step3Done];
+  const doneCount = steps.filter(Boolean).length;
+
+  // Vanish once fully set up, or if the operator hid the guide.
+  if (doneCount === 3 || hidden) return null;
+  const activeIndex = steps.findIndex((d) => !d); // first unfinished step is the open one
+
+  const hide = () => { try { localStorage.setItem('jp_outreach_hide_setup', '1'); } catch {} setHidden(true); };
+  const copyVar = async () => {
+    try { await navigator.clipboard.writeText('OUTREACH_EMAIL_FROM'); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  };
+  const runTest = async () => {
+    setTesting(true);
+    try { await onTestSend(testTo.trim()); } finally { setTesting(false); }
+  };
+
+  const linkBtnSx = { color: D.green, fontSize: 12.5, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap',
+    border: `1px solid ${D.green}55`, borderRadius: 999, px: 1.75, py: 0.4, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } };
+
+  return (
+    <Box sx={{ borderRadius: 3, border: `1px solid ${D.green}44`, bgcolor: 'rgba(74,222,128,0.04)', p: { xs: 2, sm: 2.5 } }}>
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 2 }}>
+        <RocketLaunchOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15.5 }}>Launch in 3 steps</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 12 }}>{doneCount} of 3 done — finish setup and the engine runs itself.</Typography>
+        </Box>
+        <Button onClick={hide} size="small" sx={{ color: D.faint, fontSize: 11.5, textTransform: 'none', minWidth: 0,
+          '&:hover': { color: D.muted, bgcolor: 'transparent' } }}>Hide</Button>
+      </Stack>
+
+      {/* Step 1 — Sender */}
+      <WizStep n={1} title="Connect your sending address" done={step1Done} active={activeIndex === 0}
+        statusText={step1Done
+          ? `Sending as ${engine.from || 'your outreach address'}${auth ? ` · auth ${auth.level}` : ''}.`
+          : !engine.senderConfigured
+            ? 'No sender set yet — the engine holds all sends until you add one.'
+            : authRed ? 'Sender set, but the domain isn’t authenticated yet.' : 'Almost there.'}>
+        <Stack spacing={1.5}>
+          {!engine.senderConfigured && (
+            <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+              <Typography sx={{ color: D.muted, fontSize: 12.5, lineHeight: 1.55 }}>
+                On the API, set{' '}
+                <Box component="code" sx={{ ...mono, color: D.green, bgcolor: 'rgba(74,222,128,0.1)', px: 0.6, py: 0.15, borderRadius: 0.75 }}>OUTREACH_EMAIL_FROM</Box>{' '}
+                to a <b>dedicated</b> cold-sending address on a $10 lookalike domain — never your main jointprinting.com inbox.
+                The engine starts on its own once it’s set.
+              </Typography>
+              <Button onClick={copyVar} size="small" startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
+                sx={{ mt: 1, color: copied ? D.green : D.muted, fontSize: 11.5, textTransform: 'none', border: `1px solid ${D.line}`,
+                  borderRadius: 999, px: 1.25, '&:hover': { borderColor: D.lineHi, color: D.text } }}>
+                {copied ? 'Copied' : 'Copy variable name'}
+              </Button>
+            </Box>
+          )}
+
+          {/* Live SPF / DKIM / DMARC posture — the #1 inbox-vs-spam lever. */}
+          {engine.senderConfigured && auth && (
+            <Box>
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 0.75 }}>
+                <AuthChip label="SPF" ok={!!auth.spf} />
+                <AuthChip label="DKIM" ok={!!auth.dkim} />
+                <AuthChip label="DMARC" ok={!!auth.dmarc} />
+              </Stack>
+              {authRed && (auth.issues || []).length > 0 && (
+                <Typography sx={{ color: D.muted, fontSize: 11.5, lineHeight: 1.5 }}>
+                  {(auth.issues || []).join(' ')} The exact records are in{' '}
+                  <Box component="code" sx={{ ...mono, color: D.text }}>docs/DELIVERABILITY.md</Box>.
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          {/* Send-a-test-to-yourself — the real send path, so you can eyeball
+              inbox vs. spam before enrolling a single lead. */}
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: D.panel, border: `1px solid ${D.line}` }}>
+            <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>Send a test to yourself</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <TextField
+                value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="you@yourinbox.com"
+                size="small" fullWidth type="email"
+                sx={{ '& .MuiOutlinedInput-root': { color: D.text, fontSize: 13, bgcolor: D.inset,
+                  '& fieldset': { borderColor: D.line }, '&:hover fieldset': { borderColor: D.lineHi },
+                  '&.Mui-focused fieldset': { borderColor: D.green } },
+                  '& input::placeholder': { color: D.faint, opacity: 1 } }}
+              />
+              <Button onClick={runTest} disabled={testing || !senderReady}
+                startIcon={<SendOutlinedIcon sx={{ fontSize: 15 }} />}
+                sx={{ ...linkBtnSx, py: 0.6, flexShrink: 0, opacity: (testing || !senderReady) ? 0.5 : 1 }}>
+                {testing ? 'Sending…' : 'Send test'}
+              </Button>
+            </Stack>
+            <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.75 }}>
+              {senderReady
+                ? 'Uses your real sender + SMTP. Check it lands in the inbox, not spam. Blank = sends to the sender address.'
+                : 'Available once the sender address and SMTP are set on the API.'}
+            </Typography>
+          </Box>
+        </Stack>
+      </WizStep>
+
+      {/* Step 2 — Leads */}
+      <WizStep n={2} title="Find your leads" done={step2Done} active={activeIndex === 1}
+        statusText={step2Done
+          ? `${coldReserve} in reserve${enrolledTotal ? ` · ${enrolledTotal} enrolled` : ''}.`
+          : 'No leads yet — the finder discovers dispensaries and scrapes their emails for free.'}>
+        <Button onClick={onGoImport} size="small" sx={linkBtnSx}>Find leads →</Button>
+      </WizStep>
+
+      {/* Step 3 — Launch */}
+      <WizStep n={3} title="Launch your sequence" done={step3Done} active={activeIndex === 2} last
+        statusText={step3Done
+          ? 'A campaign is live — the engine drips it on its own.'
+          : 'A proven 4-touch dispensary sequence is pre-loaded — review the copy and activate it.'}>
+        <Button onClick={onGoCampaigns} size="small" sx={linkBtnSx}>Open campaigns →</Button>
+      </WizStep>
+    </Box>
+  );
+}
+
 export default function OverviewView({
-  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport,
+  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onTestSend,
 }) {
   if (loading && !overview) {
     return (
@@ -147,34 +340,48 @@ export default function OverviewView({
   const { engine, campaigns = [], warm = [], recent = [], nextActions = [] } = overview;
   const anyActive = campaigns.some((c) => c.status === 'active');
 
+  // The first-run guide owns setup messaging while it's visible; the standalone
+  // setup alerts below are the safety net for after it's dismissed/complete.
+  const setupComplete =
+    (engine.senderConfigured && engine.smtpConfigured && !(engine.auth && engine.auth.level === 'red')) &&
+    ((overview.coldReserve || 0) > 0 || campaigns.some((c) => (c.stats && c.stats.enrolled) || 0)) &&
+    anyActive;
+  let wizardHidden = false;
+  try { wizardHidden = localStorage.getItem('jp_outreach_hide_setup') === '1'; } catch { /* SSR/no-storage */ }
+  const wizardShowing = !setupComplete && !wizardHidden;
+
   return (
     <Stack spacing={3}>
+      {/* First-run guide — self-checking "Launch in 3 steps"; hides when set up. */}
+      <SetupWizard overview={overview} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} onTestSend={onTestSend} />
+
       {/* The one thing to do right now — synthesized from the whole dashboard. */}
       <NextActions actions={nextActions} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} />
 
-      {/* Setup guardrails — surfaced loudly until sending is actually possible. */}
-      {!engine.senderConfigured && (
+      {/* Setup guardrails — a safety net once the wizard is gone (dismissed or
+          complete); while the wizard is showing it owns this messaging. */}
+      {!wizardShowing && !engine.senderConfigured && (
         <Alert severity="warning" variant="outlined" sx={{ borderColor: D.amber, color: D.text, '& .MuiAlert-icon': { color: D.amber } }}>
           <b>Holding — no sends yet.</b> Set <Box component="code" sx={{ ...mono }}>OUTREACH_EMAIL_FROM</Box> on the API
           to a dedicated outreach address (a $10 lookalike domain, not the main one) and the engine starts on its own.
           Your main jointprinting.com sender is never used for cold email.
         </Alert>
       )}
-      {engine.senderConfigured && !engine.publicLinksConfigured && (
+      {!wizardShowing && engine.senderConfigured && !engine.publicLinksConfigured && (
         <Alert severity="info" variant="outlined" sx={{ borderColor: D.line, color: D.muted }}>
           Set <Box component="code" sx={{ ...mono }}>OUTREACH_PUBLIC_API_BASE</Box> to enable one-click unsubscribe links
           and open tracking (until then, opt-outs are reply-based and opens aren’t counted).
         </Alert>
       )}
       {/* Sender authentication — the #1 inbox-vs-spam lever. Red = holding. */}
-      {engine.senderConfigured && engine.auth && engine.auth.level === 'red' && (
+      {!wizardShowing && engine.senderConfigured && engine.auth && engine.auth.level === 'red' && (
         <Alert severity="warning" variant="outlined" sx={{ borderColor: '#f87171', color: D.text, '& .MuiAlert-icon': { color: '#f87171' } }}>
           <b>{engine.authGate ? 'Holding — sender domain isn’t authenticated.' : 'Sender domain isn’t authenticated.'}</b>{' '}
           {(engine.auth.issues || []).join(' ')} See <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box> for
           the exact SPF/DKIM/DMARC records to add. Cold mail without these lands in spam or bounces.
         </Alert>
       )}
-      {engine.senderConfigured && engine.auth && engine.auth.level === 'amber' && (
+      {!wizardShowing && engine.senderConfigured && engine.auth && engine.auth.level === 'amber' && (
         <Alert severity="info" variant="outlined" sx={{ borderColor: D.amber, color: D.muted, '& .MuiAlert-icon': { color: D.amber } }}>
           Sender auth is almost there — {(engine.auth.issues || []).join(' ')} (see <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box>).
         </Alert>
