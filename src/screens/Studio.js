@@ -1812,18 +1812,21 @@ const TIER_COLS = {
 // CRM Today queue. The backup nudge lives here too (it used to be a separate top
 // banner) with a ✕ to snooze it. Falls back to the calm placeholder when clear.
 // (Missing-receipt nudges live on the Finances page, not here — by design.)
+// Consumes GET /api/signals: the server composes order-aging + money-owed + CRM
+// follow-ups + buyer replies into severity groups (critical → warning → info).
+// Each group is a row in the same calm language as before — 8px glowing tone dot,
+// 13.5/700 label — with order/CRM groups expanding to their exact records and the
+// reply group jumping to the Outreach worklist. The backup nudge (client-gated by
+// localStorage) is appended, and the whole section still vanishes on a clean day.
 function SignalsPanel({ signals, onNavigate, onPick }) {
   const [open, setOpen] = React.useState({});
-  const c = (signals && signals.counts) || {};
-  const fu = (signals && signals.followUps) || {};
-  const orders = (signals && signals.orders) || [];
+  const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
 
-  // Backup nudge, folded into Signals. Two triggers, overdue first: an overdue
-  // weekly archive (backend isDue, snooze a week) and a gentler monthly "copy it
-  // to an external drive" reminder. Each remembers its last dismissal in
-  // localStorage so it doesn't re-nag on every load. ✕ snoozes; the row body
-  // opens the Backup tab.
+  // Backup nudge, folded into Signals (unchanged): an overdue weekly-archive nudge
+  // (snooze a week) and a gentler monthly "copy it to an external drive" reminder,
+  // each remembering its last dismissal in localStorage so it doesn't re-nag. ✕
+  // snoozes; the row body opens the Backup tab.
   const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
   const [hddDismissedAt, setHddDismissedAt] = React.useState(() => readTs(K_HDD_REMINDER));
   const now = Date.now();
@@ -1834,15 +1837,38 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
   };
   const showOverdue = !!(backup && backup.isDue) && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
   const showHdd = !showOverdue && (now - hddDismissedAt > REMIND_HDD_MS);
-
-  const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const s = (n) => (n === 1 ? '' : 's');
 
+  const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+
+  // Tone per severity, from palette D (critical red, warning amber, info green).
+  const TONE = { critical: '#f87171', warning: D.amber, info: D.green };
+
+  // Deep-link one expanded item to its exact record, by the group's kind.
+  const itemNav = (kind, it) => {
+    if (kind === 'order') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
+    else if (kind === 'crm') onNavigate && onNavigate({ view: 'crm', companyKey: it.companyKey || null });
+  };
+
+  // Flatten the server groups into rows (critical → warning → info). Order/CRM
+  // groups expand to their records; the reply group jumps to the Outreach worklist.
   const rows = [];
-  if (c.possibly_late > 0) rows.push({ key: 'late', tone: '#f87171', label: `${c.possibly_late} order${s(c.possibly_late)} possibly late · 3+ weeks`, flag: 'possibly_late' });
-  if (c.running_long > 0) rows.push({ key: 'long', tone: D.amber, label: `${c.running_long} order${s(c.running_long)} running long · 2+ weeks`, flag: 'running_long' });
-  if (fu.overdue > 0) rows.push({ key: 'overdue', tone: '#f87171', label: `${fu.overdue} follow-up${s(fu.overdue)} overdue`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
-  if (fu.dueToday > 0) rows.push({ key: 'today', tone: D.green, label: `${fu.dueToday} follow-up${s(fu.dueToday)} due today`, onClick: () => onPick && onPick({ target: 'crm', view: 'today' }) });
+  for (const sev of ['critical', 'warning', 'info']) {
+    for (const g of (groups[sev] || [])) {
+      if (!g || !g.count) continue;
+      const items = Array.isArray(g.items) ? g.items : [];
+      const expandable = (g.kind === 'order' || g.kind === 'crm') && items.length > 0;
+      rows.push({
+        key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, items, expandable,
+        onClick: expandable ? null
+          : g.kind === 'triage' ? () => onPick && onPick('outreach')
+          : g.kind === 'crm' ? () => onPick && onPick({ target: 'crm', view: 'today' })
+          : null,
+      });
+    }
+  }
+
+  // Backup nudge rows (client-gated), appended after the data signals.
   if (showOverdue) rows.push({
     key: 'backup', tone: D.amber,
     label: backup.lastBackupAt
@@ -1859,7 +1885,7 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
   });
 
   // Nothing needs attention → render nothing (the whole Signals section, header
-  // included, disappears — no dead "coming soon" placeholder cluttering the hub).
+  // included, disappears — no dead placeholder cluttering the hub).
   if (!rows.length) return null;
 
   return (
@@ -1867,9 +1893,8 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
       <SectionHeader brand="Signals" tagline="What needs your attention" />
       <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
       {rows.map((r, i) => {
-        const expandable = !!r.flag;
         const expanded = !!open[r.key];
-        const click = expandable ? () => toggle(r.key) : r.onClick;
+        const click = r.expandable ? () => toggle(r.key) : r.onClick;
         return (
           <Box key={r.key}>
             <Box onClick={click} role="button" tabIndex={0}
@@ -1887,23 +1912,30 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
                   ✕
                 </Box>
               )}
-              {expandable
+              {r.expandable
                 ? <ExpandMoreIcon sx={{ fontSize: 20, color: D.faint, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
                 : <ChevronRightIcon sx={{ fontSize: 20, color: D.faint }} />}
             </Box>
-            {expandable && expanded && (
+            {r.expandable && expanded && (
               <Box sx={{ pb: 0.5, bgcolor: 'rgba(0,0,0,0.16)' }}>
-                {orders.filter((o) => o.flag === r.flag).map((o) => (
-                  <Box key={o._id} onClick={() => onNavigate && onNavigate({ view: 'clients', projectNumber: o.projectNumber })}
-                    role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && onNavigate) onNavigate({ view: 'clients', projectNumber: o.projectNumber }); }}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4.75, pr: 1.75, py: 0.85, cursor: 'pointer',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}>
-                    <MuiTypography sx={{ ...mono, color: D.green, fontSize: 12, minWidth: 50 }}>#{o.projectNumber || o.orderNumber || '—'}</MuiTypography>
-                    <MuiTypography sx={{ color: D.muted, fontSize: 12.5, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.companyName || o.clientName || '—'}</MuiTypography>
-                    <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>{o.ageDays}d</MuiTypography>
-                  </Box>
-                ))}
+                {r.items.map((it, idx) => {
+                  const idTxt = it.projectNumber || it.orderNumber || '';
+                  return (
+                    <Box key={it._id || it.companyKey || idTxt || idx}
+                      onClick={() => itemNav(r.kind, it)} role="button" tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') itemNav(r.kind, it); }}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4.75, pr: 1.75, py: 0.85, cursor: 'pointer',
+                        '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}>
+                      {idTxt
+                        ? <MuiTypography sx={{ ...mono, color: D.green, fontSize: 12, minWidth: 50 }}>#{idTxt}</MuiTypography>
+                        : null}
+                      <MuiTypography sx={{ color: D.muted, fontSize: 12.5, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name || '—'}</MuiTypography>
+                      {it.metric
+                        ? <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>{it.metric}</MuiTypography>
+                        : null}
+                    </Box>
+                  );
+                })}
               </Box>
             )}
           </Box>
@@ -2070,19 +2102,18 @@ function StudioBody({ token, onLogout }) {
   // Each fetch fails silent — a down endpoint just drops its row. (Missing-receipt
   // nudges live on the Finances page, not here.)
   const [signals, setSignals] = React.useState({
-    orders: [], counts: { possibly_late: 0, running_long: 0 },
-    followUps: { overdue: 0, dueToday: 0 }, backup: null,
+    groups: { critical: [], warning: [], info: [] }, counts: {}, backup: null,
   });
   React.useEffect(() => {
     if (view !== 'hub') return;
     let cancelled = false;
     const authH = { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 };
-    axios.get(`${config.backendUrl}/api/orders/attention`, authH)
-      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, orders: r.data?.orders || [], counts: r.data?.counts || s.counts })); })
-      .catch(() => { /* silent — orders row just won't show */ });
-    axios.get(`${config.backendUrl}/api/crm/today`, authH)
-      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, followUps: { overdue: r.data?.summary?.overdue || 0, dueToday: r.data?.summary?.dueToday || 0 } })); })
-      .catch(() => { /* silent */ });
+    // Smart Alerts: one composed, severity-ranked feed (order aging + money owed +
+    // CRM follow-ups + buyer replies) replacing the old separate orders/attention +
+    // crm/today fetches. Silent-fails so a down endpoint just hides Signals.
+    axios.get(`${config.backendUrl}/api/signals`, authH)
+      .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, groups: r.data?.groups || s.groups, counts: r.data?.counts || {} })); })
+      .catch(() => { /* silent — Signals just won't show */ });
     axios.get(`${config.backendUrl}/api/admin/backup/status`, authH)
       .then((r) => { if (!cancelled) setSignals((s) => ({ ...s, backup: r.data || null })); })
       .catch(() => { /* silent — backup row just won't show */ });
