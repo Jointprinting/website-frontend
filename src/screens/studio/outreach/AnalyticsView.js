@@ -17,16 +17,46 @@ const C = { sent: '#60a5fa', opened: '#fbbf24', replied: '#4ade80', unsub: '#f87
 
 const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : 0);
 
+// Cold-email benchmarks → a plain-language verdict + tone. Replies are the north
+// star (opens are MPP-inflated). rate is a fraction 0–1.
+function replyVerdict(rate) {
+  if (rate >= 0.03) return { label: 'Great', tone: C.replied };
+  if (rate >= 0.01) return { label: 'Good', tone: C.replied };
+  if (rate > 0) return { label: 'Low', tone: C.opened };
+  return null;
+}
+function bounceVerdict(rate) {
+  if (rate < 0.02) return { label: 'Healthy', tone: C.replied };
+  if (rate < 0.05) return { label: 'Watch', tone: C.opened };
+  return { label: 'High', tone: C.unsub };
+}
+function unsubVerdict(rate) {
+  if (rate < 0.005) return { label: 'Healthy', tone: C.replied };
+  if (rate < 0.02) return { label: 'Watch', tone: C.opened };
+  return { label: 'High', tone: C.unsub };
+}
+function VerdictChip({ v }) {
+  if (!v) return null;
+  return (
+    <Box component="span" sx={{ ml: 0.75, px: 0.7, py: 0.1, borderRadius: 999, fontSize: 9.5, fontWeight: 800,
+      color: v.tone, bgcolor: `${v.tone}22`, border: `1px solid ${v.tone}44`, verticalAlign: 'middle' }}>
+      {v.label}
+    </Box>
+  );
+}
+
 // ── Sending funnel — KPI tiles up front, nested funnel as support ─────────────
 // The old version was four bars scaled to "enrolled"; with nothing sent it read
 // as one full bar + three empty stubs (useless). This leads with the two numbers
 // that actually matter for cold email — OPEN RATE and REPLY RATE — as stat tiles,
 // then draws the nested funnel only once there's something to funnel.
-function KpiTile({ label, value, sub, tone }) {
+function KpiTile({ label, value, sub, tone, verdict }) {
   return (
     <Box sx={{ flex: '1 1 120px', minWidth: 110, px: 1.5, py: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
       <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>{label}</Typography>
-      <Typography sx={{ ...mono, color: tone || D.text, fontSize: 24, fontWeight: 800, lineHeight: 1.1, mt: 0.3 }}>{value}</Typography>
+      <Typography sx={{ ...mono, color: tone || D.text, fontSize: 24, fontWeight: 800, lineHeight: 1.1, mt: 0.3 }}>
+        {value}<VerdictChip v={verdict} />
+      </Typography>
       {sub && <Typography sx={{ ...mono, color: D.faint, fontSize: 11, fontWeight: 700, mt: 0.2 }}>{sub}</Typography>}
     </Box>
   );
@@ -47,7 +77,8 @@ function Funnel({ overall }) {
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         <KpiTile label="Enrolled" value={enrolled.toLocaleString()} tone={D.text} sub={`${sent} sent`} />
         <KpiTile label="Open rate" value={sent ? `${openRate}%` : '—'} tone={C.opened} sub={`${opened.toLocaleString()} opened`} />
-        <KpiTile label="Reply rate" value={sent ? `${replyRate}%` : '—'} tone={C.replied} sub={`${replied.toLocaleString()} replied`} />
+        <KpiTile label="Reply rate" value={sent ? `${replyRate}%` : '—'} tone={C.replied} sub={`${replied.toLocaleString()} replied`}
+          verdict={sent ? replyVerdict(replied / sent) : null} />
         <KpiTile label="Unsub" value={unsubscribed.toLocaleString()} tone={unsubscribed > 0 ? C.unsub : D.muted} sub={sent ? `${pct(unsubscribed, sent)}% of sent` : ''} />
       </Box>
       {sent > 0 ? (
@@ -76,6 +107,76 @@ function Funnel({ overall }) {
           </Typography>
         </Box>
       )}
+      <Typography sx={{ color: D.faint, fontSize: 10.5, lineHeight: 1.5 }}>
+        Benchmarks: reply <b>1–3% good, 3%+ great</b>. Opens are inflated by Apple Mail Privacy — treat <b>replies</b> as the real signal.
+      </Typography>
+    </Stack>
+  );
+}
+
+// ── Deliverability health — the metric that decides inbox vs. spam ────────────
+function DeliverabilityCard({ deliverability, overall }) {
+  const d = deliverability || {};
+  const bounceRate = d.bounceRate || 0;       // 7-day rolling (from the engine)
+  const complaintRate = d.complaintRate || 0;
+  const unsubRate = overall.sent > 0 ? (overall.unsubscribed || 0) / overall.sent : 0;
+  const bv = bounceVerdict(bounceRate);
+  const cv = bounceVerdict(complaintRate * 10); // complaints matter ~10× more; reuse the scale
+  const uv = unsubVerdict(unsubRate);
+  return (
+    <Stack spacing={1.5}>
+      {d.tripped && (
+        <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: `${C.unsub}18`, border: `1px solid ${C.unsub}55` }}>
+          <Typography sx={{ color: C.unsub, fontSize: 12.5, fontWeight: 800 }}>⏸ Auto-paused — {d.reason}</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 11.5, mt: 0.25 }}>Sending resumes automatically once the bad window ages out. Clean the list first.</Typography>
+        </Box>
+      )}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        <KpiTile label="Bounce (7d)" value={`${(bounceRate * 100).toFixed(1)}%`} tone={bv.tone} verdict={bv}
+          sub={`${d.bounced7d || 0} of ${d.sent7d || 0} sent`} />
+        <KpiTile label="Complaint (7d)" value={`${(complaintRate * 100).toFixed(2)}%`} tone={cv.tone} verdict={cv}
+          sub={`${d.complaints7d || 0} marked spam`} />
+        <KpiTile label="Unsub (all)" value={`${(unsubRate * 100).toFixed(1)}%`} tone={uv.tone} verdict={uv}
+          sub={`${(overall.unsubscribed || 0).toLocaleString()} opted out`} />
+      </Box>
+      <Typography sx={{ color: D.faint, fontSize: 10.5, lineHeight: 1.5 }}>
+        Keep bounce under <b>2%</b> and complaints under <b>0.1%</b> — Gmail/Yahoo junk a sender that crosses these. The engine auto-pauses if they spike.
+      </Typography>
+    </Stack>
+  );
+}
+
+// ── Per-touch drop-off — which STEP of the sequence is dead ───────────────────
+function StepFunnel({ stepFunnel = [] }) {
+  const rows = stepFunnel.filter((r) => r.sent > 0);
+  if (!rows.length) {
+    return <Typography sx={{ color: D.faint, fontSize: 12.5 }}>No sends yet — per-touch performance lands here once the sequence runs.</Typography>;
+  }
+  const maxSent = Math.max(1, ...rows.map((r) => r.sent));
+  return (
+    <Stack spacing={1}>
+      {rows.map((r) => {
+        const rr = pct(r.replied, r.sent);
+        return (
+          <Box key={r.step}>
+            <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 0.35 }}>
+              <Typography sx={{ color: D.text, fontSize: 12, fontWeight: 700 }}>Touch {r.step + 1}</Typography>
+              <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>
+                <Box component="span" sx={{ color: C.sent, fontWeight: 800 }}>{r.sent}</Box> sent ·{' '}
+                <Box component="span" sx={{ color: C.replied, fontWeight: 800 }}>{r.replied}</Box> replied
+                {' '}({rr}%){r.unsubscribed ? ` · ${r.unsubscribed} unsub` : ''}
+              </Typography>
+            </Stack>
+            <Box sx={{ position: 'relative', height: 9, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
+              <Box sx={{ width: `${(r.sent / maxSent) * 100}%`, height: '100%', bgcolor: `${C.sent}66`, borderRadius: 999 }} />
+              <Box sx={{ position: 'absolute', top: 0, left: 0, width: `${(r.replied / maxSent) * 100}%`, height: '100%', bgcolor: C.replied, borderRadius: 999 }} />
+            </Box>
+          </Box>
+        );
+      })}
+      <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+        A touch with lots sent but ~0 replies is dead weight — rewrite it or cut it.
+      </Typography>
     </Stack>
   );
 }
@@ -87,9 +188,10 @@ function TrendChart({ trend }) {
   const maxVal = Math.max(1, ...trend.flatMap((w) => [w.sent, w.opened, w.replied]));
   const x = (i) => padL + (i * (W - padL - padR)) / Math.max(1, n - 1);
   const y = (v) => padT + (1 - v / maxVal) * (H - padT - padB);
-  const line = (key) => trend.map((w, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(w[key]).toFixed(1)}`).join(' ');
+  const line = (key) => trend.map((w, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(w[key] || 0).toFixed(1)}`).join(' ');
   const series = [
     { key: 'sent', color: C.sent }, { key: 'opened', color: C.opened }, { key: 'replied', color: C.replied },
+    { key: 'unsubscribed', color: C.unsub },
   ];
   const anyData = trend.some((w) => w.sent || w.opened || w.replied);
   const wkLabel = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -237,7 +339,7 @@ export default function AnalyticsView({ analytics, loading }) {
   }
   if (!analytics) return null;
 
-  const { overall, perState = [], trend = [], coverage = [] } = analytics;
+  const { overall, perState = [], trend = [], coverage = [], stepFunnel = [], deliverability = null } = analytics;
   const nothing = overall.enrolled === 0 && coverage.length === 0;
   if (nothing) {
     return (
@@ -254,6 +356,14 @@ export default function AnalyticsView({ analytics, loading }) {
       <Card title="Sending performance — open &amp; reply rates">
         <Funnel overall={overall} />
       </Card>
+      <Card title="Deliverability health — inbox vs. spam">
+        <DeliverabilityCard deliverability={deliverability} overall={overall} />
+      </Card>
+      {stepFunnel.some((r) => r.sent > 0) && (
+        <Card title="Per-touch drop-off — which step is working">
+          <StepFunnel stepFunnel={stepFunnel} />
+        </Card>
+      )}
       <Card title="Last 8 weeks — sends, opens, replies">
         <TrendChart trend={trend} />
       </Card>
