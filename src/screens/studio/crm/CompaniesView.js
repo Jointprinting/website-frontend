@@ -179,9 +179,6 @@ export default function CompaniesView({
   // Archived mode runs its own client-side search (the archived set is fetched
   // separately and isn't wired to the live ?q= companies fetch).
   const [localQuery, setLocalQuery] = React.useState('');
-  // "Best leads first" — sort the shown list by the server's lead-quality score
-  // (highest first) so cold email + road visits target the most actionable leads.
-  const [bestFirst, setBestFirst] = React.useState(false);
 
   const archivedFiltered = React.useMemo(() => {
     if (!archived) return clients || [];
@@ -218,14 +215,7 @@ export default function CompaniesView({
     return (clients || []).filter((c) => segmentOf(c) === segment);
   }, [archived, archivedFiltered, clients, segment, stageFilter]);
 
-  // "Best leads first" re-sorts the shown segment by lead-quality score (desc),
-  // tie-broken by name; off, it keeps the server's A–Z order.
-  const list = React.useMemo(() => {
-    if (!bestFirst) return segmented;
-    return [...segmented].sort((a, b) =>
-      (b.leadScore || 0) - (a.leadScore || 0) ||
-      String(a.companyName || '').localeCompare(String(b.companyName || '')));
-  }, [segmented, bestFirst]);
+  const list = segmented;
 
   // ── Archived recover surface ────────────────────────────────────────────────
   if (archived) {
@@ -341,18 +331,6 @@ export default function CompaniesView({
           <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono, flexShrink: 0 }}>
             {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'company' : 'companies'}`}
           </Typography>
-          <Box
-            component="button" type="button" onClick={() => setBestFirst((v) => !v)}
-            title="Sort by lead quality — most actionable leads (email + address) first"
-            sx={{ cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
-              border: `1px solid ${bestFirst ? D.green : D.line}`, borderRadius: 999,
-              bgcolor: bestFirst ? 'rgba(74,222,128,0.12)' : 'transparent',
-              color: bestFirst ? D.green : D.faint, fontWeight: 800, fontSize: 11.5,
-              px: 1, py: 0.25, display: 'inline-flex', alignItems: 'center', gap: 0.4,
-              '&:hover': { borderColor: bestFirst ? D.green : D.lineHi } }}
-          >
-            <StarRateRoundedIcon sx={{ fontSize: 14 }} /> Best leads first
-          </Box>
         </Stack>
         <Typography sx={{ color: D.faint, fontSize: 11.5, display: { xs: 'none', sm: 'block' } }}>
           {stageFilter ? `Every ${stageM.label.toLowerCase()}-stage company, all segments` : m.hint}
