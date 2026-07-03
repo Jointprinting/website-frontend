@@ -355,7 +355,7 @@ function About() {
             target="_blank"
             rel="noopener noreferrer"
             variant="contained"
-            color="secondary"
+            color="cta"
             size="large"
             sx={{
               borderRadius: 999,

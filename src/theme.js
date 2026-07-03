@@ -18,6 +18,15 @@ const rawTheme = createTheme({
       main: '#1a3d2b',  // JP Forest
       dark: '#14301f',  // Forest Deep (hover/pressed)
     },
+    // Emerald CTA — the public site's click-me primary fills. Deliberately
+    // brighter than secondary (JP Forest) so the main action pops; INK text
+    // because white fails contrast on emerald. Mirrors src/brand.js emerald.
+    // Scoped on purpose: the Studio admin never uses color="cta".
+    cta: {
+      main: '#4ade80',         // Emerald
+      dark: '#22c55e',         // Emerald Deep (hover/pressed)
+      contrastText: '#111816', // INK
+    },
     warning: {
       main: '#ffc071',
       dark: '#ffb25e',

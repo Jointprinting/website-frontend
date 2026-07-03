@@ -172,7 +172,7 @@ function ProductHowItWorks() {
         </Grid>
 
         <Button
-          color="secondary"
+          color="cta"
           size="large"
           variant="contained"
           component={RouterLink}

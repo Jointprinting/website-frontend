@@ -146,7 +146,7 @@ function ProductValues() {
             component={RouterLink}
             to="/products"
             variant="contained"
-            color="secondary"
+            color="cta"
             size="large"
             sx={{
               borderRadius: 999,

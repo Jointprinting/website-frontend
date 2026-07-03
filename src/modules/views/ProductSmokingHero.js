@@ -76,7 +76,7 @@ function ProductSmokingHero() {
               boxShadow: 5,
             }}
             variant="contained"
-            color="secondary"
+            color="cta"
           >
             Book a free 15-min call
           </Button>
