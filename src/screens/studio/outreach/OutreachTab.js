@@ -42,10 +42,12 @@ const NAV = [
   { id: 'import',    label: 'Find leads', Icon: TravelExploreOutlinedIcon },
 ];
 
-export default function OutreachTab({ token, onBack, onNavigate }) {
+export default function OutreachTab({ token, onBack, onNavigate, initialView }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
-  const [view, setView] = React.useState('dashboard');
+  // initialView lets a deep-link (e.g. the hub's "reply awaiting response" alert)
+  // open straight onto a sub-view like Replies; a plain open falls back to Dashboard.
+  const [view, setView] = React.useState(initialView || 'dashboard');
 
   const [overview, setOverview] = React.useState(null);
   const [overviewLoading, setOverviewLoading] = React.useState(true);
