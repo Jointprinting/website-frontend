@@ -9,7 +9,7 @@
 // are dropped with mix-blend-mode:multiply over a color-matched tile.
 //
 // Built to convert: risk-reversal micro-copy, honest client proof, a dark
-// dispensary-native order flow (free mockup → approve → print in-house → ship),
+// dispensary-native order flow (free mockup → approve → we handle production → ship),
 // a closing offer, and a sticky "free mockup" bar that follows the scroll — so
 // the next step is always one tap away. The page stays fully dark end-to-end
 // (its own process + CTA blocks) instead of handing off to the light shared
@@ -100,32 +100,29 @@ const WORK = [
   { src: '/work/premier-high-life-hoodie.png', client: 'Premier High Life', loc: 'Las Cruces, NM', item: 'Branded pullover hoodie', tint: ['#eafaef', '#cdeed6'], big: true },
   { src: '/work/shaggys-baggy-local-drop.png', client: "Shaggy's Baggy", loc: 'Auburn, ME', item: 'Local-drop tee', tint: ['#fde4f0', '#f8c9e0'] },
   { src: '/work/shaggys-baggy-flower-tee.png', client: "Shaggy's Baggy", loc: 'Auburn, ME', item: 'Retail customer tee', tint: ['#fdead9', '#fbd3ad'] },
-  { src: '/work/premier-staff-tee.png', client: 'Premier High Life', loc: 'Las Cruces, NM', item: 'Staff tee', tint: ['#e8f0ea', '#d3e6d8'] },
   { src: '/work/dispensary-trucker-cap.png', client: 'Dispensary drop', loc: '', item: 'Embroidered trucker cap', tint: ['#fbe4ef', '#f6cfe2'] },
 ];
 // The hero rotates through the most striking full-garment shots.
 const HERO_SHOTS = [WORK[0], WORK[1], WORK[2], WORK[3]];
 
-// Honest client proof — real shops we've printed for, spanning the country
-// (NM → ME reinforces "we ship anywhere"). Never invented quotes.
-const PROOF = [
-  { name: 'Premier High Life', loc: 'Las Cruces, NM' },
-  { name: "Shaggy's Baggy", loc: 'Auburn, ME' },
-];
+// Credibility points — honest, verifiable, no invented client quotes.
+const PROOF = ['30,000+ pieces delivered', 'Design done in-house', 'Ships nationwide', 'Free mockups, no minimums'];
 
 // The real order flow, worded for a dispensary owner. Step 1 is the entry point.
+// Honest: we design in-house and MANAGE production — we don't claim to run the
+// presses ourselves.
 const PROCESS = [
   { Icon: DesignServicesOutlinedIcon, k: '01', t: 'Free mockup', d: 'Send your logo — or a rough idea on a napkin. We design a real mockup on real blanks and send it back. Free, no commitment.' },
   { Icon: CheckroomOutlinedIcon, k: '02', t: 'Approve & pick your blanks', d: "Love it? Pick your pieces — budget tees to premium heavyweight hoodies. We handle sizes, quantities, and the art files." },
-  { Icon: PrintOutlinedIcon, k: '03', t: 'We print in-house', d: 'No middleman, no drop-ship markup. We screen-print and embroider everything ourselves, so quality and timing are on us.' },
+  { Icon: PrintOutlinedIcon, k: '03', t: 'We handle production', d: 'We source the right blanks and manage the printing and embroidery end-to-end — one partner, consistent quality, and timing that’s on us.' },
   { Icon: LocalShippingOutlinedIcon, k: '04', t: 'Ships to your shop', d: 'Boxes at your door, on time and on-brand. Need a restock or a new seasonal drop? A couple clicks and it’s moving.' },
 ];
 
-const TRUST = ['Free mockup, no commitment', 'No minimums to start', 'Printed in-house — no middleman', 'Ships nationwide'];
+const TRUST = ['Free mockup, no commitment', 'No minimums to start', 'One partner, fully managed', 'Ships nationwide'];
 
 const STATS = [
-  { n: '30,000+', l: 'units delivered' },
-  { n: 'In-house', l: 'design + print' },
+  { n: '30,000+', l: 'pieces delivered' },
+  { n: 'In-house', l: 'design team' },
   { n: '24 hr', l: 'mockup turnaround' },
   { n: 'Nationwide', l: 'we ship anywhere' },
 ];
@@ -329,26 +326,21 @@ export default function Dispensaries() {
           </Box>
         </Box>
 
-        {/* ── PROOF strip — honest client social proof, coast to coast ── */}
+        {/* ── PROOF strip — honest credibility, no named endorsements ── */}
         <Container maxWidth="lg" sx={{ py: { xs: 3.5, md: 4.5 } }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1.5, sm: 3 }} alignItems="center"
             justifyContent="center" sx={{ textAlign: 'center' }}>
             <Typography sx={{ ...eyebrow, fontSize: 12.5, letterSpacing: 3, color: JP.onDarkMuted }}>
-              Trusted by real dispensaries
+              A merch partner that shows up
             </Typography>
             <Stack direction="row" flexWrap="wrap" useFlexGap justifyContent="center" spacing={1.25}>
               {PROOF.map((p) => (
-                <Box key={p.name} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.9, px: 1.75, py: 0.7,
+                <Box key={p} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.9, px: 1.75, py: 0.7,
                   borderRadius: 999, border: '1px solid rgba(244,248,245,0.14)', bgcolor: 'rgba(255,255,255,0.03)' }}>
                   <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: JP.emerald }} />
-                  <Typography component="span" sx={{ fontWeight: 800, fontSize: 13.5, color: JP.onDark }}>{p.name}</Typography>
-                  <Typography component="span" sx={{ fontSize: 12.5, color: JP.onDarkMuted }}>· {p.loc}</Typography>
+                  <Typography component="span" sx={{ fontWeight: 800, fontSize: 13, color: JP.onDark }}>{p}</Typography>
                 </Box>
               ))}
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1.75, py: 0.7, borderRadius: 999,
-                border: '1px dashed rgba(244,248,245,0.14)' }}>
-                <Typography component="span" sx={{ fontSize: 12.5, color: JP.onDarkMuted, fontWeight: 600 }}>+ shops nationwide</Typography>
-              </Box>
             </Stack>
           </Stack>
         </Container>
@@ -402,8 +394,11 @@ export default function Dispensaries() {
                 <Box sx={{ gridColumn: { sm: 'span 2' }, gridRow: { md: 'span 2' } }}>
                   <WorkTile w={big} big />
                 </Box>
-                {rest.map((w) => (
-                  <Box key={w.src}><WorkTile w={w} /></Box>
+                {rest.map((w, i) => (
+                  // Last tile spans both bottom cells so the bento fills cleanly.
+                  <Box key={w.src} sx={{ gridColumn: { md: i === rest.length - 1 ? 'span 2' : 'span 1' } }}>
+                    <WorkTile w={w} />
+                  </Box>
                 ))}
               </Box>
             </Reveal>
@@ -449,11 +444,8 @@ export default function Dispensaries() {
                 No agencies, no minimum-order runaround. Four steps from your logo to boxes at the shop — and it starts free.
               </Typography>
             </Reveal>
-            <Box sx={{ position: 'relative', display: 'grid', gap: 2.5,
+            <Box sx={{ display: 'grid', gap: 2.5,
               gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
-              {/* connecting line on desktop */}
-              <Box aria-hidden sx={{ display: { xs: 'none', md: 'block' }, position: 'absolute', top: 34, left: '12%', right: '12%',
-                height: '1px', background: `linear-gradient(90deg, ${JP.emeraldSoft(0)}, ${JP.emeraldSoft(0.5)}, ${JP.emeraldSoft(0)})` }} />
               {PROCESS.map(({ Icon, k, t, d }, i) => {
                 const isEntry = i === 0;
                 const card = (
@@ -521,7 +513,7 @@ export default function Dispensaries() {
                   Your next drop starts with a free mockup.
                 </Typography>
                 <Typography sx={{ color: JP.onDarkMuted, maxWidth: 560, mx: 'auto', mb: 4, fontSize: { xs: 16, md: 18.5 }, lineHeight: 1.6 }}>
-                  Send your logo — or a rough idea — and we'll send back a real mockup on real blanks. No cost, no commitment. Love it? We print in-house and ship it to your shop.
+                  Send your logo — or a rough idea — and we'll send back a real mockup on real blanks. No cost, no commitment. Love it? We handle production and ship it to your shop.
                 </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
                   <Button component={RouterLink} to="/contact?topic=dispensary" variant="contained" color="cta" size="large"
