@@ -150,7 +150,7 @@ function ProductHowItWorks() {
                   <Typography variant="h6" sx={{ mb: 1.5 }}>
                     {step.title}
                   </Typography>
-                  <Typography variant="body1" sx={{ flexGrow: 1 }}>
+                  <Typography variant="body1" sx={{ flexGrow: 1, color: 'rgba(28,32,30,0.82)' }}>
                     {step.body}
                   </Typography>
                   {step.ctaLabel && (
