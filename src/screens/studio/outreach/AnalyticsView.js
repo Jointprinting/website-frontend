@@ -17,37 +17,64 @@ const C = { sent: '#60a5fa', opened: '#fbbf24', replied: '#4ade80', unsub: '#f87
 
 const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : 0);
 
-// ── Overall funnel — horizontal bars scaled to the enrolled count ─────────────
+// ── Sending funnel — KPI tiles up front, nested funnel as support ─────────────
+// The old version was four bars scaled to "enrolled"; with nothing sent it read
+// as one full bar + three empty stubs (useless). This leads with the two numbers
+// that actually matter for cold email — OPEN RATE and REPLY RATE — as stat tiles,
+// then draws the nested funnel only once there's something to funnel.
+function KpiTile({ label, value, sub, tone }) {
+  return (
+    <Box sx={{ flex: '1 1 120px', minWidth: 110, px: 1.5, py: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+      <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>{label}</Typography>
+      <Typography sx={{ ...mono, color: tone || D.text, fontSize: 24, fontWeight: 800, lineHeight: 1.1, mt: 0.3 }}>{value}</Typography>
+      {sub && <Typography sx={{ ...mono, color: D.faint, fontSize: 11, fontWeight: 700, mt: 0.2 }}>{sub}</Typography>}
+    </Box>
+  );
+}
+
 function Funnel({ overall }) {
-  const base = Math.max(overall.enrolled, 1);
-  const rows = [
-    { label: 'Enrolled', value: overall.enrolled, color: D.muted,   sub: '' },
-    { label: 'Sent',     value: overall.sent,     color: C.sent,    sub: `${pct(overall.sent, overall.enrolled)}% of enrolled` },
-    { label: 'Opened',   value: overall.opened,   color: C.opened,  sub: `${pct(overall.opened, overall.sent)}% of sent` },
-    { label: 'Replied',  value: overall.replied,  color: C.replied, sub: `${pct(overall.replied, overall.sent)}% of sent` },
+  const { enrolled = 0, sent = 0, opened = 0, replied = 0, unsubscribed = 0 } = overall;
+  const openRate = pct(opened, sent);
+  const replyRate = pct(replied, sent);
+  // Nested funnel scaled to sent (the real conversion): Sent 100% ⊇ Opened ⊇ Replied.
+  const stages = [
+    { label: 'Sent', value: sent, color: C.sent, of: 100 },
+    { label: 'Opened', value: opened, color: C.opened, of: pct(opened, sent) },
+    { label: 'Replied', value: replied, color: C.replied, of: pct(replied, sent) },
   ];
   return (
-    <Stack spacing={1}>
-      {rows.map((r) => (
-        <Box key={r.label}>
-          <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 0.4 }}>
-            <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700 }}>{r.label}</Typography>
-            <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>
-              <Box component="span" sx={{ color: r.color, fontWeight: 800 }}>{r.value.toLocaleString()}</Box>
-              {r.sub ? `  ·  ${r.sub}` : ''}
-            </Typography>
-          </Stack>
-          <Box sx={{ height: 10, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
-            <Box sx={{ width: `${Math.max(2, (r.value / base) * 100)}%`, height: '100%', bgcolor: r.color,
-              borderRadius: 999, transition: 'width 0.5s ease' }} />
-          </Box>
+    <Stack spacing={1.75}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        <KpiTile label="Enrolled" value={enrolled.toLocaleString()} tone={D.text} sub={`${sent} sent`} />
+        <KpiTile label="Open rate" value={sent ? `${openRate}%` : '—'} tone={C.opened} sub={`${opened.toLocaleString()} opened`} />
+        <KpiTile label="Reply rate" value={sent ? `${replyRate}%` : '—'} tone={C.replied} sub={`${replied.toLocaleString()} replied`} />
+        <KpiTile label="Unsub" value={unsubscribed.toLocaleString()} tone={unsubscribed > 0 ? C.unsub : D.muted} sub={sent ? `${pct(unsubscribed, sent)}% of sent` : ''} />
+      </Box>
+      {sent > 0 ? (
+        <Stack spacing={0.75}>
+          {stages.map((r) => (
+            <Box key={r.label}>
+              <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 0.35 }}>
+                <Typography sx={{ color: D.text, fontSize: 12, fontWeight: 700 }}>{r.label}</Typography>
+                <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>
+                  <Box component="span" sx={{ color: r.color, fontWeight: 800 }}>{r.value.toLocaleString()}</Box>
+                  {r.label !== 'Sent' ? `  ·  ${r.of}% of sent` : ''}
+                </Typography>
+              </Stack>
+              <Box sx={{ height: 9, borderRadius: 999, bgcolor: D.inset, overflow: 'hidden' }}>
+                <Box sx={{ width: `${Math.max(r.value > 0 ? 3 : 0, r.of)}%`, height: '100%', bgcolor: r.color,
+                  borderRadius: 999, transition: 'width 0.5s ease' }} />
+              </Box>
+            </Box>
+          ))}
+        </Stack>
+      ) : (
+        <Box sx={{ py: 1.5, px: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px dashed ${D.line}` }}>
+          <Typography sx={{ color: D.muted, fontSize: 12.5, fontWeight: 600 }}>
+            Nothing sent yet — your open and reply rates land here the moment the engine sends.
+            {enrolled > 0 ? ' Check the campaign card above if it says a reason (e.g. leads missing email).' : ''}
+          </Typography>
         </Box>
-      ))}
-      {overall.unsubscribed > 0 && (
-        <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.5 }}>
-          <Box component="span" sx={{ color: C.unsub, fontWeight: 700 }}>{overall.unsubscribed}</Box> unsubscribed
-          {' · '}reply rate <Box component="span" sx={{ color: C.replied, fontWeight: 700 }}>{pct(overall.replied, overall.sent)}%</Box>
-        </Typography>
       )}
     </Stack>
   );
@@ -224,7 +251,7 @@ export default function AnalyticsView({ analytics, loading }) {
 
   return (
     <Stack spacing={2}>
-      <Card title="Overall funnel — enrolled → sent → opened → replied">
+      <Card title="Sending performance — open &amp; reply rates">
         <Funnel overall={overall} />
       </Card>
       <Card title="Last 8 weeks — sends, opens, replies">
