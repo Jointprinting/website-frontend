@@ -1459,6 +1459,9 @@ select:focus-visible{
         <button class="btn btn-secondary btn-sm" onclick="promptSaveBlank()">+ Blank</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveLogo()">+ Logo</button>
         <button class="btn btn-secondary btn-sm" onclick="promptSaveMockupImage()">+ Mockup Image</button>
+        <!-- One-time loose-PDF importer. Hidden by default; _initPdfImporterVisibility()
+             reveals it only until it's been used, then it removes itself. -->
+        <button class="btn btn-secondary btn-sm" id="pdf-import-btn" onclick="importLoosePdfs(this)" style="display:none" title="Import old mockup PDFs from your computer into the library (one-time)">⤓ Import loose PDFs</button>
       </div>
     </div>
     <div class="lib-section">
@@ -2604,6 +2607,7 @@ function initDB() {
         try { await syncToCloud(); } catch (_) {}
         try { refreshSyncBadge(); } catch (_) {}
         try { _refreshSaveGate(); } catch (_) {}
+        try { await _initPdfImporterVisibility(); } catch (_) {}
         // Deep-link: ?mockup=<remoteId> opens that mockup straight into the
         // editor for one-click editing from the OrderTracker drawer.
         try {
@@ -4736,6 +4740,176 @@ async function promptSaveMockupImage() {
     reader.readAsDataURL(file);
   };
   input.click();
+}
+
+// ── One-time loose-PDF importer ───────────────────────────────────
+// Nate had ~37 mockup PDFs sitting loose in Drive — exported long ago, never
+// synced as records. This self-deleting importer renders each PDF's first page
+// to a thumbnail, pulls the mockup # from the filename and the company from the
+// title text, and saves each into the mockups library via the SAME dbSave path
+// real mockups use (so it cloud-syncs normally) — WITHOUT creating any project,
+// lead, or order, and without touching the number-assigner. It skips any mockup
+// # already in the library so it can't duplicate or disturb an existing record,
+// and it removes itself after a successful run.
+
+// Pull the canonical mockup # (6 digits + letter[s]) out of a filename,
+// tolerating the shapes these exports actually have: "000061A.pdf",
+// "#000068A.pdf", "Mockup 000018A.pdf", "000062M-1.pdf", "000023B 2 (1).pdf".
+function _parseMockupNum(filename){
+  const base = String(filename||'').replace(/\.[^.]+$/, '');
+  const m = base.match(/(\d{6}[A-Z]+)/i);
+  return m ? m[1].toUpperCase() : '';
+}
+
+// Same normalization the rest of the studio uses (OrderTracker.normMockupKey):
+// strip '#', drop leading zeros, uppercase — so a legacy "61A" record and this
+// importer's padded "000061A" collapse to one key and dedup can't miss it.
+function _normMockupKey(n){ return String(n||'').replace(/^#/,'').replace(/^0+/,'').toUpperCase(); }
+
+// Derive a display title + client from the PDF's text. These studio exports
+// carry a "<Company> Merch" title line — use the whole line as the name and the
+// part before "Merch" as the client. Empty fallback lets the caller use the #.
+function _titleClientFromText(text){
+  let clean = String(text||'').replace(/\s+/g,' ').trim();
+  // Strip the export's own header/footer boilerplate + mockup-number tokens
+  // first. getTextContent returns items in draw order, which can place
+  // "www.jointprinting.com @jointprinting" (or "Mockup #000061A") ahead of the
+  // "<Company> Merch" title; without this the un-anchored match would absorb
+  // that leading junk into the company name.
+  clean = clean
+    .replace(/www\.jointprinting\.com/gi, ' ')
+    .replace(/@?jointprinting/gi, ' ')
+    .replace(/innovation in ink/gi, ' ')
+    .replace(/#?\d{6}[A-Z]+/gi, ' ')
+    .replace(/\bmockup\b/gi, ' ')
+    .replace(/\blogo back\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const m = clean.match(/([A-Za-z0-9&.,'’\-][A-Za-z0-9&.,'’\- ]{1,58}?\bMerch)\b/);
+  if (m){
+    const title = m[1].trim();
+    const client = title.replace(/\s*Merch$/i,'').trim();
+    return { title, client };
+  }
+  return { title:'', client:'' };
+}
+
+// Render a PDF ArrayBuffer's first page to a JPEG data URL (~720px wide) and
+// return its text too (grabbed while the doc is open, for client derivation).
+async function _pdfFirstPageThumb(buf){
+  const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const v1 = page.getViewport({ scale: 1 });
+    const scale = Math.min(2, Math.max(0.4, 720 / v1.width));
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    let text = '';
+    try { const tc = await page.getTextContent(); text = (tc.items||[]).map(i=>i.str).join(' '); } catch(_){}
+    return { thumb: canvas.toDataURL('image/jpeg', 0.82), text };
+  } finally {
+    try { doc.destroy(); } catch(_){}
+  }
+}
+
+async function importLoosePdfs(btn){
+  if (!db){ toast('Studio still loading — try again in a sec','error'); return; }
+  if (importLoosePdfs._busy) return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'application/pdf,.pdf'; input.multiple = true;
+  input.onchange = async ev => {
+    const files = Array.from(ev.target.files || []).filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+    if (!files.length) return;                          // cancelled — keep the button
+    importLoosePdfs._busy = true;
+    if (btn){ btn.disabled = true; btn.textContent = '⤓ Importing…'; }
+    // Dedup against what's already stored so we never duplicate an existing
+    // mockup # or disturb a current record. Fail CLOSED: if we can't read the
+    // library, abort rather than import blind — importing without the
+    // skip-existing set could duplicate live records.
+    let existing;
+    try {
+      const all = await dbGetAll('mockups');
+      existing = new Set(all.map(m => _normMockupKey(m.pageState?.mockupNum)).filter(Boolean));
+    } catch(e){
+      console.error('import: could not read existing mockups', e);
+      toast('Import aborted — could not check existing mockups. Try again.', 'error');
+      importLoosePdfs._busy = false;
+      if (btn){ btn.disabled = false; btn.textContent = '⤓ Import loose PDFs'; }
+      return;
+    }
+    const seen = new Set();
+    let imported = 0, skipped = 0, failed = 0;
+    for (let i = 0; i < files.length; i++){
+      const file = files[i];
+      if (btn) btn.textContent = `⤓ Importing ${i+1}/${files.length}…`;
+      try {
+        const num = _parseMockupNum(file.name);
+        if (!num){ skipped++; continue; }               // not a mockup-numbered pdf
+        const key = _normMockupKey(num);                // match legacy "61A" ⇄ "000061A"
+        if (existing.has(key) || seen.has(key)){ skipped++; continue; }
+        seen.add(key);
+        const buf = await file.arrayBuffer();
+        const { thumb, text } = await _pdfFirstPageThumb(buf);
+        const { title, client } = _titleClientFromText(text);
+        const name = title || `#${num}`;
+        await dbSave('mockups', {
+          name,
+          client: client || '',
+          savedAt: file.lastModified || Date.now(),
+          thumbnail: thumb,
+          data: null,
+          remoteId: `pdfimport-${num}`,                 // stable → idempotent, never dupes
+          pageState: {
+            ...defaultPageInfo(),
+            mockupNum: num,
+            title: name,
+            client: client || '',
+            pdfName: file.name,
+            frontCompositeBase64: thumb,                // so opening it shows the imported page
+            frontBlankBase64: thumb,
+            importedPdf: true,
+            importSource: 'loose-drive-pdf',
+          },
+        });
+        imported++;
+      } catch(e){
+        console.error('PDF import failed for', file.name, e);
+        failed++;
+      }
+    }
+    importLoosePdfs._busy = false;
+    try { await refreshLibrary(); } catch(_){}
+    try { await refreshClientSuggestions(); } catch(_){}
+    try { if (document.getElementById('overview-view-wrapper')?.classList.contains('active')) renderOverview(); } catch(_){}
+    const bits = [`${imported} imported`];
+    if (skipped) bits.push(`${skipped} skipped`);
+    if (failed) bits.push(`${failed} failed`);
+    toast(bits.join(' · ') + (skipped ? ' (skipped = already in library or not a mockup PDF)' : ''), imported ? 'success' : 'error');
+    // Self-delete after a CLEAN run (Nate: "auto delete after i click"): only
+    // when something imported AND nothing failed, so failed files aren't
+    // stranded with no retry path (a mis-click / all-skipped run also keeps it).
+    if (imported > 0 && failed === 0){
+      try { localStorage.setItem('jpstudio_pdfimport_done','1'); } catch(_){}
+      if (btn) btn.remove();
+    } else if (btn){
+      btn.disabled = false; btn.textContent = '⤓ Import loose PDFs';
+    }
+  };
+  input.click();
+}
+
+// The importer is a one-shot: reveal it only until it's been used cleanly on
+// this device. Gated solely on the local "done" flag (set after a no-failures
+// run) — deliberately NOT on "library already has pdfimport- items", because a
+// partial/interrupted run would then hide the button and strand the files that
+// still need importing.
+function _initPdfImporterVisibility(){
+  const btn = document.getElementById('pdf-import-btn');
+  if (!btn) return;
+  let done = false;
+  try { done = localStorage.getItem('jpstudio_pdfimport_done') === '1'; } catch(_){}
+  btn.style.display = done ? 'none' : '';
 }
 
 // ── Library Picker ────────────────────────────────────────────────
