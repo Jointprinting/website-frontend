@@ -125,6 +125,19 @@ export default function OverviewView({
           and open tracking (until then, opt-outs are reply-based and opens aren’t counted).
         </Alert>
       )}
+      {/* Sender authentication — the #1 inbox-vs-spam lever. Red = holding. */}
+      {engine.senderConfigured && engine.auth && engine.auth.level === 'red' && (
+        <Alert severity="warning" variant="outlined" sx={{ borderColor: '#f87171', color: D.text, '& .MuiAlert-icon': { color: '#f87171' } }}>
+          <b>{engine.authGate ? 'Holding — sender domain isn’t authenticated.' : 'Sender domain isn’t authenticated.'}</b>{' '}
+          {(engine.auth.issues || []).join(' ')} See <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box> for
+          the exact SPF/DKIM/DMARC records to add. Cold mail without these lands in spam or bounces.
+        </Alert>
+      )}
+      {engine.senderConfigured && engine.auth && engine.auth.level === 'amber' && (
+        <Alert severity="info" variant="outlined" sx={{ borderColor: D.amber, color: D.muted, '& .MuiAlert-icon': { color: D.amber } }}>
+          Sender auth is almost there — {(engine.auth.issues || []).join(' ')} (see <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box>).
+        </Alert>
+      )}
 
       {/* Engine status */}
       <Box>
@@ -137,6 +150,12 @@ export default function OverviewView({
             tone={engine.withinWindow ? D.green : D.muted} />
           <StatPill value={engine.senderConfigured ? 'Ready' : 'Not set'} label="Sender"
             tone={engine.senderConfigured ? D.green : '#f87171'} />
+          {engine.auth && (
+            <StatPill
+              value={engine.auth.level === 'green' ? 'Pass' : engine.auth.level === 'amber' ? 'Partial' : engine.auth.level === 'red' ? 'Fail' : '—'}
+              label="SPF·DKIM·DMARC"
+              tone={engine.auth.level === 'green' ? D.green : engine.auth.level === 'amber' ? D.amber : engine.auth.level === 'red' ? '#f87171' : D.muted} />
+          )}
         </Stack>
         {engine.from ? (
           <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, ...mono }}>
