@@ -203,6 +203,19 @@ export default function OverviewView({
             sending as {engine.from}{engine.lastRunAt ? ` · last run ${fmtRelative(engine.lastRunAt)}` : ''}
           </Typography>
         ) : null}
+        {/* Sender pool — per-inbox headroom when more than one is configured. */}
+        {Array.isArray(engine.senders) && engine.senders.length > 1 && (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+            {engine.senders.map((s) => (
+              <Box key={s.label} sx={{ px: 1.25, py: 0.5, borderRadius: 999, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+                <Typography component="span" sx={{ ...mono, fontSize: 11, fontWeight: 800, color: s.remaining > 0 ? D.green : D.amber }}>
+                  {s.label}
+                </Typography>
+                <Typography component="span" sx={{ ...mono, fontSize: 11, color: D.faint }}> {s.sentToday}/{s.cap}</Typography>
+              </Box>
+            ))}
+          </Stack>
+        )}
       </Box>
 
       {/* Warm leads — the whole point of the tool. */}
