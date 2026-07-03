@@ -20,7 +20,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
 import { EmptyState, Eyebrow, StageChip } from '../crm/_crm';
 import {
-  StatusChip, campaignStatusMeta, renderPreview, hasSpintax, SAMPLE_CONTEXT, MERGE_FIELDS,
+  StatusChip, campaignStatusMeta, renderPreview, hasSpintax, lintContent, SAMPLE_CONTEXT, MERGE_FIELDS,
   DEFAULT_SEQUENCE,
 } from './_outreach';
 
@@ -162,6 +162,28 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
               <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.75 }}>
                 The address + unsubscribe footer is added automatically to every send (legally required).
               </Typography>
+
+              {/* Live deliverability check for this step — advisory, never blocks. */}
+              {(() => {
+                const lint = lintContent({ subject: preview.subject, body: preview.body });
+                const tone = lint.level === 'ok' ? D.green : lint.level === 'warn' ? '#fbbf24' : '#f87171';
+                return (
+                  <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 2, border: `1px solid ${tone}44`, bgcolor: `${tone}14` }}>
+                    <Typography sx={{ color: tone, fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3 }}>
+                      Deliverability check — {lint.score}/100 {lint.level === 'ok' ? '· looks clean ✓' : ''}
+                    </Typography>
+                    {lint.issues.length > 0 && (
+                      <Stack component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }} spacing={0.25}>
+                        {lint.issues.map((iss) => (
+                          <Typography key={iss.code} component="li" sx={{ color: D.muted, fontSize: 11.5 }}>
+                            {iss.msg}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                );
+              })()}
             </Box>
           </Stack>
         </Stack>
