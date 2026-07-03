@@ -19,8 +19,24 @@ import AutoModeOutlinedIcon from '@mui/icons-material/AutoModeOutlined';
 import { D, mono, dropInput, dropPrimaryBtn } from '../_shared';
 import { FINDER_REGIONS, StatPill } from './_outreach';
 
-function AutoFinder({ region, onRegion, busy, result, frontier, autoBusy, onRun, onToggleAuto, onGoCampaigns }) {
+// "2h ago" style — small helper for the last-swept note.
+function agoLabel(ts) {
+  if (!ts) return '';
+  const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function AutoFinder({ region, onRegion, busy, result, frontier, regions = [], autoBusy, onRun, onToggleAuto, onGoCampaigns }) {
   const regionLabel = (FINDER_REGIONS.find((r) => r.id === region) || {}).label || region;
+  // Per-region swept status from the finder — grey the button for a region we
+  // just swept so the owner knows it's done (auto-pilot refills as they send).
+  const sweptInfo = (regions || []).find((r) => r.id === region) || null;
+  const justSwept = !!(sweptInfo && sweptInfo.recentlySwept);
+  const findDisabled = busy || justSwept;
 
   return (
     <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.lineHi}`, borderRadius: 2.5, p: 2 }}>
@@ -44,12 +60,18 @@ function AutoFinder({ region, onRegion, busy, result, frontier, autoBusy, onRun,
             <MenuItem key={r.id} value={r.id}>{r.label}{r.id === 'nj' ? ' (start here)' : ''}</MenuItem>
           ))}
         </TextField>
-        <Button onClick={onRun} disabled={busy}
+        <Button onClick={onRun} disabled={findDisabled}
           startIcon={busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <TravelExploreOutlinedIcon sx={{ fontSize: 16 }} />}
-          sx={{ ...dropPrimaryBtn, px: 2.5, py: 0.6, fontSize: 12.5 }}>
-          {busy ? 'Finding…' : `Find & import ${regionLabel}`}
+          sx={{ ...dropPrimaryBtn, px: 2.5, py: 0.6, fontSize: 12.5,
+            '&.Mui-disabled': { bgcolor: 'rgba(255,255,255,0.06)', color: D.faint } }}>
+          {busy ? 'Finding…' : justSwept ? `${regionLabel} — swept ${agoLabel(sweptInfo.lastSweptAt)}` : `Find & import ${regionLabel}`}
         </Button>
       </Stack>
+      {justSwept && !busy && (
+        <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 1 }}>
+          Just swept {regionLabel} ({sweptInfo.lastNew} new). Re-searching now won't find more — auto-pilot refills it as you send, or pick another state.
+        </Typography>
+      )}
 
       {busy && (
         <Box sx={{ mt: 1.75, p: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.lineHi}` }}>
