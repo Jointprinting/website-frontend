@@ -884,6 +884,44 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr, run, getLocation, showToast]);
 
+  // "Suggest a run near me" — ask the server for the best nearby prospects to
+  // visit (fresh, callable, not already customers), add them to today's run via
+  // the same add-stop path, then optimize the route from the current location.
+  const [suggesting, setSuggesting] = React.useState(false);
+  const suggestRun = React.useCallback(async () => {
+    setSuggesting(true);
+    try {
+      const loc = myLocRef.current || await getLocation();
+      const r = await axios.get(`${api}/api/roadtrip/suggest`, {
+        ...authHdr, params: { lat: loc.lat, lng: loc.lng, radius: 25, limit: 8 },
+      });
+      const picks = r.data?.suggestions || [];
+      if (!picks.length) { showToast('No fresh prospects nearby — try a different area or zoom out.', 'info'); return; }
+      let added = 0, lastRun = null;
+      for (const p of picks) {
+        try {
+          const rr = await axios.post(`${api}/api/roadtrip/run/stops`, { dispensaryId: p._id }, authHdr);
+          lastRun = rr.data?.run || lastRun;
+          if (!rr.data?.duplicate) added += 1;
+        } catch { /* skip a failed add, keep going */ }
+      }
+      if (lastRun) setRun(lastRun);
+      setRunMiles(null);
+      try {
+        const opt = await axios.post(`${api}/api/roadtrip/run/optimize`, loc, authHdr);
+        setRun(opt.data?.run || lastRun);
+        setRunMiles(opt.data?.miles ?? null);
+        showToast(`Planned a run of ${added} nearby prospect${added === 1 ? '' : 's'} — ~${opt.data?.miles}mi.`, 'success');
+      } catch {
+        showToast(`Added ${added} nearby prospect${added === 1 ? '' : 's'} to today's run.`, 'success');
+      }
+    } catch (err) {
+      showToast(err?.message || 'Could not suggest a run.', 'error');
+    } finally {
+      setSuggesting(false);
+    }
+  }, [api, authHdr, getLocation, showToast]);
+
   const completeRun = React.useCallback(async () => {
     try {
       await axios.post(`${api}/api/roadtrip/run/complete`, {}, authHdr);
@@ -1227,9 +1265,24 @@ export default function RoadTripTab({ token, onNavigate }) {
   const runPanel = (
     <PanelSection title={`TODAY'S RUN · ${run?.stops?.length || 0}`} persistKey="jpfm-run">
       {(!run || !run.stops?.length) ? (
-        <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 1, fontStyle: 'italic' }}>
-          Empty. Tap any pin → ＋ ADD TO RUN. Then OPTIMIZE orders the stops from where you are, and GO opens Google Maps.
-        </Typography>
+        <>
+          <Box role="button" tabIndex={0}
+            onClick={suggestRun}
+            onKeyDown={(e) => { if (e.key === 'Enter') suggestRun(); }}
+            sx={{
+              fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
+              py: 0.9, mb: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
+              color: suggesting ? TERM.amber : TERM.greenDk,
+              bgcolor: suggesting ? 'transparent' : TERM.green,
+              border: `1.5px solid ${suggesting ? TERM.amber : TERM.green}`,
+              '&:hover': { opacity: 0.9 },
+            }}>
+            {suggesting ? 'PLANNING…' : '⚡ SUGGEST A RUN NEAR ME'}
+          </Box>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 0.5, fontStyle: 'italic' }}>
+            Best fresh prospects near you, routed automatically. Or tap any pin → ＋ ADD TO RUN.
+          </Typography>
+        </>
       ) : (
         <>
           <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5 }}>
