@@ -10,9 +10,10 @@
 
 export const JP = {
   // ── Green ──
-  forest:     '#1a3d2b', // primary — CTAs, dark green panels, logo field
-  forestDeep: '#14301f', // filled-button hover / pressed
-  emerald:    '#4ade80', // accent — eyebrows, active states, highlights, links
+  forest:      '#1a3d2b', // brand green — dark panels, secondary buttons, logo field
+  forestDeep:  '#14301f', // Forest hover / pressed
+  emerald:     '#4ade80', // PRIMARY CTA fill + accent — buttons, eyebrows, highlights, links
+  emeraldDeep: '#22c55e', // filled emerald-CTA hover / pressed
   emeraldSoft: (a = 0.12) => `rgba(74,222,128,${a})`, // translucent emerald tints
 
   // ── Surfaces ──

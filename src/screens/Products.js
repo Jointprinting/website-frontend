@@ -807,7 +807,7 @@ const [loading,    setLoading]    = useState(true);
             sx={{
               textTransform: 'none', borderRadius: 999, whiteSpace: 'nowrap',
               fontSize: { xs: 12, sm: 13 }, px: { xs: 1.5, sm: 2.5 },
-              bgcolor: '#1a3d2b', '&:hover': { bgcolor: '#14301f' },
+              bgcolor: '#4ade80', color: '#111816', '&:hover': { bgcolor: '#22c55e' },
             }}
             onClick={() => setQuoteOpen(true)}>
             {isMobile ? 'Get quote' : 'Request mockup & quote'}

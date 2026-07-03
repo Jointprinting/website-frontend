@@ -268,7 +268,7 @@ function Contact() {
 
                   <TextField value={notes} label="Anything else we should know?" variant="outlined" fullWidth multiline minRows={4} onChange={(e) => setNotes(e.target.value)} />
 
-                  <Button variant="contained" color="primary" fullWidth type="submit" size="large"
+                  <Button variant="contained" color="cta" fullWidth type="submit" size="large"
                     sx={{ borderRadius: 2, py: 1.6, fontSize: 16, fontWeight: 700, textTransform: 'none' }}>
                     Send request — get your mockup
                   </Button>

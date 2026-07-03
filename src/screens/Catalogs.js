@@ -312,7 +312,7 @@ function Catalogs() {
             target="_blank"
             rel="noopener noreferrer"
             variant="contained"
-            color="secondary"
+            color="cta"
             sx={{
               borderRadius: 999,
               px: 5,

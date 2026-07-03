@@ -63,7 +63,7 @@ export default function ProductHero() {
       </Typography>
 
       <Button
-        color="secondary"
+        color="cta"
         variant="contained"
         size="large"
         component="a"
