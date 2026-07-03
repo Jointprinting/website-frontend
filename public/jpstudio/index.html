@@ -4761,11 +4761,29 @@ function _parseMockupNum(filename){
   return m ? m[1].toUpperCase() : '';
 }
 
+// Same normalization the rest of the studio uses (OrderTracker.normMockupKey):
+// strip '#', drop leading zeros, uppercase — so a legacy "61A" record and this
+// importer's padded "000061A" collapse to one key and dedup can't miss it.
+function _normMockupKey(n){ return String(n||'').replace(/^#/,'').replace(/^0+/,'').toUpperCase(); }
+
 // Derive a display title + client from the PDF's text. These studio exports
 // carry a "<Company> Merch" title line — use the whole line as the name and the
 // part before "Merch" as the client. Empty fallback lets the caller use the #.
 function _titleClientFromText(text){
-  const clean = String(text||'').replace(/\s+/g,' ').trim();
+  let clean = String(text||'').replace(/\s+/g,' ').trim();
+  // Strip the export's own header/footer boilerplate + mockup-number tokens
+  // first. getTextContent returns items in draw order, which can place
+  // "www.jointprinting.com @jointprinting" (or "Mockup #000061A") ahead of the
+  // "<Company> Merch" title; without this the un-anchored match would absorb
+  // that leading junk into the company name.
+  clean = clean
+    .replace(/www\.jointprinting\.com/gi, ' ')
+    .replace(/@?jointprinting/gi, ' ')
+    .replace(/innovation in ink/gi, ' ')
+    .replace(/#?\d{6}[A-Z]+/gi, ' ')
+    .replace(/\bmockup\b/gi, ' ')
+    .replace(/\blogo back\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
   const m = clean.match(/([A-Za-z0-9&.,'’\-][A-Za-z0-9&.,'’\- ]{1,58}?\bMerch)\b/);
   if (m){
     const title = m[1].trim();
@@ -4806,12 +4824,20 @@ async function importLoosePdfs(btn){
     importLoosePdfs._busy = true;
     if (btn){ btn.disabled = true; btn.textContent = '⤓ Importing…'; }
     // Dedup against what's already stored so we never duplicate an existing
-    // mockup # or disturb a current record.
-    let existing = new Set();
+    // mockup # or disturb a current record. Fail CLOSED: if we can't read the
+    // library, abort rather than import blind — importing without the
+    // skip-existing set could duplicate live records.
+    let existing;
     try {
       const all = await dbGetAll('mockups');
-      existing = new Set(all.map(m => String(m.pageState?.mockupNum||'').replace(/^#/,'').toUpperCase()).filter(Boolean));
-    } catch(_){}
+      existing = new Set(all.map(m => _normMockupKey(m.pageState?.mockupNum)).filter(Boolean));
+    } catch(e){
+      console.error('import: could not read existing mockups', e);
+      toast('Import aborted — could not check existing mockups. Try again.', 'error');
+      importLoosePdfs._busy = false;
+      if (btn){ btn.disabled = false; btn.textContent = '⤓ Import loose PDFs'; }
+      return;
+    }
     const seen = new Set();
     let imported = 0, skipped = 0, failed = 0;
     for (let i = 0; i < files.length; i++){
@@ -4820,8 +4846,9 @@ async function importLoosePdfs(btn){
       try {
         const num = _parseMockupNum(file.name);
         if (!num){ skipped++; continue; }               // not a mockup-numbered pdf
-        if (existing.has(num) || seen.has(num)){ skipped++; continue; }
-        seen.add(num);
+        const key = _normMockupKey(num);                // match legacy "61A" ⇄ "000061A"
+        if (existing.has(key) || seen.has(key)){ skipped++; continue; }
+        seen.add(key);
         const buf = await file.arrayBuffer();
         const { thumb, text } = await _pdfFirstPageThumb(buf);
         const { title, client } = _titleClientFromText(text);
@@ -4859,10 +4886,10 @@ async function importLoosePdfs(btn){
     if (skipped) bits.push(`${skipped} skipped`);
     if (failed) bits.push(`${failed} failed`);
     toast(bits.join(' · ') + (skipped ? ' (skipped = already in library or not a mockup PDF)' : ''), imported ? 'success' : 'error');
-    // Self-delete after a successful run (Nate: "auto delete after i click").
-    // Only when something actually imported, so a mis-click or an all-skipped
-    // run doesn't strand him with the button gone.
-    if (imported > 0){
+    // Self-delete after a CLEAN run (Nate: "auto delete after i click"): only
+    // when something imported AND nothing failed, so failed files aren't
+    // stranded with no retry path (a mis-click / all-skipped run also keeps it).
+    if (imported > 0 && failed === 0){
       try { localStorage.setItem('jpstudio_pdfimport_done','1'); } catch(_){}
       if (btn) btn.remove();
     } else if (btn){
@@ -4872,20 +4899,16 @@ async function importLoosePdfs(btn){
   input.click();
 }
 
-// The importer is a one-shot: reveal it only until it's been used. Stays hidden
-// once the local "done" flag is set OR the library already holds pdf-imported
-// items (so it stays gone across devices after the first run syncs down).
-async function _initPdfImporterVisibility(){
+// The importer is a one-shot: reveal it only until it's been used cleanly on
+// this device. Gated solely on the local "done" flag (set after a no-failures
+// run) — deliberately NOT on "library already has pdfimport- items", because a
+// partial/interrupted run would then hide the button and strand the files that
+// still need importing.
+function _initPdfImporterVisibility(){
   const btn = document.getElementById('pdf-import-btn');
   if (!btn) return;
   let done = false;
   try { done = localStorage.getItem('jpstudio_pdfimport_done') === '1'; } catch(_){}
-  if (!done && db){
-    try {
-      const all = await dbGetAll('mockups');
-      if (all.some(m => String(m.remoteId||'').startsWith('pdfimport-'))) done = true;
-    } catch(_){}
-  }
   btn.style.display = done ? 'none' : '';
 }
 
