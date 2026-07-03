@@ -15,6 +15,7 @@ import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
+import AutoModeOutlinedIcon from '@mui/icons-material/AutoModeOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
@@ -332,7 +333,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, onCreate, onUpdate, onLaunch, onUnenrollAll, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onAutoEnroll, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
 
@@ -414,6 +415,21 @@ export default function CampaignsView({ overview, loading, onCreate, onUpdate, o
                         </Button>
                       </Tooltip>
                     )}
+                    {onAutoEnroll && active && (() => {
+                      const on = autoEnrollCampaignId === c._id;
+                      return (
+                        <Tooltip title={on
+                          ? 'Auto-enroll is ON — new cold leads flow into this campaign automatically. Click to turn off.'
+                          : 'Auto-enroll: keep this campaign topped up from your lead reserve automatically (still respects the daily cap + all guards).'}>
+                          <Button onClick={() => onAutoEnroll(c._id, !on)}
+                            startIcon={<AutoModeOutlinedIcon sx={{ fontSize: 16 }} />}
+                            sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: on ? D.green : D.muted,
+                              ...(on ? { border: `1px solid ${D.green}55`, bgcolor: 'rgba(74,222,128,0.08)' } : {}) }}>
+                            Auto-enroll{on ? ': on' : ''}
+                          </Button>
+                        </Tooltip>
+                      );
+                    })()}
                     <Tooltip title="Edit the sequence">
                       <Button onClick={() => setEditor({ campaign: c })} startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
                         sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12 }}>
