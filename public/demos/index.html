@@ -52,6 +52,8 @@
   /* Hero */
   .hero{padding:84px 0 72px;position:relative;overflow:hidden}
   .hero .wrap{position:relative;z-index:2}
+  .hero-logo{width:66px;height:66px;border-radius:15px;display:block;margin-bottom:22px;
+    box-shadow:0 14px 30px -14px rgba(0,0,0,.28)}
   .hero h1{font-size:clamp(40px,7vw,76px)}
   .hero .lede{font-size:clamp(18px,2.4vw,22px);color:var(--muted);max-width:38ch;margin:22px 0 32px}
   .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
@@ -100,7 +102,11 @@
   .tier:not(.feat) .btn{background:#fff;color:var(--ink)}
   @media(max-width:1024px){.tiers{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:600px){.tiers{grid-template-columns:1fr}}
-  .fineprint{color:rgba(255,255,255,.5);font-size:14px;margin-top:26px;text-align:center}
+  .fineprint{color:rgba(255,255,255,.5);font-size:14px;margin-top:18px;text-align:center}
+  .annual{margin:28px auto 0;max-width:600px;display:flex;align-items:center;justify-content:center;gap:8px;
+    text-align:center;background:rgba(255,92,57,.08);border:1.5px solid var(--accent);border-radius:16px;
+    padding:14px 22px;font-size:15.5px;color:#fff;flex-wrap:wrap}
+  .annual b{color:var(--accent)}
 
   /* Examples */
   .ex{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:44px}
@@ -150,6 +156,7 @@
 <div class="hero">
   <div class="blob"></div>
   <div class="wrap">
+    <img class="hero-logo" src="/logo192.png" alt="JP Webworks" />
     <span class="eyebrow">South Jersey web studio</span>
     <h1>A website that works<br>as hard as you do.</h1>
     <p class="lede">JP Webworks builds fast, modern sites for local service businesses — one simple monthly plan, no big upfront, and a site you actually own.</p>
@@ -246,6 +253,7 @@
         <a class="btn" href="#start">Get started</a>
       </div>
     </div>
+    <div class="annual"><span>💚 Prefer to pay yearly?</span> <b>Get 2 months free</b> <span>— 12 months for the price of 10.</span></div>
     <p class="fineprint">Every business is a little different — your exact plan is set on our first call. Month-to-month, cancel anytime, keep your site.</p>
   </div>
 </section>
