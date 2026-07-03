@@ -39,7 +39,7 @@ export default function RewardsSection() {
   };
 
   return (
-    <Box sx={{ bgcolor: '#0c1410', py: { xs: 7, md: 10 } }}>
+    <Box sx={{ bgcolor: '#111816', py: { xs: 7, md: 10 } }}>
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: { xs: 5, md: 7 } }}>
           <Typography variant="overline" sx={{ letterSpacing: 4, color: '#4ade80', display: 'block', mb: 1.5, fontSize: 12 }}>
