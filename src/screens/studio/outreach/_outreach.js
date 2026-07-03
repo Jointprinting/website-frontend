@@ -36,7 +36,8 @@ export const enrollmentStatusMeta = (s) =>
 // of truth for classification) — keep in sync.
 export const TRIAGE_CATEGORIES = [
   'hot_lead', 'needs_response', 'asked_pricing', 'asked_mockups',
-  'follow_up_later', 'not_interested', 'wrong_person', 'unsubscribe', 'bounce_auto_ignore',
+  'follow_up_later', 'not_interested', 'wrong_person', 'unsubscribe',
+  'auto_reply_ooo', 'bounce_auto_ignore',
 ];
 export const TRIAGE_CATEGORY_META = {
   hot_lead:           { label: 'Hot lead',        color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
@@ -47,6 +48,7 @@ export const TRIAGE_CATEGORY_META = {
   wrong_person:       { label: 'Wrong person',    color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
   not_interested:     { label: 'Not interested',  color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
   unsubscribe:        { label: 'Unsubscribe',     color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
+  auto_reply_ooo:     { label: 'Out of office',   color: '#818cf8', bg: 'rgba(129,140,248,0.14)' },
   bounce_auto_ignore: { label: 'Bounce / auto',   color: '#6b7280', bg: 'rgba(107,114,128,0.16)' },
 };
 export const triageCategoryMeta = (c) => TRIAGE_CATEGORY_META[c] || TRIAGE_CATEGORY_META.needs_response;
