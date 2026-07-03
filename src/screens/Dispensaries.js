@@ -8,10 +8,18 @@
 // defensive headline. Real client mockups anchor it — the white photo backgrounds
 // are dropped with mix-blend-mode:multiply over a color-matched tile.
 //
-// Honest claims only — every stat mirrors the homepage; every mockup is real work.
+// Built to convert: risk-reversal micro-copy, honest client proof, a dark
+// dispensary-native order flow (free mockup → approve → print in-house → ship),
+// a closing offer, and a sticky "free mockup" bar that follows the scroll — so
+// the next step is always one tap away. The page stays fully dark end-to-end
+// (its own process + CTA blocks) instead of handing off to the light shared
+// components, which would break the immersive mood.
+//
+// Honest claims only — every stat mirrors the homepage; every mockup is real
+// work; the proof strip names real clients, never invented testimonials.
 
 import * as React from 'react';
-import { Box, Container, Typography, Button, Stack } from '@mui/material';
+import { Box, Container, Typography, Button, Stack, IconButton } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -20,9 +28,12 @@ import LocalMallOutlinedIcon from '@mui/icons-material/LocalMallOutlined';
 import RedeemOutlinedIcon from '@mui/icons-material/RedeemOutlined';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import LoyaltyOutlinedIcon from '@mui/icons-material/LoyaltyOutlined';
+import DesignServicesOutlinedIcon from '@mui/icons-material/DesignServicesOutlined';
+import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import JP from '../brand';
-import ProductHowItWorks from '../modules/views/ProductHowItWorks';
-import ProductSmokingHero from '../modules/views/ProductSmokingHero';
 
 const eyebrow = {
   fontFamily: JP.fontDisplay, fontSize: 14, fontWeight: 700, letterSpacing: 4,
@@ -95,6 +106,23 @@ const WORK = [
 // The hero rotates through the most striking full-garment shots.
 const HERO_SHOTS = [WORK[0], WORK[1], WORK[2], WORK[3]];
 
+// Honest client proof — real shops we've printed for, spanning the country
+// (NM → ME reinforces "we ship anywhere"). Never invented quotes.
+const PROOF = [
+  { name: 'Premier High Life', loc: 'Las Cruces, NM' },
+  { name: "Shaggy's Baggy", loc: 'Auburn, ME' },
+];
+
+// The real order flow, worded for a dispensary owner. Step 1 is the entry point.
+const PROCESS = [
+  { Icon: DesignServicesOutlinedIcon, k: '01', t: 'Free mockup', d: 'Send your logo — or a rough idea on a napkin. We design a real mockup on real blanks and send it back. Free, no commitment.' },
+  { Icon: CheckroomOutlinedIcon, k: '02', t: 'Approve & pick your blanks', d: "Love it? Pick your pieces — budget tees to premium heavyweight hoodies. We handle sizes, quantities, and the art files." },
+  { Icon: PrintOutlinedIcon, k: '03', t: 'We print in-house', d: 'No middleman, no drop-ship markup. We screen-print and embroider everything ourselves, so quality and timing are on us.' },
+  { Icon: LocalShippingOutlinedIcon, k: '04', t: 'Ships to your shop', d: 'Boxes at your door, on time and on-brand. Need a restock or a new seasonal drop? A couple clicks and it’s moving.' },
+];
+
+const TRUST = ['Free mockup, no commitment', 'No minimums to start', 'Printed in-house — no middleman', 'Ships nationwide'];
+
 const STATS = [
   { n: '30,000+', l: 'units delivered' },
   { n: 'In-house', l: 'design + print' },
@@ -165,6 +193,71 @@ function HeroSpotlight() {
   );
 }
 
+// Small check row used under the hero and in the closing offer.
+function TrustRow({ items, sx }) {
+  return (
+    <Stack direction="row" flexWrap="wrap" useFlexGap spacing={{ xs: 1.5, sm: 2.5 }} sx={sx}>
+      {items.map((t) => (
+        <Stack key={t} direction="row" spacing={0.75} alignItems="center">
+          <CheckCircleRoundedIcon sx={{ fontSize: 17, color: JP.emerald }} />
+          <Typography sx={{ color: JP.onDarkMuted, fontSize: 13.5, fontWeight: 600 }}>{t}</Typography>
+        </Stack>
+      ))}
+    </Stack>
+  );
+}
+
+// Sticky "free mockup" bar — slides up once the visitor scrolls past the hero
+// so the primary action is always one tap away. Dismissible; motion-safe.
+function StickyMockupBar() {
+  const [show, setShow] = React.useState(false);
+  const [dismissed, setDismissed] = React.useState(false);
+  React.useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 640);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  if (dismissed) return null;
+  return (
+    <Box sx={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 1250,
+      px: { xs: 0, sm: 2 }, pb: { xs: 0, sm: 2 }, pointerEvents: 'none',
+    }}>
+      <Box sx={{
+        maxWidth: 1080, mx: 'auto', pointerEvents: show ? 'auto' : 'none',
+        display: 'flex', alignItems: 'center', gap: { xs: 1.25, sm: 2 },
+        bgcolor: 'rgba(17,24,22,0.94)', backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(74,222,128,0.32)', borderRadius: { xs: 0, sm: 999 },
+        px: { xs: 2, sm: 3 }, py: { xs: 1.25, sm: 1.5 },
+        boxShadow: '0 -12px 44px -20px rgba(0,0,0,0.85)',
+        transform: show ? 'translateY(0)' : 'translateY(140%)',
+        transition: 'transform .45s cubic-bezier(.2,.7,.2,1)',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+      }}>
+        <LeafMark sx={{ width: 26, height: 26, color: JP.emerald, flexShrink: 0, display: { xs: 'none', sm: 'block' } }} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ ...display, fontSize: { xs: 15, sm: 17 }, color: JP.onDark, letterSpacing: 0, lineHeight: 1.05 }}>
+            Free dispensary mockup
+          </Typography>
+          <Typography sx={{ color: JP.onDarkMuted, fontSize: 12.5, display: { xs: 'none', md: 'block' } }}>
+            Send your logo — get a real mockup on real blanks. No commitment.
+          </Typography>
+        </Box>
+        <Button component={RouterLink} to="/contact?topic=dispensary" variant="contained" color="cta"
+          sx={{ borderRadius: 999, px: { xs: 2, sm: 3 }, py: 1.05, textTransform: 'none', fontWeight: 700,
+            fontSize: { xs: 13.5, sm: 15 }, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          Get a free mockup&nbsp;→
+        </Button>
+        <IconButton aria-label="Dismiss" onClick={() => setDismissed(true)} size="small"
+          sx={{ color: JP.onDarkMuted, flexShrink: 0, '&:hover': { color: JP.onDark } }}>
+          <CloseRoundedIcon sx={{ fontSize: 18 }} />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+}
+
 export default function Dispensaries() {
   const [big, ...rest] = WORK;
   return (
@@ -198,7 +291,7 @@ export default function Dispensaries() {
                 Build a brand your{' '}
                 <Box component="span" sx={{ color: JP.emerald }}>customers wear</Box>.
               </Typography>
-              <Typography sx={{ color: JP.onDarkMuted, maxWidth: 520, mb: 4, fontSize: { xs: 16.5, md: 19 }, lineHeight: 1.6 }}>
+              <Typography sx={{ color: JP.onDarkMuted, maxWidth: 520, mb: 3.5, fontSize: { xs: 16.5, md: 19 }, lineHeight: 1.6 }}>
                 Staff apparel, customer drops, and event gear your community actually reps — turning your best customers into your best advertising. We design, print, and ship merch dispensaries are proud to put their name on.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
@@ -213,6 +306,7 @@ export default function Dispensaries() {
                   Browse products
                 </Button>
               </Stack>
+              <TrustRow items={['Free mockup', 'No minimums to start', 'Ships nationwide']} sx={{ mt: 3 }} />
             </Reveal>
             <Reveal delay={120}>
               <HeroSpotlight />
@@ -235,8 +329,32 @@ export default function Dispensaries() {
           </Box>
         </Box>
 
+        {/* ── PROOF strip — honest client social proof, coast to coast ── */}
+        <Container maxWidth="lg" sx={{ py: { xs: 3.5, md: 4.5 } }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1.5, sm: 3 }} alignItems="center"
+            justifyContent="center" sx={{ textAlign: 'center' }}>
+            <Typography sx={{ ...eyebrow, fontSize: 12.5, letterSpacing: 3, color: JP.onDarkMuted }}>
+              Trusted by real dispensaries
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" useFlexGap justifyContent="center" spacing={1.25}>
+              {PROOF.map((p) => (
+                <Box key={p.name} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.9, px: 1.75, py: 0.7,
+                  borderRadius: 999, border: '1px solid rgba(244,248,245,0.14)', bgcolor: 'rgba(255,255,255,0.03)' }}>
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: JP.emerald }} />
+                  <Typography component="span" sx={{ fontWeight: 800, fontSize: 13.5, color: JP.onDark }}>{p.name}</Typography>
+                  <Typography component="span" sx={{ fontSize: 12.5, color: JP.onDarkMuted }}>· {p.loc}</Typography>
+                </Box>
+              ))}
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1.75, py: 0.7, borderRadius: 999,
+                border: '1px dashed rgba(244,248,245,0.14)' }}>
+                <Typography component="span" sx={{ fontSize: 12.5, color: JP.onDarkMuted, fontWeight: 600 }}>+ shops nationwide</Typography>
+              </Box>
+            </Stack>
+          </Stack>
+        </Container>
+
         {/* ── WHY MERCH ────────────────────────────────────────── */}
-        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 13 } }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 7, md: 12 } }}>
           <Reveal>
             <Typography sx={eyebrow}>Why merch</Typography>
             <Typography component="h2" sx={{ ...display, mt: 1.5, mb: 2, fontSize: { xs: 32, md: 52 }, maxWidth: 860 }}>
@@ -319,8 +437,62 @@ export default function Dispensaries() {
           </Box>
         </Container>
 
+        {/* ── HOW IT WORKS — dark, dispensary-native order flow ─── */}
+        <Box sx={{ py: { xs: 8, md: 13 }, borderTop: '1px solid rgba(244,248,245,0.07)', bgcolor: 'rgba(0,0,0,0.25)' }}>
+          <Container maxWidth="lg">
+            <Reveal>
+              <Typography sx={eyebrow}>How it works</Typography>
+              <Typography component="h2" sx={{ ...display, mt: 1.5, mb: 2, fontSize: { xs: 32, md: 52 } }}>
+                How your drop comes together.
+              </Typography>
+              <Typography sx={{ color: JP.onDarkMuted, maxWidth: 620, mb: 5, fontSize: { xs: 16, md: 18 } }}>
+                No agencies, no minimum-order runaround. Four steps from your logo to boxes at the shop — and it starts free.
+              </Typography>
+            </Reveal>
+            <Box sx={{ position: 'relative', display: 'grid', gap: 2.5,
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)' } }}>
+              {/* connecting line on desktop */}
+              <Box aria-hidden sx={{ display: { xs: 'none', md: 'block' }, position: 'absolute', top: 34, left: '12%', right: '12%',
+                height: '1px', background: `linear-gradient(90deg, ${JP.emeraldSoft(0)}, ${JP.emeraldSoft(0.5)}, ${JP.emeraldSoft(0)})` }} />
+              {PROCESS.map(({ Icon, k, t, d }, i) => {
+                const isEntry = i === 0;
+                const card = (
+                  <Box sx={{ height: '100%', position: 'relative', p: 3, borderRadius: `${JP.radius.card}px`,
+                    border: `1px solid ${isEntry ? JP.emeraldSoft(0.5) : 'rgba(244,248,245,0.1)'}`,
+                    bgcolor: isEntry ? JP.emeraldSoft(0.07) : 'rgba(255,255,255,0.025)',
+                    transition: 'border-color .25s ease, background .25s ease, transform .25s ease',
+                    '&:hover': { borderColor: JP.emeraldSoft(0.5), bgcolor: 'rgba(255,255,255,0.05)', transform: 'translateY(-4px)' } }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                      <Box sx={{ width: 46, height: 46, borderRadius: 2.5, display: 'grid', placeItems: 'center',
+                        bgcolor: JP.emeraldSoft(0.14), color: JP.emerald }}>
+                        <Icon sx={{ fontSize: 25 }} />
+                      </Box>
+                      <Typography sx={{ ...display, fontSize: 30, color: 'rgba(244,248,245,0.16)', letterSpacing: 0 }}>{k}</Typography>
+                    </Stack>
+                    <Typography sx={{ fontWeight: 800, fontSize: 18.5, mb: 1 }}>{t}</Typography>
+                    <Typography sx={{ color: JP.onDarkMuted, fontSize: 14.5, lineHeight: 1.55 }}>{d}</Typography>
+                    {isEntry && (
+                      <Typography sx={{ mt: 1.75, color: JP.emerald, fontWeight: 800, fontSize: 14 }}>Start here →</Typography>
+                    )}
+                  </Box>
+                );
+                return (
+                  <Reveal key={k} delay={i * 80} sx={{ height: '100%' }}>
+                    {isEntry ? (
+                      <Box component={RouterLink} to="/contact?topic=dispensary"
+                        sx={{ display: 'block', height: '100%', textDecoration: 'none', color: 'inherit' }}>
+                        {card}
+                      </Box>
+                    ) : card}
+                  </Reveal>
+                );
+              })}
+            </Box>
+          </Container>
+        </Box>
+
         {/* ── STATS ────────────────────────────────────────────── */}
-        <Container maxWidth="lg" sx={{ pb: { xs: 8, md: 12 } }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Reveal>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: 3,
               p: { xs: 3, md: 4 }, borderRadius: `${JP.radius.panel}px`, border: '1px solid rgba(244,248,245,0.1)',
@@ -334,13 +506,44 @@ export default function Dispensaries() {
             </Box>
           </Reveal>
         </Container>
+
+        {/* ── CLOSING OFFER ────────────────────────────────────── */}
+        <Container maxWidth="lg" sx={{ pb: { xs: 12, md: 18 } }}>
+          <Reveal>
+            <Box sx={{ position: 'relative', overflow: 'hidden', textAlign: 'center',
+              borderRadius: `${JP.radius.panel}px`, border: `1px solid ${JP.emeraldSoft(0.3)}`,
+              background: `linear-gradient(160deg, ${JP.emeraldSoft(0.12)}, rgba(255,255,255,0.02) 55%)`,
+              px: { xs: 3, md: 8 }, py: { xs: 6, md: 9 } }}>
+              <LeafMark sx={{ position: 'absolute', width: { xs: 200, md: 300 }, top: -50, right: -40, color: JP.emerald, opacity: 0.08 }} />
+              <Box sx={{ position: 'relative', zIndex: 1 }}>
+                <Typography sx={eyebrow}>Start your drop</Typography>
+                <Typography component="h2" sx={{ ...display, mt: 1.5, mb: 2, fontSize: { xs: 34, md: 56 }, maxWidth: 720, mx: 'auto' }}>
+                  Your next drop starts with a free mockup.
+                </Typography>
+                <Typography sx={{ color: JP.onDarkMuted, maxWidth: 560, mx: 'auto', mb: 4, fontSize: { xs: 16, md: 18.5 }, lineHeight: 1.6 }}>
+                  Send your logo — or a rough idea — and we'll send back a real mockup on real blanks. No cost, no commitment. Love it? We print in-house and ship it to your shop.
+                </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
+                  <Button component={RouterLink} to="/contact?topic=dispensary" variant="contained" color="cta" size="large"
+                    sx={{ borderRadius: 999, px: 4.5, py: 1.7, textTransform: 'none', fontWeight: 700, fontSize: 16.5 }}>
+                    Get a free mockup →
+                  </Button>
+                  <Button component="a" href="https://calendly.com/nate-jointprinting/30min" target="_blank" rel="noopener noreferrer"
+                    variant="outlined" size="large"
+                    sx={{ borderRadius: 999, px: 4.5, py: 1.7, textTransform: 'none', fontWeight: 700, fontSize: 16.5,
+                      color: JP.onDark, borderColor: 'rgba(244,248,245,0.32)',
+                      '&:hover': { borderColor: JP.onDark, bgcolor: 'rgba(255,255,255,0.06)' } }}>
+                    Book a 15-min call
+                  </Button>
+                </Stack>
+                <TrustRow items={TRUST} sx={{ mt: 4, justifyContent: 'center' }} />
+              </Box>
+            </Box>
+          </Reveal>
+        </Container>
       </Box>
 
-      {/* Shared process + book-a-call CTA (their own light/dark sections) */}
-      <Box sx={{ position: 'relative', zIndex: 1 }}>
-        <ProductHowItWorks />
-        <ProductSmokingHero />
-      </Box>
+      <StickyMockupBar />
     </Box>
   );
 }
