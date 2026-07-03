@@ -215,7 +215,7 @@ function Product() {
               onClick={() => navigate('/products')}
               sx={{
                 textTransform: 'none', borderRadius: 999, px: 3,
-                bgcolor: '#4ade80', color: '#111816', '&:hover': { bgcolor: '#22c55e' },
+                bgcolor: '#22c55e', color: '#111816', '&:hover': { bgcolor: '#16a34a' },
               }}>
               Back to catalog
             </Button>
@@ -449,7 +449,7 @@ function Product() {
                   sx={{
                     width: '100%', borderRadius: 2, py: 1.5,
                     fontWeight: 700, textTransform: 'none', fontSize: { xs: 14, sm: 16 },
-                    bgcolor: '#4ade80', color: '#111816', '&:hover': { bgcolor: '#22c55e' },
+                    bgcolor: '#22c55e', color: '#111816', '&:hover': { bgcolor: '#16a34a' },
                     transition: 'all 150ms ease', '&:active': { transform: 'scale(0.98)' },
                   }}
                   onClick={() => setQuoteDialogOpen(true)}>
@@ -547,7 +547,7 @@ function Product() {
             sx={{
               textTransform: 'none', borderRadius: 999, whiteSpace: 'nowrap',
               fontSize: { xs: 12, sm: 13 }, px: { xs: 1.5, sm: 2.5 },
-              bgcolor: '#4ade80', color: '#111816', '&:hover': { bgcolor: '#22c55e' },
+              bgcolor: '#22c55e', color: '#111816', '&:hover': { bgcolor: '#16a34a' },
             }}
             onClick={() => setQuoteDialogOpen(true)}>
             {isMobile ? 'Get quote' : 'Request mockup & quote'}
