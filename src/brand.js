@@ -12,8 +12,8 @@ export const JP = {
   // ── Green ──
   forest:      '#1a3d2b', // brand green — dark panels, secondary buttons, logo field
   forestDeep:  '#14301f', // Forest hover / pressed
-  emerald:     '#4ade80', // PRIMARY CTA fill + accent — buttons, eyebrows, highlights, links
-  emeraldDeep: '#22c55e', // filled emerald-CTA hover / pressed
+  emerald:     '#4ade80', // accent — eyebrows, highlights, links, code chips (text / thin marks)
+  emeraldDeep: '#22c55e', // PRIMARY CTA button fill (richer, so large fills read vivid not pale)
   emeraldSoft: (a = 0.12) => `rgba(74,222,128,${a})`, // translucent emerald tints
 
   // ── Surfaces ──
