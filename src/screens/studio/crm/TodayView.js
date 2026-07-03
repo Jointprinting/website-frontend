@@ -150,7 +150,7 @@ export default function TodayView({ summary, rows, loading, onOpen, onLog, onRes
 
   return (
     <Stack spacing={2.5}>
-      <Stack direction="row" spacing={1.25}>
+      <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
         <StatPill value={overdue} label="Overdue" tone={overdue > 0 ? '#f87171' : D.muted} />
         <StatPill value={dueToday} label="Due today" tone={dueToday > 0 ? D.amber : D.muted} />
         <StatPill value={total} label="To call" tone={D.green} />

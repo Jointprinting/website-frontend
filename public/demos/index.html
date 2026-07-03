@@ -42,7 +42,12 @@
   .brand b{color:var(--accent)}
   .navlinks{display:flex;align-items:center;gap:28px;font-weight:500;font-size:15px}
   .navlinks a:hover{color:var(--accent)}
-  @media(max-width:720px){.navlinks a:not(.btn){display:none}}
+  /* On phones, wrap the nav onto two rows (brand up top, links + CTA centered
+     below) instead of hiding the links — visitors keep full navigation. */
+  @media(max-width:720px){
+    nav{flex-wrap:wrap;height:auto;padding:12px 0;row-gap:10px}
+    .navlinks{width:100%;justify-content:center;flex-wrap:wrap;gap:18px}
+  }
 
   /* Hero */
   .hero{padding:84px 0 72px;position:relative;overflow:hidden}
@@ -125,6 +130,8 @@
 
   footer{border-top:1px solid var(--line);padding:38px 0;color:var(--muted);font-size:14px}
   footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
+  /* Tighter vertical rhythm on phones so sections don't feel over-padded. */
+  @media(max-width:600px){.hero{padding:56px 0 52px}section{padding:52px 0}}
 </style>
 </head>
 <body>

@@ -22,7 +22,7 @@ export default function ProductHero() {
       <Typography
         variant="overline"
         align="center"
-        sx={{ letterSpacing: 6, fontSize: 13, opacity: 0.7 }}
+        sx={{ letterSpacing: { xs: 2, sm: 6 }, fontSize: 13, opacity: 0.7 }}
       >
         FREE MOCKUPS · NO COMMITMENT
       </Typography>
@@ -108,7 +108,7 @@ export default function ProductHero() {
 
       <Typography
         align="center"
-        sx={{ mt: 4, color: 'rgba(255,255,255,0.45)', fontSize: 13, letterSpacing: 1 }}
+        sx={{ mt: 4, color: 'rgba(255,255,255,0.45)', fontSize: 13, letterSpacing: { xs: 0.5, sm: 1 } }}
       >
         30,000+ units delivered · Screen print · Embroidery · Promo products · Made easy
       </Typography>

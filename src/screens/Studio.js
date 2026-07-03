@@ -1287,7 +1287,8 @@ function ColdCallTab({ token }) {
                       fontSize: 11.5, fontWeight: isCurrent ? 800 : 600,
                       color: isCurrent ? BRAND.green : BRAND.muted,
                       cursor: isCurrent ? 'default' : 'pointer',
-                      px: 0.75, py: 0.3, borderRadius: 1,
+                      px: 0.75, py: { xs: 0.7, md: 0.3 }, borderRadius: 1,
+                      minHeight: { xs: 34, md: 'auto' }, display: 'inline-flex', alignItems: 'center',
                       bgcolor: isCurrent ? 'rgba(74,222,128,0.10)' : 'transparent',
                       transition: 'color 0.15s ease, background 0.15s ease',
                       '&:hover': isCurrent ? {} : { color: BRAND.white, bgcolor: 'rgba(255,255,255,0.04)' },
@@ -1801,8 +1802,9 @@ const TIER_COLS = {
   primary:   { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
   // Marketing pair — a clean 2-up, same rhythm as primary/tucked.
   growth:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
-  // Four operational tools — one even row at desktop (no orphan wrap).
-  secondary: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
+  // Four operational tools — one even row at desktop (no orphan wrap). Single
+  // column on the smallest phones so the tile descriptions don't cramp to 3–4 lines.
+  secondary: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
 };
 
@@ -1918,7 +1920,10 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries = 0 }) {
               {r.onDismiss && (
                 <Box component="span" onClick={r.onDismiss} role="button" tabIndex={0} title="Dismiss"
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); r.onDismiss(e); } }}
-                  sx={{ color: D.faint, fontSize: 15, lineHeight: 1, px: 0.75, py: 0.25, mr: -0.25,
+                  sx={{ color: D.faint, fontSize: 15, lineHeight: 1, mr: -0.25, flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    minWidth: { xs: 36, md: 'auto' }, minHeight: { xs: 36, md: 'auto' },
+                    px: { xs: 1, md: 0.75 }, py: { xs: 1, md: 0.25 },
                     cursor: 'pointer', borderRadius: 1, '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.06)' } }}>
                   ✕
                 </Box>
@@ -2419,7 +2424,7 @@ function StudioBody({ token, onLogout }) {
                   feels like one cohesive surface. */}
               <Box sx={accentBar} />
               <Stack
-                direction="row" alignItems="center" spacing={1.5}
+                direction="row" alignItems="center" spacing={1.5} flexWrap="wrap" useFlexGap
                 sx={{
                   px: { xs: 2, sm: 2.5 }, py: 1.5,
                   borderBottom: `1px solid ${D.line}`,
@@ -2436,7 +2441,8 @@ function StudioBody({ token, onLogout }) {
                   }}
                 >Studio</Button>
                 <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
-                <MuiTypography sx={{ color: D.green, fontWeight: 700, fontSize: 13, ...mono }}>
+                <MuiTypography sx={{ color: D.green, fontWeight: 700, fontSize: 13, ...mono,
+                  minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentTool?.label}
                 </MuiTypography>
                 {currentTool?.brand === 'JP Webworks' && (

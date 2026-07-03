@@ -37,6 +37,9 @@
   .navlinks a:hover{color:var(--amber)}
   .phone{color:#fff !important;font-weight:600}
   @media(max-width:800px){.navlinks a:not(.btn):not(.phone){display:none}}
+  /* On small phones the redundant phone link (the hero has a Call button) is
+     dropped so brand + estimate button never overflow the row. */
+  @media(max-width:520px){nav{flex-wrap:wrap;height:auto;padding:12px 0;gap:10px}.navlinks{gap:14px}.navlinks .phone{display:none}}
 
   .hero{background:linear-gradient(180deg,var(--pine),var(--pine-2));color:#fff;position:relative;overflow:hidden}
   .hero::after{content:"";position:absolute;right:-140px;top:-80px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle at 40% 40%,rgba(63,125,82,.5),transparent 60%);pointer-events:none}
@@ -66,6 +69,7 @@
   .why .g h3{font-size:34px;color:var(--amber)}
   .why .g p{color:rgba(255,255,255,.8);margin-top:8px;font-size:15px}
   @media(max-width:860px){.why .grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.why .grid{grid-template-columns:1fr}.why .g h3{font-size:30px}}
 
   .area{display:grid;grid-template-columns:1.1fr 1fr;gap:48px;align-items:center}
   .area .towns{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
@@ -89,6 +93,8 @@
   footer .brand{color:#fff}
   .demoflag{background:var(--bark);color:rgba(255,255,255,.75);text-align:center;font-size:13px;padding:9px;font-family:Inter}
   .demoflag a{color:var(--amber);font-weight:600}
+  /* Tighter vertical rhythm on phones so sections don't feel over-padded. */
+  @media(max-width:600px){.hero .wrap{padding:56px 20px 52px}section{padding:52px 0}}
 </style>
 </head>
 <body>
@@ -150,7 +156,7 @@
     </div>
     <div class="grid">
       <div class="g"><h3>100%</h3><p>Licensed &amp; insured — every job, every crew member.</p></div>
-      <div class="g"><h3>Same&nbsp;week</h3><p>Most estimates and small jobs booked within days.</p></div>
+      <div class="g"><h3>Same week</h3><p>Most estimates and small jobs booked within days.</p></div>
       <div class="g"><h3>Upfront</h3><p>A clear written quote before we start. The price is the price.</p></div>
       <div class="g"><h3>Spotless</h3><p>We leave your property cleaner than we found it.</p></div>
     </div>

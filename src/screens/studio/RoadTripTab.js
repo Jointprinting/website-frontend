@@ -182,7 +182,10 @@ const overlayChipSx = (active, color) => ({
 
 const actionBtnSx = (color, hoverColor) => ({
   fontFamily: MONO, fontSize: 11, fontWeight: 800,
-  color, px: 0.5, py: 0, minWidth: 16, cursor: 'pointer',
+  color, px: { xs: 1, md: 0.5 }, py: 0,
+  // Real ~40px touch targets on phones (this is the primary field surface);
+  // stays compact at the desktop hover size on md+.
+  minWidth: { xs: 40, md: 16 }, minHeight: { xs: 40, md: 'auto' }, cursor: 'pointer',
   borderRadius: 0.25, lineHeight: 1.2,
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
   border: '1px solid transparent',
@@ -1372,7 +1375,7 @@ export default function RoadTripTab({ token, onNavigate }) {
                   {dist != null && !done && (
                     <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, flexShrink: 0 }}>{fmtMi(dist)}</Typography>
                   )}
-                  <Box className="jp-stop-actions" sx={{ opacity: { xs: 1, md: 0 }, display: 'flex', gap: 0.25, transition: 'opacity 0.15s' }}>
+                  <Box className="jp-stop-actions" sx={{ opacity: { xs: 1, md: 0 }, display: 'flex', gap: { xs: 1, md: 0.25 }, flexShrink: 0, transition: 'opacity 0.15s' }}>
                     {!done && (
                       <Box role="button"
                         onClick={(e) => { e.stopPropagation(); markVisited(s); }}
@@ -1400,8 +1403,8 @@ export default function RoadTripTab({ token, onNavigate }) {
                       <Box key={o.id} role="button"
                         onClick={() => setOutcome(s, o)}
                         sx={{
-                          fontFamily: MONO, fontSize: 8.5, fontWeight: 900, letterSpacing: 0.5,
-                          px: 0.9, py: 0.4, borderRadius: 0.25, cursor: 'pointer',
+                          fontFamily: MONO, fontSize: { xs: 11, md: 8.5 }, fontWeight: 900, letterSpacing: 0.5,
+                          px: { xs: 1.4, md: 0.9 }, py: { xs: 0.8, md: 0.4 }, borderRadius: 0.25, cursor: 'pointer',
                           color: o.color, border: `1px solid ${o.color}`,
                           '&:hover': { bgcolor: `${o.color}22` },
                         }}>{o.label}</Box>
@@ -1414,8 +1417,8 @@ export default function RoadTripTab({ token, onNavigate }) {
                         setOutcomeStopId(null);
                       }}
                       sx={{
-                        fontFamily: MONO, fontSize: 8.5, fontWeight: 900, letterSpacing: 0.5,
-                        px: 0.9, py: 0.4, borderRadius: 0.25, cursor: 'pointer',
+                        fontFamily: MONO, fontSize: { xs: 11, md: 8.5 }, fontWeight: 900, letterSpacing: 0.5,
+                        px: { xs: 1.4, md: 0.9 }, py: { xs: 0.8, md: 0.4 }, borderRadius: 0.25, cursor: 'pointer',
                         color: TERM.amber, border: `1px dashed ${TERM.amber}`,
                         '&:hover': { bgcolor: 'rgba(251,191,36,0.12)' },
                       }}>+ TO-DO</Box>
@@ -1660,7 +1663,7 @@ export default function RoadTripTab({ token, onNavigate }) {
           )}
 
           {mapError && (
-            <Box sx={{ position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 2, maxWidth: 480 }}>
+            <Box sx={{ position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 2, width: 'calc(100vw - 24px)', maxWidth: 480 }}>
               <Alert severity="error" sx={{
                 bgcolor: 'rgba(248,113,113,0.12)', color: TERM.red,
                 border: `1px solid ${TERM.red}`, fontFamily: MONO, fontSize: 12,

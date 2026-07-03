@@ -398,7 +398,7 @@ function Product() {
                             }}
                             sx={{
                               cursor: 'pointer',
-                              width: { xs: 36, sm: 28 }, height: { xs: 36, sm: 28 },
+                              width: { xs: 40, sm: 28 }, height: { xs: 40, sm: 28 },
                               borderRadius: '50%',
                               backgroundColor: productColorCodes[index],
                               border: item === productColor ? '2px solid white' : 'none',
@@ -480,6 +480,11 @@ function Product() {
                     fontSize: { xs: 14, sm: 16 },
                     lineHeight: 1.6,
                     overflowWrap: 'break-word', wordBreak: 'break-word',
+                    // Vendor (S&S/SanMar) descriptions occasionally embed an
+                    // image or a spec/size table; clamp them so they can't push
+                    // the page into horizontal scroll on a phone.
+                    '& img': { maxWidth: '100%', height: 'auto' },
+                    '& table': { display: 'block', width: '100%', maxWidth: '100%', overflowX: 'auto' },
                     '& ul, & ol': { pl: 2.5, my: 1 },
                     '& li': { mb: 0.5 },
                     '& p': { my: 1 },
