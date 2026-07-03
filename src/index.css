@@ -34,13 +34,13 @@ code {
 
 /* Brand-green text selection — small, everywhere, unmistakably ours. */
 ::selection {
-  background: #06752b;
+  background: #1a3d2b;
   color: #ffffff;
 }
 
 /* Keyboard focus gets the brand ring instead of the browser default blue. */
 :focus-visible {
-  outline: 2px solid #06752b;
+  outline: 2px solid #1a3d2b;
   outline-offset: 2px;
 }
 
@@ -61,7 +61,7 @@ code {
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #06752b;
+  background: #1a3d2b;
   border: 2px solid transparent;
   background-clip: content-box;
 }

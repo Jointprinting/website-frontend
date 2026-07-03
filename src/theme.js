@@ -10,10 +10,13 @@ const rawTheme = createTheme({
       main: '#28282a',
       dark: '#1e1e1f',
     },
+    // Brand green — JP Forest (see src/brand.js). main drives every
+    // `color="secondary"` CTA, focus ring, and selection accent, so the whole
+    // public site's primary green lives here in one place.
     secondary: {
-      light: '#e3ede2',
-      main: '#06752b',
-      dark: '#035c21',
+      light: '#e3ede2', // Pale Sage
+      main: '#1a3d2b',  // JP Forest
+      dark: '#14301f',  // Forest Deep (hover/pressed)
     },
     warning: {
       main: '#ffc071',

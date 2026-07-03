@@ -16,10 +16,11 @@ import ProductValues from '../modules/views/ProductValues';
 import ProductHowItWorks from '../modules/views/ProductHowItWorks';
 import ProductSmokingHero from '../modules/views/ProductSmokingHero';
 import RewardsSection from '../modules/views/RewardsSection';
+import JP from '../brand';
 
 function Home() {
   return (
-    <Box sx={{ bgcolor: '#050806' }}>
+    <Box sx={{ bgcolor: JP.ink }}>
       <ProductHero />
       <ProductValues />
       <RewardsSection />
