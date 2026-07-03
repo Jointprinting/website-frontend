@@ -64,7 +64,7 @@ function NotFound() {
       alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24 }}>
       <h1 style={{ fontSize: 42, margin: 0 }}>404</h1>
       <p style={{ fontSize: 16, color: '#555' }}>
-        That page doesn't exist. <a href="/" style={{ color: '#1a7f3c' }}>Back to the homepage</a>
+        That page doesn't exist. <a href="/" style={{ color: '#1a3d2b' }}>Back to the homepage</a>
       </p>
     </div>
   );

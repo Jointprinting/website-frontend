@@ -158,7 +158,7 @@ function Catalogs() {
         <Box sx={{ mb: { xs: 4, md: 6 }, textAlign: 'center' }}>
           <Chip
             label="Joint Printing · Product Catalogs"
-            sx={{ mb: 2, bgcolor: '#e5f4ea', color: '#045625', fontWeight: 600 }}
+            sx={{ mb: 2, bgcolor: '#e5f4ea', color: '#1a3d2b', fontWeight: 600 }}
           />
           <Typography
             variant="h3"

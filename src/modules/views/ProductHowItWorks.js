@@ -38,7 +38,7 @@ const numberCircle = {
   width: 40,
   height: 40,
   borderRadius: '50%',
-  border: '2px solid #06752b',
+  border: '2px solid #1a3d2b',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
