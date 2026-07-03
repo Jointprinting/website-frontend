@@ -94,6 +94,44 @@ function WarmRow({ row, onOpenCompany, onMarkReplied, onStop }) {
   );
 }
 
+// The single ranked to-do list, computed server-side from the whole dashboard —
+// the "what do I do right now" a busy one-person shop wants above everything.
+const ACTION_TONE = { action: '#f87171', warm: '#4ade80', info: '#60a5fa', ok: '#9ca3af' };
+function NextActions({ actions = [], onGoCampaigns, onGoImport }) {
+  if (!actions.length) return null;
+  const [top, ...rest] = actions;
+  const tone = (l) => ACTION_TONE[l] || D.muted;
+  const cta = (c) => {
+    if (!c) return null;
+    const btnSx = { color: D.green, fontSize: 12, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap',
+      border: `1px solid ${D.green}55`, borderRadius: 999, px: 1.5, py: 0.3, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } };
+    if (c.view === 'campaigns') return <Button onClick={onGoCampaigns} size="small" sx={btnSx}>Campaigns →</Button>;
+    if (c.view === 'import') return <Button onClick={onGoImport} size="small" sx={btnSx}>Find leads →</Button>;
+    return null;
+  };
+  return (
+    <Box>
+      <Eyebrow sx={{ mb: 1 }}>Next best action</Eyebrow>
+      <Box sx={{ p: 1.75, borderRadius: 2.5, border: `1px solid ${tone(top.level)}55`, bgcolor: `${tone(top.level)}14`,
+        display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: tone(top.level), flexShrink: 0 }} />
+        <Typography sx={{ color: D.text, fontSize: 14, fontWeight: 700, flexGrow: 1, minWidth: 0 }}>{top.text}</Typography>
+        {cta(top.cta)}
+      </Box>
+      {rest.length > 0 && (
+        <Stack sx={{ mt: 1, pl: 0.5 }} spacing={0.6}>
+          {rest.map((a, i) => (
+            <Stack key={i} direction="row" spacing={1} alignItems="center">
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tone(a.level), flexShrink: 0 }} />
+              <Typography sx={{ color: D.muted, fontSize: 12.5 }}>{a.text}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
 export default function OverviewView({
   overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport,
 }) {
@@ -106,11 +144,14 @@ export default function OverviewView({
   }
   if (!overview) return null;
 
-  const { engine, campaigns = [], warm = [], recent = [] } = overview;
+  const { engine, campaigns = [], warm = [], recent = [], nextActions = [] } = overview;
   const anyActive = campaigns.some((c) => c.status === 'active');
 
   return (
     <Stack spacing={3}>
+      {/* The one thing to do right now — synthesized from the whole dashboard. */}
+      <NextActions actions={nextActions} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} />
+
       {/* Setup guardrails — surfaced loudly until sending is actually possible. */}
       {!engine.senderConfigured && (
         <Alert severity="warning" variant="outlined" sx={{ borderColor: D.amber, color: D.text, '& .MuiAlert-icon': { color: D.amber } }}>
