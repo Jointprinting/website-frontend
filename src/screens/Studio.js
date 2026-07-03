@@ -1812,13 +1812,13 @@ const TIER_COLS = {
 // CRM Today queue. The backup nudge lives here too (it used to be a separate top
 // banner) with a ✕ to snooze it. Falls back to the calm placeholder when clear.
 // (Missing-receipt nudges live on the Finances page, not here — by design.)
-// Consumes GET /api/signals: the server composes order-aging + money-owed + CRM
-// follow-ups + buyer replies into severity groups (critical → warning → info).
-// Each group is a row in the same calm language as before — 8px glowing tone dot,
-// 13.5/700 label — with order/CRM groups expanding to their exact records and the
-// reply group jumping to the Outreach worklist. The backup nudge (client-gated by
-// localStorage) is appended, and the whole section still vanishes on a clean day.
-function SignalsPanel({ signals, onNavigate, onPick }) {
+// Consumes GET /api/signals: the server composes open-order aging + CRM follow-ups
+// into severity groups (critical → warning → info). Each group is a calm row — 8px
+// glowing tone dot, 13.5/700 label — with order/CRM groups expanding to their exact
+// records. A new-site-inquiry row (from the hub's unseen-inquiry count) leads the
+// list, and the backup nudge (client-gated by localStorage) trails it; the whole
+// section still vanishes on a clean day.
+function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries = 0 }) {
   const [open, setOpen] = React.useState({});
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
@@ -1866,6 +1866,17 @@ function SignalsPanel({ signals, onNavigate, onPick }) {
           : null,
       });
     }
+  }
+
+  // A new site inquiry is a live inbound lead — surface it FIRST. The row opens the
+  // Submissions inbox (which marks them seen), same as the hub tile.
+  if (unseenInquiries > 0) {
+    rows.unshift({
+      key: 'inquiry',
+      tone: D.green,
+      label: `${unseenInquiries} new inquir${unseenInquiries === 1 ? 'y' : 'ies'} from the site`,
+      onClick: () => onPick && onPick('submissions'),
+    });
   }
 
   // Backup nudge rows (client-gated), appended after the data signals.
@@ -1961,7 +1972,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
     <Stack spacing={3.5}>
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
-      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} />
+      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} />
 
       {live.map((group) => (
         <Box key={group.brand}>
