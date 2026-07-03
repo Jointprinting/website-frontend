@@ -21,6 +21,7 @@ import Privacy from './screens/Privacy';
 
 const Product       = lazy(() => import('./screens/Product'));
 const Products      = lazy(() => import('./screens/Products'));
+const Dispensaries  = lazy(() => import('./screens/Dispensaries'));
 const Studio        = lazy(() => import('./screens/Studio'));
 const Catalogs      = lazy(() => import('./screens/Catalogs'));
 const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
@@ -40,6 +41,7 @@ const ROUTE_META = {
   '/contact':   { title: 'Contact | Joint Printing',                          desc: 'Get a quote or ask a question — we respond fast.' },
   '/product':   { title: 'Product | Joint Printing',                          desc: 'Product details, colors, and sizing.' },
   '/products':  { title: 'Products | Joint Printing',                         desc: 'Browse blank styles for your next custom merch run.' },
+  '/dispensaries': { title: 'Dispensary Merch & Apparel | Joint Printing',    desc: 'Custom apparel, staff uniforms, and branded promo for dispensaries — designed, printed, and delivered by Joint Printing.' },
   '/faq':       { title: 'FAQ | Joint Printing',                              desc: 'Answers about pricing, turnaround, artwork, and shipping.' },
   '/catalogs':  { title: 'Catalogs | Joint Printing',                         desc: 'Download our latest product catalogs.' },
   '/terms':     { title: 'Terms of Service | Joint Printing',                 desc: 'Joint Printing terms of service.' },
@@ -102,6 +104,7 @@ function AppShell() {
           <Route exact path="/contact" element={<Contact />} />
           <Route exact path="/product" element={<Product />} />
           <Route exact path="/products" element={<Products />} />
+          <Route exact path="/dispensaries" element={<Dispensaries />} />
           <Route exact path="/faq" element={<FAQ />} />
           {/* Legacy mockup-request page — folded into the contact form. */}
           <Route path="/customize" element={<Navigate to="/contact" replace />} />
