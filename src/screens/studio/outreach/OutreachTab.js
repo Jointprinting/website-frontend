@@ -225,6 +225,21 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     if (view === 'queue') loadQueue();
   };
 
+  // First-run wizard: send one sample through the real sender/SMTP to a given
+  // address (blank → the sender address) so the operator can eyeball inbox vs.
+  // spam before enrolling anyone. Config/validation errors come back as 4xx with
+  // a plain message; a transport failure as 502 — both surfaced verbatim.
+  const sendTest = async (to) => {
+    try {
+      const { data } = await axios.post(`${base}/test-send`, { to }, authHdr);
+      flash(`Test sent to ${data.to} — check your inbox (and spam) to confirm it lands.`);
+      return data;
+    } catch (e) {
+      flash(e.response?.data?.message || 'Test send failed — check the sender/SMTP settings on the API.', 'error');
+      throw e;
+    }
+  };
+
   const runTick = async () => {
     const { data } = await axios.post(`${base}/run-tick`, {}, authHdr);
     if (data.skipped === 'sender-not-configured') flash('Holding: set OUTREACH_EMAIL_FROM on the API first (see Overview).', 'warning');
@@ -323,6 +338,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               onStop={stopEnrollment}
               onGoCampaigns={() => setView('campaigns')}
               onGoImport={() => setView('import')}
+              onTestSend={sendTest}
             />
             <Box>
               <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Send queue</MuiTypography>
