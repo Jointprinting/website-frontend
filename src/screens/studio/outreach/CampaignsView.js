@@ -20,7 +20,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
 import { EmptyState, Eyebrow, StageChip } from '../crm/_crm';
 import {
-  StatusChip, campaignStatusMeta, renderTemplate, SAMPLE_CONTEXT, MERGE_FIELDS,
+  StatusChip, campaignStatusMeta, renderPreview, hasSpintax, SAMPLE_CONTEXT, MERGE_FIELDS,
   DEFAULT_SEQUENCE,
 } from './_outreach';
 
@@ -130,20 +130,35 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
               </Button>
             </Stack>
 
-            {/* Live preview — exactly what the backend will render. */}
+            {/* Live preview — exactly what the backend will render (merge +
+                spintax), including the "Re: …" threading on follow-ups. */}
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Eyebrow sx={{ mb: 1 }}>Preview — as {SAMPLE_CONTEXT.companyName} sees it</Eyebrow>
               <Box sx={{ borderRadius: 2, border: `1px solid ${D.line}`, bgcolor: '#f6f6f4', p: 2, minHeight: 220 }}>
                 <Typography sx={{ color: '#111', fontWeight: 700, fontSize: 14, mb: 1.25 }}>
-                  {renderTemplate(preview.subject, SAMPLE_CONTEXT) || '(no subject)'}
+                  {(previewIdx > 0 && !preview.freshSubject && steps[0])
+                    ? `Re: ${renderPreview(steps[0].subject, SAMPLE_CONTEXT, 'seed0:subj').replace(/^(?:re:\s*)+/i, '')}`
+                    : renderPreview(preview.subject, SAMPLE_CONTEXT, `seed${previewIdx}:subj`) || '(no subject)'}
                 </Typography>
                 <Typography component="div" sx={{ color: '#333', fontSize: 13.5, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
-                  {renderTemplate(preview.body, SAMPLE_CONTEXT)}
+                  {renderPreview(preview.body, SAMPLE_CONTEXT, `seed${previewIdx}:body`)}
                 </Typography>
                 <Typography sx={{ color: '#999', fontSize: 10.5, mt: 2, pt: 1.25, borderTop: '1px solid #e2e2de' }}>
                   Joint Printing · New Jersey, USA — Unsubscribe
                 </Typography>
               </Box>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+                {hasSpintax(`${preview.subject} ${preview.body}`) && (
+                  <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 700 }}>
+                    ✦ Varies per recipient (spintax) — each shop gets a different wording
+                  </Typography>
+                )}
+                {previewIdx > 0 && !preview.freshSubject && (
+                  <Typography sx={{ color: D.faint, fontSize: 11 }}>
+                    ↩ Threads into the first email (same conversation)
+                  </Typography>
+                )}
+              </Stack>
               <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.75 }}>
                 The address + unsubscribe footer is added automatically to every send (legally required).
               </Typography>
