@@ -19,7 +19,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import { D, mono, fmtRelative } from '../_shared';
 import { EmptyState, Eyebrow } from '../crm/_crm';
-import { StatusChip, StatPill, campaignStatusMeta, enrollmentStatusMeta } from './_outreach';
+import { StatusChip, StatPill, campaignStatusMeta, enrollmentStatusMeta, DEFAULT_SEQUENCE } from './_outreach';
 
 // One campaign's funnel numbers as a compact strip.
 function FunnelStrip({ stats }) {
@@ -110,7 +110,7 @@ function NextActions({ actions = [], onGoCampaigns, onGoImport }) {
     const btnSx = { color: D.green, fontSize: 12, fontWeight: 800, textTransform: 'none', whiteSpace: 'nowrap',
       border: `1px solid ${D.green}55`, borderRadius: 999, px: 1.5, py: 0.3, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } };
     if (c.view === 'campaigns') return <Button onClick={onGoCampaigns} size="small" sx={btnSx}>Campaigns →</Button>;
-    if (c.view === 'import') return <Button onClick={onGoImport} size="small" sx={btnSx}>Find leads →</Button>;
+    if (c.view === 'import') return <Button onClick={onGoImport} size="small" sx={btnSx}>Lead engine →</Button>;
     return null;
   };
   return (
@@ -145,6 +145,97 @@ function AuthChip({ label, ok }) {
       <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ok ? D.green : '#f87171' }} />
       <Typography sx={{ ...mono, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, color: ok ? D.green : '#f87171' }}>{label}</Typography>
     </Box>
+  );
+}
+
+// The "paste this, here" email-auth fixer. Renders the exact still-needed DNS
+// rows the backend derives from a live lookup (engine.auth.records), each with
+// a copy button, plus a re-check that bypasses the 1h DNS cache. Lives on the
+// dashboard whenever auth isn't green — the owner should never have to open a
+// doc to know what's missing.
+function AuthFixPanel({ auth, onRecheck }) {
+  const [checking, setChecking] = React.useState(false);
+  const [copiedId, setCopiedId] = React.useState('');
+  if (!auth || auth.level === 'green' || auth.level === 'unknown') return null;
+  const records = auth.records || [];
+
+  const copy = async (rec) => {
+    try { await navigator.clipboard.writeText(rec.value); setCopiedId(rec.id); setTimeout(() => setCopiedId(''), 1500); } catch {}
+  };
+  const recheck = async () => {
+    setChecking(true);
+    try { await onRecheck(); } finally { setChecking(false); }
+  };
+
+  const required = records.filter((r) => r.id !== 'dmarc-upgrade');
+  return (
+    <Box sx={{ mt: 1.25, p: 1.75, borderRadius: 2.5, bgcolor: D.panel,
+      border: `1px solid ${auth.level === 'red' ? 'rgba(248,113,113,0.4)' : 'rgba(251,191,36,0.35)'}` }}>
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 13.5, flexGrow: 1 }}>
+          {required.length
+            ? `Finish email authentication — ${required.length} DNS record${required.length === 1 ? '' : 's'} left on ${auth.domain}`
+            : `Email auth on ${auth.domain} — optional hardening`}
+        </Typography>
+        <AuthChip label="SPF" ok={!!auth.spf} />
+        <AuthChip label="DKIM" ok={!!auth.dkim} />
+        <AuthChip label="DMARC" ok={!!auth.dmarc} />
+      </Stack>
+      <Stack spacing={1}>
+        {records.map((rec) => (
+          <Box key={rec.id} sx={{ p: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Typography sx={{ ...mono, fontSize: 11, fontWeight: 800, color: rec.id === 'dmarc-upgrade' ? D.muted : D.amber }}>
+                {rec.type} @ {rec.host}
+              </Typography>
+              <Box sx={{ flexGrow: 1 }} />
+              <Button onClick={() => copy(rec)} size="small" startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 13 }} />}
+                sx={{ color: copiedId === rec.id ? D.green : D.muted, fontSize: 11, textTransform: 'none', minWidth: 0,
+                  border: `1px solid ${D.line}`, borderRadius: 999, px: 1.25, py: 0.1,
+                  '&:hover': { borderColor: D.lineHi, color: D.text } }}>
+                {copiedId === rec.id ? 'Copied' : 'Copy value'}
+              </Button>
+            </Stack>
+            <Typography sx={{ ...mono, color: D.text, fontSize: 11.5, mt: 0.5, wordBreak: 'break-all' }}>{rec.value}</Typography>
+            <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.5, lineHeight: 1.5 }}>{rec.note}</Typography>
+          </Box>
+        ))}
+      </Stack>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25 }}>
+        <Button onClick={recheck} disabled={checking} size="small"
+          sx={{ color: D.green, fontSize: 12, fontWeight: 800, textTransform: 'none', border: `1px solid ${D.green}55`,
+            borderRadius: 999, px: 1.75, py: 0.3, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' },
+            '&.Mui-disabled': { color: D.faint } }}>
+          {checking ? 'Checking DNS…' : 'I added it — re-check now'}
+        </Button>
+        <Typography sx={{ color: D.faint, fontSize: 11 }}>DNS changes can take up to an hour to show.</Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+// Subject A/B results for one campaign — hidden until a variant send exists.
+// Bolds the leading arm once both have enough volume to mean anything.
+function AbStrip({ ab }) {
+  if (!ab) return null;
+  const enough = ab.A.sent >= 10 && ab.B.sent >= 10;
+  const score = (v) => (v.sent ? (v.replied * 3 + v.opened) / v.sent : 0); // replies dominate
+  const lead = enough ? (score(ab.A) === score(ab.B) ? '' : (score(ab.A) > score(ab.B) ? 'A' : 'B')) : '';
+  const arm = (k, v) => (
+    <Typography key={k} component="span" sx={{ ...mono, fontSize: 11,
+      color: lead === k ? D.green : D.muted, fontWeight: lead === k ? 800 : 600 }}>
+      {k}{lead === k ? ' ★' : ''} · {v.sent} sent · {v.opened} opened · {v.replied} replied
+    </Typography>
+  );
+  return (
+    <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap
+      sx={{ mt: 1, px: 1.25, py: 0.6, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 800, color: '#c084fc', letterSpacing: 0.8 }}>A/B</Typography>
+      {arm('A', ab.A)}
+      <Box sx={{ width: '1px', height: 14, bgcolor: D.line }} />
+      {arm('B', ab.B)}
+      {!enough && <Typography sx={{ color: D.faint, fontSize: 10.5 }}>picks a leader at 10+ sends per arm</Typography>}
+    </Stack>
   );
 }
 
@@ -240,10 +331,12 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
       {/* Step 1 — Sender */}
       <WizStep n={1} title="Connect your sending address" done={step1Done} active={activeIndex === 0}
         statusText={step1Done
-          ? `Sending as ${engine.from || 'your outreach address'}${auth ? ` · auth ${auth.level}` : ''}.`
+          ? `Sending as ${engine.from || 'your outreach address'}${
+            auth && auth.level === 'green' ? ' · fully authenticated'
+              : auth && auth.level === 'amber' ? ' · almost authenticated — finish the DNS record below' : ''}.`
           : !engine.senderConfigured
             ? 'No sender set yet — the engine holds all sends until you add one.'
-            : authRed ? 'Sender set, but the domain isn’t authenticated yet.' : 'Almost there.'}>
+            : authRed ? 'Sender set, but the domain isn’t authenticated yet — records below.' : 'Almost there.'}>
         <Stack spacing={1.5}>
           {!engine.senderConfigured && (
             <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
@@ -261,22 +354,8 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
             </Box>
           )}
 
-          {/* Live SPF / DKIM / DMARC posture — the #1 inbox-vs-spam lever. */}
-          {engine.senderConfigured && auth && (
-            <Box>
-              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 0.75 }}>
-                <AuthChip label="SPF" ok={!!auth.spf} />
-                <AuthChip label="DKIM" ok={!!auth.dkim} />
-                <AuthChip label="DMARC" ok={!!auth.dmarc} />
-              </Stack>
-              {authRed && (auth.issues || []).length > 0 && (
-                <Typography sx={{ color: D.muted, fontSize: 11.5, lineHeight: 1.5 }}>
-                  {(auth.issues || []).join(' ')} The exact records are in{' '}
-                  <Box component="code" sx={{ ...mono, color: D.text }}>docs/DELIVERABILITY.md</Box>.
-                </Typography>
-              )}
-            </Box>
-          )}
+          {/* SPF/DKIM/DMARC details live in the AuthFixPanel below the engine
+              pills — one canonical fix-it spot with the exact records. */}
 
           {/* Send-a-test-to-yourself — the real send path, so you can eyeball
               inbox vs. spam before enrolling a single lead. */}
@@ -307,18 +386,20 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
       </WizStep>
 
       {/* Step 2 — Leads */}
-      <WizStep n={2} title="Find your leads" done={step2Done} active={activeIndex === 1}
+      <WizStep n={2} title="Stack up leads" done={step2Done} active={activeIndex === 1}
         statusText={step2Done
-          ? `${coldReserve} in reserve${enrolledTotal ? ` · ${enrolledTotal} enrolled` : ''}.`
-          : 'No leads yet — the finder discovers dispensaries and scrapes their emails for free.'}>
-        <Button onClick={onGoImport} size="small" sx={linkBtnSx}>Find leads →</Button>
+          ? `${coldReserve} in reserve${enrolledTotal ? ` · ${enrolledTotal} enrolled` : ''} — the lead engine keeps refilling on its own.`
+          : 'No leads yet — the lead engine finds dispensaries state by state automatically; you can watch it work.'}>
+        <Button onClick={onGoImport} size="small" sx={linkBtnSx}>Lead engine →</Button>
       </WizStep>
 
       {/* Step 3 — Launch */}
       <WizStep n={3} title="Launch your sequence" done={step3Done} active={activeIndex === 2} last
         statusText={step3Done
           ? 'A campaign is live — the engine drips it on its own.'
-          : 'A proven 4-touch dispensary sequence is pre-loaded — review the copy and activate it.'}>
+          : campaigns.length
+            ? `“${campaigns[0].name}” is ready — ${(campaigns[0].steps || []).length} touches. Read the copy, tweak any wording, then hit Launch.`
+            : `A ${DEFAULT_SEQUENCE.length}-touch dispensary sequence is pre-loaded — review the copy and activate it.`}>
         <Button onClick={onGoCampaigns} size="small" sx={linkBtnSx}>Open campaigns →</Button>
       </WizStep>
     </Box>
@@ -326,7 +407,7 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
 }
 
 export default function OverviewView({
-  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onTestSend,
+  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onTestSend, onRecheckAuth,
 }) {
   if (loading && !overview) {
     return (
@@ -373,19 +454,8 @@ export default function OverviewView({
           and open tracking (until then, opt-outs are reply-based and opens aren’t counted).
         </Alert>
       )}
-      {/* Sender authentication — the #1 inbox-vs-spam lever. Red = holding. */}
-      {!wizardShowing && engine.senderConfigured && engine.auth && engine.auth.level === 'red' && (
-        <Alert severity="warning" variant="outlined" sx={{ borderColor: '#f87171', color: D.text, '& .MuiAlert-icon': { color: '#f87171' } }}>
-          <b>{engine.authGate ? 'Holding — sender domain isn’t authenticated.' : 'Sender domain isn’t authenticated.'}</b>{' '}
-          {(engine.auth.issues || []).join(' ')} See <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box> for
-          the exact SPF/DKIM/DMARC records to add. Cold mail without these lands in spam or bounces.
-        </Alert>
-      )}
-      {!wizardShowing && engine.senderConfigured && engine.auth && engine.auth.level === 'amber' && (
-        <Alert severity="info" variant="outlined" sx={{ borderColor: D.amber, color: D.muted, '& .MuiAlert-icon': { color: D.amber } }}>
-          Sender auth is almost there — {(engine.auth.issues || []).join(' ')} (see <Box component="code" sx={{ ...mono }}>docs/DELIVERABILITY.md</Box>).
-        </Alert>
-      )}
+      {/* Sender authentication details render as the AuthFixPanel below the
+          engine pills — exact records, copy buttons, live re-check. */}
 
       {/* Engine status */}
       <Box>
@@ -423,6 +493,17 @@ export default function OverviewView({
             ))}
           </Stack>
         )}
+        {/* Single inbox → the free multiplier hint (Brevo/Mailjet free tiers). */}
+        {engine.senderConfigured && (engine.senderCount || 1) === 1 && (
+          <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, lineHeight: 1.5 }}>
+            One inbox tops out at {engine.dailyCapMax}/day after warm-up. Add free inboxes (Brevo 300/day, Mailjet 200/day)
+            via <Box component="code" sx={{ ...mono, color: D.muted }}>OUTREACH_SENDERS</Box> on the API and the engine
+            round-robins them — more volume, same $0.
+          </Typography>
+        )}
+        {/* The exact DNS rows still needed for inbox placement — with copy
+            buttons and a cache-busting re-check. Hidden once green. */}
+        {engine.senderConfigured && <AuthFixPanel auth={engine.auth} onRecheck={onRecheckAuth} />}
       </Box>
 
       {/* Warm leads — the whole point of the tool. */}
@@ -453,7 +534,7 @@ export default function OverviewView({
           <EmptyState
             icon={<ForwardToInboxOutlinedIcon />}
             title="No campaigns yet"
-            hint="Create one under Campaigns — a proven 3-step dispensary sequence is pre-loaded."
+            hint={`Create one under Campaigns — a ${DEFAULT_SEQUENCE.length}-touch dispensary sequence is pre-loaded.`}
           />
         ) : (
           <Stack spacing={1.5}>
@@ -466,6 +547,8 @@ export default function OverviewView({
                   <StatusChip meta={campaignStatusMeta(c.status)} />
                 </Stack>
                 <FunnelStrip stats={c.stats} />
+                {/* Subject A/B results — appears once variant sends exist. */}
+                <AbStrip ab={c.abTest} />
                 {/* When a campaign is active but not sending, say exactly why —
                     right here on the dashboard, in red, no digging required. */}
                 {c.health && c.health.level !== 'ok' && (
@@ -493,7 +576,7 @@ export default function OverviewView({
           <Button onClick={onGoImport} size="small"
             sx={{ textTransform: 'none', color: D.muted, fontWeight: 700, fontSize: 12.5, borderRadius: 999,
               px: 1.75, border: `1px solid ${D.line}`, '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.04)' } }}>
-            Import leads
+            Lead engine
           </Button>
         </Stack>
       </Box>

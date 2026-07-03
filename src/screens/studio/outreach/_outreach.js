@@ -205,83 +205,70 @@ export const SAMPLE_CONTEXT = {
   senderName: 'Nate',
 };
 
-// The approved 4-touch dispensary sequence — evergreen (no seasonal hook),
-// value-first, and built around the ONE ask that lets us quote/mockup: product +
-// quantity + design. Short on purpose (cold email converts best well under ~120
-// words). Every touch carries {a|b} spintax so no two recipients get a
-// byte-identical email, and {{senderName}} keeps the sign-off out of the copy.
-// Follow-ups THREAD into the first email automatically (Re: … + references), so
-// their subject lines below are fallbacks. Stops the instant they reply; the
-// day-14 touch is a clean exit.
+// The approved 4-touch dispensary sequence. Written to read like a real person
+// typed it in thirty seconds — short sentences, no numbered ask-lists, no
+// sales-page phrasing, plain sign-off — because template-smell is the #1 reply
+// killer (the owner's words: "must feel real and non-AI"). Deliberately names
+// NO city/state: the owner doesn't want recipients knowing where he's based.
+// Touch 1 ships a subjectB (A/B test: half get each; results on the campaign
+// card). Light {a|b} spintax keeps any two recipients from getting
+// byte-identical emails. Follow-ups THREAD into the first email automatically
+// (Re: … + references), so their subjects below are fallbacks. Stops the
+// instant they reply; day-14 is a clean exit.
 export const DEFAULT_SEQUENCE = [
   {
     offsetDays: 0,
-    subject: '{custom merch|branded merch} for {{companyName}}',
+    subject: '{merch|custom merch} for {{companyName}}',
+    subjectB: 'quick one about {{companyName}}',
     body: `{{greeting}}
 
-{I run|I'm with} Joint Printing — we make custom apparel and promo merch for dispensaries: staff tees and hoodies, branded hats, and the counter stuff that moves (lighters, grinders, totes, stickers).
+Nate here, from Joint Printing — we do custom merch for dispensaries. Staff tees and hoodies, hats, and the counter stuff like lighters and grinders.
 
-Here's why I'm reaching out: I'll design {free|no-cost} mockups with {{companyName}}'s branding so you can see real product before spending a dollar. Shops use them for staff uniforms or a customer drop.
+If you send over a logo, I'll have mockups made up with {{companyName}}'s branding so you can actually see it {before spending anything|before any money comes into it}. If you like them, we go from there.
 
-If you're open to it, just reply with:
-1. What you're thinking (tees, hoodies, hats, promo items…)
-2. A rough quantity (we start at 50 per design)
-3. Any logo or art you'd want to see on it
+Worth a look?
 
-I'll get our artists on the mockups this week — clear pricing up front, always.
-
-— {{senderName}}, Joint Printing
+Nate
 jointprinting.com`,
   },
   {
     offsetDays: 3,
-    subject: 'free mockups for {{companyName}}?',
+    subject: 'mockups for {{companyName}}',
     body: `{{greeting}}
 
-{Circling back|Following up} — the offer stands: free, no-obligation mockups of {{companyName}} gear, built around whatever budget you have in mind.
+{Floating this back up|Bumping this} in case it got buried — the free mockups are still on the table. Even just your logo and "show me hoodies" is enough for me to get started.
 
-If it helps to see our work first, here's our dispensary promo catalog: https://www.jointprinting.com/catalogs/dispo-promos.pdf
+Some of our dispensary work if it helps to see it first: https://www.jointprinting.com/catalogs/dispo-promos.pdf
 
-Even a quick "here's our logo, show me hoodies and hats" is enough for me to get started.
-
-— {{senderName}}, Joint Printing`,
+Nate`,
   },
   {
     offsetDays: 7,
-    subject: 'how most {{state|dispensary}} shops start',
+    subject: 'staff gear first?',
     body: `{{greeting}}
 
-{One more thought|Quick one}: most shops we work with start with a small staff-apparel run, see how it lands, then do a customer drop. Low risk — and the branded gear markets the shop for you every time someone wears it out.
+Most shops we work with start small — staff apparel first, then a customer drop once they see how it lands. The staff stuff kind of pays for itself once the whole floor is wearing the brand.
 
-Happy to put {{companyName}}'s logo on a few pieces so you can see it — still free, still no obligation.
+Happy to mock up a few pieces for {{companyName}} so you've got something real to look at. {Still free|No charge for that}.
 
-— {{senderName}}, Joint Printing`,
+Nate`,
   },
   {
     offsetDays: 14,
-    subject: 'should I close this out?',
+    subject: 'closing the loop',
     body: `{{greeting}}
 
-I don't want to crowd your inbox, so this is my last note. If branded merch ever lands on the list for {{companyName}} — staff apparel, a customer drop, event giveaways — I'm your guy, and the mockups are always free.
+Last one from me — I know the inbox never stops. If merch ever comes up for {{companyName}}, just reply here and I'll pick it right back up. The mockups stay free whenever you want them.
 
-Reply anytime and I'll pick it right back up. Good luck out in {{city|your area}}.
+Good luck with the shop.
 
-— {{senderName}}, Joint Printing
+Nate
 jointprinting.com`,
   },
 ];
 
-// Region options for the free auto-finder — MIRRORS services/dispensaryFinder.js
-// REGIONS (keep in sync). NJ leads; the rest are the staged expansion.
-export const FINDER_REGIONS = [
-  { id: 'nj', label: 'New Jersey' },
-  { id: 'ny', label: 'New York' },
-  { id: 'pa', label: 'Pennsylvania' },
-  { id: 'ct', label: 'Connecticut' },
-  { id: 'de', label: 'Delaware' },
-  { id: 'md', label: 'Maryland' },
-  { id: 'ma', label: 'Massachusetts' },
-];
+// (The old FINDER_REGIONS mirror is gone: the lead engine's coverage map reads
+// region labels live from GET /find-leads/status, so nothing here to drift.)
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 

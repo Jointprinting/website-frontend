@@ -42,7 +42,7 @@ const pct = (n) => { const v = Number(n); return Number.isFinite(v) ? v : 0; };
 const CATEGORIES = [
   'Client Sales', 'Blank COGS', 'Printer COGS', 'Shipping', 'Art', 'Commission',
   'Processing Fee', 'Software', 'Marketing', 'Accounting', 'Travel/Field',
-  'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
+  'Office Supplies', 'Owner Draw', 'Owner Contribution', 'Sales Tax', 'Refund', 'Other',
 ];
 // COGS categories that net against an order's revenue — offline fallback for
 // /api/finances/config (cogsCategories); mirrors backend Transaction.COGS_CATEGORIES
@@ -109,8 +109,10 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // processing-fee rates) — the anti-drift source of truth. Starts as the
   // hardcoded mirrors (offline fallback) and is replaced by the served values.
   const [finCfg, setFinCfg] = useState({
-    categories: CATEGORIES, cogsCategories: COGS_CATEGORIES, processingFeeRates: PROCESSING_FEE_RATES,
+    categories: CATEGORIES, customCategories: [], cogsCategories: COGS_CATEGORIES, processingFeeRates: PROCESSING_FEE_RATES,
   });
+  // "Manage categories" dialog (opened from the transaction dialog's category list).
+  const [showCats, setShowCats] = useState(false);
   // The "Review duplicate transactions" surface (merge cross-source dupes the budget
   // restart left behind; preview→confirm→apply, reversible). A full-screen sub-view,
   // mirroring the CRM CleanupView pattern. Its entry point auto-HIDES when there are
@@ -183,21 +185,40 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
   useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
 
-  // Live finance config on mount (alongside the other loads). Year-independent and
-  // cheap; a failure just keeps the hardcoded mirrors — same numbers as before.
+  // Live finance config (categories incl. the owner's custom ones / COGS set /
+  // fee rates). Reusable so the manage-categories dialog can refresh it after an
+  // add/remove; a failure just keeps the hardcoded mirrors — same numbers as before.
+  const applyFinCfg = useCallback((d) => {
+    if (!d) return;
+    // Partial-safe: the category add/remove responses only carry the category
+    // lists — anything absent keeps its current (mirror-seeded) value.
+    setFinCfg((prev) => ({
+      categories: Array.isArray(d.categories) && d.categories.length ? d.categories : prev.categories,
+      customCategories: Array.isArray(d.customCategories) ? d.customCategories : prev.customCategories,
+      cogsCategories: Array.isArray(d.cogsCategories) && d.cogsCategories.length ? d.cogsCategories : prev.cogsCategories,
+      processingFeeRates: (d.processingFeeRates && typeof d.processingFeeRates === 'object') ? d.processingFeeRates : prev.processingFeeRates,
+    }));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     axios.get(`${base}/finances/config`, authHdr).then((r) => {
       if (cancelled || !r.data) return;
-      const d = r.data;
-      setFinCfg({
-        categories: Array.isArray(d.categories) && d.categories.length ? d.categories : CATEGORIES,
-        cogsCategories: Array.isArray(d.cogsCategories) && d.cogsCategories.length ? d.cogsCategories : COGS_CATEGORIES,
-        processingFeeRates: (d.processingFeeRates && typeof d.processingFeeRates === 'object') ? d.processingFeeRates : PROCESSING_FEE_RATES,
-      });
+      applyFinCfg(r.data);
     }).catch(() => { /* keep the hardcoded fallback */ });
     return () => { cancelled = true; };
-  }, [authHdr]);
+  }, [authHdr, applyFinCfg]);
+
+  // Owner-managed custom categories (the manage dialog's actions). The response
+  // carries the updated lists, so the select repaints without a second fetch.
+  const addCategory = async (name) => {
+    const r = await axios.post(`${base}/finances/categories`, { name }, authHdr);
+    applyFinCfg(r.data);
+  };
+  const removeCategory = async (name) => {
+    const r = await axios.delete(`${base}/finances/categories/${encodeURIComponent(name)}`, authHdr);
+    applyFinCfg(r.data);
+  };
 
   const exportCsv = async () => {
     try {
@@ -675,12 +696,20 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       {(showAdd || prefill) && (
         <TxnDialog token={token} prefill={prefill}
           categories={finCfg.categories} feeRates={finCfg.processingFeeRates}
+          onManageCategories={() => setShowCats(true)}
           onClose={() => { setShowAdd(false); setPrefill(null); }}
           onSave={async (form) => { await addTxn(form); setPrefill(null); }} />
       )}
       {editTxn && <TxnDialog token={token} txn={editTxn}
         categories={finCfg.categories} feeRates={finCfg.processingFeeRates}
+        onManageCategories={() => setShowCats(true)}
         onClose={() => setEditTxn(null)} onSave={saveTxn} onDelete={deleteTxn} />}
+      {showCats && (
+        <ManageCategoriesDialog
+          categories={finCfg.categories} custom={finCfg.customCategories}
+          onAdd={addCategory} onRemove={removeCategory}
+          onClose={() => setShowCats(false)} />
+      )}
       {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} cogsCategories={finCfg.cogsCategories}
         onClose={() => setOpenOrder(null)}
         onEditTxn={(t) => { setOpenOrder(null); setEditTxn(t); }}
@@ -1030,10 +1059,103 @@ function TopClients({ clients, onClient }) {
   );
 }
 
+// Owner-managed category list — opened from the transaction dialog's category
+// dropdown ("＋ Edit category list…"). Built-ins are shown locked (they drive the
+// P&L math: Client Sales = revenue, the COGS set = per-order margins); customs
+// add/remove freely and roll up as operating expenses. Removing one never touches
+// existing rows — they keep their label (the edit dialog keeps an off-list saved
+// category selectable), it just stops being offered for new entries.
+function ManageCategoriesDialog({ categories = [], custom = [], onAdd, onRemove, onClose }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const customSet = new Set(custom.map((c) => c.toLowerCase()));
+  const builtIns = categories.filter((c) => !customSet.has(c.toLowerCase()));
+
+  const add = async () => {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true); setErr('');
+    try { await onAdd(n); setName(''); }
+    catch (e) { setErr(e.response?.data?.message || e.message); }
+    finally { setBusy(false); }
+  };
+  const remove = async (n) => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    try { await onRemove(n); }
+    catch (e) { setErr(e.response?.data?.message || e.message); }
+    finally { setBusy(false); }
+  };
+
+  const pill = (locked) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1.25, py: 0.4,
+    borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: '1px solid rgba(255,255,255,0.12)',
+    bgcolor: 'rgba(255,255,255,0.05)', color: locked ? 'rgba(255,255,255,0.55)' : '#e7efe9',
+  });
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: '#14181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 3 } }}>
+      <DialogContent>
+        <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, mb: 0.5 }}>Transaction categories</Typography>
+        <Typography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: 12.5, mb: 2 }}>
+          Built-in categories are locked — the P&amp;L math depends on them. Your own are removable;
+          rows already saved under a removed category keep their label.
+        </Typography>
+
+        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', mb: 0.75 }}>
+          Built-in
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+          {builtIns.map((c) => <Box key={c} sx={pill(true)}>{c}</Box>)}
+        </Box>
+
+        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', mb: 0.75 }}>
+          Yours
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+          {custom.length === 0 && (
+            <Typography sx={{ color: 'rgba(255,255,255,0.35)', fontSize: 12.5 }}>None yet — add one below.</Typography>
+          )}
+          {custom.map((c) => (
+            <Box key={c} sx={pill(false)}>
+              {c}
+              <IconButton size="small" disabled={busy} onClick={() => remove(c)}
+                sx={{ p: 0.1, ml: 0.25, color: 'rgba(255,255,255,0.45)', '&:hover': { color: '#f87171' } }}>
+                <CloseIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Box>
+          ))}
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField size="small" fullWidth placeholder="New category (e.g. Trade Shows)"
+            value={name} onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            inputProps={{ maxLength: 40 }}
+            sx={darkInput} />
+          <Button onClick={add} disabled={busy || !name.trim()}
+            sx={{ px: 2, fontWeight: 700, textTransform: 'none', color: '#4ade80',
+              border: '1px solid rgba(74,222,128,0.4)', borderRadius: 2,
+              '&.Mui-disabled': { color: 'rgba(255,255,255,0.25)', borderColor: 'rgba(255,255,255,0.1)' } }}>
+            {busy ? '…' : 'Add'}
+          </Button>
+        </Box>
+        {err && <Typography sx={{ color: '#f87171', fontSize: 12, mt: 1 }}>{err}</Typography>}
+
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+          <Button onClick={onClose} sx={{ color: 'rgba(255,255,255,0.6)', textTransform: 'none' }}>Done</Button>
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // `categories` / `feeRates` are the LIVE values from /api/finances/config, handed
 // down by the tab (defaulting to the hardcoded mirrors so the dialog stays safe
 // standalone / while the config fetch is in flight).
-function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories = CATEGORIES, feeRates = PROCESSING_FEE_RATES }) {
+function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories = CATEGORIES, feeRates = PROCESSING_FEE_RATES, onManageCategories }) {
   const edit = !!txn;
   // `prefill` (from "record payment for this order") seeds a NEW entry already set
   // to the client's payment — Income · Client Sales · the order's client + amount.
@@ -1212,11 +1334,22 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1 }}>
             <FormControl size="small" sx={fld}>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)} sx={sel}>
+              <Select value={category}
+                onChange={(e) => {
+                  // The last row is an action, not a category — open the manager
+                  // and leave the current pick untouched.
+                  if (e.target.value === '__manage') { if (onManageCategories) onManageCategories(); return; }
+                  setCategory(e.target.value);
+                }} sx={sel}>
                 {/* Live categories from /api/finances/config; keep an off-list saved
                     category selectable so editing an old row can't blank the field. */}
                 {(categories.includes(category) ? categories : [...categories, category])
                   .map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                {onManageCategories && (
+                  <MenuItem value="__manage" sx={{ borderTop: '1px solid rgba(255,255,255,0.09)', color: '#4ade80', fontWeight: 700 }}>
+                    ＋ Edit category list…
+                  </MenuItem>
+                )}
               </Select>
             </FormControl>
             <TextField size="small" type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} sx={fld} />
