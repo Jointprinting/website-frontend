@@ -6,10 +6,12 @@
         { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
         { "key": "Content-Type", "value": "text/vcard; charset=utf-8" }
       ]
+    },
+    {
+      "source": "/(demos|northpine|clearwater)(/.*)?",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
     }
-  ],
-  "redirects": [
-    { "source": "/demos", "destination": "/", "permanent": false },
-    { "source": "/demos/:path*", "destination": "/", "permanent": false }
   ]
 }
