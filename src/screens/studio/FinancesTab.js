@@ -72,6 +72,19 @@ const SCAN_FAIL_NOTE = 'Couldn’t read the receipt — fill the fields in manua
 // Signed amount within a row's type bucket (credit reverses direction) — matches
 // backend signed(): an income credit nets revenue down, an expense credit nets cost down.
 const signedAmt = (t) => (t && t.isCredit ? -(Number(t.amount) || 0) : (Number(t.amount) || 0));
+
+// What ONE income row contributes to an order's REVENUE — the exact client mirror
+// of backend controllers/finances.orderRevenueContribution, so the OrderDialog's
+// revenue/profit reconcile to the by-order P&L and the headline (keep in sync):
+//   • 'Client Sales' → signedAmt(t)   (a Customer-Sales CREDIT nets down)
+//   • 'Refund'       → −|signedAmt(t)| (contra-revenue — always reduces)
+//   • anything else  → 0              (never was order revenue)
+const orderRevenueContribution = (t) => {
+  if (!t || t.type !== 'income') return 0;
+  if (t.category === 'Client Sales') return signedAmt(t);
+  if (t.category === 'Refund') return -Math.abs(signedAmt(t));
+  return 0;
+};
 const CAT_COLOR = {
   'Blank COGS': '#60a5fa', 'Printer COGS': '#a78bfa', 'Shipping': '#2dd4bf', 'Art': '#f472b6',
   'Commission': '#fbbf24', 'Processing Fee': '#34d399', 'Software': '#f97316', 'Owner Draw': '#9ca3af',
@@ -735,11 +748,13 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   const income  = rows.filter((t) => isInflow(t)).reduce((s, t) => s + num(t.amount), 0);
   const expense = rows.filter((t) => !isInflow(t)).reduce((s, t) => s + num(t.amount), 0);
-  // Profit reconciles EXACTLY with the by-order list (M6): the SAME definition —
-  // signed Customer-Sales revenue minus signed COGS — not the all-categories cash
-  // Net. (Cash In/Out above stays a separate lens; profit is the margin number.)
-  const revenue = rows.filter((t) => t.type === 'income' && t.category === 'Client Sales')
-    .reduce((s, t) => s + signedAmt(t), 0);
+  // Profit reconciles EXACTLY with the by-order list (M6): the SAME definition as
+  // the backend — Customer-Sales revenue with a customer REFUND netted down as
+  // contra-revenue (orderRevenueContribution), minus signed COGS — not the
+  // all-categories cash Net. Without the contra a refunded order showed full
+  // revenue here yet a reduced top-line on the P&L; now they match. (Cash In/Out
+  // above stays a separate lens; profit is the margin number.)
+  const revenue = rows.reduce((s, t) => s + orderRevenueContribution(t), 0);
   const cost = rows.filter((t) => t.type === 'expense' && cogsCategories.includes(t.category))
     .reduce((s, t) => s + signedAmt(t), 0);
   const profit = revenue - cost;
