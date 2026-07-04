@@ -213,14 +213,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     await axios.post(`${base}/enrollments/${enrollmentId}/replied`, {}, authHdr);
     flash('Marked replied — they’re tagged warm and on today’s call list.');
     await loadOverview();
-    if (view === 'queue') loadQueue();
+    // The Send queue lives on the dashboard now (post-rebuild); refresh it there
+    // so a stopped/replied row leaves the queue immediately instead of lingering
+    // as "due" until the next tab switch.
+    if (view === 'dashboard') loadQueue();
   };
 
   const stopEnrollment = async (enrollmentId) => {
     await axios.post(`${base}/enrollments/${enrollmentId}/stop`, {}, authHdr);
     flash('Sequence stopped for that company.');
     await loadOverview();
-    if (view === 'queue') loadQueue();
+    if (view === 'dashboard') loadQueue();
   };
 
   // First-run wizard: send one sample through the real sender/SMTP to a given
@@ -342,6 +345,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               onStop={stopEnrollment}
               onGoCampaigns={() => setView('campaigns')}
               onGoImport={() => setView('import')}
+              onGoReplies={() => setView('replies')}
               onTestSend={sendTest}
               onRecheckAuth={recheckAuth}
             />
@@ -364,7 +368,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
         return (
           <CampaignsView
             overview={overview} loading={overviewLoading}
-            autoEnrollCampaignId={overview.autoEnrollCampaignId || null}
+            autoEnrollCampaignId={overview?.autoEnrollCampaignId || null}
             onCreate={createCampaign}
             onUpdate={updateCampaign}
             onLaunch={launchCampaign}
