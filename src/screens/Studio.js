@@ -81,6 +81,10 @@ import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined
 import JpLoader from '../common/JpLoader';
 
 const TOKEN_KEY = 'jpStudioToken';
+// The signed-in account's role ('owner' | 'agent'), stored alongside the token so
+// the Studio renders the right surface (agents get a trimmed view). The token is
+// still the source of truth server-side; this is a display hint only.
+const ROLE_KEY = 'jpStudioRole';
 
 // Mirrors backend (controllers/auth.js) — display-only.
 const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
@@ -116,6 +120,7 @@ const darkInputSx = {
 //  Login
 // ─────────────────────────────────────────────────────────────────────────────
 function Login({ onAuthed }) {
+  const [user, setUser] = React.useState('');
   const [pw, setPw] = React.useState('');
   const [show, setShow] = React.useState(false);
   const [err, setErr] = React.useState('');
@@ -137,9 +142,11 @@ function Login({ onAuthed }) {
     if (!pw) return;
     setBusy(true);
     try {
-      const res = await axios.post(`${config.backendUrl}/api/auth/studio-login`, { password: pw });
+      const res = await axios.post(`${config.backendUrl}/api/auth/studio-login`,
+        { username: user.trim(), password: pw }); // blank username → the backend uses 'studio' (owner)
       if (res.data?.token) {
         localStorage.setItem(TOKEN_KEY, res.data.token);
+        localStorage.setItem(ROLE_KEY, res.data.role || 'owner');
         setFailCount(0);
         setLockedMsg('');
         setSuccess(true);
@@ -239,8 +246,20 @@ function Login({ onAuthed }) {
             <Stack spacing={2}>
               <TextField
                 autoFocus
+                type="text"
+                label="Username"
+                placeholder="studio"
+                autoComplete="username"
+                value={user}
+                onChange={(e) => { setUser(e.target.value); if (err) setErr(''); }}
+                disabled={!!lockedMsg}
+                fullWidth size="medium"
+                sx={darkInputSx}
+              />
+              <TextField
                 type={show ? 'text' : 'password'}
                 label="Password"
+                autoComplete="current-password"
                 value={pw}
                 onChange={(e) => {
                   setPw(e.target.value);
@@ -2563,9 +2582,10 @@ export default function Studio() {
     if (t) {
       axios
         .get(`${config.backendUrl}/api/auth/verify`, { headers: { Authorization: `Bearer ${t}` } })
-        .then(() => handleAuthed(t))
+        .then((res) => { if (res?.data?.role) localStorage.setItem(ROLE_KEY, res.data.role); handleAuthed(t); })
         .catch(() => {
           localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(ROLE_KEY);
           setToken(null);
         });
     }
@@ -2573,6 +2593,7 @@ export default function Studio() {
 
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
     setToken(null);
   };
 
