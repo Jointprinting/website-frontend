@@ -97,8 +97,11 @@ export const isWonColumn = (col) => col === 'delivered';
 // + cancel). Lead/contacted/lost/dormant are CLIENT states an order never enters.
 export const ORDER_BOARD_COLUMNS = ['quoting', 'approval', 'production', 'shipped', 'delivered', 'cancelled'];
 // The board columns a LEAD card may be dragged among. It can advance into quoting
-// (which mints/opens the order via the handoff); it can't jump mid-fulfillment.
-export const LEAD_BOARD_COLUMNS = ['lead', 'contacted', 'quoting'];
+// (which mints/opens the order via the handoff), and it can be dropped onto the
+// Lost / Dormant off-ramps to close it right from the board (the previous list
+// left those unreachable by drag — the owner had to open the card). It still
+// can't jump mid-fulfillment (approval/production/…) — that's an order lifecycle.
+export const LEAD_BOARD_COLUMNS = ['lead', 'contacted', 'quoting', 'lost', 'dormant'];
 
 // Map a board column → the Order.status to PERSIST when an order card is dropped
 // there. 'production' lands on 'placed' (the canonical entry to the production
