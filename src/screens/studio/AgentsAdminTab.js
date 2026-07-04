@@ -26,9 +26,11 @@ import VisibilityIcon        from '@mui/icons-material/Visibility';
 import VisibilityOffIcon     from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon       from '@mui/icons-material/CheckCircle';
 import KeyOutlinedIcon       from '@mui/icons-material/KeyOutlined';
+import ExpandMoreIcon        from '@mui/icons-material/ExpandMore';
 import {
-  D, mono, eyebrow, money0, fmtRelative, dropInput, dropPrimaryBtn, dropGhostBtn, scrollbar,
+  D, mono, eyebrow, money0, fmtRelative, fmtDate, dropInput, dropPrimaryBtn, dropGhostBtn, scrollbar, STATUS_META,
 } from './_shared';
+import { STAGE_META } from './crm/_crm';
 import { useContextMenu } from './ContextMenu';
 import { buildFallbackMenu } from './contextMenuActions';
 import config from '../../config.json';
@@ -54,13 +56,18 @@ function genPassword() {
   return out;
 }
 
-// Turn a stats rollup into a short, honest pace read + a tone the card colours by.
+// Turn a stats rollup into a short pace read + a tone the card colours by. Keyed
+// off the server's canonical `paceLabel` (controllers/admin.js) so the owner card
+// and the agent's own hero NEVER disagree on the same numbers.
+const PACE_READ = {
+  none:   { label: 'No goal set',   tone: 'muted' },
+  hit:    { label: 'Goal hit',      tone: 'good' },
+  ahead:  { label: 'Ahead of pace', tone: 'good' },
+  on:     { label: 'On pace',       tone: 'good' },
+  behind: { label: 'Behind pace',   tone: 'warn' },
+};
 function paceRead(stats) {
-  if (!stats || !stats.goal) return { label: 'No goal set', tone: 'muted' };
-  const { progress = 0, onPace, monthFrac = 0 } = stats;
-  if (progress >= 1) return { label: 'Goal hit', tone: 'good' };
-  if (onPace) return { label: progress > monthFrac + 0.05 ? 'Ahead of pace' : 'On pace', tone: 'good' };
-  return { label: 'Behind pace', tone: 'warn' };
+  return PACE_READ[(stats && stats.paceLabel) || 'none'] || PACE_READ.none;
 }
 const TONE = {
   good:  { fg: D.green, bg: 'rgba(74,222,128,0.12)', bar: D.green },
@@ -137,8 +144,81 @@ function StatCell({ label, value }) {
   );
 }
 
-function AgentCard({ agent, onPatch, onReset }) {
+// Read-only drill-in: the owner viewing ONE agent's book (their orders + leads),
+// fetched lazily on first expand. This is the owner's "manage their order tabs"
+// window — kept separate from the owner's own Order Tracker so their board stays
+// their projects.
+function AgentBook({ agentId, token }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const hdr = { headers: { Authorization: `Bearer ${token}` } };
+        const [oR, lR] = await Promise.all([
+          fetch(`${base}/agents/${agentId}/orders`, hdr),
+          fetch(`${base}/agents/${agentId}/leads`, hdr),
+        ]);
+        const orders = oR.ok ? (await oR.json()).orders || [] : [];
+        const leads = lR.ok ? (await lR.json()).leads || [] : [];
+        if (!cancelled) setData({ orders, leads });
+      } catch (_) { if (!cancelled) setData({ orders: [], leads: [] }); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [agentId, token]);
+
+  if (loading) return <Typography sx={{ color: D.faint, fontSize: 12, py: 1.5 }}>Loading their book…</Typography>;
+  const { orders, leads } = data;
+
+  const chip = (meta) => (
+    <Chip size="small" label={meta.label} sx={{ height: 18, fontSize: 10, fontWeight: 700, color: meta.color, bgcolor: meta.bg }} />
+  );
+
+  return (
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 1.5 }}>
+      {[['Orders', orders, 'order'], ['Leads', leads, 'lead']].map(([title, rows, kind]) => (
+        <Box key={title} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ ...eyebrow, mb: 0.75 }}>{title} ({rows.length})</Typography>
+          {rows.length === 0 ? (
+            <Typography sx={{ color: D.faint, fontSize: 11.5 }}>None yet.</Typography>
+          ) : (
+            <Stack spacing={0.5} sx={{ maxHeight: 200, overflowY: 'auto', ...scrollbar, pr: 0.5 }}>
+              {rows.slice(0, 40).map((r) => (
+                <Stack key={r.id || r.companyKey} direction="row" alignItems="center" justifyContent="space-between" spacing={1}
+                  sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`, borderRadius: 1.5, px: 1, py: 0.6 }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.companyName || r.clientName || 'Untitled'}
+                    </Typography>
+                    <Typography sx={{ color: D.faint, fontSize: 10, ...mono }}>
+                      {kind === 'order'
+                        ? `${r.orderDate ? fmtDate(r.orderDate) : '—'}`
+                        : (r.nextFollowUp ? `Follow up ${fmtDate(r.nextFollowUp)}` : (r.lastContact ? `Last ${fmtRelative(r.lastContact)}` : '—'))}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexShrink: 0 }}>
+                    {kind === 'order'
+                      ? chip(STATUS_META[r.status] || STATUS_META.quoted)
+                      : chip(STAGE_META[r.stage] || STAGE_META.lead)}
+                    <Typography sx={{ ...mono, color: D.green, fontSize: 12, fontWeight: 700 }}>
+                      {money0(kind === 'order' ? r.totalValue : r.dealValue)}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+function AgentCard({ agent, token, onPatch, onReset }) {
   const s = agent.stats || {};
+  const [showBook, setShowBook] = useState(false);
   const pace = paceRead(s);
   const tone = TONE[pace.tone];
   const [editGoal, setEditGoal] = useState(false);
@@ -243,11 +323,20 @@ function AgentCard({ agent, onPatch, onReset }) {
           <StatCell label="Open orders" value={s.openOrders || 0} />
           <StatCell label="Leads" value={s.leads || 0} />
         </Stack>
-        <Button size="small" startIcon={<KeyOutlinedIcon sx={{ fontSize: 15 }} />} onClick={resetPw} disabled={busy}
-          sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
-          Reset password
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" endIcon={<ExpandMoreIcon sx={{ fontSize: 16, transform: showBook ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />}
+            onClick={() => setShowBook((v) => !v)}
+            sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
+            {showBook ? 'Hide book' : 'View book'}
+          </Button>
+          <Button size="small" startIcon={<KeyOutlinedIcon sx={{ fontSize: 15 }} />} onClick={resetPw} disabled={busy}
+            sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
+            Reset password
+          </Button>
+        </Stack>
       </Stack>
+
+      {showBook && <AgentBook agentId={agent.id} token={token} />}
 
       {reveal && (
         <Box sx={{ mt: 1.5 }}>
@@ -434,7 +523,7 @@ export default function AgentsAdminTab({ token, onBack }) {
         ) : (
           <Stack spacing={1.5} sx={{ ...scrollbar }}>
             {agents.map((a) => (
-              <AgentCard key={a.id} agent={a} onPatch={patchAgent} onReset={resetPassword} />
+              <AgentCard key={a.id} agent={a} token={token} onPatch={patchAgent} onReset={resetPassword} />
             ))}
           </Stack>
         )}

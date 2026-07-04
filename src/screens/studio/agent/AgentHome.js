@@ -43,31 +43,33 @@ function daysLeftIn(goalMonth) {
 
 // The heart of the dashboard: turn goal + this-month sales into an honest,
 // motivating read. Encouraging when ahead/on-pace, a nudge (never a scolding)
-// when behind. The owner asked specifically for this framing.
+// when behind. The HEADLINE/tone come from the server's canonical `paceLabel`
+// (controllers/admin.js) so the owner's Admin card and this hero always agree;
+// the copy here just adds the friendly detail.
 function paceMessage(stats, goal, goalMonth) {
-  if (!goal) {
-    return { tone: 'muted', emoji: '🎯', headline: 'No goal set yet',
-      sub: 'Ask Nate to set your monthly target — then you can track your pace here.' };
-  }
+  const label = stats.paceLabel || (goal ? 'behind' : 'none');
   const sales = Math.round(stats.salesThisMonth || 0);
-  const progress = stats.progress || 0;
   const monthFrac = Math.min(1, Math.max(0, stats.monthFrac || 0));
   const expected = goal * monthFrac;
   const daysLeft = daysLeftIn(goalMonth);
-  if (progress >= 1) {
-    return { tone: 'good', emoji: '🎉', headline: 'Goal smashed!',
-      sub: `You hit ${money0(goal)} this month. Everything from here is bonus — keep the momentum going.` };
+  switch (label) {
+    case 'none':
+      return { tone: 'muted', emoji: '🎯', headline: 'No goal set yet',
+        sub: 'Ask Nate to set your monthly target — then you can track your pace here.' };
+    case 'hit':
+      return { tone: 'good', emoji: '🎉', headline: 'Goal smashed!',
+        sub: `You hit ${money0(goal)} this month. Everything from here is bonus — keep the momentum going.` };
+    case 'ahead':
+      return { tone: 'good', emoji: '🔥', headline: 'Ahead of pace',
+        sub: `You're ${money0(Math.max(0, sales - expected))} ahead of where you need to be. ${money0(Math.max(0, goal - sales))} to go — keep pushing.` };
+    case 'on':
+      return { tone: 'good', emoji: '✅', headline: 'Right on pace',
+        sub: `Stay consistent — ${money0(Math.max(0, goal - sales))} left to hit your goal${daysLeft ? `, ${daysLeft} days to do it` : ''}.` };
+    case 'behind':
+    default:
+      return { tone: 'warn', emoji: '💪', headline: 'Behind pace',
+        sub: `${money0(Math.max(0, expected - sales))} behind pace${daysLeft ? ` with ${daysLeft} days left` : ''}. A couple of closes gets you right back on track.` };
   }
-  if (sales >= expected * 1.1) {
-    return { tone: 'good', emoji: '🔥', headline: 'Ahead of pace',
-      sub: `You're ${money0(sales - expected)} ahead of where you need to be. ${money0(goal - sales)} to go — keep pushing.` };
-  }
-  if (sales >= expected * 0.9) {
-    return { tone: 'good', emoji: '✅', headline: 'Right on pace',
-      sub: `Stay consistent — ${money0(goal - sales)} left to hit your goal${daysLeft ? `, ${daysLeft} days to do it` : ''}.` };
-  }
-  return { tone: 'warn', emoji: '💪', headline: 'Behind pace',
-    sub: `${money0(expected - sales)} behind pace${daysLeft ? ` with ${daysLeft} days left` : ''}. A couple of closes gets you right back on track.` };
 }
 
 const TONE = {
