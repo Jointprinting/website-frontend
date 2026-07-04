@@ -954,6 +954,12 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onLog={(item) => openLog({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
             onReschedule={(item) => openResched({ companyKey: item.companyKey, name: item.name, nextFollowUp: null })}
             onArchive={(item) => archiveOne(item.companyKey)}
+            onSnooze={async (item, until) => {
+              await patchCompany(item.companyKey, { snoozedUntil: until });
+              flash(`${item.name} snoozed.`);
+              refreshAffected();
+            }}
+            onNotInterested={(item) => setLostDlg({ open: true, target: { companyKey: item.companyKey, name: item.name } })}
             onGoToday={() => setView('today')}
             // Funnel drill-down: tap a stage bar → the Companies list narrowed
             // to that stage (client-side filter + a dismissible chip).
