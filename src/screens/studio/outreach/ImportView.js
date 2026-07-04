@@ -1,13 +1,13 @@
 // src/screens/studio/outreach/ImportView.js
 // The lead engine's progress readout. The engine itself runs on the API —
 // always on, queue-aware, and SELF-TUNING: it watches the cold-lead reserve,
-// sweeps OpenStreetMap state by state (scraping each shop's own site for a
-// contact email, verifying, importing EVERY dispensary — email ones become
-// cold-email leads, phone/address-only ones become call/visit leads), milks a
-// state dry, then advances the frontier and eventually wraps the country to
-// re-catch new openings. When the finder logic itself improves, the API
-// version-stamps each state and quietly re-milks the stale ones in the
-// background — so coverage upgrades itself with nothing to press here.
+// sweeps OpenStreetMap state by state for RECREATIONAL dispensaries (scraping
+// each shop's own site for a contact email, verifying it, importing the ones
+// with a real inbox as mail-merge leads), milks a state dry, then advances the
+// frontier and eventually wraps the country to re-catch new openings. When the
+// finder logic itself improves, the API version-stamps each state and quietly
+// re-milks the stale ones in the background — so coverage upgrades itself with
+// nothing to press here.
 //
 // There is nothing to operate — the owner asked for exactly that ("something I
 // shouldn't even see"). This is a pure readout; the one tucked-away "Refill now"
@@ -37,10 +37,10 @@ function agoLabel(ts) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// One state's tile in the coverage map: swept states show their last haul (total
-// new, and how many of those are emailable), the frontier state glows, states
-// queued for an automatic finder-upgrade re-milk get a faint "refresh" cue, and
-// untouched states sit dim until the engine arrives.
+// One state's tile in the coverage map: swept states show their last haul, the
+// frontier state glows, states queued for an automatic finder-upgrade re-milk
+// get a faint "refresh" cue, and untouched states sit dim until the engine
+// arrives.
 function RegionTile({ r, isFrontier }) {
   const swept = !!r.lastSweptAt;
   const borderColor = isFrontier ? D.green : r.stale ? D.amber : swept ? D.lineHi : D.line;
@@ -65,7 +65,7 @@ function RegionTile({ r, isFrontier }) {
       <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.25 }}>
         {isFrontier && !swept ? 'up next'
           : r.stale ? 'refresh queued'
-            : swept ? `+${r.lastNew ?? 0}${r.lastNewEmailable ? ` · ${r.lastNewEmailable}✉` : ''} · ${agoLabel(r.lastSweptAt)}`
+            : swept ? `+${r.lastNew ?? 0} · ${agoLabel(r.lastSweptAt)}`
               : 'not reached yet'}
       </Typography>
     </Box>
@@ -89,15 +89,14 @@ export default function ImportView({ busy, frontier, regions = [], onRefillNow }
         </Stack>
         <Typography sx={{ color: D.muted, fontSize: 12.5, mb: 1.75 }}>
           Runs by itself in the background — nothing to start or manage. It watches your cold-lead reserve, and
-          whenever it dips low it sweeps the next states on the map: every dispensary OpenStreetMap knows about,
-          each shop’s own site scraped for a real contact email. Emailable shops become cold-email leads; the rest
-          land as call/visit leads in your CRM and Field Map — so it banks <b>every</b> dispensary, not just the
-          ones with an inbox. It drains a state, moves on, loops the country for new openings, and re-milks states
-          on its own whenever the finder gets smarter.
+          whenever it dips low it sweeps the next states on the map for <b>recreational</b> dispensaries — including
+          ones whose name never says “cannabis” or “dispensary” — scrapes each shop’s own site for a real contact
+          email, verifies it, and imports the ones with an inbox as mail-merge leads. It drains a state, moves on,
+          loops the country for new openings, and re-milks states on its own whenever the finder gets smarter.
         </Typography>
 
         <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-          <StatPill value={reserve != null ? reserve : '—'} label="Emailable leads in reserve"
+          <StatPill value={reserve != null ? reserve : '—'} label="Cold leads in reserve"
             tone={reserve > 20 ? D.green : D.amber} />
           <StatPill value={frontier?.activeLabel || '—'} label="Next state up" tone={D.text} />
           <StatPill value={`${sweptCount}/${regions.length || '—'}`} label="States swept" tone={D.text} />
