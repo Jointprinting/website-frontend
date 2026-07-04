@@ -444,6 +444,26 @@ export default function OverviewView({
       {/* The one thing to do right now — synthesized from the whole dashboard. */}
       <NextActions actions={nextActions} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} onGoReplies={onGoReplies} />
 
+      {/* Today's plan — plain-English "here's what the engine is doing", so it can
+          be trusted without babysitting. Only once it's actually running. */}
+      {anyActive && overview.plan && (
+        <Box>
+          <Eyebrow sx={{ mb: 1 }}>Today’s plan — warm follow-ups send first, then new</Eyebrow>
+          <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+            <StatPill value={overview.plan.followUpsDue ?? 0} label="Follow-ups due" tone={D.green} />
+            <StatPill value={overview.plan.firstTouchesDue ?? 0} label="New first-touches due" tone={D.text} />
+            <StatPill value={overview.plan.inSequence ?? 0} label="In sequence" tone={D.text} />
+            <StatPill value={overview.plan.reserve ?? 0} label="Reserve (auto-enrolls)"
+              tone={(overview.plan.reserve ?? 0) > 0 ? D.green : D.muted} />
+          </Stack>
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, mt: 0.9 }}>
+            {overview.plan.dueNow > 0
+              ? `${overview.plan.dueNow} queued to go now, paced under today’s ${overview.plan.dailyCap || '—'}/day cap (${overview.plan.sentToday || 0} sent). The rest drip as they come due — nothing to do.`
+              : `Nothing due this minute — ${overview.plan.inSequence || 0} leads mid-sequence will send as they come due, and the reserve keeps topping the pipeline up on its own.`}
+          </Typography>
+        </Box>
+      )}
+
       {/* Setup guardrails — a safety net once the wizard is gone (dismissed or
           complete); while the wizard is showing it owns this messaging. */}
       {!wizardShowing && !engine.senderConfigured && (

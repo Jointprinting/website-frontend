@@ -160,14 +160,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   // One-click go: activate + kick a send tick immediately, so touch 1 leaves now
   // (in-window) and the follow-ups drip on their own. The response tells us what
   // actually happened so the toast is honest instead of a hopeful "done".
+  // One tap = always-on: the backend flips the campaign active, points continuous
+  // auto-enroll at it, fills the pipeline from the reserve, and fires touch 1.
   const launchCampaign = async (id) => {
     const { data } = await axios.post(`${base}/campaigns/${id}/launch`, {}, authHdr);
     const t = data.tick || {};
-    if (t.sent > 0) flash(`Launched — ${t.sent} email${t.sent === 1 ? '' : 's'} going out now. The rest drip automatically.`);
-    else if (t.skipped === 'outside-window') flash('Launched & active — sends begin in the window (Mon–Fri 9a–5p ET).');
-    else if (t.skipped === 'daily-cap') flash("Launched — today's warm-up cap is used up; more goes out tomorrow.");
-    else if (t.sent === 0 && t.skipped) flash('Launched & active — no emails were due to send this minute; the engine will send as they come due.');
-    else flash('Launched — the engine will start sending due emails.');
+    const n = (data.filled && data.filled.enrolled) || 0;
+    const enrolledBit = n ? ` ${n} lead${n === 1 ? '' : 's'} enrolled and` : '';
+    if (t.sent > 0) flash(`Always-on —${enrolledBit} ${t.sent} email${t.sent === 1 ? '' : 's'} going out now. It self-feeds and drips the rest for you.`);
+    else if (t.skipped === 'outside-window') flash(`Always-on —${enrolledBit} sends begin in the window (Mon–Fri 9a–5p ET). Nothing else to do.`);
+    else if (t.skipped === 'daily-cap') flash(`Always-on —${enrolledBit} today's warm-up cap is used; more goes out tomorrow on its own.`);
+    else flash(`Always-on —${enrolledBit} the engine self-feeds from your reserve and drips as leads come due.`);
     await loadOverview();
     return data;
   };
