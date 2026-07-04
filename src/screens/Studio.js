@@ -76,6 +76,7 @@ import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
 import AgentsAdminTab from './studio/AgentsAdminTab';
+import AgentHome from './studio/agent/AgentHome';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
@@ -2579,6 +2580,11 @@ function StudioBody({ token, onLogout }) {
 
 export default function Studio() {
   const [token, setToken] = React.useState(null);
+  // The signed-in account's role, tracked in React state so the shell switches
+  // when it resolves (localStorage alone wouldn't re-render). Owner → the full
+  // Studio; agent → the trimmed, self-scoped AgentHome. Seeded from the stored
+  // hint and refreshed on every login/verify.
+  const [role, setRole] = React.useState(() => localStorage.getItem(ROLE_KEY) || 'owner');
 
   // Bounce-back support: when another tool (jpstudio) redirected here to
   // collect a login, it tagged the URL with ?return=/wherever. After we have
@@ -2586,6 +2592,7 @@ export default function Studio() {
   // so an attacker can't smuggle in an off-site URL.
   const handleAuthed = React.useCallback((t) => {
     setToken(t);
+    setRole(localStorage.getItem(ROLE_KEY) || 'owner');
     try {
       const ret = new URLSearchParams(window.location.search).get('return');
       if (ret && ret.startsWith('/')) {
@@ -2613,11 +2620,14 @@ export default function Studio() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ROLE_KEY);
     setToken(null);
+    setRole('owner');
   };
 
-  return token
-    ? <StudioBody token={token} onLogout={handleLogout} />
-    : <Login onAuthed={handleAuthed} />;
+  if (!token) return <Login onAuthed={handleAuthed} />;
+  // Agents get their own trimmed, self-scoped surface (leads + orders + goal);
+  // they never load the owner's hub or tools.
+  if (role === 'agent') return <AgentHome token={token} onLogout={handleLogout} />;
+  return <StudioBody token={token} onLogout={handleLogout} />;
 }
 
 // ── Backup nudge state ───────────────────────────────────────────────────────
