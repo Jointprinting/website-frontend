@@ -106,7 +106,7 @@ const WORK = [
 const HERO_SHOTS = [WORK[0], WORK[1], WORK[2], WORK[3]];
 
 // Credibility points — honest, verifiable, no invented client quotes.
-const PROOF = ['30,000+ pieces delivered', 'Design done in-house', 'Ships nationwide', 'Free mockups, no minimums'];
+const PROOF = ['30,000+ pieces delivered', 'Design done in-house', 'Ships nationwide', 'Free mockups, zero commitment'];
 
 // The real order flow, worded for a dispensary owner. Step 1 is the entry point.
 // Honest: we design in-house and MANAGE production — we don't claim to run the
@@ -118,12 +118,12 @@ const PROCESS = [
   { Icon: LocalShippingOutlinedIcon, k: '04', t: 'Ships to your shop', d: 'Boxes at your door, on time and on-brand. Need a restock or a new seasonal drop? A couple clicks and it’s moving.' },
 ];
 
-const TRUST = ['Free mockup, no commitment', 'No minimums to start', 'One partner, fully managed', 'Ships nationwide'];
+const TRUST = ['Free mockup, no commitment', 'Flexible minimums', 'One partner, fully managed', 'Ships nationwide'];
 
 const STATS = [
   { n: '30,000+', l: 'pieces delivered' },
   { n: 'In-house', l: 'design team' },
-  { n: '24 hr', l: 'mockup turnaround' },
+  { n: '48 hr', l: 'mockup turnaround' },
   { n: 'Nationwide', l: 'we ship anywhere' },
 ];
 
@@ -289,7 +289,7 @@ export default function Dispensaries() {
                 <Box component="span" sx={{ color: JP.emerald }}>customers wear</Box>.
               </Typography>
               <Typography sx={{ color: JP.onDarkMuted, maxWidth: 520, mb: 3.5, fontSize: { xs: 16.5, md: 19 }, lineHeight: 1.6 }}>
-                Staff apparel, customer drops, and event gear your community actually reps — turning your best customers into your best advertising. We design, print, and ship merch dispensaries are proud to put their name on.
+                Staff apparel, customer drops, and event gear your community actually reps — turning your best customers into your best advertising. We design your merch, manage production end-to-end, and ship it to your shop — the kind dispensaries are proud to put their name on.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
                 <Button component={RouterLink} to="/contact?topic=dispensary" variant="contained" color="cta" size="large"
@@ -303,7 +303,7 @@ export default function Dispensaries() {
                   Browse products
                 </Button>
               </Stack>
-              <TrustRow items={['Free mockup', 'No minimums to start', 'Ships nationwide']} sx={{ mt: 3 }} />
+              <TrustRow items={['Free mockup', 'Flexible minimums', 'Ships nationwide']} sx={{ mt: 3 }} />
             </Reveal>
             <Reveal delay={120}>
               <HeroSpotlight />

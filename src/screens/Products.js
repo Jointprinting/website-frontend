@@ -20,7 +20,15 @@ const GREEN       = '#4ade80';   // brand Emerald accent
 const MUTED       = 'rgba(255,255,255,0.55)';
 const SIDEBAR_W   = 230;
 const DISPLAY_FONT = JP.fontDisplay; // brand display type — Fraunces retired
-const NAVBAR_H    = 64;
+// The desktop navbar is a 70px STICKY AppBar, but ONLY above 800px — at/below
+// 800px the navbar switches to a non-sticky mobile bar that scrolls away (see
+// Navbar.js `mobile = max-width:800px`). So the sticky search header + sidebar
+// must offset by 70 above 800px and 0 below it — matching the SAME breakpoint,
+// not MUI's default sm(600). A mismatched offset left a dead strip / 6px tuck
+// in the 600–800px range.
+const NAVBAR_H    = 70;
+const STICKY_TOP  = { xs: 0, '@media (min-width:800px)': `${NAVBAR_H}px` };
+const STICKY_H    = { xs: '100vh', '@media (min-width:800px)': `calc(100vh - ${NAVBAR_H}px)` };
 
 const GARMENT_CATEGORIES = [
   { label: 'All Styles',      value: '' },
@@ -389,13 +397,13 @@ const [loading,    setLoading]    = useState(true);
   return (
     <Box sx={{
       display: 'flex', alignItems: 'flex-start', minHeight: '100vh',
-      bgcolor: '#e8e9e3',
-      background: { md: `linear-gradient(to right, ${SIDEBAR_BG} 0, ${SIDEBAR_BG} ${SIDEBAR_W}px, #e8e9e3 ${SIDEBAR_W}px)` },
+      bgcolor: JP.stone,
+      background: { md: `linear-gradient(to right, ${SIDEBAR_BG} 0, ${SIDEBAR_BG} ${SIDEBAR_W}px, ${JP.stone} ${SIDEBAR_W}px)` },
     }}>
       {!isMobile && (
         <Box sx={{
           width: SIDEBAR_W, flexShrink: 0,
-          position: 'sticky', top: NAVBAR_H, height: `calc(100vh - ${NAVBAR_H}px)`,
+          position: 'sticky', top: STICKY_TOP, height: STICKY_H,
           alignSelf: 'flex-start',
         }}>
           <Sidebar category={category} setCategory={setCategory}
@@ -411,7 +419,7 @@ const [loading,    setLoading]    = useState(true);
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <Box sx={{
           bgcolor: SIDEBAR_BG, px: { xs: 1.5, sm: 2.5, md: 3 }, py: { xs: 1, sm: 1.5 },
-          position: 'sticky', top: { xs: 0, sm: NAVBAR_H }, zIndex: 100,
+          position: 'sticky', top: STICKY_TOP, zIndex: 100,
           borderBottom: '1px solid rgba(255,255,255,0.08)',
         }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -476,8 +484,8 @@ const [loading,    setLoading]    = useState(true);
             fontSize: { xs: 13.5, sm: 15 }, maxWidth: 580, lineHeight: 1.55,
           }}>
             {activeLabel === 'All Styles'
-              ? 'Premium blanks from the brands customers ask for — pick anything, we send a free mockup within 24 hours.'
-              : `Browse every ${activeLabel.toLowerCase().replace(/s$/, '')} we stock. Add to your tray, quote in 24 hours.`}
+              ? 'Premium blanks from the brands customers ask for — pick anything, we send a free mockup within 48 hours.'
+              : `Browse every ${activeLabel.toLowerCase().replace(/s$/, '')} we stock. Add to your tray, quote in 48 hours.`}
           </Typography>
           {relaxedFilter && (
             <Box sx={{
@@ -558,12 +566,12 @@ const [loading,    setLoading]    = useState(true);
                 {/* Gradient fade — left + right */}
                 <Box sx={{
                   position: 'absolute', top: 0, left: 0, bottom: 0, width: { xs: 24, sm: 60 },
-                  background: 'linear-gradient(to right, #e8e9e3, rgba(232,233,227,0))',
+                  background: `linear-gradient(to right, ${JP.stone}, rgba(232,233,227,0))`,
                   zIndex: 3, pointerEvents: 'none',
                 }} />
                 <Box sx={{
                   position: 'absolute', top: 0, right: 0, bottom: 0, width: { xs: 24, sm: 60 },
-                  background: 'linear-gradient(to left, #e8e9e3, rgba(232,233,227,0))',
+                  background: `linear-gradient(to left, ${JP.stone}, rgba(232,233,227,0))`,
                   zIndex: 3, pointerEvents: 'none',
                 }} />
 

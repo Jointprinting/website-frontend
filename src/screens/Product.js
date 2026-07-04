@@ -205,7 +205,7 @@ function Product() {
 
   if (error) {
     return (
-      <Box bgcolor="#e8e9e3" minHeight="100vh">
+      <Box bgcolor={JP.stone} minHeight="100vh">
         <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>
           <Stack spacing={3} alignItems="center" textAlign="center">
             <CheckroomIcon sx={{ fontSize: 64, color: 'rgba(0,0,0,0.2)' }} />
@@ -226,7 +226,7 @@ function Product() {
   }
 
   return (
-    <Box bgcolor="#e8e9e3" minHeight="100vh">
+    <Box bgcolor={JP.stone} minHeight="100vh">
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 7 }, px: { xs: 2, md: 4 } }}>
         {loading ? (
           <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="60vh" gap={2}>
@@ -422,7 +422,7 @@ function Product() {
                 }}>
                   <strong>Available in {productColorCount} colors.</strong> All color options
                   are confirmed in your free mockup — request a quote below and we'll send
-                  one within 24 hours.
+                  one within 48 hours.
                 </Alert>
               ) : null}
 
@@ -456,7 +456,7 @@ function Product() {
                   Request quote now →
                 </Button>
                 <Typography fontSize={12} color="text.secondary">
-                  Free mockup &amp; quote within <b>24 hours.</b> No commitment required.
+                  Free mockup &amp; quote within <b>48 hours.</b> No commitment required.
                 </Typography>
               </Stack>
 

@@ -16,11 +16,14 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import boxLogo from '../modules/images/logo_white.webp';
 
 const NAV_LINKS = [
-  { label: 'PRODUCTS', to: '/products' },
-  { label: 'CATALOGS', to: '/catalogs' },
-  { label: 'ABOUT',    to: '/about' },
-  { label: 'CONTACT',  to: '/contact' },
-  { label: 'FAQ',      to: '/faq' },
+  { label: 'PRODUCTS',     to: '/products' },
+  { label: 'CATALOGS',     to: '/catalogs' },
+  // The dispensary vertical is the #1 audience — link the landing page so a shop
+  // owner browsing the site (and search crawlers) can actually reach it.
+  { label: 'DISPENSARIES', to: '/dispensaries' },
+  { label: 'ABOUT',        to: '/about' },
+  { label: 'CONTACT',      to: '/contact' },
+  { label: 'FAQ',          to: '/faq' },
 ];
 
 // Desktop nav link with a brand-green underline that slides in on hover and
@@ -85,13 +88,22 @@ function Navbar() {
                 <ListItemText primary="Products" />
               </ListItemButton>
             </ListItem>
-            <ListItem divider key="Catalogs" disablePadding>
+            <ListItem key="Catalogs" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
                 to="/catalogs"
                 onClick={() => setOpenDrawer(false)}
               >
                 <ListItemText primary="Catalogs" />
+              </ListItemButton>
+            </ListItem>
+            <ListItem divider key="Dispensaries" disablePadding>
+              <ListItemButton
+                component={ReactRouterLink}
+                to="/dispensaries"
+                onClick={() => setOpenDrawer(false)}
+              >
+                <ListItemText primary="Dispensaries" />
               </ListItemButton>
             </ListItem>
             <ListItem key="About" disablePadding>

@@ -16,14 +16,14 @@ import config from '../config.json';
 
 const steps = [
   { icon: '📋', title: 'Fill out the form', body: 'Tell us your products, quantity, and in-hand date. Attach any art you have.' },
-  { icon: '🎨', title: 'Get your free mockup', body: "We'll send back a mockup and quote — usually within 24 hours." },
+  { icon: '🎨', title: 'Get your free mockup', body: "We'll send back a mockup and quote — usually within 48 hours." },
   { icon: '✅', title: 'Approve & go', body: 'Love it? Approve the mockup and we handle everything from there.' },
 ];
 
 const trustPoints = [
   'No account or login required',
   'Free mockups, zero commitment',
-  'Response within 24 hours',
+  'Response within 48 hours',
   '30,000+ units delivered',
 ];
 
@@ -154,7 +154,7 @@ function Contact() {
           <MuiTypography variant="h6" sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 300, maxWidth: 500, mx: 'auto', lineHeight: 1.7 }}>
             {isReferralContext
               ? "Drop the details in the form below — we'll take it from there and credit your account when they order."
-              : "Fill out the form and we'll get back to you with a mockup and clear pricing — usually within 24 hours."}
+              : "Fill out the form and we'll get back to you with a mockup and clear pricing — usually within 48 hours."}
           </MuiTypography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} justifyContent="center" sx={{ mt: 3 }}>
             <MuiTypography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>
@@ -275,7 +275,7 @@ function Contact() {
 
                   <Collapse in={success}>
                     <Alert severity="success" icon={<CheckCircleOutlineIcon />} sx={{ borderRadius: 2 }}>
-                      Request sent! We'll get back to you within 24 hours.
+                      Request sent! We'll get back to you within 48 hours.
                     </Alert>
                   </Collapse>
                 </Stack>

@@ -5,8 +5,11 @@ import Button from '../components/Button';
 import Typography from '../components/Typography';
 import ProductHeroLayout from './ProductHeroLayout';
 
-const backgroundImage =
-  'https://cdn.midjourney.com/02200c93-b8ea-452c-b02d-99cc2954e81f/0_2.webp';
+// Self-hosted (public/about/merch-hero.jpg) — the hero used to hotlink
+// cdn.midjourney.com, which is not a hosting service and can vanish upstream at
+// any time, silently degrading the homepage to a flat panel (the About page was
+// already migrated off external image URLs for exactly this reason).
+const backgroundImage = '/about/merch-hero.jpg';
 
 export default function ProductHero() {
   return (
@@ -59,7 +62,7 @@ export default function ProductHero() {
           lineHeight: 1.65,
         }}
       >
-        Pick your products, send your art — get a mockup and quote back in under 24 hours. No account needed.
+        Pick your products, send your art — get a mockup and quote back in within 48 hours. No account needed.
       </Typography>
 
       <Button

@@ -20,6 +20,7 @@ export const JP = {
   ink:        '#111816', // the single dark hero / section surface
   charcoal:   '#28282a', // navbar + body text on light
   paper:      '#f5f5f5', // light section ground
+  stone:      '#e8e9e3', // warmer catalog / product ground (Products + Product pages)
   white:      '#ffffff', // cards / forms on paper
   pale:       '#e3ede2', // footer field / soft tint
 
