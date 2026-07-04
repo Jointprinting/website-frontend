@@ -267,17 +267,18 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
 
   React.useEffect(() => { loadFinderStatus(); }, [loadFinderStatus]);
 
-  // restart=true rewinds the frontier to the first state before sweeping — the
-  // "re-sweep the map" action for after the finder improves. Imports dedupe on
-  // company + email, so a re-pass only ADDS shops the older pass missed.
-  const runRefillNow = async (restart = false) => {
+  // The engine refills itself and re-milks improved states on its own; this only
+  // forces an early sweep for the impatient. (Re-sweeping after a finder upgrade
+  // is now automatic — the API version-stamps each state and re-milks stale ones
+  // in the background — so there's no "start from the top" button anymore.)
+  const runRefillNow = async () => {
     setImportBusy(true);
     try {
-      const { data } = await axios.post(`${base}/find-leads/auto/run`, restart ? { restart: true } : {}, authHdr);
+      const { data } = await axios.post(`${base}/find-leads/auto/run`, {}, authHdr);
       const n = data.imported || 0;
       flash(n
-        ? `${restart ? 'Re-sweep started from the top — ' : 'Refilled — '}${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
-        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'}${restart ? ' from the top' : ''} — nothing new there; the engine keeps working the map on its own.`);
+        ? `Refilled — ${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
+        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'} — nothing new there; the engine keeps working the map on its own.`);
       await Promise.all([loadOverview(), loadFinderStatus()]);
     } catch (e) {
       flash(e.response?.data?.message || 'Refill failed — the discovery service may be busy, try again.', 'error');
