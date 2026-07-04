@@ -2048,10 +2048,24 @@ function PulseBar({ pulse }) {
   );
 }
 
-function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, isOwner }) {
+function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, isOwner, token }) {
   // Paused groups collapse by default — present but out of the way. State keyed
   // by brand so each remembers its own open/closed for this session.
   const [openPaused, setOpenPaused] = React.useState({});
+  // The Team tile is only relevant once there's actually a sales agent, so we
+  // keep the hub clean until then: hide the tile at zero agents (a discreet
+  // onboarding link stays at the bottom), and let it appear on its own the moment
+  // the owner onboards someone. `null` = not-yet-known (treat as none → hidden).
+  const [agentCount, setAgentCount] = React.useState(null);
+  React.useEffect(() => {
+    if (!isOwner || !token) return;
+    let cancelled = false;
+    axios.get(`${config.backendUrl}/api/admin/agents/count`, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
+      .then((r) => { if (!cancelled) setAgentCount(Number(r.data?.count) || 0); })
+      .catch(() => { if (!cancelled) setAgentCount(0); }); // silent — just keep it hidden
+    return () => { cancelled = true; };
+  }, [isOwner, token]);
+  const hasAgents = (agentCount || 0) > 0;
   const live = HUB_GROUPS.filter((g) => !g.paused);
   const paused = HUB_GROUPS.filter((g) => g.paused);
   let cardIdx = 0;
@@ -2077,9 +2091,15 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
               overwhelming. Each tier is its own grid + a soft label. */}
           <Stack spacing={2.5}>
             {(group.tiers || []).map((tier) => {
-              // Owner-only tiles (Team/Admin) drop out for agents. A tier that
-              // ends up empty renders nothing at all.
-              const tools = tier.tools.filter((t) => !t.ownerOnly || isOwner);
+              // Owner-only tiles (Team/Admin) drop out for agents. The Team tile
+              // also stays hidden until at least one agent exists, so it doesn't
+              // clutter the hub before it's relevant. A tier that ends up empty
+              // renders nothing at all.
+              const tools = tier.tools.filter((t) => {
+                if (t.ownerOnly && !isOwner) return false;
+                if (t.id === 'admin' && !hasAgents) return false;
+                return true;
+              });
               if (tools.length === 0) return null;
               const startIdx = cardIdx;
               cardIdx += tools.length;
@@ -2171,6 +2191,27 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
           </Box>
         );
       })}
+
+      {/* Discreet first-agent onboarding. Only when the owner has NO agents yet —
+          the full Team tile is hidden until then to keep the hub clean, but this
+          keeps the path to onboard the first one alive. Vanishes once an agent
+          exists (the Team tile takes over in Maintenance). */}
+      {isOwner && agentCount === 0 && (
+        <Box sx={{ textAlign: 'center', pt: 0.5 }}>
+          <MuiTypography
+            component="button"
+            onClick={() => onPick('admin')}
+            sx={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: D.faint, fontSize: 11.5, fontWeight: 600, letterSpacing: 0.2,
+              transition: 'color 0.15s ease',
+              '&:hover': { color: D.green },
+            }}
+          >
+            Hiring a sales agent? Set up your team →
+          </MuiTypography>
+        </Box>
+      )}
     </Stack>
   );
 }
@@ -2514,7 +2555,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} isOwner={isOwner} />
+          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} isOwner={isOwner} token={token} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
