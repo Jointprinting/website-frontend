@@ -43,12 +43,17 @@ const base = `${config.backendUrl}/api`;
 const fieldSx = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13.5, py: 1 } };
 
 // ── Vendor row in the list ────────────────────────────────────────────────────
+// Carries the relationship numbers (real spend / POs / orders from the usage
+// rollup the API attaches), so the list reads as a supplier ledger — who you
+// actually pay and how much — not a bare contact rolodex.
 function VendorRow({ v, onOpen, bindVendor }) {
   const details = [
     v.contactName,
     v.address,
     v.shipMethod,
   ].filter(Boolean).join(' · ');
+  const st = v.stats || {};
+  const hasActivity = (st.spend || 0) > 0 || (st.poCount || 0) > 0 || (st.orderCount || 0) > 0;
   return (
     <Box
       onClick={() => onOpen(v._id)}
@@ -85,6 +90,25 @@ function VendorRow({ v, onOpen, bindVendor }) {
             display: { xs: 'none', sm: 'block' }, flexShrink: 0 }}>
             BLANKS BY PRINTER
           </Box>
+        )}
+        {/* Relationship-at-a-glance: paid / POs / orders. Dimmed rolodex-only rows. */}
+        {hasActivity ? (
+          <Box sx={{ textAlign: 'right', flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
+            <Typography sx={{ ...mono, color: D.green, fontSize: 13.5, fontWeight: 800, lineHeight: 1.2 }}>
+              {money0(st.spend || 0)}
+            </Typography>
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700 }}>
+              {[
+                st.poCount ? `${st.poCount} PO${st.poCount === 1 ? '' : 's'}` : null,
+                st.orderCount ? `${st.orderCount} order${st.orderCount === 1 ? '' : 's'}` : null,
+              ].filter(Boolean).join(' · ') || 'paid'}
+            </Typography>
+          </Box>
+        ) : (
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, flexShrink: 0,
+            display: { xs: 'none', sm: 'block' } }}>
+            no activity yet
+          </Typography>
         )}
         <ChevronRightIcon sx={{ color: D.faint, fontSize: 20, flexShrink: 0 }} />
       </Stack>
@@ -221,9 +245,16 @@ function RebuildBanner({ onOpen }) {
 // ── List view ─────────────────────────────────────────────────────────────────
 function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, duplicates, onMerge, showRebuild, onRebuild }) {
   const list = useMemo(() => {
+    // The TAB ranks by real money (spend, then PO volume, then name) — "who do
+    // I actually pay" first. The server keeps its alphabetical order because the
+    // same endpoint feeds the PO builder / finance vendor pickers.
+    const ranked = [...vendors].sort((a, b) =>
+      ((b.stats?.spend || 0) - (a.stats?.spend || 0))
+      || ((b.stats?.poCount || 0) - (a.stats?.poCount || 0))
+      || String(a.name || '').toLowerCase().localeCompare(String(b.name || '').toLowerCase()));
     const t = query.trim().toLowerCase();
-    if (!t) return vendors;
-    return vendors.filter((v) => [v.name, v.contactName, v.email, v.address, v.shipMethod]
+    if (!t) return ranked;
+    return ranked.filter((v) => [v.name, v.contactName, v.email, v.address, v.shipMethod]
       .filter(Boolean).join(' ').toLowerCase().includes(t));
   }, [vendors, query]);
 
@@ -243,19 +274,11 @@ function VendorsList({ vendors, loading, query, onQuery, onOpen, bindVendor, dup
       {!query && <DuplicatesPanel groups={duplicates} onMerge={onMerge} />}
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography sx={{ color: D.faint, fontSize: 12, fontWeight: 700, ...mono }}>
-          {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'vendor' : 'vendors'}`}
+          {loading ? 'Loading…' : `${list.length} ${list.length === 1 ? 'vendor' : 'vendors'} · by spend`}
         </Typography>
-        {/* Quiet re-entry once the one-time rebuild has been applied and the big CTA
-            banner auto-hid — the surface has its own preview/confirm/revert safety,
-            so keeping it reachable is safe. */}
-        {!showRebuild && (
-          <Button onClick={onRebuild} size="small" startIcon={<CloudSyncOutlinedIcon sx={{ fontSize: 15 }} />}
-            title="Re-run the Drive rebuild (preview first — reversible)"
-            sx={{ color: D.faint, textTransform: 'none', fontWeight: 600, fontSize: 11.5, px: 0.75, py: 0.1, minWidth: 0,
-              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
-            Rebuild from Drive…
-          </Button>
-        )}
+        {/* The one-time Drive rebuild's quiet re-entry button is gone by owner
+            request — the importer already ran; the pre-apply banner above still
+            covers a fresh database. */}
       </Stack>
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: D.green }} /></Box>
