@@ -101,7 +101,7 @@ function WarmRow({ row, onOpenCompany, onMarkReplied, onStop }) {
 // The single ranked to-do list, computed server-side from the whole dashboard —
 // the "what do I do right now" a busy one-person shop wants above everything.
 const ACTION_TONE = { action: '#f87171', warm: '#4ade80', info: '#60a5fa', ok: '#9ca3af' };
-function NextActions({ actions = [], onGoCampaigns, onGoImport }) {
+function NextActions({ actions = [], onGoCampaigns, onGoImport, onGoReplies }) {
   if (!actions.length) return null;
   const [top, ...rest] = actions;
   const tone = (l) => ACTION_TONE[l] || D.muted;
@@ -111,6 +111,11 @@ function NextActions({ actions = [], onGoCampaigns, onGoImport }) {
       border: `1px solid ${D.green}55`, borderRadius: 999, px: 1.5, py: 0.3, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } };
     if (c.view === 'campaigns') return <Button onClick={onGoCampaigns} size="small" sx={btnSx}>Campaigns →</Button>;
     if (c.view === 'import') return <Button onClick={onGoImport} size="small" sx={btnSx}>Lead engine →</Button>;
+    // The warm-replies banner (often the top action) carries a 'replies' target
+    // and used to render button-less — jump it to the Replies tab. ('analytics'
+    // stays button-less on purpose: the deliverability detail is the Analytics
+    // section on this same dashboard, right below.)
+    if (c.view === 'replies' && onGoReplies) return <Button onClick={onGoReplies} size="small" sx={btnSx}>Replies →</Button>;
     return null;
   };
   return (
@@ -407,7 +412,7 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
 }
 
 export default function OverviewView({
-  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onTestSend, onRecheckAuth,
+  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onGoReplies, onTestSend, onRecheckAuth,
 }) {
   if (loading && !overview) {
     return (
@@ -437,7 +442,7 @@ export default function OverviewView({
       <SetupWizard overview={overview} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} onTestSend={onTestSend} />
 
       {/* The one thing to do right now — synthesized from the whole dashboard. */}
-      <NextActions actions={nextActions} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} />
+      <NextActions actions={nextActions} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} onGoReplies={onGoReplies} />
 
       {/* Setup guardrails — a safety net once the wizard is gone (dismissed or
           complete); while the wizard is showing it owns this messaging. */}
