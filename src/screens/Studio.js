@@ -63,7 +63,7 @@ import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import config from '../config.json';
-import { D, accentBar, eyebrow, mono, BRAND } from './studio/_shared';
+import { D, accentBar, eyebrow, mono, BRAND, money0 } from './studio/_shared';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
@@ -1585,7 +1585,7 @@ const HUB_TOOLS = (() => {
 // size: 'large' (primary tier), 'normal' (secondary), or muted (paused).
 // `large` cards get more height, a bigger icon, and a brighter label so the
 // daily-core tier reads as the headline; muted cards (paused) read quietest.
-function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large }) {
+function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large, stat }) {
   const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   const iconSize = large ? 54 : (muted ? 42 : 48);
@@ -1683,6 +1683,16 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large 
               {desc}
             </MuiTypography>
           )}
+          {/* Live pulse line — the tool's heartbeat number(s), so the hub reads
+              as a live cockpit instead of a static menu. */}
+          {stat && (
+            <MuiTypography sx={{
+              color: D.green, fontSize: 10.5, fontWeight: 700,
+              letterSpacing: 0.3, mt: 0.6, ...mono,
+            }}>
+              {stat}
+            </MuiTypography>
+          )}
           {countdown && (
             <MuiTypography sx={{
               color: D.green, fontSize: 10.5, fontWeight: 700,
@@ -1753,7 +1763,29 @@ function SectionHeader({ brand, tagline, dim, right }) {
 // cols: explicit responsive column template. `large` renders the primary tier;
 // `muted` the paused group. onPick receives the whole tool so a tile can
 // deep-link into a tool's internal view (e.g. the CRM tile → the Clients tab).
-function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+// One tool's live pulse line, from the hub-pulse payload the signals feed
+// carries. Null (no line) for tools without a heartbeat number.
+function statFor(t, pulse) {
+  if (!pulse) return null;
+  const s = (n) => (n === 1 ? '' : 's');
+  if (t.id === 'clients') {
+    return pulse.ordersOpen > 0 ? `${pulse.ordersOpen} open order${s(pulse.ordersOpen)}` : 'no open orders';
+  }
+  if (t.id === 'crm') {
+    return pulse.followUpsToday > 0 ? `${pulse.followUpsToday} follow-up${s(pulse.followUpsToday)} due` : 'follow-ups clear';
+  }
+  if (t.id === 'outreach') {
+    const bits = [`${pulse.outreachActive || 0} in sequence`];
+    if (pulse.repliesWaiting > 0) bits.push(`${pulse.repliesWaiting} repl${pulse.repliesWaiting === 1 ? 'y' : 'ies'} waiting`);
+    return bits.join(' · ');
+  }
+  if (t.id === 'finances' && pulse.monthProfit != null) {
+    return `${money0(pulse.monthProfit)} profit this month`;
+  }
+  return null;
+}
+
+function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse }) {
   return (
     <Box sx={{
       display: 'grid',
@@ -1775,6 +1807,7 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
             notice={showNotice ? "Today's sweep not run yet" : null}
             countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
             badge={badge}
+            stat={statFor(t, pulse)}
           />
         );
       })}
@@ -1962,6 +1995,33 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries = 0 }) {
   );
 }
 
+// The hub's opening line: today's date + a one-breath read of where the whole
+// business stands (from the pulse the signals feed carries). Quiet, mono, and
+// live — the first thing that makes the hub feel like a cockpit, not a menu.
+function PulseBar({ pulse }) {
+  const day = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const s = (n) => (n === 1 ? '' : 's');
+  const bits = [];
+  if (pulse) {
+    if (pulse.ordersOpen > 0) bits.push(`${pulse.ordersOpen} order${s(pulse.ordersOpen)} in motion`);
+    if (pulse.followUpsToday > 0) bits.push(`${pulse.followUpsToday} follow-up${s(pulse.followUpsToday)} due`);
+    if (pulse.outreachActive > 0) bits.push(`${pulse.outreachActive} cold sequence${s(pulse.outreachActive)} running`);
+    if (pulse.monthRevenue != null) bits.push(`${money0(pulse.monthRevenue)} in this month`);
+  }
+  return (
+    <Box>
+      <MuiTypography sx={{ color: D.text, fontWeight: 800, fontSize: { xs: 19, sm: 22 }, letterSpacing: -0.3, lineHeight: 1.2 }}>
+        {day}
+      </MuiTypography>
+      {bits.length > 0 && (
+        <MuiTypography sx={{ ...mono, color: D.muted, fontSize: 12.5, mt: 0.5 }}>
+          {bits.join('  ·  ')}
+        </MuiTypography>
+      )}
+    </Box>
+  );
+}
+
 function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
   // Paused groups collapse by default — present but out of the way. State keyed
   // by brand so each remembers its own open/closed for this session.
@@ -1969,12 +2029,16 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   const live = HUB_GROUPS.filter((g) => !g.paused);
   const paused = HUB_GROUPS.filter((g) => g.paused);
   let cardIdx = 0;
+  const pulse = (signals && signals.pulse) || null;
 
-  // Shared props every ToolGrid needs (badges / sweep nudges).
-  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries };
+  // Shared props every ToolGrid needs (badges / sweep nudges / live pulse).
+  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse };
 
   return (
     <Stack spacing={3.5}>
+      {/* Today, at a glance — date + the business's live vitals in one line. */}
+      <PulseBar pulse={pulse} />
+
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
       <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} />
