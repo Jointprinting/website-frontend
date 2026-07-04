@@ -75,6 +75,8 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import VendorsTab from './studio/VendorsTab';
+import AgentsAdminTab from './studio/AgentsAdminTab';
+import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
@@ -1560,6 +1562,10 @@ const HUB_GROUPS = [
         tools: [
           { id: 'vendors', label: 'Printers · Vendors', desc: 'Supplier directory — POs, spend',  Icon: LocalShippingOutlinedIcon },
           { id: 'backup',  label: 'Backup',             desc: 'Snapshots of projects + mockups',  Icon: BackupIcon },
+          // Owner-only: onboard sales agents, set goals, watch access. Gated by
+          // `ownerOnly` so it never renders for an agent (they get a separate
+          // shell entirely, but this keeps the hub honest either way).
+          { id: 'admin',   label: 'Team',   desc: 'Agents, goals, access', Icon: ManageAccountsOutlinedIcon, ownerOnly: true },
         ],
       },
     ],
@@ -2041,7 +2047,7 @@ function PulseBar({ pulse }) {
   );
 }
 
-function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries }) {
+function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, isOwner }) {
   // Paused groups collapse by default — present but out of the way. State keyed
   // by brand so each remembers its own open/closed for this session.
   const [openPaused, setOpenPaused] = React.useState({});
@@ -2070,13 +2076,17 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
               overwhelming. Each tier is its own grid + a soft label. */}
           <Stack spacing={2.5}>
             {(group.tiers || []).map((tier) => {
+              // Owner-only tiles (Team/Admin) drop out for agents. A tier that
+              // ends up empty renders nothing at all.
+              const tools = tier.tools.filter((t) => !t.ownerOnly || isOwner);
+              if (tools.length === 0) return null;
               const startIdx = cardIdx;
-              cardIdx += tier.tools.length;
+              cardIdx += tools.length;
               return (
                 <Box key={tier.id}>
                   {tier.label && <TierLabel>{tier.label}</TierLabel>}
                   <ToolGrid
-                    tools={tier.tools}
+                    tools={tools}
                     cols={TIER_COLS[tier.id] || TIER_COLS.secondary}
                     large={tier.id === 'primary'}
                     startIdx={startIdx}
@@ -2184,6 +2194,10 @@ function StudioBody({ token, onLogout }) {
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
+  // Role gates the owner-only surfaces (the Team/Admin tile + its view). Read from
+  // the stored role hint; the server still enforces access (requireOwner) — this
+  // is purely so an agent never even SEES the tile. Missing/owner → owner.
+  const isOwner = (localStorage.getItem(ROLE_KEY) || 'owner') !== 'agent';
 
   // Daily-sweep reminder: when sitting on the hub, peek at sweep state to
   // know whether today's sweep has run. If not, show a small dot on the
@@ -2422,6 +2436,10 @@ function StudioBody({ token, onLogout }) {
     return <BackupTab token={token} onBack={() => setView('hub')} />;
   }
 
+  if (view === 'admin' && isOwner) {
+    return <AgentsAdminTab token={token} onBack={() => setView('hub')} />;
+  }
+
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
   }
@@ -2495,7 +2513,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} />
+          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} isOwner={isOwner} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
