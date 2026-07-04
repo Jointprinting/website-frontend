@@ -960,6 +960,17 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
               refreshAffected();
             }}
             onNotInterested={(item) => setLostDlg({ open: true, target: { companyKey: item.companyKey, name: item.name } })}
+            onClearColdProspects={async () => {
+              try {
+                const res = await axios.post(`${base}/archive`, { coldProspects: true }, authHdr);
+                const n = res.data?.archived || 0;
+                flash(`Cleared ${n} cold prospect${n === 1 ? '' : 's'} — archived (recoverable).`, 'success');
+                loadDashboard();
+                refreshAffected();
+              } catch (e) {
+                flash(e?.response?.data?.message || 'Clear failed.', 'error');
+              }
+            }}
             onGoToday={() => setView('today')}
             // Funnel drill-down: tap a stage bar → the Companies list narrowed
             // to that stage (client-side filter + a dismissible chip).
