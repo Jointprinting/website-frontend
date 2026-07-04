@@ -264,14 +264,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
 
   React.useEffect(() => { loadFinderStatus(); }, [loadFinderStatus]);
 
-  const runRefillNow = async () => {
+  // restart=true rewinds the frontier to the first state before sweeping — the
+  // "re-sweep the map" action for after the finder improves. Imports dedupe on
+  // company + email, so a re-pass only ADDS shops the older pass missed.
+  const runRefillNow = async (restart = false) => {
     setImportBusy(true);
     try {
-      const { data } = await axios.post(`${base}/find-leads/auto/run`, {}, authHdr);
+      const { data } = await axios.post(`${base}/find-leads/auto/run`, restart ? { restart: true } : {}, authHdr);
       const n = data.imported || 0;
       flash(n
-        ? `Refilled — ${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
-        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'} — nothing new there yet; the engine keeps working the map on its own.`);
+        ? `${restart ? 'Re-sweep started from the top — ' : 'Refilled — '}${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
+        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'}${restart ? ' from the top' : ''} — nothing new there; the engine keeps working the map on its own.`);
       await Promise.all([loadOverview(), loadFinderStatus()]);
     } catch (e) {
       flash(e.response?.data?.message || 'Refill failed — the discovery service may be busy, try again.', 'error');

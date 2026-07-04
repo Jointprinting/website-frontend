@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { D, mono, dropPrimaryBtn } from '../_shared';
 import { StatPill } from './_outreach';
 
@@ -109,7 +110,8 @@ export default function ImportView({ busy, frontier, regions = [], onRefillNow }
             </Typography>
           </Box>
         ) : (
-          <Button onClick={onRefillNow}
+          // Arrow wrapper: the click event must never leak into the restart param.
+          <Button onClick={() => onRefillNow()}
             startIcon={<BoltOutlinedIcon sx={{ fontSize: 16 }} />}
             sx={{ ...dropPrimaryBtn, px: 2.5, py: 0.6, fontSize: 12.5 }}>
             Refill now
@@ -128,6 +130,21 @@ export default function ImportView({ busy, frontier, regions = [], onRefillNow }
               <RegionTile key={r.id} r={r} isFrontier={frontier?.activeRegion === r.id} />
             ))}
           </Box>
+          {/* One-time catch-up after the finder itself improves: rewind to state
+              one and re-milk the map. Dedupe makes it purely additive. */}
+          {sweptCount > 0 && !busy && (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25 }} flexWrap="wrap" useFlexGap>
+              <Button onClick={() => onRefillNow(true)} startIcon={<ReplayIcon sx={{ fontSize: 15 }} />}
+                sx={{ color: D.muted, fontSize: 12, fontWeight: 700, textTransform: 'none', borderRadius: 999,
+                  px: 1.5, py: 0.3, border: `1px solid ${D.line}`,
+                  '&:hover': { color: D.text, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.04)' } }}>
+                Re-sweep from the start
+              </Button>
+              <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
+                The finder got smarter since the first pass — a re-sweep only adds shops it missed (nothing duplicates).
+              </Typography>
+            </Stack>
+          )}
         </Box>
       )}
     </Stack>
