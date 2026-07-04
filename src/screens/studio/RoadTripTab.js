@@ -697,7 +697,11 @@ export default function RoadTripTab({ token, onNavigate }) {
    *   anything else            → never touch stage (don't demote customers)
    */
   const addOpportunity = React.useCallback(async (d, { visited = false, logText = null } = {}) => {
-    const key = companyKeyFor(d);
+    // Prefer the MATCHED CRM record's real key (same as openInCrm) — the map
+    // joins by companyKey OR the fuzzier matchKey, so a pin's derived key can
+    // differ from the CRM card's actual key. Writing to the derived key would
+    // upsert a DUPLICATE company; the visit/to-do must land on the real card.
+    const key = d?.crm?.companyKey || companyKeyFor(d);
     const body = {
       companyName: d.name,
       address: d.address || '',
@@ -727,7 +731,9 @@ export default function RoadTripTab({ token, onNavigate }) {
     const d = todoTarget;
     if (!d) return;
     const chip = TODO_CHIPS.find((c) => c.id === todoForm.chipId) || TODO_CHIPS[0];
-    const key = companyKeyFor(d);
+    // Matched CRM record's real key wins (see addOpportunity) — never write the
+    // to-do onto a derived-key duplicate.
+    const key = d?.crm?.companyKey || companyKeyFor(d);
     const body = {
       companyName: d.name,
       address: d.address || '',
