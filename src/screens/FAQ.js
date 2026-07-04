@@ -34,7 +34,7 @@ const faqs = [
   },
   {
     q: 'What\'s the best way to get started?',
-    a: 'Hit "Get your free mockup & quote" below, pick a few products from our catalog, and send us your art or ideas. We\'ll come back with mockups, recommendations, and clear next steps — usually within 24 hours.',
+    a: 'Hit "Get your free mockup & quote" below, pick a few products from our catalog, and send us your art or ideas. We\'ll come back with mockups, recommendations, and clear next steps — usually within 48 hours.',
   },
   {
     q: 'Do I need to know exactly what I want before reaching out?',

@@ -128,7 +128,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
             Request your free mockup & quote
           </Typography>
           <Typography variant="body2" color="text.secondary" mt={0.5}>
-            We'll get back to you within 24 hours — no commitment required.
+            We'll get back to you within 48 hours — no commitment required.
           </Typography>
         </Box>
         <IconButton onClick={handleClose} size="small" sx={{ mt: -0.5, flexShrink: 0 }}>
@@ -143,7 +143,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
             elevation={0}
             sx={{ mb: 2.5, bgcolor: '#e5f4ea', borderRadius: 2, p: 2, border: '1px solid #b7e4c7' }}
           >
-            <Typography fontWeight={700} fontSize={13} mb={1} color="#1a4a2e">
+            <Typography fontWeight={700} fontSize={13} mb={1} color="#1a3d2b">
               {localProducts.length === 1 ? 'Product in your quote:' : 'Products in your quote:'}
             </Typography>
             <Stack spacing={0.75}>
@@ -288,7 +288,7 @@ export default function QuoteDialog({ open, onClose, products = [] }) {
 
         <Collapse in={success} sx={{ mt: 2 }}>
           <Alert severity="success" icon={<CheckCircleOutlineIcon />} sx={{ borderRadius: 2 }}>
-            Request sent! We'll get back to you within 24 hours.
+            Request sent! We'll get back to you within 48 hours.
           </Alert>
         </Collapse>
       </DialogContent>

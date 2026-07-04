@@ -84,7 +84,7 @@ function ProductHowItWorks() {
     {
       num: '4',
       img: deliveryImage,
-      title: 'We print & ship',
+      title: 'Produced & shipped',
       body:
         'We manage production and fulfillment so your merch shows up on time and on-brand.',
     },
@@ -95,7 +95,7 @@ function ProductHowItWorks() {
       component="section"
       sx={{
         display: 'flex',
-        bgcolor: '#f4f6f5',
+        bgcolor: '#f5f5f5',
         overflow: 'hidden',
       }}
     >

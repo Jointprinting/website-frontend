@@ -19,7 +19,7 @@ const stats = [
   { number: '30,000+', label: 'Units delivered' },
   { number: '10+', label: 'Industries served' },
   { number: '6', label: 'Decoration methods' },
-  { number: '3 days', label: 'Avg. mockup turnaround' },
+  { number: '48 hrs', label: 'Avg. mockup turnaround' },
 ];
 
 const industries = [
