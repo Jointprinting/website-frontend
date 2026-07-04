@@ -17,6 +17,7 @@
 import * as React from 'react';
 import {
   Box, Stack, Typography, IconButton, Tooltip, CircularProgress, Button, LinearProgress,
+  Menu, MenuItem,
 } from '@mui/material';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
@@ -24,6 +25,8 @@ import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import NotificationsPausedOutlinedIcon from '@mui/icons-material/NotificationsPausedOutlined';
+import DoNotDisturbOnOutlinedIcon from '@mui/icons-material/DoNotDisturbOnOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { D, mono } from '../_shared';
@@ -59,11 +62,28 @@ function MetricCard({ label, value, accent, hint }) {
 // right side = the same quick actions Today uses + a one-tap "clear" (archive)
 // so a cold lead can be cleared from attention without deleting (soft/reversible
 // — the toast offers Undo). Whole row opens the company.
-function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive }) {
+// Snooze presets → an ISO instant N days out (end of that day, local). "Remind me
+// then" — the card vanishes from attention now and returns on its own on that day.
+const SNOOZE_PRESETS = [
+  { label: 'Tomorrow', days: 1 },
+  { label: 'In 3 days', days: 3 },
+  { label: 'In 1 week', days: 7 },
+  { label: 'In 2 weeks', days: 14 },
+  { label: 'In 1 month', days: 30 },
+];
+const snoozeDate = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(23, 59, 0, 0);
+  return d.toISOString();
+};
+
+function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested }) {
   const meta = headsUpMeta(item.type);
   const sev = severityMeta(item.severity);
   const Icon = meta.Icon;
   const phone = item.phone || '';
+  const [snoozeAnchor, setSnoozeAnchor] = React.useState(null);
 
   return (
     <Box
@@ -131,6 +151,38 @@ function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive }) {
               <EventRepeatOutlinedIcon sx={{ fontSize: 17 }} />
             </IconButton>
           </Tooltip>
+          {onSnooze && (
+            <>
+              <Tooltip title="Snooze — hide until a day I pick, then remind me">
+                <IconButton onClick={(e) => setSnoozeAnchor(e.currentTarget)} size="small"
+                  sx={{ color: D.muted, '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.1)' } }}>
+                  <NotificationsPausedOutlinedIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Menu
+                anchorEl={snoozeAnchor} open={!!snoozeAnchor} onClose={() => setSnoozeAnchor(null)}
+                PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, backgroundImage: 'none' } }}
+              >
+                <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, px: 2, py: 0.5, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                  Remind me
+                </Typography>
+                {SNOOZE_PRESETS.map((p) => (
+                  <MenuItem key={p.days} onClick={() => { onSnooze(item, snoozeDate(p.days)); setSnoozeAnchor(null); }}
+                    sx={{ color: D.text, fontSize: 13.5, '&:hover': { bgcolor: D.panelHi } }}>
+                    {p.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+          {onNotInterested && (
+            <Tooltip title="Not interested — mark lost (kept, stops nagging)">
+              <IconButton onClick={() => onNotInterested(item)} size="small"
+                sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.1)' } }}>
+                <DoNotDisturbOnOutlinedIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {onArchive && (
             <Tooltip title="Clear from attention (archive — recoverable)">
               <IconButton onClick={() => onArchive(item)} size="small"
@@ -409,7 +461,7 @@ function TopDeals({ items, onOpen }) {
   );
 }
 
-export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onGoToday, onOpenStage }) {
+export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested, onGoToday, onOpenStage }) {
   // Heads-up expander state — declared before any early return so hook order is
   // stable across the loading / loaded renders.
   const [showAll, setShowAll] = React.useState(false);
@@ -482,6 +534,8 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
                 onLog={onLog}
                 onReschedule={onReschedule}
                 onArchive={onArchive}
+                onSnooze={onSnooze}
+                onNotInterested={onNotInterested}
               />
             ))}
             {items.length > 12 && (
