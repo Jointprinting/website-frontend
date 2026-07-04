@@ -45,13 +45,25 @@
   .hero::before{content:"";position:absolute;left:0;right:0;bottom:-1px;height:80px;background:
     radial-gradient(120% 100% at 20% 100%,rgba(56,198,217,.35),transparent 55%),
     radial-gradient(120% 100% at 80% 100%,rgba(26,134,201,.4),transparent 55%)}
-  .hero .wrap{position:relative;z-index:2;padding:90px 24px 88px}
+  .hero .wrap{position:relative;z-index:2;padding:88px 24px 88px}
+  .heroGrid{display:grid;grid-template-columns:1.25fr .75fr;gap:48px;align-items:center}
   .hero h1{font-size:clamp(34px,7.5vw,80px);max-width:15ch}
   .hero p{font-size:clamp(18px,2.3vw,22px);color:rgba(255,255,255,.85);max-width:42ch;margin:22px 0 30px}
   .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
   .badges{display:flex;gap:30px;margin-top:46px;flex-wrap:wrap;font-size:14px;font-weight:500}
   .badges div{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.9)}
   .badges .dot{width:9px;height:9px;border-radius:50%;background:var(--aqua)}
+  /* floating "clean pool" trust card */
+  .trust{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:26px;
+    backdrop-filter:blur(6px);box-shadow:0 30px 60px -30px rgba(0,0,0,.6);animation:cwfloat 7s ease-in-out infinite}
+  @keyframes cwfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .trust .rate{font-family:Sora;font-weight:800;font-size:50px;color:var(--aqua);line-height:1}
+  .trust .stars{color:var(--aqua);letter-spacing:3px;font-size:18px;margin-top:4px}
+  .trust .sub{color:rgba(255,255,255,.75);font-size:14px;margin-top:6px}
+  .trust hr{border:0;border-top:1px solid rgba(255,255,255,.14);margin:18px 0}
+  .trust .row{display:flex;justify-content:space-between;font-size:14.5px;font-weight:600;margin-top:10px}
+  .trust .row b{color:#fff;font-weight:600}.trust .row span{color:var(--aqua)}
+  @media(max-width:860px){.heroGrid{grid-template-columns:1fr;gap:34px}.trust{max-width:360px}}
 
   section{padding:78px 0}
   .sec-head h2{font-size:clamp(30px,4.6vw,46px)}
@@ -117,18 +129,32 @@
 
 <div class="hero">
   <div class="wrap">
-    <span class="eyebrow" style="color:var(--aqua)">Weekly pool care · South Jersey</span>
-    <h1>Crystal-clear water. Every single week.</h1>
-    <p>Reliable weekly service, openings and closings, and repairs — so your pool is always ready and you never think about the chemistry.</p>
-    <div class="cta">
-      <a class="btn aqua" href="#quote">Get a free quote →</a>
-      <a class="btn line" href="tel:+18565550164">Call (856) 555-0164</a>
-    </div>
-    <div class="badges">
-      <div><span class="dot"></span> Licensed &amp; insured</div>
-      <div><span class="dot"></span> 300+ pools serviced</div>
-      <div><span class="dot"></span> Same tech every week</div>
-      <div><span class="dot"></span> ★★★★★ rated</div>
+    <div class="heroGrid">
+      <div>
+        <span class="eyebrow" style="color:var(--aqua)">Weekly pool care · South Jersey</span>
+        <h1>Crystal-clear water. Every single week.</h1>
+        <p>Reliable weekly service, openings and closings, and repairs — so your pool is always ready and you never think about the chemistry.</p>
+        <div class="cta">
+          <a class="btn aqua" href="#quote">Get a free quote →</a>
+          <a class="btn line" href="tel:+18565550164">Call (856) 555-0164</a>
+        </div>
+        <div class="badges">
+          <div><span class="dot"></span> Licensed &amp; insured</div>
+          <div><span class="dot"></span> 300+ pools serviced</div>
+          <div><span class="dot"></span> Same tech every week</div>
+          <div><span class="dot"></span> ★★★★★ rated</div>
+        </div>
+      </div>
+      <div class="trust" aria-hidden="true">
+        <div class="rate">4.9</div>
+        <div class="stars">★★★★★</div>
+        <div class="sub">Rated by South Jersey pool owners</div>
+        <hr>
+        <div class="row"><b>Pools serviced</b><span>300+</span></div>
+        <div class="row"><b>Same tech weekly</b><span>Always</span></div>
+        <div class="row"><b>Insured</b><span>100%</span></div>
+        <div class="row"><b>Quote</b><span>Free</span></div>
+      </div>
     </div>
   </div>
 </div>
