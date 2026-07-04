@@ -322,8 +322,13 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
   const customers = customersWithOrders || 0;
   const rate = total > 0 ? Math.round((customers / total) * 100) : 0;
   const open = pipeline.totalOpenValue || 0;
-  const weighted = pipeline.weightedValue || 0;
-  const landRate = open > 0 ? Math.round((weighted / open) * 100) : 0;
+  // "% likely to land" = expected value of the OPEN pipe ÷ the open pipe, so numerator
+  // and denominator share the same open-stage set (inherently ≤ 100%). Fall back to the
+  // old field name only if an older API is in front of a newer client. (The prior code
+  // divided weightedValue — which folds in realized won/customer revenue at prob 1 —
+  // by the open-only base, which is what produced the nonsensical 460%.)
+  const weightedOpen = pipeline.weightedOpenValue != null ? pipeline.weightedOpenValue : 0;
+  const landRate = open > 0 ? Math.min(100, Math.round((weightedOpen / open) * 100)) : 0;
   return (
     <WidgetCard title="Conversion">
       <Stack direction="row" spacing={2} alignItems="center">
@@ -346,7 +351,7 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
               sx={{ height: 6, borderRadius: 999, bgcolor: D.inset,
                 '& .MuiLinearProgress-bar': { bgcolor: D.green, borderRadius: 999 } }} />
             <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, mt: 0.4 }}>
-              {fmtMoney0(weighted)} weighted of {fmtMoney0(open)} open
+              {fmtMoney0(weightedOpen)} likely of {fmtMoney0(open)} open
             </Typography>
           </Box>
         </Box>
