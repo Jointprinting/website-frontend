@@ -43,13 +43,28 @@
 
   .hero{background:linear-gradient(180deg,var(--pine),var(--pine-2));color:#fff;position:relative;overflow:hidden}
   .hero::after{content:"";position:absolute;right:-140px;top:-80px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle at 40% 40%,rgba(63,125,82,.5),transparent 60%);pointer-events:none}
-  .hero .wrap{position:relative;z-index:2;padding:92px 24px 84px}
+  /* faint topographic texture so the pine isn't a flat slab */
+  .hero::before{content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
+    background:repeating-radial-gradient(circle at 82% 18%,rgba(255,255,255,.035) 0 1px,transparent 1px 26px)}
+  .hero .wrap{position:relative;z-index:2;padding:88px 24px 84px}
+  .heroGrid{display:grid;grid-template-columns:1.25fr .75fr;gap:48px;align-items:center}
   .hero h1{font-size:clamp(44px,8vw,86px);max-width:14ch}
   .hero p{font-size:clamp(18px,2.3vw,21px);color:rgba(255,255,255,.82);max-width:44ch;margin:22px 0 30px}
   .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
   .badges{display:flex;gap:28px;margin-top:44px;flex-wrap:wrap;font-family:Oswald;text-transform:uppercase;letter-spacing:.04em;font-size:14px}
   .badges div{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.9)}
   .badges .dot{width:9px;height:9px;border-radius:50%;background:var(--amber)}
+  /* floating trust card — the "this crew is legit" glance */
+  .trust{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:26px;
+    backdrop-filter:blur(6px);box-shadow:0 30px 60px -30px rgba(0,0,0,.6);animation:npfloat 7s ease-in-out infinite}
+  @keyframes npfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .trust .rate{font-family:Oswald;font-size:52px;color:var(--amber);line-height:1}
+  .trust .stars{color:var(--amber);letter-spacing:3px;font-size:18px;margin-top:4px}
+  .trust .sub{color:rgba(255,255,255,.75);font-size:14px;margin-top:6px}
+  .trust hr{border:0;border-top:1px solid rgba(255,255,255,.12);margin:18px 0}
+  .trust .row{display:flex;justify-content:space-between;font-family:Oswald;text-transform:uppercase;letter-spacing:.03em;font-size:14px;margin-top:10px}
+  .trust .row b{color:#fff}.trust .row span{color:var(--amber)}
+  @media(max-width:860px){.heroGrid{grid-template-columns:1fr;gap:34px}.trust{max-width:360px}}
 
   section{padding:78px 0}
   .sec-head h2{font-size:clamp(30px,4.6vw,46px)}
@@ -114,18 +129,32 @@
 
 <div class="hero">
   <div class="wrap">
-    <span class="eyebrow">Licensed &amp; insured · South Jersey</span>
-    <h1>Big trees.<br>Handled.</h1>
-    <p>Expert tree removal, trimming, and land clearing — done safely, cleaned up right, and quoted straight. No guesswork, no mess left behind.</p>
-    <div class="cta">
-      <a class="btn amber" href="#quote">Get a free estimate →</a>
-      <a class="btn line" href="tel:+18565550137">Call (856) 555-0137</a>
-    </div>
-    <div class="badges">
-      <div><span class="dot"></span> Fully insured</div>
-      <div><span class="dot"></span> 12+ years in the trees</div>
-      <div><span class="dot"></span> 500+ jobs cleared</div>
-      <div><span class="dot"></span> ★★★★★ locally rated</div>
+    <div class="heroGrid">
+      <div>
+        <span class="eyebrow">Licensed &amp; insured · South Jersey</span>
+        <h1>Big trees.<br>Handled.</h1>
+        <p>Expert tree removal, trimming, and land clearing — done safely, cleaned up right, and quoted straight. No guesswork, no mess left behind.</p>
+        <div class="cta">
+          <a class="btn amber" href="#quote">Get a free estimate →</a>
+          <a class="btn line" href="tel:+18565550137">Call (856) 555-0137</a>
+        </div>
+        <div class="badges">
+          <div><span class="dot"></span> Fully insured</div>
+          <div><span class="dot"></span> 12+ years in the trees</div>
+          <div><span class="dot"></span> 500+ jobs cleared</div>
+          <div><span class="dot"></span> ★★★★★ locally rated</div>
+        </div>
+      </div>
+      <div class="trust" aria-hidden="true">
+        <div class="rate">4.9</div>
+        <div class="stars">★★★★★</div>
+        <div class="sub">Rated by South Jersey neighbors</div>
+        <hr>
+        <div class="row"><b>Years in the trees</b><span>12+</span></div>
+        <div class="row"><b>Jobs cleared</b><span>500+</span></div>
+        <div class="row"><b>Insured</b><span>100%</span></div>
+        <div class="row"><b>Estimate</b><span>Free</span></div>
+      </div>
     </div>
   </div>
 </div>
