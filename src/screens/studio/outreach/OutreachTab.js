@@ -205,6 +205,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
+  // Delete a campaign for good (a stale draft, or one set up wrong). The backend
+  // also drops its enrollments and clears the auto-enroll pointer if it targeted
+  // this campaign. Opt-outs + CRM contacts are kept. axios sends the confirm in
+  // the request body (DELETE with a body needs the `data` option).
+  const deleteCampaign = async (campaignId) => {
+    const { data } = await axios.delete(`${base}/campaigns/${campaignId}`, { ...authHdr, data: { confirm: true } });
+    flash('Campaign deleted.');
+    await loadOverview();
+    return data;
+  };
+
   // Auto-enroll: keep the chosen active campaign topped up from the cold-lead
   // reserve automatically (only one campaign at a time; enabling fills once now).
   const setAutoEnroll = async (campaignId, enabled) => {
@@ -405,6 +416,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onLaunch={launchCampaign}
             onUnenrollAll={unenrollAll}
             onReset={resetCampaign}
+            onDelete={deleteCampaign}
             onAutoEnroll={setAutoEnroll}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
