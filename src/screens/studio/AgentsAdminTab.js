@@ -91,6 +91,58 @@ function CopyBtn({ text, title = 'Copy' }) {
   );
 }
 
+// One deferred engineering step exists for the FIRST agent: everything in
+// Orders/CRM created before agents existed has no agentId, so it's implicitly
+// the owner's. Scoping already treats unassigned records as owner-visible, but
+// there's a one-time backfill (stamp the owner's id on the legacy records) to
+// run so the owner-vs-agent split is explicit and clean. The owner asked to be
+// reminded of this right where they add an agent — with a prompt they can paste
+// into a Claude Code session to have it done. Copy-paste, don't make them
+// remember it.
+const FIRST_AGENT_CLAUDE_PROMPT =
+  "I'm onboarding my first sales agent in the Joint Printing Studio. Run the "
+  + 'deferred multi-agent data migration: backfill agentId on all existing '
+  + 'Orders and CRM Clients so records created before agents existed are owned '
+  + 'by me (the "studio" owner), and verify the owner board still shows every '
+  + 'record while each agent sees only their own scoped orders and leads. This '
+  + 'is the owner-board-scoping + agentId backfill migration.';
+
+// Shown ABOVE the add-agent form until the first agent exists — a heads-up that
+// there's a one-time backfill to run when the team goes from solo → multi-user,
+// with the exact prompt to hand Claude.
+function FirstAgentSetupNote() {
+  return (
+    <Box sx={{
+      bgcolor: 'rgba(251,191,36,0.06)', border: `1px solid ${D.amber}55`,
+      borderRadius: 2.5, p: { xs: 1.75, md: 2.25 }, mb: 2.5,
+    }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <KeyOutlinedIcon sx={{ color: D.amber, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5 }}>
+          One setup step for your first agent
+        </Typography>
+      </Stack>
+      <Typography sx={{ color: D.muted, fontSize: 12.5, lineHeight: 1.6, mb: 1.25 }}>
+        Everything you built solo (orders, leads) is currently yours by default. When you
+        bring on your first agent, there's a quick one-time backfill to run so ownership and
+        each person's scoped view are explicit. Paste this into a Claude Code session and it'll
+        handle it:
+      </Typography>
+      <Box sx={{
+        position: 'relative', bgcolor: D.panel, border: `1px solid ${D.line}`,
+        borderRadius: 1.5, p: 1.25, pr: 5,
+      }}>
+        <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+          {FIRST_AGENT_CLAUDE_PROMPT}
+        </Typography>
+        <Box sx={{ position: 'absolute', top: 4, right: 4 }}>
+          <CopyBtn text={FIRST_AGENT_CLAUDE_PROMPT} title="Copy prompt for Claude" />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 // The credential hand-off card the owner reads once — after creating an agent or
 // resetting a password. The plaintext password never comes back from the server,
 // so this is the ONE place it's visible; the owner copies it and gives it over.
@@ -444,6 +496,9 @@ export default function AgentsAdminTab({ token, onBack }) {
         </Stack>
 
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+
+        {/* First-agent migration reminder — only until an agent exists */}
+        {!loading && agents.length === 0 && <FirstAgentSetupNote />}
 
         {/* Add agent */}
         <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 1.75, md: 2.25 }, mb: 2.5 }}>
