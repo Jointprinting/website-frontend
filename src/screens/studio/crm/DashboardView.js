@@ -5,9 +5,10 @@
 //                         today, customers. Monospace figures.
 //   2. Stage funnel     — count + $ per stage as CSS bars (no chart lib), bar
 //                         width ∝ count, $ labeled on the right.
-//   3. Needs attention  — the heads-up feed (THE centerpiece): prioritized rows,
-//                         each with an icon, the message, and the same quick
-//                         actions as Today (tap-to-call, log, reschedule, open),
+//   3. Cadence cockpit — THE centerpiece: the live book grouped by NEXT ACTION
+//                         (your move → call today → closing soon → make a mockup
+//                         → on the rails), each card with the same quick actions
+//                         as Today (tap-to-call, log, reschedule, snooze, open),
 //                         driven by the SAME dialogs/transport.
 //   4. Working widgets  — this-week agenda, conversion snapshot, biggest deals.
 // Presentational only: the parent (CrmTab) owns data + the dialog transport and
@@ -32,7 +33,7 @@ import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepart
 import { D, mono } from '../_shared';
 import {
   Eyebrow, EmptyState, stageMeta, telHref, fmtMoney0,
-  headsUpMeta, severityMeta,
+  headsUpMeta, severityMeta, CADENCE_BUCKETS, cadenceMeta,
 } from './_crm';
 
 // ── Metric card ────────────────────────────────────────────────────────────────
@@ -461,10 +462,79 @@ function TopDeals({ items, onOpen }) {
   );
 }
 
-export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested, onClearColdProspects, onGoToday, onOpenStage }) {
-  // Heads-up expander state — declared before any early return so hook order is
-  // stable across the loading / loaded renders.
+// One cadence bucket — a titled group of cards for a single next-action. Header
+// carries the bucket's icon, name, live count, and a one-line caption; rows reuse
+// the exact HeadsUpRow (a cockpit entry's `type` is its bucket key, so the row
+// paints itself from CADENCE_META). "On the rails" is reassurance, not work, so it
+// collapses by default; the action buckets show up to 6 with a per-bucket expander.
+function CockpitBucket({ bucket, entries, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested }) {
+  const meta = cadenceMeta(bucket);
+  const Icon = meta.Icon;
+  const rails = bucket === 'on_the_rails';
+  const [expanded, setExpanded] = React.useState(!rails);
   const [showAll, setShowAll] = React.useState(false);
+  if (!entries || entries.length === 0) return null;
+  const LIMIT = 6;
+  const visible = showAll ? entries : entries.slice(0, LIMIT);
+
+  return (
+    <Box>
+      <Stack
+        direction="row" alignItems="center" spacing={1} sx={{ mb: 1, cursor: rails ? 'pointer' : 'default' }}
+        onClick={rails ? () => setExpanded((v) => !v) : undefined}
+        role={rails ? 'button' : undefined} tabIndex={rails ? 0 : undefined}
+        onKeyDown={rails ? (e) => { if (e.key === 'Enter' || e.key === ' ') setExpanded((v) => !v); } : undefined}
+      >
+        <Box sx={{
+          flexShrink: 0, width: 26, height: 26, borderRadius: 1.5, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', bgcolor: `${meta.color}1f`, border: `1px solid ${meta.color}55`,
+        }}>
+          <Icon sx={{ fontSize: 16, color: meta.color }} />
+        </Box>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5 }}>{meta.label}</Typography>
+        <Box sx={{ ...mono, fontSize: 11, fontWeight: 800, color: meta.color, bgcolor: `${meta.color}1a`, px: 0.85, py: 0.15, borderRadius: 1 }}>
+          {entries.length}
+        </Box>
+        <Typography sx={{ color: D.faint, fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>
+          {meta.caption}
+        </Typography>
+        {rails && (
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 11, ml: 'auto', flexShrink: 0 }}>{expanded ? 'hide' : 'show'}</Typography>
+        )}
+      </Stack>
+
+      {expanded && (
+        <Stack spacing={1}>
+          {visible.map((item) => (
+            <HeadsUpRow
+              key={`${bucket}:${item.companyKey}`}
+              item={item}
+              onOpen={onOpen}
+              onLog={onLog}
+              onReschedule={onReschedule}
+              onArchive={onArchive}
+              onSnooze={onSnooze}
+              onNotInterested={onNotInterested}
+            />
+          ))}
+          {entries.length > LIMIT && (
+            <Button
+              onClick={() => setShowAll((v) => !v)}
+              sx={{ alignSelf: 'center', textTransform: 'none', color: D.muted, fontWeight: 700, fontSize: 12.5,
+                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}
+            >
+              {showAll ? 'Show fewer' : `Show all ${entries.length}`}
+            </Button>
+          )}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested, onClearColdProspects, onGoToday, onOpenStage }) {
+  // Declared before any early return so hook order is stable across the
+  // loading / loaded renders.
   const [purging, setPurging] = React.useState(false);
   const [dismissedPurge, setDismissedPurge] = React.useState(false);
 
@@ -479,8 +549,14 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
   const pipeline = data?.pipeline || {};
   const followUps = data?.followUps || {};
   const heads = data?.headsUp || { items: [], counts: {}, total: 0 };
+  const cockpit = data?.cockpit || { buckets: {}, counts: {}, total: 0 };
   const totalCompanies = data?.totalCompanies || 0;
   const customersWithOrders = data?.customersWithOrders || 0;
+
+  // Actionable = everything except the reassurance "on the rails" bucket.
+  const actionable = CADENCE_BUCKETS
+    .filter((b) => b !== 'on_the_rails')
+    .reduce((n, b) => n + (cockpit.counts?.[b] || 0), 0);
 
   const overdue = followUps.overdue || 0;
   const dueToday = followUps.dueToday || 0;
@@ -491,10 +567,8 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
     try { await onClearColdProspects(coldProspects); } finally { setPurging(false); }
   };
 
-  // Heads-up items, capped further for the surface (the endpoint already caps at
-  // 25; we show up to 12 by default with a "show all" expander).
+  // Heads-up items still feed the "biggest deals on the radar" widget below.
   const items = heads.items || [];
-  const shown = showAll ? items : items.slice(0, 12);
 
   return (
     <Stack spacing={2.5}>
@@ -546,30 +620,32 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
           Companies list filtered to that stage. */}
       <StageFunnel stages={pipeline.stages} onOpenStage={onOpenStage} />
 
-      {/* Needs your attention (the centerpiece). The backend already
-          down-ranks cold/never-worked leads, so this leads with overdue/hot. Each
-          row gets call/log/reschedule + a one-tap clear (archive). */}
+      {/* Cadence cockpit (the centerpiece). The same live book, organized by the
+          NEXT ACTION instead of by problem — work it top-down: your move → call
+          today → close → mockup → on the rails. Each row keeps the same
+          call/log/reschedule/snooze/clear actions as Today. */}
       <Box>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
-          <Eyebrow>Needs your attention</Eyebrow>
-          {heads.total > 0 && (
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+          <Eyebrow>Your day</Eyebrow>
+          {actionable > 0 && (
             <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, fontWeight: 700 }}>
-              {heads.total} item{heads.total === 1 ? '' : 's'}
+              {actionable} to work
             </Typography>
           )}
         </Stack>
 
-        {items.length === 0 ? (
+        {cockpit.total === 0 ? (
           <EmptyState
             icon={<TaskAltOutlinedIcon />}
-            title="Nothing overdue or stale"
+            title="Nothing needs you right now"
           />
         ) : (
-          <Stack spacing={1}>
-            {shown.map((item) => (
-              <HeadsUpRow
-                key={`${item.type}:${item.companyKey}`}
-                item={item}
+          <Stack spacing={2.5}>
+            {CADENCE_BUCKETS.map((b) => (
+              <CockpitBucket
+                key={b}
+                bucket={b}
+                entries={cockpit.buckets?.[b] || []}
                 onOpen={onOpen}
                 onLog={onLog}
                 onReschedule={onReschedule}
@@ -578,15 +654,6 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
                 onNotInterested={onNotInterested}
               />
             ))}
-            {items.length > 12 && (
-              <Button
-                onClick={() => setShowAll((v) => !v)}
-                sx={{ alignSelf: 'center', textTransform: 'none', color: D.muted, fontWeight: 700, fontSize: 12.5,
-                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}
-              >
-                {showAll ? 'Show fewer' : `Show all ${items.length}`}
-              </Button>
-            )}
           </Stack>
         )}
       </Box>
