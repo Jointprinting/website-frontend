@@ -351,7 +351,7 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onAutoEnroll, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
 
@@ -443,6 +443,19 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                           startIcon={<RestartAltOutlinedIcon sx={{ fontSize: 16 }} />}
                           sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
                           Reset
+                        </Button>
+                      </Tooltip>
+                    )}
+                    {onDelete && (
+                      <Tooltip title="Delete this campaign for good — removes it and any enrollments. Opt-outs and CRM contacts are kept.">
+                        <Button
+                          onClick={() => {
+                            // eslint-disable-next-line no-alert
+                            if (window.confirm(`Delete "${c.name}" for good?\n\nThis removes the campaign${c.stats.enrolled ? ` and all ${c.stats.enrolled} enrollments` : ''}. Opt-outs and CRM contacts are kept. This can't be undone.`)) onDelete(c._id);
+                          }}
+                          startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
+                          sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
+                          Delete
                         </Button>
                       </Tooltip>
                     )}
