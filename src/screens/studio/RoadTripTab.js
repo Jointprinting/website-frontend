@@ -1,21 +1,22 @@
 // src/screens/studio/RoadTripTab.js — the FIELD MAP
 //
-// Nationwide dispensary prospecting map. Big shift from the old version:
+// Nationwide dispensary prospecting map. How it works:
 //
 //   - Pins come from OUR database (GET /api/roadtrip/dispensaries?bbox=…) —
-//     every licensed rec dispensary in 24 states, seeded from state license
-//     rosters and enriched via Google. Panning is instant and free; Google
-//     is only touched by per-store enrichment and the optional area sweep.
+//     licensed rec dispensaries seeded from state rosters, PLUS stores found
+//     free via OpenStreetMap. Panning both reads the DB (instant) AND fires a
+//     free OSM sweep of the viewport (POST …/scan-osm) that fills in any new
+//     stores — so dispensaries just appear as you drive the map. ZERO paid
+//     API: no Google Places, no per-store enrichment, no manual state loading.
 //   - Rendering is a clustered GeoJSON source (native circles), not HTML
 //     markers — thousands of pins stay smooth. Pin color = status (fresh /
 //     in-CRM / customer / visited / dead), amber stroke = chain.
 //   - TODAY'S RUN replaces the day tracker: tap pins → ADD TO RUN →
 //     OPTIMIZE (orders stops from your location) → GO opens Google Maps.
 //     Runs over 10 stops split into chained legs (Google's hard cap).
-//   - One-tap CRM capture: → OPPORTUNITY upserts the real CRM company
-//     (stage lead/contacted, leadSource "Field Visit", visit logged);
-//     + TO-DO (mockups / quote / catalog / call) writes a next-action log +
-//     follow-up date so it lands in the CRM Today queue.
+//   - CRM capture happens through the run: marking a stop "pitched" upserts
+//     the real CRM company (leadSource "Field Visit", visit logged); the run
+//     tray's + TO-DO writes a next-action so it lands in the CRM Today queue.
 //   - CRM state flows back onto the map: pins know their company's stage.
 //
 // Shared pure logic (gmaps leg chunking, key derivation, pin status) lives
@@ -33,7 +34,6 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import config from '../../config.json';
 import { lsGet, lsSet } from '../../common/jpStorage';
 import {
-  REC_STATE_CODES, MEDICAL_ONLY_CODES, STATE_CENTERS,
   deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS,
   haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf,
 } from './_roadTrip';
@@ -60,6 +60,7 @@ const MONO = 'ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo,
 const INITIAL_CENTER = [-74.5, 40.5];
 const INITIAL_ZOOM   = 6.8;
 const MIN_LOAD_ZOOM  = 5.4; // below this a bbox would cover half the country
+const OSM_SCAN_ZOOM  = 9;   // only free-scan OSM once zoomed in enough to be an "area"
 
 const MAP_STYLES = [
   { id: 'dark',      label: 'DARK', url: 'mapbox://styles/mapbox/dark-v11' },
@@ -370,10 +371,6 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [optimizing, setOptimizing] = React.useState(false);
   const runMarkersRef = React.useRef(new Map());
 
-  // Coverage panel
-  const [coverage, setCoverage] = React.useState(null);
-  const [ingesting, setIngesting] = React.useState({});
-
   // Custom pins (friends / printers / waypoints) — still RoadTripLead docs
   const [customPins, setCustomPins] = React.useState([]);
   const customMarkersRef = React.useRef(new Map());
@@ -625,16 +622,47 @@ export default function RoadTripTab({ token, onNavigate }) {
   const loadAreaRef = React.useRef(loadArea);
   React.useEffect(() => { loadAreaRef.current = loadArea; }, [loadArea]);
 
+  // Free OSM viewport fill. When zoomed into an area, ask the server to sweep it
+  // on OpenStreetMap (Overpass — no API key, no billing) and upsert any new
+  // dispensaries into our DB; if it found any, reload the pins. A client-side
+  // tile guard (matching the server's ~0.5° tile throttle) means each area is
+  // only requested once per session — panning around a worked area stays free
+  // and instant. This is what makes stores "just appear" as you drive the map.
+  const scannedTilesRef = React.useRef(new Set());
+  const scanOsmArea = React.useCallback(async () => {
+    const map = mapRef.current;
+    if (!map || !token || map.getZoom() < OSM_SCAN_ZOOM) return;
+    const c = map.getCenter();
+    const tileKey = `${Math.floor(c.lat / 0.5) * 0.5}_${Math.floor(c.lng / 0.5) * 0.5}`;
+    if (scannedTilesRef.current.has(tileKey)) return;
+    scannedTilesRef.current.add(tileKey);
+    const b = map.getBounds();
+    try {
+      const r = await axios.post(`${api}/api/roadtrip/dispensaries/scan-osm`, {
+        minLat: b.getSouth(), maxLat: b.getNorth(),
+        minLng: b.getWest(), maxLng: b.getEast(),
+      }, authHdr);
+      if ((r.data?.added || 0) > 0 || (r.data?.attached || 0) > 0) {
+        loadAreaRef.current(); // surface the fresh finds
+      }
+    } catch {
+      scannedTilesRef.current.delete(tileKey); // let a later pan retry
+    }
+  }, [api, token, authHdr]);
+  const scanOsmAreaRef = React.useRef(scanOsmArea);
+  React.useEffect(() => { scanOsmAreaRef.current = scanOsmArea; }, [scanOsmArea]);
+
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     let t = null;
     const onMoveEnd = () => {
       if (t) clearTimeout(t);
-      t = setTimeout(() => loadAreaRef.current(), 500);
+      t = setTimeout(() => { loadAreaRef.current(); scanOsmAreaRef.current(); }, 500);
     };
     map.on('moveend', onMoveEnd);
-    loadAreaRef.current(); // initial load
+    loadAreaRef.current();     // initial DB load
+    scanOsmAreaRef.current();  // initial free OSM fill
     return () => { map.off('moveend', onMoveEnd); if (t) clearTimeout(t); };
   }, [mapReady]);
 
@@ -735,8 +763,6 @@ export default function RoadTripTab({ token, onNavigate }) {
   React.useEffect(() => {
     if (!token) return;
     refreshRun();
-    axios.get(`${api}/api/roadtrip/dispensaries/coverage`, authHdr)
-      .then((r) => setCoverage(r.data)).catch(() => {});
     axios.get(`${api}/api/roadtrip/leads`, authHdr)
       .then((r) => setCustomPins((r.data || []).filter((l) => l.source === 'manual')))
       .catch(() => {});
@@ -1054,30 +1080,6 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   };
 
-  // ── Coverage actions ───────────────────────────────────────────────────────
-  const ingestStateNow = React.useCallback(async (code) => {
-    setIngesting((s) => ({ ...s, [code]: true }));
-    try {
-      const r = await axios.post(`${api}/api/roadtrip/dispensaries/ingest/${code}`, {}, { ...authHdr, timeout: 180_000 });
-      const rep = r.data || {};
-      showToast(`${code}: ${rep.imported ?? 0} licensed stores loaded${rep.lowCoverage ? ' (looks low — check source)' : ''}.`, rep.lowCoverage ? 'error' : 'success');
-      const cov = await axios.get(`${api}/api/roadtrip/dispensaries/coverage`, authHdr);
-      setCoverage(cov.data);
-      loadAreaRef.current();
-    } catch (err) {
-      showToast(`${code}: ${err?.response?.data?.message || 'ingest failed'}`, 'error');
-    } finally {
-      setIngesting((s) => ({ ...s, [code]: false }));
-    }
-  }, [api, authHdr, showToast]);
-
-  const jumpToState = (code) => {
-    const c = STATE_CENTERS[code];
-    if (!c || !mapRef.current) return;
-    mapRef.current.flyTo({ center: [c[0], c[1]], zoom: c[2], essential: true, duration: 1600 });
-    if (window.innerWidth < 900) setMobileTab('map');
-  };
-
   // ── Custom pin add ─────────────────────────────────────────────────────────
   const addCustomPin = async () => {
     const { name, address, notes, customType } = customPinForm;
@@ -1114,10 +1116,6 @@ export default function RoadTripTab({ token, onNavigate }) {
   const chainList = React.useMemo(
     () => Object.entries(chainCounts).sort((a, b) => b[1] - a[1]),
     [chainCounts]
-  );
-  const loadedStates = React.useMemo(
-    () => (coverage?.states || []).filter((s) => s.total > 0).length,
-    [coverage]
   );
 
   const flyToStop = (s) => {
@@ -1457,46 +1455,6 @@ export default function RoadTripTab({ token, onNavigate }) {
     </PanelSection>
   );
 
-  const statesPanel = (
-    <PanelSection title={`STATES · ${loadedStates}/${REC_STATE_CODES.length} LOADED`} persistKey="jpfm-states" defaultOpen={false}>
-      <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, lineHeight: 1.5, mb: 1 }}>
-        {REC_STATE_CODES.length} states sell rec. LOAD pulls the state's license roster;
-        pins fill in Google details as you browse. {MEDICAL_ONLY_CODES.length} states are medical-only (skipped).
-      </Typography>
-      {(coverage?.states || []).map((s) => {
-        const stale = s.lastVerifiedAt && (Date.now() - new Date(s.lastVerifiedAt) > 45 * 24 * 3600 * 1000);
-        return (
-          <Box key={s.code} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.4, borderBottom: `1px solid ${TERM.borderDim}` }}>
-            <Box role="button" tabIndex={0} onClick={() => jumpToState(s.code)}
-              sx={{
-                fontFamily: MONO, fontSize: 10.5, fontWeight: 900, color: s.total ? TERM.green : TERM.muted,
-                width: 26, cursor: 'pointer', '&:hover': { color: TERM.green },
-              }}>{s.code}</Box>
-            <Typography sx={{ flexGrow: 1, fontFamily: MONO, fontSize: 9.5, color: TERM.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {s.total
-                ? <>{s.total} stores · {s.enriched} enriched{stale ? ' · stale' : ''}</>
-                : <>~{s.approxRetail} expected</>}
-            </Typography>
-            <Box role="button" tabIndex={0}
-              onClick={() => !ingesting[s.code] && ingestStateNow(s.code)}
-              sx={{
-                fontFamily: MONO, fontSize: 8.5, fontWeight: 900, letterSpacing: 0.5,
-                px: 0.75, py: 0.3, cursor: 'pointer', borderRadius: 0.25, flexShrink: 0,
-                color: ingesting[s.code] ? TERM.amber : s.total ? TERM.muted : TERM.green,
-                border: `1px solid ${ingesting[s.code] ? TERM.amber : s.total ? TERM.borderDim : TERM.green}`,
-                '&:hover': { color: TERM.green, borderColor: TERM.green },
-              }}>
-              {ingesting[s.code] ? '…' : s.total ? '↻' : 'LOAD'}
-            </Box>
-          </Box>
-        );
-      })}
-      {!coverage && (
-        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic' }}>Loading coverage…</Typography>
-      )}
-    </PanelSection>
-  );
-
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -1557,7 +1515,6 @@ export default function RoadTripTab({ token, onNavigate }) {
             {runPanel}
             {chainsPanel}
             {filtersPanel}
-            {statesPanel}
           </Box>
         </Box>
 
@@ -1667,7 +1624,6 @@ export default function RoadTripTab({ token, onNavigate }) {
             {navigatePanel}
             {chainsPanel}
             {filtersPanel}
-            {statesPanel}
           </Box>
         </Box>
       )}
