@@ -18,9 +18,10 @@ import boxLogo from '../modules/images/logo_white.webp';
 const NAV_LINKS = [
   { label: 'PRODUCTS',     to: '/products' },
   { label: 'CATALOGS',     to: '/catalogs' },
-  // The dispensary vertical is the #1 audience — link the landing page so a shop
-  // owner browsing the site (and search crawlers) can actually reach it.
-  { label: 'DISPENSARIES', to: '/dispensaries' },
+  // NOTE: /dispensaries is deliberately NOT in the public nav. It's a targeted
+  // landing page for the cold-email/outreach campaign — recipients reach it via
+  // the link in the email, not by browsing the main site. The route still exists
+  // in App.js so those campaign links resolve.
   { label: 'ABOUT',        to: '/about' },
   { label: 'CONTACT',      to: '/contact' },
   { label: 'FAQ',          to: '/faq' },
@@ -88,7 +89,7 @@ function Navbar() {
                 <ListItemText primary="Products" />
               </ListItemButton>
             </ListItem>
-            <ListItem key="Catalogs" disablePadding>
+            <ListItem divider key="Catalogs" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
                 to="/catalogs"
@@ -97,15 +98,8 @@ function Navbar() {
                 <ListItemText primary="Catalogs" />
               </ListItemButton>
             </ListItem>
-            <ListItem divider key="Dispensaries" disablePadding>
-              <ListItemButton
-                component={ReactRouterLink}
-                to="/dispensaries"
-                onClick={() => setOpenDrawer(false)}
-              >
-                <ListItemText primary="Dispensaries" />
-              </ListItemButton>
-            </ListItem>
+            {/* /dispensaries is intentionally omitted — it's a campaign landing
+                page reached from the outreach email, not part of the site nav. */}
             <ListItem key="About" disablePadding>
               <ListItemButton
                 component={ReactRouterLink}
