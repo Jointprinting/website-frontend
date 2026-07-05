@@ -204,7 +204,7 @@ const inputStyle = {
 // Popup DOM builders (run outside React — handlers close over live refs)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildDispPopup({ d, inRun, onAddToRun, onOpportunity, onTodo, onHide, onOpenCrm }) {
+function buildDispPopup({ d, inRun, onAddToRun, onHide, onOpenCrm }) {
   const status = pinStatusOf(d);
   const statusMeta = PIN_STATUS[status];
   const div = document.createElement('div');
@@ -232,7 +232,6 @@ function buildDispPopup({ d, inRun, onAddToRun, onOpportunity, onTodo, onHide, o
   if (d.phone) lines.push(`<div style="font-size:11px;margin-top:4px;">[TEL] <a href="tel:${escapeAttr(d.phone)}" style="color:${TERM.green};text-decoration:none;">${escapeHtml(d.phone)}</a></div>`);
   if (d.website) lines.push(`<div style="font-size:11px;margin-top:2px;"><a href="${escapeAttr(d.website)}" target="_blank" rel="noopener" style="color:${TERM.green};text-decoration:none;">[WEB] ${escapeHtml(truncate(d.website, 38))}</a></div>`);
   if (d.googleMapsUri) lines.push(`<div style="font-size:11px;margin-top:2px;"><a href="${escapeAttr(d.googleMapsUri)}" target="_blank" rel="noopener" style="color:${TERM.green};text-decoration:none;">[MAPS] open in google maps</a></div>`);
-  if (d.rating != null) lines.push(`<div style="font-size:11px;color:${TERM.muted};margin-top:4px;">[RATING] ${Number(d.rating).toFixed(1)} ★ (${d.ratingCount ?? '—'})</div>`);
   if (d.lastVisitedAt) lines.push(`<div style="font-size:10px;color:${TERM.amber};margin-top:4px;">✓ visited ${new Date(d.lastVisitedAt).toLocaleDateString()}</div>`);
 
   div.innerHTML = lines.filter(Boolean).join('');
@@ -255,25 +254,6 @@ function buildDispPopup({ d, inRun, onAddToRun, onOpportunity, onTodo, onHide, o
       .catch(() => { runBtn.disabled = false; runBtn.textContent = '＋ ADD TO RUN'; });
   });
   row1.appendChild(runBtn);
-
-  const oppBtn = document.createElement('button');
-  oppBtn.textContent = d.crm ? '↗ OPEN CRM' : '→ OPPORTUNITY';
-  oppBtn.style.cssText = btnStyle('cyan');
-  oppBtn.addEventListener('click', () => {
-    if (d.crm) { onOpenCrm(d); return; }
-    oppBtn.disabled = true;
-    oppBtn.textContent = 'ADDING…';
-    onOpportunity(d)
-      .then(() => { oppBtn.textContent = '↗ OPEN CRM'; oppBtn.disabled = false; d.crm = d.crm || { companyKey: '', stage: 'lead' }; })
-      .catch(() => { oppBtn.disabled = false; oppBtn.textContent = '→ OPPORTUNITY'; });
-  });
-  row1.appendChild(oppBtn);
-
-  const todoBtn = document.createElement('button');
-  todoBtn.textContent = '＋ TO-DO';
-  todoBtn.style.cssText = btnStyle('amber');
-  todoBtn.addEventListener('click', () => onTodo(d));
-  row1.appendChild(todoBtn);
 
   const row2 = document.createElement('div');
   row2.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
@@ -620,28 +600,6 @@ export default function RoadTripTab({ token, onNavigate }) {
   };
 
   // ── Viewport loading ───────────────────────────────────────────────────────
-  // Auto-enrichment: when the viewport contains un-enriched stores at street
-  // zoom, quietly fill in a Google batch and refresh. Throttled so a
-  // pan-happy session doesn't hammer the API.
-  const lastEnrichRef = React.useRef(0);
-  const autoEnrich = React.useCallback(async (bounds, results) => {
-    const map = mapRef.current;
-    if (!map || map.getZoom() < 8.5) return;
-    const unenriched = results.filter((d) => !d.enriched && d.verified).length;
-    if (!unenriched) return;
-    const now = Date.now();
-    if (now - lastEnrichRef.current < 12_000) return;
-    lastEnrichRef.current = now;
-    try {
-      const bbox = {
-        minLat: bounds.getSouth(), maxLat: bounds.getNorth(),
-        minLng: bounds.getWest(), maxLng: bounds.getEast(),
-      };
-      const r = await axios.post(`${api}/api/roadtrip/dispensaries/enrich`, { bbox, limit: 15 }, authHdr);
-      if (r.data?.enriched > 0) loadAreaRef.current();
-    } catch { /* quiet — enrichment is best-effort */ }
-  }, [api, authHdr]);
-
   const loadArea = React.useCallback(async () => {
     const map = mapRef.current;
     if (!map || !token) return;
@@ -657,13 +615,12 @@ export default function RoadTripTab({ token, onNavigate }) {
       const r = await axios.get(`${api}/api/roadtrip/dispensaries?${params}`, authHdr);
       setDisps(r.data?.results || []);
       setChainCounts(r.data?.chains || {});
-      autoEnrich(b, r.data?.results || []);
     } catch (err) {
       showToast(err?.response?.data?.message || 'Area load failed.', 'error');
     } finally {
       setLoadingArea(false);
     }
-  }, [api, token, authHdr, autoEnrich, showToast]);
+  }, [api, token, authHdr, showToast]);
 
   const loadAreaRef = React.useRef(loadArea);
   React.useEffect(() => { loadAreaRef.current = loadArea; }, [loadArea]);
@@ -968,8 +925,6 @@ export default function RoadTripTab({ token, onNavigate }) {
         .setDOMContent(buildDispPopup({
           d, inRun,
           onAddToRun: (dd) => addDispToRun(dd),
-          onOpportunity: (dd) => addOpportunity(dd, { visited: false }),
-          onTodo: (dd) => { setTodoTarget(dd); setTodoForm({ chipId: 'mockups', note: '', date: tomorrowISO() }); popup.remove(); },
           onHide: (dd) => { hideDispensary(dd); popup.remove(); },
           onOpenCrm: (dd) => openInCrm(dd),
         }))
@@ -1113,21 +1068,6 @@ export default function RoadTripTab({ token, onNavigate }) {
       showToast(`${code}: ${err?.response?.data?.message || 'ingest failed'}`, 'error');
     } finally {
       setIngesting((s) => ({ ...s, [code]: false }));
-    }
-  }, [api, authHdr, showToast]);
-
-  const sweepHere = React.useCallback(async () => {
-    const map = mapRef.current;
-    if (!map) return;
-    const c = map.getCenter();
-    showToast('Sweeping this area on Google…', 'info');
-    try {
-      const r = await axios.post(`${api}/api/roadtrip/dispensaries/sweep`, { lat: c.lat, lng: c.lng, radius: 20000 }, authHdr);
-      const { added = 0, attachedToRoster = 0 } = r.data || {};
-      showToast(`Sweep done — ${added} new unverified, ${attachedToRoster} matched to licenses.`, 'success');
-      loadAreaRef.current();
-    } catch (err) {
-      showToast(err?.response?.data?.message || 'Sweep failed.', 'error');
     }
   }, [api, authHdr, showToast]);
 
@@ -1650,10 +1590,6 @@ export default function RoadTripTab({ token, onNavigate }) {
                 background: heatmapOn ? 'radial-gradient(circle, #f87171 0%, #fbbf24 50%, #4ade80 100%)' : TERM.muted,
               }} />
               DENSITY
-            </Box>
-            <Box role="button" tabIndex={0} onClick={sweepHere}
-              sx={overlayChipSx(false, TERM.green)} title="Google-scan this area for stores not in the database yet">
-              ◎ SWEEP AREA
             </Box>
           </Stack>
 
