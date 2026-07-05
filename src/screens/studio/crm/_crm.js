@@ -17,6 +17,10 @@ import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
+import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import DesignServicesOutlinedIcon from '@mui/icons-material/DesignServicesOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { D, mono } from '../_shared';
 
 // ── Stage vocabulary ──────────────────────────────────────────────────────────
@@ -238,7 +242,26 @@ export const HEADSUP_META = {
   stale:            { label: 'Stale',        Icon: HourglassEmptyOutlinedIcon,        color: '#fbbf24' },
   no_next_step:     { label: 'No next step', Icon: HelpOutlineOutlinedIcon,           color: '#60a5fa' },
 };
-export const headsUpMeta = (t) => HEADSUP_META[t] || { label: t || 'Attention', Icon: HelpOutlineOutlinedIcon, color: D.muted };
+
+// ── Cadence cockpit — the day organized by NEXT ACTION ────────────────────────
+// One bucket per action, in the order the owner should work them. Mirrors the
+// backend's controllers/crm.js CADENCE_BUCKETS (keep the keys + order in sync).
+// `caption` is the one-line "what this bucket is" under the header; `color`/`Icon`
+// also drive each row (a cockpit entry's `type` IS its bucket key, so headsUpMeta
+// falls back here to paint the row).
+export const CADENCE_BUCKETS = ['your_move', 'call_today', 'closing_soon', 'make_mockup', 'on_the_rails'];
+export const CADENCE_META = {
+  your_move:    { label: 'Your move',     caption: 'You owe the next move — reach out now.',      Icon: BoltOutlinedIcon,           color: '#f87171' },
+  call_today:   { label: 'Call today',    caption: 'A follow-up you booked for today.',           Icon: PhoneInTalkIcon,            color: '#fbbf24' },
+  closing_soon: { label: 'Closing soon',  caption: "A quote's out — nudge it over the line.",     Icon: RequestQuoteOutlinedIcon,   color: '#4ade80' },
+  make_mockup:  { label: 'Make a mockup', caption: 'Put a mockup in front of them to move it.',   Icon: DesignServicesOutlinedIcon, color: '#22d3ee' },
+  on_the_rails: { label: 'On the rails',  caption: 'Booked and healthy — nothing to do today.',   Icon: CheckCircleOutlinedIcon,    color: D.muted },
+};
+export const cadenceMeta = (b) => CADENCE_META[b] || { label: b || 'Worklist', caption: '', Icon: HelpOutlineOutlinedIcon, color: D.muted };
+
+// Row icon/color: heads-up types first, then cockpit buckets (a cockpit entry's
+// `type` is its bucket key), then a neutral fallback.
+export const headsUpMeta = (t) => HEADSUP_META[t] || CADENCE_META[t] || { label: t || 'Attention', Icon: HelpOutlineOutlinedIcon, color: D.muted };
 
 // Severity → the tone its pill/border carries. high = red, med = amber, low = blue.
 export const SEVERITY_META = {
