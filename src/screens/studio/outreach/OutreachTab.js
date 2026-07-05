@@ -2,10 +2,11 @@
 // Outreach — the cold-email engine's cockpit. Full-viewport Studio tool (same
 // chrome as the CRM): slim header + an internal sub-nav across four views:
 //
-//   Overview  → /api/outreach/overview   engine status, funnels, WARM LEADS
-//   Campaigns → campaign CRUD + enroll   sequences of merge-templated steps
-//   Queue     → /api/outreach/queue      what sends next + "send now"
-//   Import    → /api/crm/import          state license lists → CRM leads
+//   Home      → /api/outreach/overview   engine status + WARM LEADS + send queue
+//                                         + the always-on lead engine, folded in
+//   Campaign  → campaign CRUD + enroll    sequences + a full "reset" fresh start
+//   Replies   → /api/triage               the reply inbox / warm-handoff
+//   Analytics → /api/outreach/analytics   funnels + deliverability (its own tab)
 //
 // This component owns ALL data + transport (views stay presentational), and
 // every cross-tool jump goes through onNavigate — a warm lead opens straight
@@ -19,7 +20,7 @@ import {
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
-import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
@@ -33,23 +34,31 @@ import RepliesView from './RepliesView';
 const base = `${config.backendUrl}/api/outreach`;
 const triageBase = `${config.backendUrl}/api/triage`;
 
-// Four tabs: the engine dashboard (overview + send queue + analytics stacked),
-// campaigns, the reply command center, and lead finding.
+// Four single-purpose tabs. HOME is the daily cockpit (overview + send queue +
+// the always-on lead engine folded in); CAMPAIGN edits the copy + reset; REPLIES
+// is the inbox; ANALYTICS is its own tab (promoted out of the old mega-dashboard,
+// so the heavy charts don't clutter the day-to-day view). The 'dashboard' /
+// 'campaigns' ids are kept so existing deep links + internal jumps keep working.
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard',   Icon: SpaceDashboardOutlinedIcon },
-  { id: 'campaigns', label: 'Campaigns',   Icon: ForwardToInboxOutlinedIcon },
-  { id: 'replies',   label: 'Replies',     Icon: MarkEmailUnreadOutlinedIcon },
-  // Progress readout only — the lead engine runs itself (id stays 'import' so
-  // existing deep links keep working).
-  { id: 'import',    label: 'Lead engine', Icon: TravelExploreOutlinedIcon },
+  { id: 'dashboard', label: 'Home',      Icon: SpaceDashboardOutlinedIcon },
+  { id: 'campaigns', label: 'Campaign',  Icon: ForwardToInboxOutlinedIcon },
+  { id: 'replies',   label: 'Replies',   Icon: MarkEmailUnreadOutlinedIcon },
+  { id: 'analytics', label: 'Analytics', Icon: InsightsOutlinedIcon },
 ];
 
 export default function OutreachTab({ token, onBack, onNavigate, initialView }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
   // initialView lets a deep-link (e.g. the hub's "reply awaiting response" alert)
-  // open straight onto a sub-view like Replies; a plain open falls back to Dashboard.
+  // open straight onto a sub-view like Replies; a plain open falls back to Home.
   const [view, setView] = React.useState(initialView || 'dashboard');
+
+  // The lead engine is folded into Home now; the "Lead engine →" CTAs scroll to it.
+  const leadEngineRef = React.useRef(null);
+  const scrollToLeadEngine = React.useCallback(() => {
+    setView('dashboard');
+    requestAnimationFrame(() => leadEngineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, []);
 
   const [overview, setOverview] = React.useState(null);
   const [overviewLoading, setOverviewLoading] = React.useState(true);
@@ -137,7 +146,8 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   }, [authHdr]);
 
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
-  React.useEffect(() => { if (view === 'dashboard') { loadQueue(); loadAnalytics(); } }, [view, loadQueue, loadAnalytics]);
+  React.useEffect(() => { if (view === 'dashboard') loadQueue(); }, [view, loadQueue]);
+  React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
   React.useEffect(() => { if (view === 'replies') { loadReplies(); loadWorklist(); } }, [view, loadReplies, loadWorklist]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
@@ -180,6 +190,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const unenrollAll = async (campaignId) => {
     const { data } = await axios.post(`${base}/campaigns/${campaignId}/unenroll-all`, {}, authHdr);
     flash(`Unenrolled ${data.removed} compan${data.removed === 1 ? 'y' : 'ies'}${data.keptSent ? ' (kept any already emailed)' : ''}.`);
+    await loadOverview();
+    return data;
+  };
+
+  // Full fresh start — clears the WHOLE roster (including already-sent) so the
+  // campaign re-runs from email 1 as auto-enroll refills it. Opt-outs and CRM
+  // contacts are untouched (the backend preserves the Suppression list + the
+  // sender's warm-up ramp). Confirm-gated on the server too.
+  const resetCampaign = async (campaignId) => {
+    const { data } = await axios.post(`${base}/campaigns/${campaignId}/reset`, { confirm: true }, authHdr);
+    flash(`Campaign reset — cleared ${data.removed} enrollment${data.removed === 1 ? '' : 's'}. Fresh sends start from email 1 as leads refill.`);
     await loadOverview();
     return data;
   };
@@ -348,7 +369,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               onMarkReplied={markReplied}
               onStop={stopEnrollment}
               onGoCampaigns={() => setView('campaigns')}
-              onGoImport={() => setView('import')}
+              onGoImport={scrollToLeadEngine}
               onGoReplies={() => setView('replies')}
               onTestSend={sendTest}
               onRecheckAuth={recheckAuth}
@@ -362,9 +383,15 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
                 onOpenCompany={openCompany}
               />
             </Box>
-            <Box>
-              <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Analytics</MuiTypography>
-              <AnalyticsView analytics={analytics} loading={analyticsLoading} />
+            {/* Lead engine — always-on discovery, folded in from its old tab. */}
+            <Box ref={leadEngineRef}>
+              <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Lead engine</MuiTypography>
+              <ImportView
+                busy={importBusy}
+                frontier={importFrontier} regions={importRegions}
+                onRefillNow={runRefillNow}
+                onGoCampaigns={() => setView('campaigns')}
+              />
             </Box>
           </Stack>
         );
@@ -377,12 +404,15 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onUpdate={updateCampaign}
             onLaunch={launchCampaign}
             onUnenrollAll={unenrollAll}
+            onReset={resetCampaign}
             onAutoEnroll={setAutoEnroll}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
           />
         );
+      case 'analytics':
+        return <AnalyticsView analytics={analytics} loading={analyticsLoading} />;
       case 'replies':
         return (
           <RepliesView
@@ -394,15 +424,6 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onSync={syncGmail}
             onOpenCompany={openCompany}
             onError={(m) => flash(m, 'error')}
-          />
-        );
-      case 'import':
-        return (
-          <ImportView
-            busy={importBusy}
-            frontier={importFrontier} regions={importRegions}
-            onRefillNow={runRefillNow}
-            onGoCampaigns={() => setView('campaigns')}
           />
         );
       default:
