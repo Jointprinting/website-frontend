@@ -5,11 +5,13 @@ import Button from '../components/Button';
 import Typography from '../components/Typography';
 import ProductHeroLayout from './ProductHeroLayout';
 
-// Self-hosted (public/about/merch-hero.jpg) — the hero used to hotlink
-// cdn.midjourney.com, which is not a hosting service and can vanish upstream at
-// any time, silently degrading the homepage to a flat panel (the About page was
-// already migrated off external image URLs for exactly this reason).
-const backgroundImage = '/about/merch-hero.jpg';
+// The owner's original homepage hero — the AI print-studio image. A prior sweep
+// swapped it to a self-hosted stock photo to avoid hotlinking (cdn.midjourney.com
+// isn't a hosting service and could vanish), but that changed the actual picture,
+// which the owner wants back. Restored to his image. If it ever needs to be made
+// bulletproof, drop the file into public/about/ and point this at it.
+const backgroundImage =
+  'https://cdn.midjourney.com/02200c93-b8ea-452c-b02d-99cc2954e81f/0_2.webp';
 
 export default function ProductHero() {
   return (
