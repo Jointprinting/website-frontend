@@ -75,9 +75,10 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const [worklist, setWorklist] = React.useState(null);
   const [worklistLoading, setWorklistLoading] = React.useState(true);
 
-  // Lead-engine state lives HERE, not inside ImportView, so an in-flight sweep
-  // survives switching tabs and back — a forced refill can take a minute+.
-  const [importBusy, setImportBusy] = React.useState(false);
+  // Lead-engine state lives HERE, not inside ImportView, so the readout survives
+  // switching tabs and back. The finder runs entirely on the API now (no manual
+  // sweep), so we only track its status — `running` (if the API reports it) drives
+  // the progress readout.
   const [importFrontier, setImportFrontier] = React.useState(null);
   const [importRegions, setImportRegions] = React.useState([]); // per-region swept status
 
@@ -85,63 +86,67 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const flash = (msg, severity = 'success') => setSnack({ msg, severity });
 
   // ── Loads ─────────────────────────────────────────────────────────────────
-  const loadOverview = React.useCallback(async () => {
-    setOverviewLoading(true);
+  // Loaders take a `silent` flag: the first/manual load shows a spinner and may
+  // surface an error toast; the 45s background poll passes silent=true so it
+  // refreshes the numbers invisibly — no spinner flicker, no red toast on a
+  // transient hiccup. That's what makes the auto-refresh feel calm, not busy.
+  const loadOverview = React.useCallback(async (silent = false) => {
+    if (!silent) setOverviewLoading(true);
     try {
       const { data } = await axios.get(`${base}/overview`, authHdr);
       setOverview(data);
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not load outreach overview', 'error');
+      if (!silent) flash(e.response?.data?.message || 'Could not load outreach overview', 'error');
     } finally {
-      setOverviewLoading(false);
+      if (!silent) setOverviewLoading(false);
     }
   }, [authHdr]);
 
-  const loadQueue = React.useCallback(async () => {
-    setQueueLoading(true);
+  const loadQueue = React.useCallback(async (silent = false) => {
+    if (!silent) setQueueLoading(true);
     try {
       const { data } = await axios.get(`${base}/queue`, authHdr);
       setQueue(data.queue || []);
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not load the queue', 'error');
+      if (!silent) flash(e.response?.data?.message || 'Could not load the queue', 'error');
     } finally {
-      setQueueLoading(false);
+      if (!silent) setQueueLoading(false);
     }
   }, [authHdr]);
 
-  const loadAnalytics = React.useCallback(async () => {
-    setAnalyticsLoading(true);
+  const loadAnalytics = React.useCallback(async (silent = false) => {
+    if (!silent) setAnalyticsLoading(true);
     try {
       const { data } = await axios.get(`${base}/analytics`, authHdr);
       setAnalytics(data);
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not load analytics', 'error');
+      if (!silent) flash(e.response?.data?.message || 'Could not load analytics', 'error');
     } finally {
-      setAnalyticsLoading(false);
+      if (!silent) setAnalyticsLoading(false);
     }
   }, [authHdr]);
 
-  const loadReplies = React.useCallback(async () => {
-    setRepliesLoading(true);
+  const loadReplies = React.useCallback(async (silent = false) => {
+    if (!silent) setRepliesLoading(true);
     try {
       const { data } = await axios.get(`${triageBase}/replies`, { ...authHdr, params: { includeIgnored: showIgnored } });
       setReplies(data.replies || []);
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not load replies', 'error');
+      if (!silent) flash(e.response?.data?.message || 'Could not load replies', 'error');
     } finally {
-      setRepliesLoading(false);
+      if (!silent) setRepliesLoading(false);
     }
   }, [authHdr, showIgnored]);
 
-  const loadWorklist = React.useCallback(async () => {
-    setWorklistLoading(true);
+  const loadWorklist = React.useCallback(async (silent = false) => {
+    if (!silent) setWorklistLoading(true);
     try {
       const { data } = await axios.get(`${triageBase}/worklist`, authHdr);
       setWorklist(data);
     } catch (e) {
-      flash(e.response?.data?.message || 'Could not load the follow-up worklist', 'error');
+      if (!silent) flash(e.response?.data?.message || 'Could not load the follow-up worklist', 'error');
     } finally {
-      setWorklistLoading(false);
+      if (!silent) setWorklistLoading(false);
     }
   }, [authHdr]);
 
@@ -150,19 +155,29 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
   React.useEffect(() => { if (view === 'replies') { loadReplies(); loadWorklist(); } }, [view, loadReplies, loadWorklist]);
 
-  // Auto-refresh — keep the numbers live without a manual reload. Polls the
-  // overview + the active view's data on a light interval; skips while the tab is
-  // hidden so it never hammers in the background. Read-only, so it can't disturb
-  // anything the engine is doing.
+  // Auto-refresh — calm, not busy. Every 60s it SILENTLY re-fetches the overview
+  // + the active view's data (silent=true → no spinner, no error toast), so the
+  // page updates in place instead of flickering a loading state at you, and once
+  // more the moment you return to the tab (so it's fresh when you look, not stale
+  // and not thrashing while you're away). Skips while hidden. Read-only — it can
+  // never disturb the send engine.
   React.useEffect(() => {
+    const refreshActive = () => {
+      loadOverview(true);
+      if (view === 'dashboard') loadQueue(true);
+      else if (view === 'analytics') loadAnalytics(true);
+      else if (view === 'replies') { loadReplies(true); loadWorklist(true); }
+    };
     const id = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      loadOverview();
-      if (view === 'dashboard') loadQueue();
-      else if (view === 'analytics') loadAnalytics();
-      else if (view === 'replies') { loadReplies(); loadWorklist(); }
-    }, 25000);
-    return () => clearInterval(id);
+      refreshActive();
+    }, 60000);
+    const onVis = () => { if (typeof document !== 'undefined' && !document.hidden) refreshActive(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
+    };
   }, [view, loadOverview, loadQueue, loadAnalytics, loadReplies, loadWorklist]);
 
   // ── Campaign actions ──────────────────────────────────────────────────────
@@ -309,8 +324,9 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   };
 
   // ── Lead engine (always-on OSM discovery → email scrape → import) ─────────
-  // The engine runs itself on the API (queue-aware, state by state). The Studio
-  // only reads progress — plus one "Refill now" that forces a sweep early.
+  // The engine runs itself on the API (queue-aware, state by state, re-milking
+  // improved regions on its own). The Studio only READS progress — there is no
+  // manual sweep button; nothing here needs the owner to press it.
   const loadFinderStatus = React.useCallback(async () => {
     try {
       const { data } = await axios.get(`${base}/find-leads/status`, authHdr);
@@ -320,26 +336,6 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   }, [authHdr]);
 
   React.useEffect(() => { loadFinderStatus(); }, [loadFinderStatus]);
-
-  // The engine refills itself and re-milks improved states on its own; this only
-  // forces an early sweep for the impatient. (Re-sweeping after a finder upgrade
-  // is now automatic — the API version-stamps each state and re-milks stale ones
-  // in the background — so there's no "start from the top" button anymore.)
-  const runRefillNow = async () => {
-    setImportBusy(true);
-    try {
-      const { data } = await axios.post(`${base}/find-leads/auto/run`, {}, authHdr);
-      const n = data.imported || 0;
-      flash(n
-        ? `Refilled — ${n} new lead${n === 1 ? '' : 's'} across ${data.regionsSwept} state${data.regionsSwept === 1 ? '' : 's'} (${(data.swept || []).join(', ')}).`
-        : `Swept ${data.regionsSwept || 0} state${data.regionsSwept === 1 ? '' : 's'} — nothing new there; the engine keeps working the map on its own.`);
-      await Promise.all([loadOverview(), loadFinderStatus()]);
-    } catch (e) {
-      flash(e.response?.data?.message || 'Refill failed — the discovery service may be busy, try again.', 'error');
-    } finally {
-      setImportBusy(false);
-    }
-  };
 
   // AuthFixPanel's "I added it — re-check now": bypass the API's 1h DNS cache,
   // then reload the overview so the chips/pills repaint from the fresh result.
@@ -416,9 +412,8 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             <Box ref={leadEngineRef}>
               <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Lead engine</MuiTypography>
               <ImportView
-                busy={importBusy}
+                busy={!!importFrontier?.running}
                 frontier={importFrontier} regions={importRegions}
-                onRefillNow={runRefillNow}
                 onGoCampaigns={() => setView('campaigns')}
               />
             </Box>
