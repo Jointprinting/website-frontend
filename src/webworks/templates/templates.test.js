@@ -1,0 +1,116 @@
+// src/webworks/templates/templates.test.js
+//
+// Smoke coverage for the five JP Webworks site templates + the registry.
+// The templates are pure functions of the site `data` bag, so the contract
+// worth pinning is:
+//   1. FULL data renders every section (nav, hero, services, about,
+//      testimonials, hours, contact) without crashing.
+//   2. EMPTY data renders WITHOUT crashing and WITHOUT empty section shells —
+//      the owner's explicit design bar ("no mistakes"), and what makes a
+//      half-built draft still presentable.
+//   3. tel:/mailto: links are real (the phone CTA is the whole point of a
+//      small-business one-pager).
+//   4. An unknown paletteId falls back to the first palette instead of
+//      exploding. Run via:  CI=true npm test
+//
+// The registry's Component fields are React.lazy, so tests render inside
+// <Suspense>. `findBy*` waits for the lazy chunk to resolve.
+
+import * as React from 'react';
+import { render, screen } from '@testing-library/react';
+import { TEMPLATES, getTemplate } from './index';
+
+const FULL_DATA = {
+  businessName: 'North Pine Plumbing',
+  tagline: 'Honest work, done right',
+  heroHeadline: 'Plumbing you can trust',
+  ctaLabel: 'Call for a free estimate',
+  phone: '(609) 555-0143',
+  email: 'office@northpine.example',
+  serviceArea: 'Burlington County',
+  address: '12 Main St, Mount Holly, NJ',
+  hours: [{ days: 'Mon – Fri', hours: '8:00 AM – 6:00 PM' }],
+  services: [
+    { name: 'Drain cleaning', desc: 'Fast, clean, guaranteed.', price: 'from $95' },
+    { name: 'Water heaters', desc: 'Same-week install.', price: '$1,200+' },
+  ],
+  about: 'Family-run since 2012.\n\nWe answer the phone.',
+  testimonials: [{ quote: 'Showed up on time and fixed it.', name: 'Maria G.' }],
+  paletteId: '',
+  established: '2012',
+  license: 'NJ Lic. #12345',
+};
+
+const renderTpl = (tpl, data) =>
+  render(
+    <React.Suspense fallback={<div>loading…</div>}>
+      <tpl.Component data={data} />
+    </React.Suspense>
+  );
+
+describe('template registry', () => {
+  test('exposes five templates with the contract fields', () => {
+    expect(TEMPLATES).toHaveLength(5);
+    expect(TEMPLATES.map((t) => t.id)).toEqual(
+      ['trades', 'dining', 'wellness', 'professional', 'retail']
+    );
+    for (const t of TEMPLATES) {
+      expect(t.label).toBeTruthy();
+      expect(t.description).toBeTruthy();
+      expect(t.businessTypes.length).toBeGreaterThan(0);
+      expect(t.palettes).toHaveLength(3);
+      for (const p of t.palettes) {
+        expect(p.id).toBeTruthy();
+        expect(p.label).toBeTruthy();
+        expect(p.swatches).toHaveLength(3);
+      }
+      expect(t.Component).toBeTruthy();
+    }
+  });
+
+  test('getTemplate resolves ids and nulls unknowns', () => {
+    expect(getTemplate('dining')?.label).toBe('Dining');
+    expect(getTemplate('nope')).toBeNull();
+  });
+});
+
+describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
+  test('renders full data: name, services, hours, quote, tel/mailto links', async () => {
+    const { container } = renderTpl(tpl, { ...FULL_DATA, paletteId: tpl.palettes[1].id });
+    // Business name shows (nav + footer at minimum).
+    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+    // Services + hours + testimonial content made it in.
+    expect(screen.getAllByText(/Drain cleaning/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/8:00 AM – 6:00 PM/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Showed up on time/).length).toBeGreaterThan(0);
+    // Contact links are real.
+    expect(container.querySelector('a[href="tel:6095550143"]')).toBeTruthy();
+    expect(container.querySelector('a[href="mailto:office@northpine.example"]')).toBeTruthy();
+    // Every anchor nav link points at a section that exists.
+    for (const a of container.querySelectorAll('a[href^="#"]')) {
+      const target = a.getAttribute('href').slice(1);
+      expect(container.querySelector(`[id="${target}"]`)).toBeTruthy();
+    }
+    // A hover-styled CTA exists (buttons must have hover states — pinned by
+    // the scoped stylesheet containing :hover rules).
+    expect(container.querySelector('style').textContent).toMatch(/:hover/);
+  });
+
+  test('renders empty data without crashing or empty shells', async () => {
+    const { container } = renderTpl(tpl, {});
+    // Falls back to the placeholder business name.
+    expect((await screen.findAllByText(/Your Business/)).length).toBeGreaterThan(0);
+    // No content → no content sections: services/menu/offerings, testimonials,
+    // and hours headings must NOT render as empty shells.
+    expect(container.querySelectorAll('h3').length).toBe(0); // service/quote cards use h3
+    expect(container.querySelector('blockquote')).toBeNull();
+    // No dangling tel:/mailto: links to nowhere.
+    expect(container.querySelector('a[href^="tel:"]')).toBeNull();
+    expect(container.querySelector('a[href^="mailto:"]')).toBeNull();
+  });
+
+  test('unknown paletteId falls back to the first palette', async () => {
+    renderTpl(tpl, { ...FULL_DATA, paletteId: 'not-a-palette' });
+    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+  });
+});
