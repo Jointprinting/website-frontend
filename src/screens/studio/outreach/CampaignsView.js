@@ -443,7 +443,7 @@ function LaunchDialog({ open, campaign, onClose, onLaunch, onTestSend, onError }
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, onRecoverSends, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
   const [launchFor, setLaunchFor] = React.useState(null); // campaign | null (confirm + test gate)
@@ -519,6 +519,19 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                         Enroll
                       </Button>
                     </Tooltip>
+                    {onRecoverSends && ((c.stats.failed || 0) + (c.stats.stopped || 0)) > 0 && (
+                      <Tooltip title="Requeue leads dropped by a SENDER-side send error (SMTP down, auth, unverified sender) — undoes the wrongful suppression + do-not-email so the drip resumes. Real bounces and opt-outs stay blocked.">
+                        <Button
+                          onClick={() => {
+                            // eslint-disable-next-line no-alert
+                            if (window.confirm('Requeue leads that were dropped by a sender-side send error?\n\nThis reverses only drops caused by an SMTP/sender problem — real bounces and opt-outs are kept blocked — and resumes the drip. Safe to run.')) onRecoverSends();
+                          }}
+                          startIcon={<ForwardToInboxOutlinedIcon sx={{ fontSize: 16 }} />}
+                          sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: D.amber }}>
+                          Requeue dropped
+                        </Button>
+                      </Tooltip>
+                    )}
                     {onUnenrollAll && c.stats.enrolled > 0 && (
                       <Tooltip title="Remove everyone from this campaign so you can re-enroll fresh leads (keeps anyone already emailed)">
                         <Button
