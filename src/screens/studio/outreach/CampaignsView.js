@@ -347,13 +347,82 @@ function EnrollDialog({ open, campaign, onClose, fetchCandidates, onEnroll, onEr
   );
 }
 
+// ── Launch confirmation + "send me a test first" gate ────────────────────────
+// Launch is the moment real cold email starts going out, so it no longer fires
+// on a single click. This dialog says exactly what's about to happen (paced,
+// per-lead) and lets the owner send themselves a live test through the real
+// sender before a single lead is touched.
+function LaunchDialog({ open, campaign, onClose, onLaunch, onTestSend, onError }) {
+  const fullScreen = useMobileFullScreen();
+  const [testTo, setTestTo] = React.useState('');
+  const [testing, setTesting] = React.useState(false);
+  const [testedOk, setTestedOk] = React.useState(false);
+  const [launching, setLaunching] = React.useState(false);
+  React.useEffect(() => {
+    if (open) { setTestTo(''); setTestedOk(false); setTesting(false); setLaunching(false); }
+  }, [open]);
+  if (!campaign) return null;
+  const enrolled = (campaign.stats && campaign.stats.enrolled) || 0;
+  const steps = (campaign.steps || []).length;
+
+  const runTest = async () => {
+    if (!onTestSend) return;
+    setTesting(true);
+    try { await onTestSend(testTo.trim()); setTestedOk(true); }
+    catch (e) { onError && onError(e?.response?.data?.message || 'Test send failed.'); }
+    finally { setTesting(false); }
+  };
+  const go = async () => {
+    setLaunching(true);
+    try { await onLaunch(campaign._id); onClose(); }
+    catch (e) { onError && onError(e?.response?.data?.message || 'Launch failed.'); setLaunching(false); }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, backgroundImage: 'none' } }}>
+      <DialogTitle sx={{ color: D.text, fontWeight: 800 }}>Launch “{campaign.name}”</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ color: D.muted, fontSize: 13.5, lineHeight: 1.6, mb: 2 }}>
+          This starts real cold email{enrolled ? ` to your ${enrolled} enrolled lead${enrolled === 1 ? '' : 's'}` : ''} and
+          turns on auto-enroll to keep it fed. It ramps up gently (~10/day in week one, doubling weekly) — it will not blast
+          everyone at once. Each lead walks its own {steps}-touch sequence, warm follow-ups always go first, and anyone who
+          replies drops out of the drip.
+        </Typography>
+        <Box sx={{ p: 1.75, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+          <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700, mb: 0.75 }}>Send yourself a test first</Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <TextField value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="you@yourinbox.com (blank = your sender)"
+              size="small" fullWidth type="email" sx={dropInput} />
+            <Button onClick={runTest} disabled={testing}
+              sx={{ ...dropGhostBtn, px: 2, py: 0.6, flexShrink: 0, color: testedOk ? D.green : D.text }}>
+              {testing ? 'Sending…' : testedOk ? 'Sent ✓ — again' : 'Send test'}
+            </Button>
+          </Stack>
+          <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75 }}>
+            Uses your real sender + SMTP — check it lands in the inbox (not spam) before a single lead gets it.
+          </Typography>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} sx={{ ...dropGhostBtn, px: 2 }}>Cancel</Button>
+        <Button onClick={go} disabled={launching} startIcon={<PlayArrowRoundedIcon sx={{ fontSize: 17 }} />}
+          sx={{ ...dropPrimaryBtn, px: 2.5 }}>
+          {launching ? 'Starting…' : 'Start sending'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
+  const [launchFor, setLaunchFor] = React.useState(null); // campaign | null (confirm + test gate)
 
   if (loading && !overview) {
     return (
@@ -480,9 +549,9 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                         Edit
                       </Button>
                     </Tooltip>
-                    <Tooltip title={active ? 'Pause — nothing more sends' : 'Launch — activate and send the first touch now'}>
+                    <Tooltip title={active ? 'Pause — nothing more sends' : 'Launch — review, send yourself a test, then start sending'}>
                       <Button
-                        onClick={() => (active ? onUpdate(c._id, { status: 'paused' }) : onLaunch(c._id))}
+                        onClick={() => (active ? onUpdate(c._id, { status: 'paused' }) : setLaunchFor(c))}
                         startIcon={active ? <PauseRoundedIcon sx={{ fontSize: 16 }} /> : <PlayArrowRoundedIcon sx={{ fontSize: 17 }} />}
                         sx={active
                           ? { ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: D.amber }
@@ -502,6 +571,8 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
       <CampaignEditor open={!!editor} campaign={editor?.campaign} onClose={() => setEditor(null)} onSave={save} />
       <EnrollDialog open={!!enrollFor} campaign={enrollFor} onClose={() => setEnrollFor(null)}
         fetchCandidates={fetchCandidates} onEnroll={onEnroll} onError={onError} />
+      <LaunchDialog open={!!launchFor} campaign={launchFor} onClose={() => setLaunchFor(null)}
+        onLaunch={onLaunch} onTestSend={onTestSend} onError={onError} />
     </Stack>
   );
 }

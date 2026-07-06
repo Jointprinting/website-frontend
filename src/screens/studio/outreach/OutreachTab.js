@@ -150,6 +150,21 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   React.useEffect(() => { if (view === 'analytics') loadAnalytics(); }, [view, loadAnalytics]);
   React.useEffect(() => { if (view === 'replies') { loadReplies(); loadWorklist(); } }, [view, loadReplies, loadWorklist]);
 
+  // Auto-refresh — keep the numbers live without a manual reload. Polls the
+  // overview + the active view's data on a light interval; skips while the tab is
+  // hidden so it never hammers in the background. Read-only, so it can't disturb
+  // anything the engine is doing.
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      loadOverview();
+      if (view === 'dashboard') loadQueue();
+      else if (view === 'analytics') loadAnalytics();
+      else if (view === 'replies') { loadReplies(); loadWorklist(); }
+    }, 25000);
+    return () => clearInterval(id);
+  }, [view, loadOverview, loadQueue, loadAnalytics, loadReplies, loadWorklist]);
+
   // ── Campaign actions ──────────────────────────────────────────────────────
   const createCampaign = async (payload) => {
     const { data } = await axios.post(`${base}/campaigns`, payload, authHdr);
@@ -421,6 +436,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onReset={resetCampaign}
             onDelete={deleteCampaign}
             onAutoEnroll={setAutoEnroll}
+            onTestSend={sendTest}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
