@@ -1,9 +1,12 @@
 // src/screens/studio/outreach/AnalyticsView.js
-// Outreach analytics — the numbers behind the machine, overall and per state.
-// Four blocks: the overall funnel (enrolled → sent → opened → replied), an
-// 8-week trend, a per-state funnel table, and the free-finder coverage per
-// state. Charts are lightweight inline SVG on the Studio dark palette — subdued
-// grid, semantic colors (distinct from the green accent), tabular figures.
+// Outreach analytics — the numbers behind the machine, as an OVERVIEW (all
+// campaigns combined) AND per campaign individually, switched by the picker at
+// the top. Overview blocks: the overall funnel (enrolled → sent → opened →
+// replied), deliverability health, per-touch drop-off, an 8-week trend, a
+// per-state funnel, and the free-finder coverage. A single campaign shows its own
+// health verdict, funnel, A/B split, per-touch drop-off, trend, and geography.
+// Charts are lightweight inline SVG on the Studio dark palette — subdued grid,
+// semantic colors (distinct from the green accent), tabular figures.
 
 import * as React from 'react';
 import { Box, Stack, Typography, CircularProgress } from '@mui/material';
@@ -321,6 +324,126 @@ function Card({ title, children }) {
   );
 }
 
+// ── Campaign picker — Overview + one chip per campaign ────────────────────────
+// A campaign's health level colors its dot (green ok / amber warn / red action),
+// so the owner spots a stalled campaign before even opening it.
+const HEALTH_TONE = { ok: C.replied, warn: C.opened, action: C.unsub };
+
+function PickerChip({ active, tone, label, sub, onClick }) {
+  return (
+    <Box
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      sx={{
+        flex: '0 0 auto', cursor: 'pointer', userSelect: 'none', px: 1.5, py: 0.85, borderRadius: 2,
+        bgcolor: active ? 'rgba(74,222,128,0.12)' : D.inset,
+        border: `1px solid ${active ? D.green : D.line}`,
+        transition: 'background 0.15s, border-color 0.15s',
+        '&:hover': { borderColor: active ? D.green : D.muted },
+        '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+      }}
+    >
+      <Stack direction="row" spacing={0.75} alignItems="center">
+        {tone && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: tone, flex: '0 0 auto' }} />}
+        <Typography sx={{ color: active ? D.text : D.muted, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{label}</Typography>
+      </Stack>
+      {sub && <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, mt: 0.15, whiteSpace: 'nowrap' }}>{sub}</Typography>}
+    </Box>
+  );
+}
+
+function CampaignPicker({ campaigns, sel, onSelect }) {
+  if (!campaigns.length) return null;
+  return (
+    <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.5, mx: -0.25, px: 0.25 }}>
+      <PickerChip active={sel === 'overview'} label="Overview" sub="all campaigns" onClick={() => onSelect('overview')} />
+      {campaigns.map((c) => (
+        <PickerChip
+          key={c.id}
+          active={sel === c.id}
+          tone={HEALTH_TONE[c.health && c.health.level] || D.muted}
+          label={c.name || 'Untitled'}
+          sub={`${(c.stats.sent || 0).toLocaleString()} sent · ${c.stats.replied || 0} rep`}
+          onClick={() => onSelect(c.id)}
+        />
+      ))}
+    </Box>
+  );
+}
+
+// The one-line health verdict at the top of a single-campaign view — same signal
+// the campaign card badges, so the two surfaces never disagree.
+function HealthLine({ health, status }) {
+  if (!health) return null;
+  const tone = HEALTH_TONE[health.level] || D.muted;
+  return (
+    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: `${tone}14`, border: `1px solid ${tone}44` }}>
+      <Stack direction="row" spacing={0.85} alignItems="center" sx={{ mb: health.hint ? 0.4 : 0 }}>
+        <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: tone, flex: '0 0 auto' }} />
+        <Typography sx={{ color: tone, fontSize: 13, fontWeight: 800 }}>{health.label}</Typography>
+        {status && (
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+            textTransform: 'uppercase', ml: 'auto' }}>{status}</Typography>
+        )}
+      </Stack>
+      {health.hint && <Typography sx={{ color: D.muted, fontSize: 12, lineHeight: 1.5 }}>{health.hint}</Typography>}
+    </Box>
+  );
+}
+
+// Subject-line A/B split for a campaign that's testing (null → nothing rendered).
+function AbTestStrip({ abTest }) {
+  if (!abTest || !abTest.A || !abTest.B) return null;
+  const arm = (name, v) => {
+    const or = pct(v.opened, v.sent);
+    const rr = pct(v.replied, v.sent);
+    return (
+      <Box key={name} sx={{ flex: '1 1 160px', minWidth: 150, px: 1.5, py: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+        <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>Variant {name}</Typography>
+        <Typography sx={{ ...mono, color: D.text, fontSize: 20, fontWeight: 800, lineHeight: 1.1, mt: 0.3 }}>{(v.sent || 0).toLocaleString()} <Box component="span" sx={{ fontSize: 11, color: D.faint }}>sent</Box></Typography>
+        <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, fontWeight: 700, mt: 0.3 }}>
+          <Box component="span" sx={{ color: C.opened }}>{or}%</Box> open · <Box component="span" sx={{ color: C.replied }}>{rr}%</Box> reply
+        </Typography>
+      </Box>
+    );
+  };
+  return <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{arm('A', abTest.A)}{arm('B', abTest.B)}</Box>;
+}
+
+// The per-campaign view — one campaign's own numbers, using the very same chart
+// components as the overview so the vocabulary is identical.
+function CampaignPanel({ c }) {
+  const sent = c.stats.sent || 0;
+  return (
+    <Stack spacing={2}>
+      <HealthLine health={c.health} status={c.status} />
+      <Card title="Sending performance — open &amp; reply rates">
+        <Funnel overall={c.stats} />
+      </Card>
+      {c.abTest && (
+        <Card title="Subject A/B test — which line wins">
+          <AbTestStrip abTest={c.abTest} />
+        </Card>
+      )}
+      {c.stepFunnel && c.stepFunnel.some((r) => r.sent > 0) && (
+        <Card title="Per-touch drop-off — which step is working">
+          <StepFunnel stepFunnel={c.stepFunnel} />
+        </Card>
+      )}
+      {sent > 0 && (
+        <Card title="Last 8 weeks — sends, opens, replies">
+          <TrendChart trend={c.trend || []} />
+        </Card>
+      )}
+      <Card title="By state — where this campaign's replies come from">
+        <StateTable perState={c.perState || []} />
+      </Card>
+    </Stack>
+  );
+}
+
 const REGION_LABELS = {
   nj: 'New Jersey', ny: 'New York', pa: 'Pennsylvania', ct: 'Connecticut', de: 'Delaware',
   md: 'Maryland', ma: 'Massachusetts', ri: 'Rhode Island', vt: 'Vermont', me: 'Maine',
@@ -330,6 +453,8 @@ const REGION_LABELS = {
 };
 
 export default function AnalyticsView({ analytics, loading }) {
+  // 'overview' (all campaigns) or a campaign id — the analytics view's one selector.
+  const [sel, setSel] = React.useState('overview');
   if (loading && !analytics) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -339,7 +464,7 @@ export default function AnalyticsView({ analytics, loading }) {
   }
   if (!analytics) return null;
 
-  const { overall, perState = [], trend = [], coverage = [], stepFunnel = [], deliverability = null } = analytics;
+  const { overall, perState = [], trend = [], coverage = [], stepFunnel = [], deliverability = null, campaigns = [] } = analytics;
   const nothing = overall.enrolled === 0 && coverage.length === 0;
   if (nothing) {
     return (
@@ -351,28 +476,40 @@ export default function AnalyticsView({ analytics, loading }) {
     );
   }
 
+  // Overview (all campaigns combined) vs. a single campaign, chosen by the picker.
+  // If the selected campaign disappears (deleted/archived-empty) fall back to Overview.
+  const selected = sel !== 'overview' ? campaigns.find((c) => c.id === sel) : null;
+
   return (
     <Stack spacing={2}>
-      <Card title="Sending performance — open &amp; reply rates">
-        <Funnel overall={overall} />
-      </Card>
-      <Card title="Deliverability health — inbox vs. spam">
-        <DeliverabilityCard deliverability={deliverability} overall={overall} />
-      </Card>
-      {stepFunnel.some((r) => r.sent > 0) && (
-        <Card title="Per-touch drop-off — which step is working">
-          <StepFunnel stepFunnel={stepFunnel} />
-        </Card>
+      <CampaignPicker campaigns={campaigns} sel={selected ? sel : 'overview'} onSelect={setSel} />
+
+      {selected ? (
+        <CampaignPanel c={selected} />
+      ) : (
+        <>
+          <Card title="Sending performance — open &amp; reply rates">
+            <Funnel overall={overall} />
+          </Card>
+          <Card title="Deliverability health — inbox vs. spam">
+            <DeliverabilityCard deliverability={deliverability} overall={overall} />
+          </Card>
+          {stepFunnel.some((r) => r.sent > 0) && (
+            <Card title="Per-touch drop-off — which step is working">
+              <StepFunnel stepFunnel={stepFunnel} />
+            </Card>
+          )}
+          <Card title="Last 8 weeks — sends, opens, replies">
+            <TrendChart trend={trend} />
+          </Card>
+          <Card title="By state — where your replies come from">
+            <StateTable perState={perState} />
+          </Card>
+          <Card title="Lead-finder coverage — free dispensary discovery">
+            <Coverage coverage={coverage} regionLabels={REGION_LABELS} />
+          </Card>
+        </>
       )}
-      <Card title="Last 8 weeks — sends, opens, replies">
-        <TrendChart trend={trend} />
-      </Card>
-      <Card title="By state — where your replies come from">
-        <StateTable perState={perState} />
-      </Card>
-      <Card title="Lead-finder coverage — free dispensary discovery">
-        <Coverage coverage={coverage} regionLabels={REGION_LABELS} />
-      </Card>
     </Stack>
   );
 }
