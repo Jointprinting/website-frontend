@@ -18,10 +18,9 @@
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, Button, CircularProgress, LinearProgress,
+  Box, Stack, Typography, CircularProgress, LinearProgress,
 } from '@mui/material';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
-import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import { D, mono } from '../_shared';
 import { StatPill } from './_outreach';
@@ -72,7 +71,7 @@ function RegionTile({ r, isFrontier }) {
   );
 }
 
-export default function ImportView({ busy, frontier, regions = [], onRefillNow }) {
+export default function ImportView({ busy, frontier, regions = [] }) {
   const reserve = frontier?.availableColdLeads;
   const sweptCount = regions.filter((r) => r.lastSweptAt).length;
   const staleCount = regions.filter((r) => r.stale).length;
@@ -139,18 +138,14 @@ export default function ImportView({ busy, frontier, regions = [], onRefillNow }
             </Typography>
           </Box>
         ) : (
-          // Deliberately understated: the engine refills itself. This is only an
-          // early-nudge for the impatient, not something the owner needs to press.
-          <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
-            <Button onClick={() => onRefillNow()}
-              startIcon={<BoltOutlinedIcon sx={{ fontSize: 15 }} />}
-              sx={{ color: D.muted, fontSize: 12, fontWeight: 700, textTransform: 'none', borderRadius: 999,
-                px: 1.75, py: 0.35, border: `1px solid ${D.line}`,
-                '&:hover': { color: D.text, borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.04)' } }}>
-              Refill now
-            </Button>
-            <Typography sx={{ color: D.faint, fontSize: 11.5 }}>
-              Optional — it refills on its own. This just forces an early sweep.
+          // Fully automatic — no manual sweep button. The API runs the finder on
+          // its own (queue-aware, state by state, re-milking improved regions), so
+          // there is nothing to press; this is a pure status readout.
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: D.green, flex: '0 0 auto' }} />
+            <Typography sx={{ color: D.faint, fontSize: 11.5, lineHeight: 1.5 }}>
+              Running automatically — the engine finds and imports fresh leads on its own as the reserve
+              runs low. Nothing to do here.
             </Typography>
           </Stack>
         )}

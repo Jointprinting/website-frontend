@@ -552,12 +552,17 @@ export default function OverviewView({
             ))}
           </Stack>
         )}
-        {/* Single inbox → the free multiplier hint (Brevo/Mailjet free tiers). */}
+        {/* Self-explaining cap — answers "why only 40, and how do I send more?"
+            right where the number lives, instead of leaving it a mystery. */}
         {engine.senderConfigured && (engine.senderCount || 1) === 1 && (
-          <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, lineHeight: 1.5 }}>
-            One inbox tops out at {engine.dailyCapMax}/day after warm-up. Add free inboxes (Brevo 300/day, Mailjet 200/day)
-            via <Box component="code" sx={{ ...mono, color: D.muted }}>OUTREACH_SENDERS</Box> on the API and the engine
-            round-robins them — more volume, same $0.
+          <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, lineHeight: 1.55 }}>
+            <Box component="span" sx={{ color: D.muted, fontWeight: 700 }}>Why {engine.dailyCapMax}/day?</Box>{' '}
+            It’s the reputation-safe ceiling for a single inbox on a young domain — it ramps 10→20→40 over the first
+            weeks, then holds, which is about <b>{(engine.dailyCapMax || 40) * 5}/week</b>. One mailbox sending much more
+            than that reads as spam and can get the address suspended.{' '}
+            <Box component="span" sx={{ color: D.muted }}>To send more safely,</Box> the engine round-robins across
+            several inboxes (each its own ~{engine.dailyCapMax}/day) — per-inbox warm-up is landing next so you can add
+            them without risking the new domain.
           </Typography>
         )}
         {/* The exact DNS rows still needed for inbox placement — with copy
