@@ -181,6 +181,34 @@
   .why div p{color:var(--muted);margin:9px 0 0 21px;font-size:16px}
   @media(max-width:760px){.why{grid-template-columns:1fr}}
 
+  /* Founder — the human behind it (anti-agency, anti-template) */
+  .founder{background:var(--pine)}
+  .founderGrid{display:grid;grid-template-columns:auto 1fr;gap:36px;align-items:center;color:#fff}
+  .founder .avatar{width:104px;height:104px;flex:0 0 104px;border-radius:50%;
+    background:linear-gradient(140deg,var(--green),var(--green-deep));color:#04231a;
+    font-family:'Bricolage Grotesque';font-weight:800;font-size:46px;display:grid;place-items:center;
+    box-shadow:0 0 0 6px rgba(23,184,119,.16),0 24px 44px -20px rgba(0,0,0,.6)}
+  .founder .eyebrow{color:var(--green)}
+  .founder h2{color:#fff;font-size:clamp(26px,3.8vw,42px);margin-top:12px}
+  .founder p{color:rgba(255,255,255,.82);margin:15px 0 24px;font-size:17.5px;max-width:62ch}
+  .founder .sig{font-family:'Bricolage Grotesque';font-weight:700;color:#fff;font-size:18px;margin-bottom:22px}
+  .founder .sig span{color:rgba(255,255,255,.55);font-weight:400;font-size:15px}
+  .founder .btn.ghost{color:#fff;border-color:rgba(255,255,255,.5)}
+  .founder .btn.ghost:hover{background:#fff}.founder .btn.ghost:hover span{color:var(--pine)}
+  @media(max-width:680px){.founderGrid{grid-template-columns:1fr;gap:22px}.founder .avatar{width:84px;height:84px;flex-basis:84px;font-size:38px}}
+
+  /* FAQ — native <details>, answers inline (no extra page, no dead clicks) */
+  .faqwrap{background:var(--paper-2)}
+  .faq{margin-top:42px;max-width:840px}
+  .faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:box-shadow .18s ease}
+  .faq details[open]{box-shadow:var(--shadow)}
+  .faq summary{list-style:none;cursor:pointer;padding:20px 24px;font-weight:700;font-size:17px;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;font-family:'Bricolage Grotesque'}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";font-size:25px;font-weight:600;color:var(--green-deep);transition:transform .2s ease;line-height:1;flex:0 0 auto}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq details p{padding:0 24px 22px;margin:0;color:var(--muted);font-size:16px}
+
   /* Final CTA */
   .final{background:radial-gradient(110% 120% at 50% -20%,var(--pine-2),var(--pine));color:#fff;text-align:center}
   .final h2{font-size:clamp(32px,5.2vw,56px);max-width:18ch;margin:0 auto;color:#fff}
@@ -195,7 +223,7 @@
 <body>
 <header>
   <nav class="wrap">
-    <a class="brand" href="/demos"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
     <div class="navlinks">
       <a href="#how">How it works</a>
       <a href="#pricing">Pricing</a>
@@ -337,7 +365,7 @@
       <p>Two live examples — the kind of site your customers expect from a company they'd trust. Click in and look around.</p>
     </div>
     <div class="ex">
-      <a href="/northpine">
+      <a href="/webworks/northpine">
         <div class="top np"><span>Northpine</span></div>
         <div class="meta">
           <div class="k">Tree care &amp; land clearing · example</div>
@@ -345,7 +373,7 @@
           <div class="go">Visit the site →</div>
         </div>
       </a>
-      <a href="/clearwater">
+      <a href="/webworks/clearwater">
         <div class="top cw"><span>Clearwater</span></div>
         <div class="meta">
           <div class="k">Pool service &amp; maintenance · example</div>
@@ -372,6 +400,54 @@
   </div>
 </section>
 
+<section class="founder">
+  <div class="wrap founderGrid">
+    <div class="avatar" aria-hidden="true">N</div>
+    <div>
+      <span class="eyebrow">Who builds it</span>
+      <h2>You're hiring a person, not an agency.</h2>
+      <p>I'm Nate — I run Joint Printing here in Marlton, and JP Webworks is me building sites for local businesses the same way I'd want my own built: fast, clean, and no runaround. When you text about a change, you're texting me — no account managers, no ticket queue, no offshore handoff. I take one company per trade in a town, so I've got the time to actually care about yours.</p>
+      <div class="sig">— Nate, Joint Printing <span>· Marlton, NJ</span></div>
+      <a class="btn ghost" href="#start"><span>Start with a quick chat →</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="faqwrap">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Questions</span>
+      <h2>The stuff people ask first.</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>How fast can my site be live?</summary>
+        <p>Usually 3–5 business days from the moment I have your info and a few photos. Bigger multi-page builds take a little longer, but you'll see a live draft within the first week either way.</p>
+      </details>
+      <details>
+        <summary>Do I actually own the site?</summary>
+        <p>Yes. Your domain, your content, your site. If you ever cancel the plan, the site is yours to keep or move — you're never locked in.</p>
+      </details>
+      <details>
+        <summary>What if I need changes later?</summary>
+        <p>Just text or email me. Edits are handled on your monthly plan — swap a photo, update your hours, add a service — no per-change invoices and no waiting on a ticket queue.</p>
+      </details>
+      <details>
+        <summary>Will people actually find it on Google?</summary>
+        <p>On Silver and up I set up your Google Business Profile and the on-page basics so you show up when locals search your trade + town. It's built to get found, not just to look good.</p>
+      </details>
+      <details>
+        <summary>Do I have to write all the words?</summary>
+        <p>No. Tell me about your business on a quick call and I'll draft the copy for you — you just read it over and tell me what to tweak.</p>
+      </details>
+      <details>
+        <summary>What if I don't have a domain or business email yet?</summary>
+        <p>I'll help you grab the domain and get everything pointed correctly, and I can set up a matching name@yourbusiness.com email too. You don't need to figure out any of the technical side.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
 <section id="start" class="final">
   <div class="wrap">
     <h2>Let's get your business a site worth clicking.</h2>
@@ -382,7 +458,7 @@
 
 <footer>
   <div class="wrap">
-    <a class="brand" href="/demos"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
     <span>Marlton, NJ · nate@jointprinting.com · A Joint Printing company</span>
   </div>
 </footer>
