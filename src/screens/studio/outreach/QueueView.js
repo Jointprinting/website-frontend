@@ -5,12 +5,11 @@
 
 import * as React from 'react';
 import {
-  Box, Stack, Typography, CircularProgress, Button, Tooltip, IconButton,
+  Box, Stack, Typography, CircularProgress, Tooltip, IconButton,
 } from '@mui/material';
-import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
-import { D, mono, dropPrimaryBtn } from '../_shared';
+import { D, mono } from '../_shared';
 import { EmptyState } from '../crm/_crm';
 import { StatPill } from './_outreach';
 
@@ -23,9 +22,7 @@ const dueLabel = (iso) => {
   return `in ${Math.round(h / 24)}d`;
 };
 
-export default function QueueView({ queue, loading, engine, onRunTick, onStop, onOpenCompany }) {
-  const [running, setRunning] = React.useState(false);
-
+export default function QueueView({ queue, loading, engine, onStop, onOpenCompany }) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -35,32 +32,26 @@ export default function QueueView({ queue, loading, engine, onRunTick, onStop, o
   }
 
   const dueNow = queue.filter((r) => r.nextSendAt && new Date(r.nextSendAt) <= new Date()).length;
-  const runNow = async () => {
-    setRunning(true);
-    try { await onRunTick(); } finally { setRunning(false); }
-  };
+  const windowOpen = !!(engine && engine.withinWindow);
 
   return (
     <Stack spacing={2.5}>
-      <Stack direction="row" spacing={1.25}>
+      <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
         <StatPill value={dueNow} label="Due now" tone={dueNow > 0 ? D.amber : D.muted} />
         <StatPill value={queue.length} label="In sequences" tone={D.text} />
         {engine && (
           <StatPill value={`${engine.sentToday}/${engine.dailyCap}`} label="Sent today"
             tone={engine.remainingToday > 0 ? D.green : D.amber} />
         )}
-      </Stack>
-
-      <Stack direction="row" justifyContent="flex-end">
-        <Tooltip title="Runs one engine batch immediately — window, daily cap, and guards still apply">
-          <span>
-            <Button onClick={runNow} disabled={running || dueNow === 0}
-              startIcon={<SendOutlinedIcon sx={{ fontSize: 16 }} />}
-              sx={{ ...dropPrimaryBtn, px: 2, py: 0.6, fontSize: 12.5 }}>
-              {running ? 'Sending…' : 'Send next batch now'}
-            </Button>
-          </span>
-        </Tooltip>
+        {/* Fully automated — no manual send button. Say plainly whether the engine
+            is sending right now or holding until the next business-hours window. */}
+        <Typography sx={{ color: windowOpen ? D.green : D.muted, fontSize: 11.5, fontWeight: 700, ml: 'auto' }}>
+          {dueNow === 0
+            ? 'Nothing due right now'
+            : windowOpen
+              ? `Auto-sending — ${dueNow} going out now, paced under today's cap`
+              : `${dueNow} queued — auto-sends when the window opens (Mon–Fri 9a–5p ET)`}
+        </Typography>
       </Stack>
 
       {queue.length === 0 ? (

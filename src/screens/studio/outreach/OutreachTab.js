@@ -294,19 +294,6 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     }
   };
 
-  const runTick = async () => {
-    const { data } = await axios.post(`${base}/run-tick`, {}, authHdr);
-    if (data.skipped === 'sender-not-configured') flash('Holding: set OUTREACH_EMAIL_FROM on the API first (see Overview).', 'warning');
-    else if (data.skipped === 'smtp-not-configured') flash('Holding: SMTP isn’t configured on the API.', 'warning');
-    else if (data.skipped === 'outside-window') flash('Outside the send window (Mon–Fri 9a–5p ET) — the engine only sends business hours.', 'warning');
-    else if (data.skipped === 'daily-cap') flash(`Today’s warm-up cap (${data.cap}) is used up — more goes out tomorrow.`, 'warning');
-    else if (data.skipped === 'no-active-campaigns') flash('No active campaign — activate one under Campaigns.', 'warning');
-    else flash(`Sent ${data.sent || 0} now (${data.sentToday || 0} today).`);
-    await loadOverview();
-    loadQueue();
-    return data;
-  };
-
   // ── Lead engine (always-on OSM discovery → email scrape → import) ─────────
   // The engine runs itself on the API (queue-aware, state by state). The Studio
   // only reads progress — plus one "Refill now" that forces a sweep early.
@@ -407,7 +394,6 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Send queue</MuiTypography>
               <QueueView
                 queue={queue} loading={queueLoading} engine={overview?.engine}
-                onRunTick={runTick}
                 onStop={stopEnrollment}
                 onOpenCompany={openCompany}
               />
