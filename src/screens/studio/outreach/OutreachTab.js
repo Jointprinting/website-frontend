@@ -177,7 +177,10 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     const t = data.tick || {};
     const n = (data.filled && data.filled.enrolled) || 0;
     const enrolledBit = n ? ` ${n} lead${n === 1 ? '' : 's'} enrolled and` : '';
-    if (t.sent > 0) flash(`Always-on —${enrolledBit} ${t.sent} email${t.sent === 1 ? '' : 's'} going out now. It self-feeds and drips the rest for you.`);
+    if (data.finderKicked) {
+      // Reserve was empty at launch — the backend kicked the free lead-finder.
+      flash('Campaign live. Your reserve was empty, so the lead-finder is out finding dispensaries now — they auto-enroll and start sending as they come in. Nothing else to do.', 'info');
+    } else if (t.sent > 0) flash(`Always-on —${enrolledBit} ${t.sent} email${t.sent === 1 ? '' : 's'} going out now. It self-feeds and drips the rest for you.`);
     else if (t.skipped === 'outside-window') flash(`Always-on —${enrolledBit} sends begin in the window (Mon–Fri 9a–5p ET). Nothing else to do.`);
     else if (t.skipped === 'daily-cap') flash(`Always-on —${enrolledBit} today's warm-up cap is used; more goes out tomorrow on its own.`);
     else flash(`Always-on —${enrolledBit} the engine self-feeds from your reserve and drips as leads come due.`);
