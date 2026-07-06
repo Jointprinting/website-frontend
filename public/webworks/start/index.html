@@ -156,7 +156,7 @@
               <input id="currentWebsite" name="currentWebsite" type="text" placeholder="yoursite.com — or leave blank" />
             </div>
             <div>
-              <label for="planInterest">Plan that fits</label>
+              <label for="planInterest">Plan that fits <span class="opt">(optional)</span></label>
               <select id="planInterest" name="planInterest">
                 <option value="Not sure yet">Not sure yet — help me pick</option>
                 <option value="Bronze">Bronze — Starter ($99/mo)</option>
@@ -198,7 +198,7 @@
       var sel = document.getElementById('planInterest');
       sel.value = map[plan];
       var pill = document.getElementById('planpill');
-      pill.textContent = '★ You picked the ' + map[plan] + ' plan — great choice. Tweak it anytime.';
+      pill.textContent = '★ ' + map[plan] + ' plan';
       pill.classList.add('show');
     }
   })();

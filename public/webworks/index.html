@@ -9,7 +9,7 @@
 <link rel="icon" href="/favicon.ico" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=Oswald:wght@600;700&family=Sora:wght@700;800&display=swap" rel="stylesheet" />
 <style>
   :root{
     --ink:#0e1613; --ink-2:#16211c; --paper:#f7f4ee; --paper-2:#efeae0; --line:#e2ddd1;
@@ -174,7 +174,19 @@
   .ex .top::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.28))}
   .ex .np{background:radial-gradient(120% 120% at 30% 0%,#2f7c56,#0e2c1f)}
   .ex .cw{background:radial-gradient(120% 120% at 70% 0%,#2aa5d6,#0b3f66)}
-  .ex .top span{font-family:'Bricolage Grotesque';font-weight:800;color:#fff;font-size:32px;letter-spacing:-.02em;position:relative;z-index:2}
+  /* Each card previews the example company's actual logo — its brandmark + its
+     own typeface — so the slot reads as that business, not a JPW label. */
+  .ex .exlogo{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
+  .ex .exmark{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
+    box-shadow:0 10px 22px -10px rgba(0,0,0,.5)}
+  .ex .exmark svg{width:27px;height:27px}
+  .ex .exword{font-size:30px;line-height:1}
+  .ex .exlogo.np .exmark{background:#e0a13a;color:#15382a}
+  .ex .exlogo.np .exword{font-family:'Oswald',sans-serif;text-transform:uppercase;font-weight:700;letter-spacing:.02em;color:#fff}
+  .ex .exlogo.np .exword b{color:#eab657;font-weight:700}
+  .ex .exlogo.cw .exmark{background:linear-gradient(140deg,#38c6d9,#1a86c9);color:#fff}
+  .ex .exlogo.cw .exword{font-family:'Sora',sans-serif;font-weight:800;letter-spacing:-.02em;color:#fff}
+  .ex .exlogo.cw .exword b{color:#9fe9ff;font-weight:800}
   .ex .meta{padding:24px}
   .ex .meta .k{font-size:12.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
   .ex .meta h3{font-size:21px;margin:8px 0 8px}
@@ -376,7 +388,12 @@
     </div>
     <div class="ex">
       <a href="/webworks/northpine">
-        <div class="top np"><span>Northpine</span></div>
+        <div class="top np">
+          <div class="exlogo np">
+            <span class="exmark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.3l3.7 5.6h-2l3 4.6h-2l3.2 4.9H6.1l3.2-4.9h-2l3-4.6h-2L12 2.3z"/><rect x="11" y="16.6" width="2" height="4.3" rx=".4"/></svg></span>
+            <span class="exword">North<b>pine</b></span>
+          </div>
+        </div>
         <div class="meta">
           <div class="k">Tree care &amp; land clearing · example</div>
           <h3>Rugged, trustworthy, book-a-crew fast</h3>
@@ -384,7 +401,12 @@
         </div>
       </a>
       <a href="/webworks/clearwater">
-        <div class="top cw"><span>Clearwater</span></div>
+        <div class="top cw">
+          <div class="exlogo cw">
+            <span class="exmark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6s6.2 6.5 6.2 11a6.2 6.2 0 1 1-12.4 0C5.8 9.1 12 2.6 12 2.6z"/></svg></span>
+            <span class="exword">Clear<b>water</b></span>
+          </div>
+        </div>
         <div class="meta">
           <div class="k">Pool service &amp; maintenance · example</div>
           <h3>Clean, calm, and easy to schedule</h3>
