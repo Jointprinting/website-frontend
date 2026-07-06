@@ -491,13 +491,17 @@ export default function OverviewView({
           <StatPill value={`wk ${engine.rampWeek}`} label={`Ramp → ${engine.dailyCapMax}/day`} tone={D.text} />
           <StatPill value={engine.withinWindow ? 'Open' : 'Closed'} label="Send window"
             tone={engine.withinWindow ? D.green : D.muted} />
-          <StatPill value={engine.senderConfigured ? 'Ready' : 'Not set'} label="Sender"
-            tone={engine.senderConfigured ? D.green : '#f87171'} />
-          {engine.auth && (
+          {/* Sender + auth pills are one-time setup confirmations — once they're
+              green they're just noise, so only surface them when there's actually
+              something to fix. */}
+          {!engine.senderConfigured && (
+            <StatPill value="Not set" label="Sender" tone="#f87171" />
+          )}
+          {engine.auth && engine.auth.level !== 'green' && (
             <StatPill
-              value={engine.auth.level === 'green' ? 'Pass' : engine.auth.level === 'amber' ? 'Partial' : engine.auth.level === 'red' ? 'Fail' : '—'}
+              value={engine.auth.level === 'amber' ? 'Partial' : engine.auth.level === 'red' ? 'Fail' : '—'}
               label="SPF·DKIM·DMARC"
-              tone={engine.auth.level === 'green' ? D.green : engine.auth.level === 'amber' ? D.amber : engine.auth.level === 'red' ? '#f87171' : D.muted} />
+              tone={engine.auth.level === 'amber' ? D.amber : engine.auth.level === 'red' ? '#f87171' : D.muted} />
           )}
         </Stack>
         {engine.from ? (
