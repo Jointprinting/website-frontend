@@ -7,7 +7,7 @@ import * as React from 'react';
 import {
   Box, Stack, Typography, CircularProgress, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, IconButton, Tooltip, Checkbox,
-  Chip,
+  Chip, MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -23,23 +23,27 @@ import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen }
 import { EmptyState, Eyebrow, StageChip } from '../crm/_crm';
 import {
   StatusChip, campaignStatusMeta, renderPreview, hasSpintax, lintContent, SAMPLE_CONTEXT, MERGE_FIELDS,
-  DEFAULT_SEQUENCE,
+  DEFAULT_SEQUENCE, LEAD_VERTICALS, DEFAULT_VERTICAL_ID, verticalMeta,
 } from './_outreach';
 
 // ── Sequence editor dialog ────────────────────────────────────────────────────
-function CampaignEditor({ open, campaign, onClose, onSave }) {
+function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
   const fullScreen = useMobileFullScreen();
   const isNew = !campaign?._id;
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [vertical, setVertical] = React.useState(DEFAULT_VERTICAL_ID);
   const [steps, setSteps] = React.useState([]);
   const [previewIdx, setPreviewIdx] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
+  // Live list from the API when present, else the client mirror.
+  const verticalList = (Array.isArray(verticals) && verticals.length) ? verticals : LEAD_VERTICALS;
 
   React.useEffect(() => {
     if (!open) return;
     setName(campaign?.name || 'Dispensary intro');
     setDescription(campaign?.description || '');
+    setVertical(campaign?.vertical || DEFAULT_VERTICAL_ID);
     setSteps(campaign?.steps?.length ? campaign.steps.map((s) => ({ ...s })) : DEFAULT_SEQUENCE.map((s) => ({ ...s })));
     setPreviewIdx(0);
   }, [open, campaign]);
@@ -54,7 +58,7 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
   const save = async () => {
     setSaving(true);
     try {
-      await onSave({ name, description, steps });
+      await onSave({ name, description, steps, vertical });
       onClose();
     } finally {
       setSaving(false);
@@ -77,6 +81,26 @@ function CampaignEditor({ open, campaign, onClose, onSave }) {
             <TextField label="Notes (only you see this)" value={description} onChange={(e) => setDescription(e.target.value)}
               size="small" fullWidth sx={dropInput} />
           </Stack>
+
+          {/* Which business type the free finder hunts + this campaign enrolls.
+              Dispensaries is the default; picking another (e.g. Breweries) points
+              the engine at that vertical and searches every state for it. */}
+          <Box>
+            <TextField select label="Who this targets" value={vertical}
+              onChange={(e) => setVertical(e.target.value)} size="small"
+              sx={{ ...dropInput, minWidth: 260, maxWidth: 360 }}>
+              {verticalList.map((v) => (
+                <MenuItem key={v.id} value={v.id}>
+                  {v.label}{v.isDefault ? ' (default)' : ''}{v.experimental ? ' · experimental' : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.6 }}>
+              The free lead engine searches every state for {verticalMeta(vertical).short}; this campaign only
+              enrolls {verticalMeta(vertical).short} — never leads from another vertical.
+              {verticalMeta(vertical).experimental ? ' (Sparsely mapped on OSM — expect lighter, noisier results.)' : ''}
+            </Typography>
+          </Box>
 
           {/* Merge-field cheatsheet */}
           <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
@@ -463,6 +487,12 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                       <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5 }}>{c.name}</Typography>
                       <StatusChip meta={campaignStatusMeta(c.status)} />
+                      {/* Only badge non-default verticals — a dispensary campaign
+                          (the common case) stays uncluttered. */}
+                      {c.vertical && c.vertical !== DEFAULT_VERTICAL_ID && (
+                        <Chip label={verticalMeta(c.vertical).label} size="small"
+                          sx={{ height: 20, fontSize: 10.5, bgcolor: D.inset, color: D.green, border: `1px solid ${D.line}` }} />
+                      )}
                     </Stack>
                     <Typography sx={{ color: D.faint, fontSize: 12, mt: 0.4 }}>
                       {(c.steps || []).length} step{(c.steps || []).length === 1 ? '' : 's'} ·{' '}
@@ -568,7 +598,8 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
         </Stack>
       )}
 
-      <CampaignEditor open={!!editor} campaign={editor?.campaign} onClose={() => setEditor(null)} onSave={save} />
+      <CampaignEditor open={!!editor} campaign={editor?.campaign} onClose={() => setEditor(null)} onSave={save}
+        verticals={overview?.verticals} />
       <EnrollDialog open={!!enrollFor} campaign={enrollFor} onClose={() => setEnrollFor(null)}
         fetchCandidates={fetchCandidates} onEnroll={onEnroll} onError={onError} />
       <LaunchDialog open={!!launchFor} campaign={launchFor} onClose={() => setLaunchFor(null)}

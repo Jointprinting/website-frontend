@@ -18,6 +18,20 @@ export const CAMPAIGN_STATUS_META = {
 };
 export const campaignStatusMeta = (s) => CAMPAIGN_STATUS_META[s] || CAMPAIGN_STATUS_META.draft;
 
+// ── Lead verticals ────────────────────────────────────────────────────────────
+// Which business type a campaign targets — the free finder hunts it and the
+// campaign only enrolls its tagged pool. MIRRORS services/leadVerticals.js on the
+// backend (keep the ids/labels in sync). The overview API also sends the live
+// list (overview.verticals); this is the fallback + label lookup.
+export const LEAD_VERTICALS = [
+  { id: 'dispensary', label: 'Dispensaries', short: 'dispensaries', isDefault: true },
+  { id: 'brewery', label: 'Breweries', short: 'breweries' },
+  { id: 'smoke-vape', label: 'Smoke, Vape & Bodegas', short: 'smoke/vape shops', experimental: true },
+];
+export const DEFAULT_VERTICAL_ID = 'dispensary';
+export const verticalMeta = (id) =>
+  LEAD_VERTICALS.find((v) => v.id === id) || LEAD_VERTICALS[0];
+
 // ── Enrollment status vocabulary ──────────────────────────────────────────────
 // Mirrors models/OutreachEnrollment.js ENROLLMENT_STATUSES — keep in sync.
 export const ENROLLMENT_STATUS_META = {
