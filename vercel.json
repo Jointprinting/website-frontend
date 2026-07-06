@@ -8,11 +8,17 @@
       ]
     },
     {
-      "source": "/(demos|northpine|clearwater)(/.*)?",
+      "source": "/webworks(/.*)?",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
         { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
       ]
     }
+  ],
+  "redirects": [
+    { "source": "/demos", "destination": "/webworks" },
+    { "source": "/demos/:path*", "destination": "/webworks/:path*" },
+    { "source": "/northpine", "destination": "/webworks/northpine" },
+    { "source": "/clearwater", "destination": "/webworks/clearwater" }
   ]
 }

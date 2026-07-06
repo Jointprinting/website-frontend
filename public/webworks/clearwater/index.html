@@ -103,9 +103,30 @@
   .cta h2{font-size:clamp(30px,5vw,50px);max-width:18ch;margin:0 auto}
   .cta p{font-size:19px;margin:16px auto 28px;max-width:42ch}
 
+  .svc .ic svg{width:22px;height:22px}
+
+  /* Promises strip — quiet reassurance under the hero */
+  .promises{background:#fff;border-bottom:1px solid var(--line)}
+  .promises .wrap{display:flex;flex-wrap:wrap;justify-content:center;gap:12px 40px;padding:20px 24px}
+  .promises div{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;font-size:14px}
+  .promises svg{width:18px;height:18px;color:var(--blue);flex:0 0 auto}
+
+  /* FAQ — inline answers, no dead clicks */
+  .faqwrap{background:var(--aqua-soft)}
+  .faq{max-width:820px;margin:40px auto 0}
+  .faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .faq summary{list-style:none;cursor:pointer;padding:19px 22px;font-family:Sora;font-weight:700;font-size:16.5px;
+    display:flex;justify-content:space-between;align-items:center;gap:14px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";font-size:23px;color:var(--blue);transition:transform .2s ease;flex:0 0 auto}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq details p{padding:0 22px 20px;margin:0;color:var(--muted);font-size:15.5px;line-height:1.6}
+
   footer{background:var(--deep-2);color:rgba(255,255,255,.72);padding:40px 0;font-size:14px}
   footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
   footer .brand{color:#fff}
+  .foot-meta{display:flex;flex-direction:column;gap:3px;text-align:right;font-size:13px;line-height:1.5}
+  @media(max-width:600px){footer .wrap{justify-content:center;text-align:center}.foot-meta{text-align:center}}
   .demoflag{background:var(--ink);color:rgba(255,255,255,.78);text-align:center;font-size:13px;padding:9px}
   .demoflag a{color:var(--aqua);font-weight:600}
   /* Tighter vertical rhythm on phones so sections don't feel over-padded. */
@@ -113,7 +134,7 @@
 </style>
 </head>
 <body>
-<div class="demoflag">Demo site by <a href="/demos">JP Webworks</a> — Clearwater is a sample company.</div>
+<div class="demoflag">Demo site by <a href="/webworks">JP Webworks</a> — Clearwater is a sample company.</div>
 <header>
   <nav class="wrap">
     <a class="brand" href="#"><span class="mark">≈</span> Clear<b>water</b></a>
@@ -159,6 +180,15 @@
   </div>
 </div>
 
+<div class="promises">
+  <div class="wrap">
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Free quotes</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Licensed &amp; insured</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Same tech every week</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Photo summary after each visit</div>
+  </div>
+</div>
+
 <section id="plans">
   <div class="wrap">
     <div class="sec-head">
@@ -200,12 +230,12 @@
       <h2>Whatever your pool needs.</h2>
     </div>
     <div class="services">
-      <div class="svc"><div class="ic">🌸</div><div><h3>Openings</h3><p>Get swim-ready fast in spring — cover off, balanced, and running.</p></div></div>
-      <div class="svc"><div class="ic">❄️</div><div><h3>Closings</h3><p>Winterized right so you don't get a costly surprise next season.</p></div></div>
-      <div class="svc"><div class="ic">🛠️</div><div><h3>Repairs</h3><p>Pumps, filters, heaters, and salt systems — diagnosed and fixed.</p></div></div>
-      <div class="svc"><div class="ic">💧</div><div><h3>Green-to-clean</h3><p>Turned green? We'll get it swimmable again, usually within days.</p></div></div>
-      <div class="svc"><div class="ic">🧪</div><div><h3>One-time cleanups</h3><p>Party coming up? A single deep clean and balance on demand.</p></div></div>
-      <div class="svc"><div class="ic">🧂</div><div><h3>Salt conversions</h3><p>Switch to softer, lower-maintenance saltwater — we handle the swap.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg></div><div><h3>Openings</h3><p>Get swim-ready fast in spring — cover off, balanced, and running.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17"/><path d="M12 5.6 9.6 4M12 5.6 14.4 4M12 18.4 9.6 20M12 18.4 14.4 20M5 9.3 4.4 6.6M5 9.3 2.3 9.9M19 14.7l.6 2.7M19 14.7l2.7-.6M5 14.7l-.6 2.7M5 14.7l-2.7-.6M19 9.3l.6-2.7M19 9.3l2.7.6"/></svg></div><div><h3>Closings</h3><p>Winterized right so you don't get a costly surprise next season.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.6 6.3a3.6 3.6 0 00-4.8 4.6l-6.1 6.1a1.9 1.9 0 002.7 2.7l6.1-6.1a3.6 3.6 0 004.6-4.8l-2.8 2.8-1.9-.5-.5-1.9 2.7-2.7z"/></svg></div><div><h3>Repairs</h3><p>Pumps, filters, heaters, and salt systems — diagnosed and fixed.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6.2 5.9 6.2 10.2A6.2 6.2 0 0112 19.4a6.2 6.2 0 01-6.2-6.2C5.8 8.9 12 3 12 3z"/></svg></div><div><h3>Green-to-clean</h3><p>Turned green? We'll get it swimmable again, usually within days.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.7 4.3L17 9l-4.3 1.7L11 15l-1.7-4.3L5 9l4.3-1.7L11 3z"/><path d="M18 14l.8 2.2 2.2.8-2.2.8L18 20l-.8-2.2-2.2-.8 2.2-.8L18 14z"/></svg></div><div><h3>One-time cleanups</h3><p>Party coming up? A single deep clean and balance on demand.</p></div></div>
+      <div class="svc"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v5.4l-4.4 8.3A2 2 0 007.4 20h9.2a2 2 0 001.8-3.3L14 8.4V3"/><path d="M7.7 14h8.6"/></svg></div><div><h3>Salt conversions</h3><p>Switch to softer, lower-maintenance saltwater — we handle the swap.</p></div></div>
     </div>
   </div>
 </section>
@@ -225,6 +255,37 @@
   </div>
 </section>
 
+<section class="faqwrap">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Good to know</span>
+      <h2>Questions before you dive in.</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>What's actually included in weekly service?</summary>
+        <p>Every visit we test and balance the water, skim the surface, empty the baskets, and check the equipment. On Full Service and up we also brush, vacuum, and net — and you get a photo summary after each visit.</p>
+      </details>
+      <details>
+        <summary>Do I have to buy the chemicals?</summary>
+        <p>Nope — chemicals are included in your monthly price. No trips to the pool store, no guessing at chlorine levels, no surprise charges.</p>
+      </details>
+      <details>
+        <summary>My pool turned green — can you save it?</summary>
+        <p>Almost always. Our green-to-clean recovery usually has a pool swimmable again within a few days. Send a photo and we'll tell you what it'll take.</p>
+      </details>
+      <details>
+        <summary>Do I need to be home for service?</summary>
+        <p>No. As long as we can reach the gate and equipment, you never have to be there. You'll get a text with photos every time we visit, so you always know it's done.</p>
+      </details>
+      <details>
+        <summary>Am I locked into a contract?</summary>
+        <p>No lock-in — weekly service is month-to-month through the season, and you can pause or cancel anytime. We keep you because the water's clear, not because of fine print.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
 <section id="quote" class="cta">
   <div class="wrap">
     <h2>Ready for a pool you never have to worry about?</h2>
@@ -236,7 +297,11 @@
 <footer>
   <div class="wrap">
     <a class="brand" href="#"><span class="mark">≈</span> Clear<b>water</b></a>
-    <span>Pool Service &amp; Maintenance · South Jersey · Licensed &amp; Insured</span>
+    <div class="foot-meta">
+      <span>Clearwater Pool Service · Serving South Jersey</span>
+      <span>(856) 555-0164 · Mon–Sat 8am–5pm · Seasonal &amp; year-round plans</span>
+      <span>Licensed &amp; fully insured · CPO-certified techs · Est. 2016</span>
+    </div>
   </div>
 </footer>
 </body>
