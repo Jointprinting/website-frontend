@@ -45,6 +45,36 @@ function FunnelStrip({ stats }) {
   );
 }
 
+// Account for EVERY enrolled lead by status, so "72 enrolled · 0 sent" never reads
+// as broken. The funnel above shows sent/opened/replied; this line explains the
+// rest: who's still active, and who the engine deliberately HELD (no email on the
+// card, already opted-out/bounced anywhere = suppressed, or turned into a client).
+// Held leads aren't lost — they're the anti-spam guard doing its job.
+function EnrollmentAccounting({ stats }) {
+  if (!stats) return null;
+  const stopped = stats.stopped || 0;
+  const held = stopped + (stats.unsubscribed || 0) + (stats.failed || 0);
+  if (!held) return null; // clean run — the funnel already tells the whole story
+  const known = (stats.noEmail || 0) + (stats.suppressed || 0) + (stats.bounced || 0);
+  const otherStopped = Math.max(0, stopped - known);
+  const bits = [];
+  if (stats.noEmail) bits.push(`${stats.noEmail} no email`);
+  if (stats.suppressed) bits.push(`${stats.suppressed} suppressed`);
+  if (stats.bounced) bits.push(`${stats.bounced} bounced`);
+  if (stats.unsubscribed) bits.push(`${stats.unsubscribed} opted out`);
+  if (otherStopped) bits.push(`${otherStopped} became a client / blocked`);
+  if (stats.failed) bits.push(`${stats.failed} failed`);
+  return (
+    <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, lineHeight: 1.5 }}>
+      <Box component="span" sx={{ color: D.text, fontWeight: 700 }}>{stats.active || 0} active</Box>
+      {(stats.completed || 0) > 0 ? ` · ${stats.completed} completed` : ''}
+      {' · '}
+      <Box component="span" sx={{ color: D.amber, fontWeight: 700 }}>{held} held</Box>
+      {` (${bits.join(' · ')}) — held = the engine's spam guard, not lost leads.`}
+    </Typography>
+  );
+}
+
 function WarmRow({ row, onOpenCompany, onMarkReplied, onStop }) {
   const meta = enrollmentStatusMeta(row.status);
   const replied = row.status === 'replied';
@@ -576,6 +606,7 @@ export default function OverviewView({
                   <StatusChip meta={campaignStatusMeta(c.status)} />
                 </Stack>
                 <FunnelStrip stats={c.stats} />
+                <EnrollmentAccounting stats={c.stats} />
                 {/* Subject A/B results — appears once variant sends exist. */}
                 <AbStrip ab={c.abTest} />
                 {/* When a campaign is active but not sending, say exactly why —
