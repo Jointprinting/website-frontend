@@ -234,6 +234,20 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
+  // Requeue leads the engine dropped because of a SENDER-side send error (SMTP
+  // down / auth / unverified sender) — reverses the wrongful suppression +
+  // do-not-email so the drip resumes. Real bounces and opt-outs stay blocked.
+  const recoverSends = async () => {
+    const { data } = await axios.post(`${base}/recover-sends`, { confirm: true }, authHdr);
+    const n = data.enrollmentsRequeued || 0;
+    flash(n
+      ? `Requeued ${n} lead${n === 1 ? '' : 's'} dropped by sender errors — unblocked ${data.companiesUnblocked || 0}, cleared ${data.freedSuppressions || 0} suppression${data.freedSuppressions === 1 ? '' : 's'}. The drip resumes on the next tick.`
+      : 'No sender-dropped leads to requeue — nothing was suppressed by a sender-side error.');
+    await loadOverview();
+    loadQueue();
+    return data;
+  };
+
   // Auto-enroll: keep the chosen active campaign topped up from the cold-lead
   // reserve automatically (only one campaign at a time; enabling fills once now).
   const setAutoEnroll = async (campaignId, enabled) => {
@@ -423,6 +437,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onDelete={deleteCampaign}
             onAutoEnroll={setAutoEnroll}
             onTestSend={sendTest}
+            onRecoverSends={recoverSends}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
