@@ -122,7 +122,7 @@
     <div class="card">
       <div id="formWrap">
         <h2>Get your plan &amp; price</h2>
-        <div class="sub">Takes about a minute. Only name, business, and email are required.</div>
+        <div class="sub">Takes about a minute. Just your name, business, email, and phone.</div>
         <div class="planpill" id="planpill"></div>
         <div class="formerr" id="formerr"></div>
         <form id="leadForm" novalidate>
@@ -142,8 +142,8 @@
               <input id="email" name="email" type="email" autocomplete="email" required />
             </div>
             <div>
-              <label for="phone">Phone <span class="opt">(optional)</span></label>
-              <input id="phone" name="phone" type="tel" autocomplete="tel" />
+              <label for="phone">Phone</label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel" required />
             </div>
           </div>
           <div class="field">
@@ -212,16 +212,19 @@
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     errBox.classList.remove('show');
-    ['name', 'companyName', 'email'].forEach(function (id) { document.getElementById(id).classList.remove('err'); });
+    ['name', 'companyName', 'email', 'phone'].forEach(function (id) { document.getElementById(id).classList.remove('err'); });
 
     var name = document.getElementById('name').value.trim();
     var companyName = document.getElementById('companyName').value.trim();
     var email = document.getElementById('email').value.trim();
+    var phone = document.getElementById('phone').value.trim();
 
     var missing = [];
     if (!name) { document.getElementById('name').classList.add('err'); missing.push('name'); }
     if (!companyName) { document.getElementById('companyName').classList.add('err'); missing.push('business'); }
     if (!email || !isEmail(email)) { document.getElementById('email').classList.add('err'); missing.push('email'); }
+    // Phone is required — need at least 7 digits (mirrors the server's check).
+    if (!phone || phone.replace(/\D/g, '').length < 7) { document.getElementById('phone').classList.add('err'); missing.push('phone'); }
     if (missing.length) {
       errBox.textContent = 'Please add your ' + missing.join(', ') + ' so I can get back to you.';
       errBox.classList.add('show');
