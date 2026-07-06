@@ -7,7 +7,9 @@
 //     1) Submissions — mini-CRM for contact form leads
 //     2) Mockup Studio — launches /jpstudio/ in a new tab
 //   JP Webworks tools:
-//     3) Cold Calls — JPW cold-call decision tree with editable script versions
+//     3) Websites — build/preview/publish client subscription sites (JpwSitesTab)
+//     4) Inquiries — the same Submissions inbox, opened pre-filtered to webworks
+//     5) Cold Call Tree + Lead Recon — kept, but collapsed under "On hold"
 
 import * as React from 'react';
 import axios from 'axios';
@@ -62,6 +64,7 @@ import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0 } from './studio/_shared';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
@@ -82,6 +85,10 @@ import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import JpLoader from '../common/JpLoader';
+
+// JP Webworks Websites tool — lazy so the template registry + editor stay out
+// of the Studio's main chunk until the owner actually opens the tool.
+const JpwSitesTab = React.lazy(() => import('./studio/JpwSitesTab'));
 
 const TOKEN_KEY = 'jpStudioToken';
 // The signed-in account's role ('owner' | 'agent'), stored alongside the token so
@@ -423,10 +430,28 @@ function MockupLauncherTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Submissions tab (mini-CRM)
 // ─────────────────────────────────────────────────────────────────────────────
-function SubmissionsTab({ token, onOpenClients }) {
+// Which lead pipe a submission came down. 'contact' = the Joint Printing
+// contact form (source unset/anything else); 'webworks' = /webworks/start.
+// Client-side only — the API returns all sources and we slice here.
+const SOURCE_FILTERS = [
+  { value: 'all',      label: 'All sources' },
+  { value: 'webworks', label: 'JP Webworks' },
+  { value: 'contact',  label: 'Contact form' },
+];
+const matchesSource = (item, filter) =>
+  filter === 'all' ? true
+    : filter === 'webworks' ? item.source === 'webworks'
+    : item.source !== 'webworks';
+
+// `initialSource` seeds the source filter — the hub's JP Webworks "Inquiries"
+// tile opens this same inbox pre-filtered to webworks leads (see handlePick).
+function SubmissionsTab({ token, onOpenClients, initialSource }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState('all');
+  const [sourceFilter, setSourceFilter] = React.useState(
+    initialSource === 'webworks' ? 'webworks' : 'all'
+  );
   const [selected, setSelected] = React.useState(null);
   const [projectCreated, setProjectCreated] = React.useState(null); // { projectNumber } for the success toast
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -490,12 +515,25 @@ function SubmissionsTab({ token, onOpenClients }) {
     } catch { return iso; }
   };
 
+  // Source filter applies first; the status pills then count within that slice
+  // so the numbers always agree with the rows on screen.
+  const visible = React.useMemo(
+    () => items.filter((it) => matchesSource(it, sourceFilter)),
+    [items, sourceFilter]
+  );
+
+  const sourceCounts = React.useMemo(() => ({
+    all: items.length,
+    webworks: items.filter((it) => matchesSource(it, 'webworks')).length,
+    contact: items.filter((it) => matchesSource(it, 'contact')).length,
+  }), [items]);
+
   const statusCounts = React.useMemo(() => {
-    const counts = { all: items.length };
+    const counts = { all: visible.length };
     STATUS_OPTIONS.forEach((s) => { counts[s.value] = 0; });
-    items.forEach((it) => { counts[it.status || 'new'] = (counts[it.status || 'new'] || 0) + 1; });
+    visible.forEach((it) => { counts[it.status || 'new'] = (counts[it.status || 'new'] || 0) + 1; });
     return counts;
-  }, [items]);
+  }, [visible]);
 
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
@@ -503,6 +541,19 @@ function SubmissionsTab({ token, onOpenClients }) {
         Every contact form submission is saved here so you don&apos;t lose a lead even
         if email hiccups. Filter, click any row for details, update as you work.
       </MuiTypography>
+
+      {/* Source row — which business the lead belongs to. Webworks leads keep
+          their green chip on the row; this just slices the inbox. */}
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.25 }}>
+        {SOURCE_FILTERS.map((s) => (
+          <FilterPill
+            key={s.value}
+            active={sourceFilter === s.value} label={s.label} count={sourceCounts[s.value] || 0}
+            onClick={() => setSourceFilter(s.value)}
+            color={s.value === 'webworks' ? '#17b878' : BRAND.green}
+          />
+        ))}
+      </Stack>
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
         <FilterPill
@@ -530,12 +581,14 @@ function SubmissionsTab({ token, onOpenClients }) {
         <Box display="flex" justifyContent="center" py={8}>
           <JpLoader size={56} label="Loading inquiries…" />
         </Box>
-      ) : items.length === 0 ? (
+      ) : visible.length === 0 ? (
         <Fade in>
           <Box py={8} textAlign="center">
             <InboxIcon sx={{ fontSize: 56, color: 'rgba(255,255,255,0.18)', mb: 2 }} />
             <MuiTypography sx={{ color: BRAND.muted }}>
-              {statusFilter === 'all' ? 'No submissions yet.' : `No "${statusMeta(statusFilter).label}" submissions.`}
+              {sourceFilter !== 'all' && items.length > 0
+                ? `No ${SOURCE_FILTERS.find((s) => s.value === sourceFilter)?.label} submissions here.`
+                : statusFilter === 'all' ? 'No submissions yet.' : `No "${statusMeta(statusFilter).label}" submissions.`}
             </MuiTypography>
             <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
               They&apos;ll appear here as soon as someone fills out your contact form.
@@ -544,7 +597,7 @@ function SubmissionsTab({ token, onOpenClients }) {
         </Fade>
       ) : (
         <Stack spacing={1.2}>
-          {items.map((it, idx) => (
+          {visible.map((it, idx) => (
             <Grow in timeout={Math.min(180 + idx * 50, 600)} key={it._id}>
               <Box>
                 <SubmissionRow item={it} onClick={() => openDetail(it)} formatDate={formatDate} />
@@ -1593,21 +1646,38 @@ const HUB_GROUPS = [
   },
   {
     brand: 'JP Webworks',
-    // Paused business — kept fully functional but visually demoted into a
-    // muted, collapsed-by-default section. Nothing about the tools changes;
-    // only how the hub presents them.
-    paused: true,
-    tagline: 'Web services — on hold',
-    tools: [
-      { id: 'coldcall',  label: 'Cold Call Tree', desc: 'On-the-fly call script',     Icon: PhoneInTalkIcon },
-      { id: 'jpwrecon',  label: 'Lead Recon',     desc: 'Daily lead sweep + queue',   Icon: TrackChangesOutlinedIcon },
+    // ACTIVE again — the website-subscription business now has a real product
+    // surface (Websites: build → free preview → paid domain). The cold-call
+    // tools stay dismissed: they live in `held`, which renders as a muted,
+    // collapsed-by-default "On hold" sub-list under this group (the same
+    // presentation the old paused group used, scoped to just those two).
+    tagline: 'Websites on subscription',
+    tiers: [
+      {
+        id: 'jpw',
+        tools: [
+          { id: 'jpwsites', label: 'Websites', desc: 'Build & preview client sites', Icon: LanguageOutlinedIcon },
+          // Same Submissions inbox, deep-linked: `view` seeds the source filter
+          // so it opens showing only /webworks/start leads (see handlePick).
+          { id: 'jpwinquiries', target: 'submissions', view: 'webworks', label: 'Inquiries', desc: 'Leads from /webworks/start', Icon: InboxIcon },
+        ],
+      },
     ],
+    held: {
+      tools: [
+        { id: 'coldcall', label: 'Cold Call Tree', desc: 'On-the-fly call script',   Icon: PhoneInTalkIcon, held: true },
+        { id: 'jpwrecon', label: 'Lead Recon',     desc: 'Daily lead sweep + queue', Icon: TrackChangesOutlinedIcon, held: true },
+      ],
+    },
   },
 ];
 
-// All tools in a group, flattened across its tiers (tiered groups) or its flat
-// `tools` (paused group).
-const groupTools = (g) => (g.tiers ? g.tiers.flatMap((t) => t.tools) : (g.tools || []));
+// All tools in a group: flattened across its tiers, plus any held ("on hold")
+// sub-list — held tools still need header labels/brand when opened.
+const groupTools = (g) => [
+  ...(g.tiers ? g.tiers.flatMap((t) => t.tools) : (g.tools || [])),
+  ...((g.held && g.held.tools) || []),
+];
 
 // Flat list of all tools, with brand attached, for header lookups. De-dupes by
 // the StudioBody view id (`target` || `id`) so the two CRM entry points (Today /
@@ -1885,6 +1955,8 @@ const TIER_COLS = {
   // column on the smallest phones so the tile descriptions don't cramp to 3–4 lines.
   secondary: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
+  // JP Webworks pair (Websites + Inquiries) — same clean 2-up as growth/tucked.
+  jpw:       { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
 };
 
 // The live command-center panel: clickable rows for what needs attention, ordered
@@ -2069,9 +2141,10 @@ function PulseBar({ pulse }) {
 }
 
 function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, isOwner, token }) {
-  // Paused groups collapse by default — present but out of the way. State keyed
-  // by brand so each remembers its own open/closed for this session.
-  const [openPaused, setOpenPaused] = React.useState({});
+  // "On hold" sub-lists (a group's dismissed tools) collapse by default —
+  // present but out of the way. State keyed by brand so each remembers its own
+  // open/closed for this session.
+  const [openHeld, setOpenHeld] = React.useState({});
   // The Team tile is only relevant once there's actually a sales agent, so we
   // keep the hub clean until then: hide the tile at zero agents (a discreet
   // onboarding link stays at the bottom), and let it appear on its own the moment
@@ -2086,8 +2159,6 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
     return () => { cancelled = true; };
   }, [isOwner, token]);
   const hasAgents = (agentCount || 0) > 0;
-  const live = HUB_GROUPS.filter((g) => !g.paused);
-  const paused = HUB_GROUPS.filter((g) => g.paused);
   let cardIdx = 0;
   const pulse = (signals && signals.pulse) || null;
 
@@ -2103,7 +2174,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
           and all) when nothing needs attention — no dead placeholder. */}
       <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} />
 
-      {live.map((group) => (
+      {HUB_GROUPS.map((group) => (
         <Box key={group.brand}>
           <SectionHeader brand={group.brand} tagline={group.tagline} />
           {/* Tiered: the daily core (primary) renders big & bold; secondary and
@@ -2136,81 +2207,63 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
                 </Box>
               );
             })}
-          </Stack>
-        </Box>
-      ))}
 
-      {/* Paused businesses — kept, but visually tucked: muted header, a Paused
-          chip, and collapsed by default. Every tool inside stays fully
-          functional; this only changes presentation. */}
-      {paused.map((group) => {
-        const isOpen = !!openPaused[group.brand];
-        const startIdx = cardIdx;
-        cardIdx += group.tools.length;
-        const toggle = () => setOpenPaused((m) => ({ ...m, [group.brand]: !m[group.brand] }));
-        return (
-          <Box key={group.brand} sx={{ opacity: 0.92 }}>
-            <Box
-              onClick={toggle}
-              role="button"
-              tabIndex={0}
-              aria-expanded={isOpen}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-              sx={{
-                cursor: 'pointer', borderRadius: 2, mx: -1, px: 1, py: 0.5,
-                transition: 'background-color 0.15s ease',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
-                '&:focus-visible': { outline: `2px solid ${D.line}`, outlineOffset: 2 },
-              }}
-            >
-              <SectionHeader
-                brand={group.brand}
-                tagline={group.tagline}
-                dim
-                right={
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
-                    <Chip
-                      icon={<PauseCircleOutlineIcon sx={{ fontSize: 14, ml: 0.5 }} />}
-                      label="Paused"
-                      size="small"
-                      sx={{
-                        bgcolor: 'rgba(251,191,36,0.10)', color: D.amber, fontWeight: 700,
-                        fontSize: 10.5, height: 22, border: '1px solid rgba(251,191,36,0.28)',
-                        '& .MuiChip-icon': { color: D.amber },
-                      }}
-                    />
+            {/* "On hold" — the group's dismissed tools (JP Webworks' Cold Call
+                Tree + Lead Recon). Kept fully functional but tucked into a
+                muted, collapsed-by-default sub-list — the same presentation
+                the old paused group used, now scoped to just these tools. */}
+            {group.held && group.held.tools.length > 0 && (() => {
+              const heldStart = cardIdx;
+              cardIdx += group.held.tools.length;
+              const isOpen = !!openHeld[group.brand];
+              const toggle = () => setOpenHeld((m) => ({ ...m, [group.brand]: !m[group.brand] }));
+              return (
+                <Box>
+                  <Box
+                    onClick={toggle}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isOpen}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1,
+                      cursor: 'pointer', borderRadius: 2, mx: -1, px: 1, py: 0.6,
+                      transition: 'background-color 0.15s ease',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
+                      '&:focus-visible': { outline: `2px solid ${D.line}`, outlineOffset: 2 },
+                    }}
+                  >
+                    <PauseCircleOutlineIcon sx={{ fontSize: 15, color: D.amber, opacity: 0.8, flexShrink: 0 }} />
+                    <MuiTypography sx={{ ...eyebrow, color: D.faint, fontSize: 10, letterSpacing: 2 }}>
+                      On hold
+                    </MuiTypography>
+                    <MuiTypography sx={{ color: D.faint, fontSize: 11.5, minWidth: 0 }}>
+                      {group.held.tools.length} dismissed tool{group.held.tools.length === 1 ? '' : 's'} — tap to open.
+                    </MuiTypography>
+                    <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'rgba(255,255,255,0.05)' }} />
                     <ExpandMoreIcon sx={{
-                      color: D.faint, fontSize: 20,
+                      color: D.faint, fontSize: 18, flexShrink: 0,
                       transition: 'transform 0.2s ease',
                       transform: isOpen ? 'rotate(180deg)' : 'none',
                     }} />
-                  </Stack>
-                }
-              />
-            </Box>
-            {!isOpen && (
-              <MuiTypography sx={{ color: D.faint, fontSize: 11.5, mt: -1, mb: 0.5, ml: 0.25 }}>
-                {group.tools.length} tool{group.tools.length === 1 ? '' : 's'} kept on hold — tap to open.
-              </MuiTypography>
-            )}
-            <Collapse in={isOpen} timeout={260} unmountOnExit>
-              <Box sx={{ pt: 0.5 }}>
-                <ToolGrid
-                  tools={group.tools}
-                  cols={TIER_COLS.tucked}
-                  muted
-                  startIdx={startIdx}
-                  onPick={onPick}
-                  sweepNeeded={sweepNeeded}
-                  sweepBlocked={sweepBlocked}
-                  nextResetAt={nextResetAt}
-                  unseenInquiries={unseenInquiries}
-                />
-              </Box>
-            </Collapse>
-          </Box>
-        );
-      })}
+                  </Box>
+                  <Collapse in={isOpen} timeout={260} unmountOnExit>
+                    <Box sx={{ pt: 1 }}>
+                      <ToolGrid
+                        tools={group.held.tools}
+                        cols={TIER_COLS.tucked}
+                        muted
+                        startIdx={heldStart}
+                        {...gridProps}
+                      />
+                    </Box>
+                  </Collapse>
+                </Box>
+              );
+            })()}
+          </Stack>
+        </Box>
+      ))}
 
       {/* Discreet first-agent onboarding. Only when the owner has NO agents yet —
           the full Team tile is hidden until then to keep the hub clean, but this
@@ -2279,6 +2332,11 @@ function StudioBody({ token, onLogout }) {
   // Which Outreach sub-view to open when the tool is entered (e.g. the hub's reply
   // alert jumps straight to Replies). Null → the Outreach dashboard on a plain open.
   const [outreachView, setOutreachView] = React.useState(null);
+  // Source filter the Submissions inbox opens with. The JP Webworks "Inquiries"
+  // tile (target 'submissions', view 'webworks') seeds 'webworks' so the inbox
+  // lands pre-filtered to /webworks/start leads; every other entry point clears
+  // it. Same handlePick entry-seeding pattern as crmEntry/outreachView.
+  const [subsSource, setSubsSource] = React.useState(null);
   const [signals, setSignals] = React.useState({
     groups: { critical: [], warning: [], info: [] }, counts: {}, backup: null,
   });
@@ -2356,6 +2414,9 @@ function StudioBody({ token, onLogout }) {
         { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
         .catch(() => { /* best-effort; badge already cleared locally */ });
     }
+    // Seed (or clear) the Submissions source filter: the JP Webworks Inquiries
+    // tile carries view:'webworks'; the plain Inquiries tile carries none.
+    if (id === 'submissions') setSubsSource(innerView === 'webworks' ? 'webworks' : null);
     if (id === 'crm') setCrmEntry((p) => ({ view: innerView || 'companies', companyKey: null, nonce: p.nonce + 1 }));
     // Entering Orders/Vendors from the hub bumps their entry nonce with a CLEARED
     // target, so the tool remounts fresh — a stale deep-linked drawer from an
@@ -2608,10 +2669,13 @@ function StudioBody({ token, onLogout }) {
                   minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentTool?.label}
                 </MuiTypography>
-                {currentTool?.brand === 'JP Webworks' && (
+                {/* Only the dismissed JPW tools (Cold Call Tree / Lead Recon)
+                    read as on-hold now — the Websites/Inquiries surfaces are
+                    live business. */}
+                {currentTool?.held && (
                   <Chip
                     icon={<PauseCircleOutlineIcon sx={{ fontSize: 13, ml: 0.5 }} />}
-                    label="Paused"
+                    label="On hold"
                     size="small"
                     sx={{
                       bgcolor: 'rgba(251,191,36,0.10)', color: D.amber, fontWeight: 700,
@@ -2624,11 +2688,20 @@ function StudioBody({ token, onLogout }) {
 
               <Fade in key={view} timeout={300}>
                 <Box>
-                  {view === 'submissions' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
+                  {view === 'submissions' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} initialSource={subsSource} />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
+                  {view === 'jpwsites'    && (
+                    <React.Suspense fallback={
+                      <Box display="flex" justifyContent="center" py={8}>
+                        <JpLoader size={56} label="Loading Websites…" />
+                      </Box>
+                    }>
+                      <JpwSitesTab token={token} />
+                    </React.Suspense>
+                  )}
                 </Box>
               </Fade>
             </Paper>

@@ -25,6 +25,11 @@ const Dispensaries  = lazy(() => import('./screens/Dispensaries'));
 const Studio        = lazy(() => import('./screens/Studio'));
 const Catalogs      = lazy(() => import('./screens/Catalogs'));
 const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
+// JP Webworks client-site preview (/webworks/p/:slug) — a full-page render of
+// a client's site, sent to prospects before they pay. Bare chrome (see
+// isClientSite below). The static /webworks marketing + demo pages live in
+// public/ and never reach the router; only /p/* falls through to the SPA.
+const WebworksPreview = lazy(() => import('./screens/WebworksPreview'));
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
@@ -53,7 +58,10 @@ const ROUTE_META = {
 function useRouteMeta(pathname) {
   React.useEffect(() => {
     const meta = ROUTE_META[pathname]
-      || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null);
+      || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null)
+      // Client-site previews retitle themselves to the business name once the
+      // site loads (WebworksPreview) — this is just the pre-fetch placeholder.
+      || (pathname.startsWith('/webworks/p/') ? { title: 'Site preview' } : null);
     document.title = (meta && meta.title) || 'Joint Printing | Custom Merch & Screen Printing';
     const tag = document.querySelector('meta[name="description"]');
     if (tag && meta && meta.desc) tag.setAttribute('content', meta.desc);
@@ -78,11 +86,16 @@ function AppShell() {
   const isStudio = STUDIO_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
   );
+  // JP Webworks client-site previews render the CLIENT's site full-page — no
+  // Joint Printing banner/nav/footer, and no route-fade (the preview manages
+  // its own loading state).
+  const isClientSite = pathname.startsWith('/webworks/p/');
+  const bare = isStudio || isClientSite;
 
   return (
     <>
-      {!isStudio && <AnnouncementBar />}
-      {!isStudio && <Navbar />}
+      {!bare && <AnnouncementBar />}
+      {!bare && <Navbar />}
       <Suspense
         fallback={
           <div style={{
@@ -96,8 +109,9 @@ function AppShell() {
       >
         {/* Keyed on pathname so every navigation replays the soft fade-up
             (see .route-fade in index.css). Skipped inside Studio — it's a
-            single route whose internal navigation shouldn't remount. */}
-        <div key={isStudio ? 'studio' : pathname} className={isStudio ? undefined : 'route-fade'}>
+            single route whose internal navigation shouldn't remount — and on
+            client-site previews, which own their whole viewport. */}
+        <div key={isStudio ? 'studio' : pathname} className={bare ? undefined : 'route-fade'}>
         <Routes>
           <Route exact path="/" element={<Home />} />
           <Route exact path="/about" element={<About />} />
@@ -115,11 +129,14 @@ function AppShell() {
           <Route exact path="/terms" element={<Terms />} />
           <Route exact path="/privacy" element={<Privacy />} />
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
+          {/* JP Webworks client-site preview — public, no auth; the backend
+              404s drafts so only published previews/live sites render. */}
+          <Route exact path="/webworks/p/:slug" element={<WebworksPreview />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </div>
       </Suspense>
-      {!isStudio && <Footer />}
+      {!bare && <Footer />}
     </>
   );
 }

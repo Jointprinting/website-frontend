@@ -25,6 +25,7 @@ export const campaignStatusMeta = (s) => CAMPAIGN_STATUS_META[s] || CAMPAIGN_STA
 // list (overview.verticals); this is the fallback + label lookup.
 export const LEAD_VERTICALS = [
   { id: 'dispensary', label: 'Dispensaries', short: 'dispensaries', isDefault: true },
+  { id: 'medical', label: 'Medical dispensaries', short: 'medical dispensaries' },
   { id: 'brewery', label: 'Breweries', short: 'breweries' },
   { id: 'smoke-vape', label: 'Smoke, Vape & Bodegas', short: 'smoke/vape shops', experimental: true },
 ];
