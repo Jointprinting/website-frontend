@@ -444,12 +444,21 @@ function CampaignPanel({ c }) {
   );
 }
 
+// Every US state — the finder's coverage map is expanding to the full country,
+// so any region code it reports gets a real name (unknown codes still fall back
+// to the uppercased code).
 const REGION_LABELS = {
-  nj: 'New Jersey', ny: 'New York', pa: 'Pennsylvania', ct: 'Connecticut', de: 'Delaware',
-  md: 'Maryland', ma: 'Massachusetts', ri: 'Rhode Island', vt: 'Vermont', me: 'Maine',
-  va: 'Virginia', oh: 'Ohio', mi: 'Michigan', il: 'Illinois', mn: 'Minnesota', mo: 'Missouri',
-  az: 'Arizona', co: 'Colorado', nm: 'New Mexico', nv: 'Nevada', ca: 'California', or: 'Oregon',
-  wa: 'Washington', mt: 'Montana', ak: 'Alaska',
+  al: 'Alabama', ak: 'Alaska', az: 'Arizona', ar: 'Arkansas', ca: 'California',
+  co: 'Colorado', ct: 'Connecticut', de: 'Delaware', dc: 'Washington DC', fl: 'Florida',
+  ga: 'Georgia', hi: 'Hawaii', id: 'Idaho', il: 'Illinois', in: 'Indiana',
+  ia: 'Iowa', ks: 'Kansas', ky: 'Kentucky', la: 'Louisiana', me: 'Maine',
+  md: 'Maryland', ma: 'Massachusetts', mi: 'Michigan', mn: 'Minnesota', ms: 'Mississippi',
+  mo: 'Missouri', mt: 'Montana', ne: 'Nebraska', nv: 'Nevada', nh: 'New Hampshire',
+  nj: 'New Jersey', nm: 'New Mexico', ny: 'New York', nc: 'North Carolina', nd: 'North Dakota',
+  oh: 'Ohio', ok: 'Oklahoma', or: 'Oregon', pa: 'Pennsylvania', ri: 'Rhode Island',
+  sc: 'South Carolina', sd: 'South Dakota', tn: 'Tennessee', tx: 'Texas', ut: 'Utah',
+  vt: 'Vermont', va: 'Virginia', wa: 'Washington', wv: 'West Virginia', wi: 'Wisconsin',
+  wy: 'Wyoming',
 };
 
 export default function AnalyticsView({ analytics, loading }) {
@@ -505,7 +514,7 @@ export default function AnalyticsView({ analytics, loading }) {
           <Card title="By state — where your replies come from">
             <StateTable perState={perState} />
           </Card>
-          <Card title="Lead-finder coverage — free dispensary discovery">
+          <Card title="Lead-finder coverage — where the engine has looked">
             <Coverage coverage={coverage} regionLabels={REGION_LABELS} />
           </Card>
         </>
