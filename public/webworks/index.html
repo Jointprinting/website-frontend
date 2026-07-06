@@ -138,18 +138,26 @@
   .tier.silver .metal{color:var(--silver-lite)} .tier.silver .metal i{background:linear-gradient(135deg,#dfe6ea,var(--silver-2))}
   .tier.silver li::before{color:var(--silver)} .tier.silver .btn{background:rgba(152,164,172,.16);color:var(--silver-lite);border:1px solid rgba(152,164,172,.4)}
   .tier.silver .btn:hover{background:var(--silver);color:#1c2226}
-  .tier.gold{border:1px solid rgba(211,160,41,.5);
-    background:linear-gradient(180deg,#241f10,var(--ink-2));box-shadow:0 34px 70px -34px rgba(211,160,41,.5)}
+  .tier.gold{border-top:3px solid var(--gold)}
   .tier.gold .metal{color:var(--gold-lite)} .tier.gold .metal i{background:linear-gradient(135deg,#f4d475,var(--gold-2))}
-  .tier.gold li::before{color:var(--gold)} .tier.gold .btn{background:linear-gradient(135deg,#e8bd4a,var(--gold));color:#2c2005}
-  .tier.gold .btn:hover{filter:brightness(1.08)}
-  .tier.gold .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);white-space:nowrap;
-    background:linear-gradient(135deg,#f4d475,var(--gold));color:#2c2005;font-size:11.5px;font-weight:700;letter-spacing:.06em;
-    padding:6px 15px;border-radius:999px;box-shadow:0 8px 20px -8px rgba(211,160,41,.7)}
+  .tier.gold li::before{color:var(--gold)} .tier.gold .btn{background:rgba(211,160,41,.16);color:var(--gold-lite);border:1px solid rgba(211,160,41,.42)}
+  .tier.gold .btn:hover{background:var(--gold);color:#2c2005}
   .tier.platinum{border-top:3px solid var(--plat)}
   .tier.platinum .metal{color:var(--plat-lite)} .tier.platinum .metal i{background:linear-gradient(135deg,#8fe6d4,var(--plat-2))}
   .tier.platinum li::before{color:var(--plat)} .tier.platinum .btn{background:rgba(63,182,162,.16);color:var(--plat-lite);border:1px solid rgba(63,182,162,.45)}
   .tier.platinum .btn:hover{background:var(--plat);color:#052b25}
+  /* Featured tier (Silver = most popular): green-accented, lifted, with the tag +
+     a solid green CTA. Placed after the metal identities so its button wins. */
+  .tier.featured{border:1.5px solid rgba(23,184,119,.55);border-top-width:1.5px;
+    background:linear-gradient(180deg,rgba(23,184,119,.07),var(--ink-2));
+    box-shadow:0 36px 74px -34px rgba(23,184,119,.5);transform:translateY(-6px);z-index:1}
+  .tier.featured:hover{transform:translateY(-11px)}
+  .tier.featured .btn{background:var(--green);color:#052b1c;border:0;box-shadow:0 12px 26px -12px rgba(23,184,119,.7)}
+  .tier.featured .btn:hover{background:var(--green-deep);color:#fff}
+  .tier .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);white-space:nowrap;
+    background:linear-gradient(135deg,#2ee89a,var(--green-deep));color:#04231a;font-size:11.5px;font-weight:700;letter-spacing:.06em;
+    padding:6px 15px;border-radius:999px;box-shadow:0 8px 20px -8px rgba(23,184,119,.7)}
+  @media(max-width:1024px){.tier.featured{transform:none}.tier.featured:hover{transform:translateY(-6px)}}
   @media(max-width:1024px){.tiers{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.tiers{grid-template-columns:1fr}}
   .annual{margin:34px auto 0;max-width:620px;display:flex;align-items:center;justify-content:center;gap:9px;text-align:center;
@@ -228,7 +236,7 @@
       <a href="#how">How it works</a>
       <a href="#pricing">Pricing</a>
       <a href="#work">Our work</a>
-      <a class="btn primary" href="#start" style="padding:11px 20px;font-size:15px">Start your site</a>
+      <a class="btn primary" href="/webworks/start" style="padding:11px 20px;font-size:15px">Start your site</a>
     </div>
   </nav>
 </header>
@@ -241,7 +249,7 @@
         <h1>A website that pulls its <em>weight.</em></h1>
         <p class="lede">JP Webworks builds fast, modern sites for local service businesses — live in days, one simple monthly plan, and a site you actually own.</p>
         <div class="cta">
-          <a class="btn primary" href="#start">Start your site →</a>
+          <a class="btn primary" href="/webworks/start">Start your site →</a>
           <a class="btn ghost" href="#work"><span>See live examples</span></a>
         </div>
         <div class="stat">
@@ -301,42 +309,44 @@
       <div class="tier bronze">
         <span class="metal"><i></i>Bronze</span>
         <h3>Starter</h3>
-        <div class="who">Get found &amp; get calls.</div>
+        <div class="who">Get online &amp; get calls.</div>
         <div class="price">$99<small>/mo</small></div>
         <ul>
-          <li>Clean one-page site</li>
-          <li>Mobile-perfect &amp; fast</li>
+          <li>One-page site, custom-designed</li>
+          <li>Mobile-perfect, fast &amp; secure</li>
           <li>Click-to-call &amp; contact form</li>
-          <li>Hosting + up to 2 edits / month</li>
+          <li>Hosting, your domain + 2 edits / month</li>
         </ul>
-        <a class="btn" href="#start">Get started</a>
+        <a class="btn" href="/webworks/start?plan=bronze">Get started</a>
       </div>
-      <div class="tier silver">
+      <div class="tier silver featured">
+        <span class="tag">★ Most popular</span>
         <span class="metal"><i></i>Silver</span>
         <h3>Growth</h3>
-        <div class="who">Turn visitors into bookings.</div>
+        <div class="who">Everything a local business needs.</div>
         <div class="price">$249<small>/mo</small></div>
         <ul>
-          <li>Up to 5 pages</li>
-          <li>Booking / quote request form</li>
-          <li>Google Business Profile set up</li>
-          <li>Monthly refresh + unlimited edits</li>
+          <li>Everything in Bronze, plus:</li>
+          <li>Up to 5 pages (services, about, reviews)</li>
+          <li>Lead-capturing quote / booking form</li>
+          <li>Google Business Profile + local SEO</li>
+          <li>Unlimited edits &amp; monthly refresh</li>
         </ul>
-        <a class="btn" href="#start">Get started</a>
+        <a class="btn" href="/webworks/start?plan=silver">Get started</a>
       </div>
       <div class="tier gold">
-        <span class="tag">★ Most popular</span>
         <span class="metal"><i></i>Gold</span>
         <h3>Pro</h3>
-        <div class="who">A full presence that sells.</div>
+        <div class="who">Book &amp; sell, all in one.</div>
         <div class="price">$499<small>/mo</small></div>
         <ul>
-          <li>Full multi-page site</li>
+          <li>Everything in Silver, plus:</li>
+          <li>Full multi-page site + blog</li>
           <li>Online booking &amp; payments</li>
-          <li>Photo galleries &amp; reviews</li>
+          <li>Photo galleries + live reviews</li>
           <li>Priority same-week edits</li>
         </ul>
-        <a class="btn" href="#start">Get started</a>
+        <a class="btn" href="/webworks/start?plan=gold">Get started</a>
       </div>
       <div class="tier platinum">
         <span class="metal"><i></i>Platinum</span>
@@ -344,12 +354,12 @@
         <div class="who">Multi-location &amp; hands-off.</div>
         <div class="price">$999<small>/mo</small></div>
         <ul>
-          <li>Everything in Gold</li>
-          <li>Multiple locations / advanced pages</li>
-          <li>New pages &amp; seasonal updates on request</li>
-          <li>Same-day priority support</li>
+          <li>Everything in Gold, plus:</li>
+          <li>Multiple locations / custom pages</li>
+          <li>New pages &amp; seasonal campaigns</li>
+          <li>Same-day priority support + direct line</li>
         </ul>
-        <a class="btn" href="#start">Get started</a>
+        <a class="btn" href="/webworks/start?plan=platinum">Get started</a>
       </div>
     </div>
     <div class="annual"><span>💚 Prefer to pay yearly?</span> <b>Get 2 months free</b> <span>— 12 months for the price of 10.</span></div>
@@ -406,9 +416,9 @@
     <div>
       <span class="eyebrow">Who builds it</span>
       <h2>You're hiring a person, not an agency.</h2>
-      <p>I'm Nate — I run Joint Printing here in Marlton, and JP Webworks is me building sites for local businesses the same way I'd want my own built: fast, clean, and no runaround. When you text about a change, you're texting me — no account managers, no ticket queue, no offshore handoff. I take one company per trade in a town, so I've got the time to actually care about yours.</p>
-      <div class="sig">— Nate, Joint Printing <span>· Marlton, NJ</span></div>
-      <a class="btn ghost" href="#start"><span>Start with a quick chat →</span></a>
+      <p>I'm Nate — I run Joint Printing, and JP Webworks is me building sites for local businesses the same way I'd want my own built: fast, clean, and no runaround. When you text about a change, you're texting me — no account managers, no ticket queue, no offshore handoff. I take one company per trade in a town, so I've got the time to actually care about yours.</p>
+      <div class="sig">— Nate, Joint Printing</div>
+      <a class="btn ghost" href="/webworks/start"><span>Start with a quick chat →</span></a>
     </div>
   </div>
 </section>
@@ -452,14 +462,14 @@
   <div class="wrap">
     <h2>Let's get your business a site worth clicking.</h2>
     <p>Tell me a bit about what you do — I'll send back a plan and a price, no pressure.</p>
-    <a class="btn primary" href="mailto:nate@jointprinting.com?subject=JP%20Webworks%20—%20new%20site">Start your site →</a>
+    <a class="btn primary" href="/webworks/start">Start your site →</a>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
     <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
-    <span>Marlton, NJ · nate@jointprinting.com · A Joint Printing company</span>
+    <span>nate@jointprinting.com · A Joint Printing company</span>
   </div>
 </footer>
 </body>

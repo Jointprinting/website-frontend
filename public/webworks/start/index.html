@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Start your site — JP Webworks</title>
+<meta name="description" content="Tell JP Webworks about your business and get a simple plan and a price back — usually within one business day. No pressure, nothing owed." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/favicon.ico" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#0e1613; --paper:#f7f4ee; --paper-2:#efeae0; --line:#e2ddd1;
+    --muted:#57635c; --green:#17b877; --green-deep:#0f8f5c; --pine:#0d271d; --pine-2:#123227;
+    --card:#ffffff; --r:18px; --max:1080px;
+    --shadow:0 1px 2px rgba(14,22,19,.05),0 24px 50px -30px rgba(14,22,19,.5);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:#fff;background:radial-gradient(120% 90% at 85% -10%,var(--pine-2),var(--pine) 60%);
+    font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;min-height:100vh}
+  h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;line-height:1.04;letter-spacing:-.025em;margin:0;text-wrap:balance}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+
+  header{padding:22px 0}
+  .brand{display:inline-flex;align-items:center;gap:11px;font-family:'Bricolage Grotesque';font-weight:700;font-size:19px;color:#fff}
+  .brand img{width:30px;height:30px;border-radius:8px}
+  .brand b{color:var(--green)}
+  .back{float:right;color:rgba(255,255,255,.7);font-size:14px;font-weight:500;padding-top:6px}
+  .back:hover{color:#fff}
+
+  .grid{display:grid;grid-template-columns:1fr 1.05fr;gap:52px;align-items:start;padding:26px 0 80px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;gap:34px}}
+
+  /* Left — reassurance */
+  .pitch .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--green);
+    display:inline-flex;align-items:center;gap:9px;margin-bottom:16px}
+  .pitch .eyebrow::before{content:"";width:26px;height:2px;background:var(--green);border-radius:2px}
+  .pitch h1{font-size:clamp(34px,5vw,52px)}
+  .pitch .lede{color:rgba(255,255,255,.8);font-size:18px;margin:18px 0 30px;max-width:42ch}
+  .steps{list-style:none;padding:0;margin:0 0 30px;display:flex;flex-direction:column;gap:16px}
+  .steps li{display:flex;gap:14px;align-items:flex-start}
+  .steps .n{flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:rgba(23,184,119,.14);border:1px solid rgba(23,184,119,.3);
+    color:var(--green);font-family:'Bricolage Grotesque';font-weight:800;font-size:14px;display:grid;place-items:center}
+  .steps b{color:#fff;font-weight:700;font-family:'Bricolage Grotesque'}
+  .steps p{margin:2px 0 0;color:rgba(255,255,255,.72);font-size:14.5px}
+  .assure{display:flex;flex-wrap:wrap;gap:10px 18px;color:rgba(255,255,255,.85);font-size:13.5px}
+  .assure div{display:flex;align-items:center;gap:8px}
+  .assure svg{width:16px;height:16px;color:var(--green);flex:0 0 auto}
+
+  /* Right — form card */
+  .card{background:var(--card);color:var(--ink);border-radius:22px;padding:34px;box-shadow:var(--shadow)}
+  .card h2{font-size:23px}
+  .card .sub{color:var(--muted);font-size:14.5px;margin:6px 0 22px}
+  .planpill{display:none;align-items:center;gap:8px;background:rgba(23,184,119,.1);border:1px solid rgba(23,184,119,.4);
+    color:var(--green-deep);font-weight:600;font-size:13.5px;padding:9px 14px;border-radius:12px;margin-bottom:20px}
+  .planpill.show{display:flex}
+  .field{margin-bottom:15px}
+  .field.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:460px){.field.two{grid-template-columns:1fr}}
+  label{display:block;font-size:13px;font-weight:600;color:#2a352f;margin-bottom:6px}
+  label .opt{color:#9aa39c;font-weight:500}
+  input,select,textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:#fbfaf7;
+    border:1.5px solid var(--line);border-radius:11px;padding:12px 14px;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2357635c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:right 13px center;padding-right:40px}
+  textarea{resize:vertical;min-height:92px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,184,119,.15)}
+  input.err,select.err{border-color:#e0564e;box-shadow:0 0 0 3px rgba(224,86,78,.12)}
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+  .submit{width:100%;margin-top:8px;background:var(--green);color:#052b1c;font-weight:700;font-size:16px;border:0;
+    border-radius:999px;padding:15px;cursor:pointer;box-shadow:0 12px 28px -10px rgba(23,184,119,.6);
+    transition:background .16s,transform .16s,opacity .16s}
+  .submit:hover{background:var(--green-deep);color:#fff;transform:translateY(-1px)}
+  .submit:disabled{opacity:.6;cursor:default;transform:none}
+  .formnote{text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px}
+  .formerr{background:rgba(224,86,78,.1);border:1px solid rgba(224,86,78,.4);color:#b23b34;font-size:14px;
+    border-radius:11px;padding:12px 14px;margin-bottom:16px;display:none}
+  .formerr.show{display:block}
+
+  /* Success */
+  .done{display:none;text-align:center;padding:20px 6px}
+  .done.show{display:block}
+  .done .check{width:66px;height:66px;margin:0 auto 18px;border-radius:50%;background:rgba(23,184,119,.12);
+    display:grid;place-items:center}
+  .done .check svg{width:34px;height:34px;color:var(--green-deep)}
+  .done h2{font-size:24px}
+  .done p{color:var(--muted);font-size:15.5px;margin:12px auto 0;max-width:40ch}
+  .done .home{display:inline-block;margin-top:22px;color:var(--green-deep);font-weight:700;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
+    <a class="back" href="/webworks">← Back</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="pitch">
+      <span class="eyebrow">Start your site</span>
+      <h1>Tell me about your business.</h1>
+      <p class="lede">A few quick details is all I need to send back a simple plan and a price — usually within one business day.</p>
+      <ul class="steps">
+        <li><span class="n">1</span><div><b>You fill this out</b><p>The basics about what you do — no long questionnaire.</p></div></li>
+        <li><span class="n">2</span><div><b>I send a plan + price</b><p>A clear recommendation and a flat monthly number, no pressure.</p></div></li>
+        <li><span class="n">3</span><div><b>We build it, fast</b><p>Say yes and your site is usually live within a week.</p></div></li>
+      </ul>
+      <div class="assure">
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Reply within 1 business day</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> No pressure, nothing owed</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> You own the site, always</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="formWrap">
+        <h2>Get your plan &amp; price</h2>
+        <div class="sub">Takes about a minute. Only name, business, and email are required.</div>
+        <div class="planpill" id="planpill"></div>
+        <div class="formerr" id="formerr"></div>
+        <form id="leadForm" novalidate>
+          <div class="field two">
+            <div>
+              <label for="name">Your name</label>
+              <input id="name" name="name" type="text" autocomplete="name" required />
+            </div>
+            <div>
+              <label for="companyName">Business name</label>
+              <input id="companyName" name="companyName" type="text" autocomplete="organization" required />
+            </div>
+          </div>
+          <div class="field two">
+            <div>
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" autocomplete="email" required />
+            </div>
+            <div>
+              <label for="phone">Phone <span class="opt">(optional)</span></label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="businessType">What does your business do? <span class="opt">(optional)</span></label>
+            <input id="businessType" name="businessType" type="text" placeholder="e.g. tree care, pool service, HVAC, bakery" />
+          </div>
+          <div class="field two">
+            <div>
+              <label for="currentWebsite">Current website <span class="opt">(optional)</span></label>
+              <input id="currentWebsite" name="currentWebsite" type="text" placeholder="yoursite.com — or leave blank" />
+            </div>
+            <div>
+              <label for="planInterest">Plan that fits</label>
+              <select id="planInterest" name="planInterest">
+                <option value="Not sure yet">Not sure yet — help me pick</option>
+                <option value="Bronze">Bronze — Starter ($99/mo)</option>
+                <option value="Silver">Silver — Growth ($249/mo)</option>
+                <option value="Gold">Gold — Pro ($499/mo)</option>
+                <option value="Platinum">Platinum — Elite ($999/mo)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="notes">Anything else? <span class="opt">(optional)</span></label>
+            <textarea id="notes" name="notes" placeholder="What you're hoping the site does, a deadline, examples you like…"></textarea>
+          </div>
+          <div class="hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+          <button class="submit" id="submitBtn" type="submit">Send it →</button>
+          <div class="formnote">By sending this you're just starting a conversation — no commitment.</div>
+        </form>
+      </div>
+
+      <div class="done" id="done">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <h2>Got it — thank you!</h2>
+        <p id="doneMsg">Your request is in. I'll get back to you with a plan and a price, usually within one business day.</p>
+        <a class="home" href="/webworks">← Back to JP Webworks</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var API = 'https://jointprinting-backend.onrender.com';
+
+  // Pre-select the plan from ?plan=silver etc. and show a friendly confirmation pill.
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var plan = (params.get('plan') || '').toLowerCase();
+    var map = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
+    if (map[plan]) {
+      var sel = document.getElementById('planInterest');
+      sel.value = map[plan];
+      var pill = document.getElementById('planpill');
+      pill.textContent = '★ You picked the ' + map[plan] + ' plan — great choice. Tweak it anytime.';
+      pill.classList.add('show');
+    }
+  })();
+
+  var form = document.getElementById('leadForm');
+  var btn = document.getElementById('submitBtn');
+  var errBox = document.getElementById('formerr');
+
+  function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errBox.classList.remove('show');
+    ['name', 'companyName', 'email'].forEach(function (id) { document.getElementById(id).classList.remove('err'); });
+
+    var name = document.getElementById('name').value.trim();
+    var companyName = document.getElementById('companyName').value.trim();
+    var email = document.getElementById('email').value.trim();
+
+    var missing = [];
+    if (!name) { document.getElementById('name').classList.add('err'); missing.push('name'); }
+    if (!companyName) { document.getElementById('companyName').classList.add('err'); missing.push('business'); }
+    if (!email || !isEmail(email)) { document.getElementById('email').classList.add('err'); missing.push('email'); }
+    if (missing.length) {
+      errBox.textContent = 'Please add your ' + missing.join(', ') + ' so I can get back to you.';
+      errBox.classList.add('show');
+      return;
+    }
+
+    var data = new FormData(form); // includes the honeypot "website" field
+    btn.disabled = true; btn.textContent = 'Sending…';
+
+    fetch(API + '/api/email/webworks-lead', { method: 'POST', body: data })
+      .then(function (res) {
+        if (!res.ok) throw new Error('bad status ' + res.status);
+        document.getElementById('formWrap').style.display = 'none';
+        document.getElementById('done').classList.add('show');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = 'Send it →';
+        errBox.textContent = "Something went wrong sending that. Please try again, or email nate@jointprinting.com directly.";
+        errBox.classList.add('show');
+      });
+  });
+</script>
+</body>
+</html>

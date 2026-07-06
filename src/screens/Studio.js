@@ -572,6 +572,12 @@ function SubmissionsTab({ token, onOpenClients }) {
             <MuiTypography variant="caption" sx={{ color: BRAND.muted }}>
               {selected?.companyName}
             </MuiTypography>
+            {selected?.source === 'webworks' && (
+              <Chip label="JP Webworks lead" size="small" sx={{
+                mt: 0.6, height: 20, fontSize: 11, fontWeight: 700,
+                bgcolor: 'rgba(23,184,120,0.16)', color: '#4ade80',
+              }} />
+            )}
           </Box>
           <IconButton
             onClick={() => removeSubmission(selected._id)} size="small"
@@ -614,8 +620,19 @@ function SubmissionsTab({ token, onOpenClients }) {
                 <Detail label="Phone">
                   <MuiLink href={`tel:${(selected.phone || '').replace(/\D/g, '')}`} sx={{ color: BRAND.green }}>{selected.phone}</MuiLink>
                 </Detail>
-                <Detail label="Quantity per item">{selected.quantity || '-'}</Detail>
-                <Detail label="In-hand date">{selected.inHandDate || '-'}</Detail>
+                {selected.source === 'webworks' ? (
+                  <>
+                    <Detail label="Business / trade">{selected.webworks?.businessType || '-'}</Detail>
+                    <Detail label="Plan interest">{selected.webworks?.planInterest || '-'}</Detail>
+                    <Detail label="Current site">{selected.webworks?.currentWebsite || '-'}</Detail>
+                    <Detail label="Service area">{selected.webworks?.serviceArea || '-'}</Detail>
+                  </>
+                ) : (
+                  <>
+                    <Detail label="Quantity per item">{selected.quantity || '-'}</Detail>
+                    <Detail label="In-hand date">{selected.inHandDate || '-'}</Detail>
+                  </>
+                )}
                 <Detail label="Submitted">{formatDate(selected.createdAt)}</Detail>
                 <Detail label="Email status">
                   <Chip label={selected.emailStatus || '-'} size="small" sx={{
@@ -835,12 +852,15 @@ function SubmissionRow({ item, onClick, formatDate }) {
               · {item.companyName || '(no company)'}
             </MuiTypography>
             {item.honeypot && <Chip label="bot" size="small" sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(248,113,113,0.2)', color: '#f87171' }} />}
+            {item.source === 'webworks' && <Chip label="JP Webworks" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: 'rgba(23,184,120,0.18)', color: '#4ade80' }} />}
           </Stack>
           <MuiTypography variant="body2" sx={{
             color: BRAND.muted, fontFamily: 'monospace', fontSize: 12.5,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {item.email} · {item.phone} · qty {item.quantity || '?'} · in-hand {item.inHandDate || '?'}
+            {item.source === 'webworks'
+              ? `${item.email}${item.phone ? ' · ' + item.phone : ''}${item.webworks?.planInterest ? ' · ' + item.webworks.planInterest : ''}`
+              : `${item.email} · ${item.phone} · qty ${item.quantity || '?'} · in-hand ${item.inHandDate || '?'}`}
           </MuiTypography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center" flexShrink={0}>

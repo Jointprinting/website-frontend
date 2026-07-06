@@ -16,8 +16,6 @@
     }
   ],
   "redirects": [
-    { "source": "/demos", "destination": "/webworks" },
-    { "source": "/demos/:path*", "destination": "/webworks/:path*" },
     { "source": "/northpine", "destination": "/webworks/northpine" },
     { "source": "/clearwater", "destination": "/webworks/clearwater" }
   ]
