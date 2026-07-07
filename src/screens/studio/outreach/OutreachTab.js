@@ -424,6 +424,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
           <CampaignsView
             overview={overview} loading={overviewLoading}
             autoEnrollCampaignId={overview?.autoEnrollCampaignId || null}
+            autoEnrollOn={overview?.autoEnrollOn !== false}
             onCreate={createCampaign}
             onUpdate={updateCampaign}
             onLaunch={launchCampaign}
