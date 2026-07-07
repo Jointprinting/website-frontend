@@ -443,7 +443,7 @@ function LaunchDialog({ open, campaign, onClose, onLaunch, onTestSend, onError }
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, onRecoverSends, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, autoEnrollOn = true, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, onRecoverSends, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
   const [launchFor, setLaunchFor] = React.useState(null); // campaign | null (confirm + test gate)
@@ -572,11 +572,15 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                       </Tooltip>
                     )}
                     {onAutoEnroll && active && (() => {
-                      const on = autoEnrollCampaignId === c._id;
+                      // Auto-enroll is ON by default for any active campaign: it's on
+                      // unless the owner explicitly turned it off (autoEnrollOn=false).
+                      // When no campaign is pinned yet, the active campaign shows on
+                      // (the engine adopts it) — matching the backend's default-on.
+                      const on = autoEnrollOn && (!autoEnrollCampaignId || autoEnrollCampaignId === c._id);
                       return (
                         <Tooltip title={on
-                          ? 'Auto-enroll is ON — new cold leads flow into this campaign automatically. Click to turn off.'
-                          : 'Auto-enroll: keep this campaign topped up from your lead reserve automatically (still respects the daily cap + all guards).'}>
+                          ? 'Auto-enroll is ON — new cold leads flow into this campaign automatically, so nothing waits on you (still respects the daily cap + all guards). Click to turn off.'
+                          : 'Auto-enroll is off — turn it on to keep this campaign topped up from your lead reserve automatically.'}>
                           <Button onClick={() => onAutoEnroll(c._id, !on)}
                             startIcon={<AutoModeOutlinedIcon sx={{ fontSize: 16 }} />}
                             sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: on ? D.green : D.muted,
