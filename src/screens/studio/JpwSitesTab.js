@@ -346,10 +346,10 @@ function ConnectDomainDialog({ open, onClose, onConnect, busy, siteName }) {
             border: '1px solid rgba(96,165,250,0.25)', '& .MuiAlert-icon': { color: '#60a5fa' },
             fontSize: 12.5,
           }}>
-            Honest note: entering the domain here only records it and flips the
-            status — the site actually serves on that domain once it&apos;s added in
-            Vercel and DNS has propagated. The preview link keeps working the
-            whole time.
+            Once the domain is added in Vercel and DNS propagates, it serves the
+            client&apos;s site automatically — the app recognizes the domain and
+            renders their site instead of the Joint Printing pages. The preview
+            link keeps working the whole time.
           </Alert>
         </Stack>
       </DialogContent>
@@ -498,47 +498,85 @@ export default function JpwSitesTab({ token }) {
   }, [authHdr]);
   React.useEffect(() => { load(); }, [load]);
 
-  // ── Autosave (600ms debounce on content edits) ─────────────────────────────
+  // ── Autosave (600ms debounce, single-flight, edit-sequence tracked) ─────────
+  // Three guarantees the naive debounce version lacked:
+  //   1. ORDER — PUTs are chained (single-flight), so two in-flight saves can
+  //      never land out of order server-side (old content overwriting new).
+  //   2. NO GHOST RE-SENDS — the timer ref is cleared when the debounce fires,
+  //      and dirtiness is tracked by edit/saved sequence numbers, so closing the
+  //      editor doesn't re-PUT an already-saved draft.
+  //   3. NO SILENT LOSS — closing WAITS for the final flush; if it fails, the
+  //      editor stays open with the edits intact instead of discarding them.
   const saveTimer = React.useRef(null);
-  const persist = React.useCallback(async (site) => {
+  const editSeq = React.useRef(0);                       // bumps on every edit
+  const savedSeq = React.useRef(0);                      // highest seq persisted OK
+  const inFlightRef = React.useRef(Promise.resolve(true)); // the single-flight chain
+
+  const persist = React.useCallback((site, seq) => {
     setSaveState('saving');
-    try {
-      const { data } = await axios.put(`${API}/${site._id}`, { name: site.name, data: site.data }, authHdr);
-      const updated = data?.site;
-      if (updated) setSites((arr) => arr.map((s) => (s._id === site._id ? { ...s, ...updated } : s)));
-      setSaveState('saved');
-    } catch (e) {
-      setSaveState('error');
-    }
+    const run = inFlightRef.current.then(async () => {
+      try {
+        const { data } = await axios.put(`${API}/${site._id}`, { name: site.name, data: site.data }, authHdr);
+        const updated = data?.site;
+        if (updated) setSites((arr) => arr.map((s) => (s._id === site._id ? { ...s, ...updated } : s)));
+        savedSeq.current = Math.max(savedSeq.current, seq);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+    inFlightRef.current = run;
+    return run.then((ok) => {
+      // Only the LATEST save drives the indicator — an older chained save
+      // finishing must not flip "Saving…" to "Saved" under a newer edit.
+      if (inFlightRef.current === run) setSaveState(ok ? 'saved' : 'error');
+      return ok;
+    });
   }, [authHdr]);
 
   const queueSave = React.useCallback((next) => {
     setDraft(next);
     setSaveState('dirty');
+    editSeq.current += 1;
+    const seq = editSeq.current;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => persist(next), 600);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null; // fired — no stale timer for flush to misread
+      persist(next, seq);
+    }, 600);
   }, [persist]);
 
-  // Leaving the editor (or unmounting the tab) flushes any pending edit so the
-  // last keystrokes are never lost to the debounce window.
+  const hasUnsaved = () => editSeq.current > savedSeq.current;
+
+  // Unmount-only flush (best-effort; an unmount can't await or stay open).
   const flushRef = React.useRef(null);
-  flushRef.current = () => {
-    if (saveTimer.current && draft) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      persist(draft);
-    }
+  flushRef.current = (site) => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (site && hasUnsaved()) persist(site, editSeq.current);
   };
-  React.useEffect(() => () => { if (flushRef.current) flushRef.current(); }, []);
+  const draftRef = React.useRef(null);
+  draftRef.current = draft;
+  React.useEffect(() => () => { if (flushRef.current) flushRef.current(draftRef.current); }, []);
 
   const openEditor = (site) => {
     setDraft(JSON.parse(JSON.stringify(site))); // detach from the list copy
     setSaveState('idle');
+    editSeq.current = 0;
+    savedSeq.current = 0;
     setMobilePane('form');
     setDevice('desktop');
   };
-  const closeEditor = () => {
-    if (flushRef.current) flushRef.current();
+  const closeEditor = async () => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (draft && hasUnsaved()) {
+      // Waiting on the flush is the whole point: a failed final save must keep
+      // the editor (and the edits) alive, not silently drop the last keystrokes.
+      const ok = await persist(draft, editSeq.current);
+      if (!ok) {
+        flash("Couldn't save your last edits — check your connection. They're still here.", 'error');
+        return;
+      }
+    }
     setDraft(null);
     setSaveState('idle');
   };
@@ -702,8 +740,9 @@ export default function JpwSitesTab({ token }) {
         </Paper>
         {isLive && (
           <T sx={{ color: D.faint, fontSize: 11.5, mt: -1, mb: 2 }}>
-            Live on {draft.domain} — remember the domain must also be added to the
-            Vercel project (Settings → Domains) for it to actually serve.
+            Live on {draft.domain} — the app serves their site on that domain
+            automatically once it&apos;s added in Vercel (Settings → Domains) and
+            DNS points here.
           </T>
         )}
 
