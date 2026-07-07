@@ -1,13 +1,68 @@
 // src/webworks/templates/Wellness.js
 // JPW template: WELLNESS — salons, spas, massage, yoga studios.
 // Design voice: airy and elegant. High whitespace, light Cormorant Garamond
-// serif over letterspaced Jost captions, hairline rules instead of cards, a
-// soft floating circle behind the hero. Services render as ruled ledger rows,
-// not tiles — a completely different rhythm from the other templates.
+// serif over letterspaced Jost captions, hairline rules instead of cards, and
+// photography cropped into soft ARCHES — one grand arch under the hero (the
+// template's signature), smaller arch tiles in the gallery. Services render
+// as ruled ledger rows, not tiles. Photos are fail-safe: curated defaults
+// ship with the template (owner URLs override via data.photos) over crafted
+// ring-and-leaf underlayers in the palette.
 
 import * as React from 'react';
-import { useGoogleFonts, resolvePalette, initialsOf, telHref, txt, rows } from './_kit';
+import {
+  useGoogleFonts, resolvePalette, initialsOf, telHref, txt, rows,
+  mergePhotos, Ph, PH_CSS,
+} from './_kit';
 import { WELLNESS_PALETTES } from './_meta';
+
+// Curated defaults — well-known Unsplash spa/studio photography. Owner-
+// supplied data.photos.{hero,gallery} replace these slot-for-slot.
+const DEFAULT_PHOTOS = {
+  hero: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=1400&q=80',
+  gallery: [
+    'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1545205597-3d9d02c29597?auto=format&fit=crop&w=900&q=80',
+  ],
+};
+
+// Crafted no-photo tile: soft accent glow, concentric rings, a botanical glyph.
+function WellnessFx({ c, glyph }) {
+  const uid = React.useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  return (
+    <svg viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <radialGradient id={`wfx-${uid}`} cx="50%" cy="34%" r="75%">
+          <stop offset="0" stopColor={c.accent} stopOpacity=".42" />
+          <stop offset=".6" stopColor={c.accent} stopOpacity=".14" />
+          <stop offset="1" stopColor={c.accent} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width="400" height="500" fill={c.soft} />
+      <rect width="400" height="500" fill={`url(#wfx-${uid})`} />
+      <g fill="none" stroke={c.accent} opacity=".4" strokeWidth="1">
+        <circle cx="200" cy="230" r="80" /><circle cx="200" cy="230" r="124" />
+        <circle cx="200" cy="230" r="168" />
+      </g>
+      <g transform="translate(200 230)" fill="none" stroke={c.dark}
+        strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity=".62">
+        {glyph === 'leaf' && (<>
+          <path d="M0 -44C26 -18 26 16 0 44C-26 16 -26 -18 0 -44z" />
+          <path d="M0 -30v62" opacity=".7" />
+        </>)}
+        {glyph === 'stones' && (<>
+          <ellipse cx="0" cy="30" rx="40" ry="14" />
+          <ellipse cx="0" cy="2" rx="30" ry="12" />
+          <ellipse cx="0" cy="-22" rx="20" ry="10" />
+        </>)}
+        {glyph === 'sun' && (<>
+          <circle cx="0" cy="0" r="22" />
+          <path d="M0 -40v-8M0 40v8M-40 0h-8M40 0h8M-30 -30l-5 -5M30 30l5 5M30 -30l5 -5M-30 30l-5 5" opacity=".8" />
+        </>)}
+      </g>
+    </svg>
+  );
+}
 
 const css = (c) => `
 .jpww{--max:980px;font-family:'Jost','Helvetica Neue',Arial,sans-serif;background:${c.bg};color:${c.ink};line-height:1.7;font-weight:400;overflow-x:clip;min-height:100%;}
@@ -30,10 +85,18 @@ const css = (c) => `
 .jpww-nav .jpww-links + .jpww-callink{margin-left:0;}
 @media(max-width:720px){.jpww-links{display:none;}}
 
-/* Hero — vast whitespace, floating circle */
-.jpww-hero{position:relative;text-align:center;padding:clamp(76px,13vw,150px) 0 clamp(64px,10vw,120px);}
-.jpww-orb{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:min(520px,86vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 38% 32%,color-mix(in srgb,${c.accent} 22%,transparent),color-mix(in srgb,${c.accent} 8%,transparent) 62%,transparent 74%);pointer-events:none;}
+/* Hero — vast whitespace, floating circle, then the signature ARCH photo */
+.jpww-hero{position:relative;text-align:center;padding:clamp(76px,13vw,150px) 0 0;}
+.jpww-orb{position:absolute;left:50%;top:32%;transform:translate(-50%,-50%);width:min(520px,86vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 38% 32%,color-mix(in srgb,${c.accent} 22%,transparent),color-mix(in srgb,${c.accent} 8%,transparent) 62%,transparent 74%);pointer-events:none;}
 .jpww-hero-in{position:relative;z-index:1;}
+.jpww-arch-row{position:relative;z-index:1;display:flex;justify-content:center;align-items:flex-end;gap:clamp(18px,4vw,44px);
+  margin-top:clamp(44px,7vw,72px);padding-bottom:clamp(56px,9vw,104px);}
+.jpww-arch{width:min(460px,80vw);aspect-ratio:4/5;border-radius:999px 999px 14px 14px;
+  box-shadow:0 40px 70px -42px color-mix(in srgb,${c.dark} 65%,transparent);}
+.jpww-arch-side{flex:0 0 auto;width:1px;height:120px;background:${c.line};align-self:center;}
+@media(max-width:700px){.jpww-arch-side{display:none;}}
+.jpww-arch-cap{position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(18px,3.4vw,40px);
+  font-size:11.5px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:${c.sub};white-space:nowrap;}
 .jpww-hero h1{font-size:clamp(38px,7.2vw,74px);font-weight:500;max-width:18ch;margin:22px auto 0;}
 .jpww-hero .jpww-tag{margin:20px auto 0;max-width:46ch;font-size:clamp(15px,1.9vw,17.5px);color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
 .jpww-rule{width:1px;height:52px;background:${c.accent};margin:34px auto 0;opacity:.6;}
@@ -63,6 +126,15 @@ const css = (c) => `
 .jpww-philo h2{font-size:clamp(26px,4vw,40px);margin-top:12px;}
 .jpww-philo p{font-size:clamp(15px,1.9vw,17px);color:${c.sub};font-weight:300;white-space:pre-line;overflow-wrap:anywhere;}
 @media(max-width:720px){.jpww-philo{grid-template-columns:1fr;}.jpww-philo .vline{display:none;}}
+
+/* Gallery — small arch tiles, middle one dropped */
+.jpww-gal{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(14px,3vw,28px);max-width:820px;margin:0 auto;}
+@media(max-width:640px){.jpww-gal{grid-template-columns:1fr;max-width:340px;}}
+.jpww-gal .jpw-ph{aspect-ratio:3/4;border-radius:999px 999px 10px 10px;
+  box-shadow:0 26px 48px -34px color-mix(in srgb,${c.dark} 60%,transparent);transition:transform .2s;}
+.jpww-gal .jpw-ph:hover{transform:translateY(-4px);}
+@media(min-width:641px){.jpww-gal .jpw-ph:nth-child(2){transform:translateY(26px);}
+  .jpww-gal .jpw-ph:nth-child(2):hover{transform:translateY(22px);}}
 
 /* Testimonials — soft band, large serif quotes */
 .jpww-quotes{background:${c.soft};}
@@ -97,7 +169,11 @@ export default function WellnessTemplate({ data }) {
   const d = data || {};
   useGoogleFonts('family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Jost:wght@300;400;500;600');
   const pal = resolvePalette(WELLNESS_PALETTES, d.paletteId);
-  const style = React.useMemo(() => css(pal.c), [pal]);
+  const photos = React.useMemo(() => mergePhotos(d.photos, DEFAULT_PHOTOS), [d.photos]);
+  const style = React.useMemo(
+    () => css(pal.c) + PH_CSS('.jpww', `linear-gradient(165deg,${pal.c.soft},${pal.c.accent}55)`),
+    [pal]
+  );
 
   const name = txt(d.businessName) || 'Your Business';
   const phone = txt(d.phone);
@@ -156,6 +232,14 @@ export default function WellnessTemplate({ data }) {
             </div>
           )}
         </div>
+        {/* the signature arch — one grand, soft-cropped photo */}
+        <div className="jpww-arch-row">
+          <span className="jpww-arch-side" aria-hidden="true" />
+          <Ph className="jpww-arch" src={photos.hero} alt={name}
+            fx={<WellnessFx c={pal.c} glyph="leaf" />} />
+          <span className="jpww-arch-side" aria-hidden="true" />
+        </div>
+        <span className="jpww-arch-cap">{area || (established ? `Since ${established}` : name)}</span>
       </header>
 
       {services.length > 0 && (
@@ -187,6 +271,22 @@ export default function WellnessTemplate({ data }) {
             </div>
             <div className="vline" aria-hidden="true" />
             <p>{about}</p>
+          </div>
+        </section>
+      )}
+
+      {photos.gallery.length > 0 && (
+        <section className="jpww-sec" aria-label="Photos">
+          <div className="jpww-wrap">
+            <div className="jpww-sec-head">
+              <span className="jpww-cap">Moments</span>
+            </div>
+            <div className="jpww-gal">
+              {photos.gallery.map((src, i) => (
+                <Ph key={i} src={src} alt={`${name} — the space`}
+                  fx={<WellnessFx c={pal.c} glyph={['sun', 'leaf', 'stones'][i % 3]} />} />
+              ))}
+            </div>
           </div>
         </section>
       )}

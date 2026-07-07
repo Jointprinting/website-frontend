@@ -9,9 +9,17 @@
 //   initialsOf(name)       — 1–2 letter mark for the no-photo "logo" plate
 //   telHref(phone)         — tel: link from a human-formatted phone string
 //   txt(v) / rows(arr,…k)  — trim-to-string + "keep only rows with content"
+//   mergePhotos(p, defs)   — owner photo URLs over the template's curated set
+//   Ph / PH_CSS            — the fail-safe <img> stack (crafted tile under it)
 //
 // Templates NEVER render an empty shell: they pass their data through txt()/
 // rows() and drop any section that comes back empty.
+//
+// PHOTOS are fail-safe by construction. Every template ships a curated
+// default photo set (Unsplash CDN URLs) so a brand-new site looks finished,
+// and every photo renders as a STACK: a crafted palette scene (gradient +
+// SVG texture) sits under the real <img>/background layer, so the page still
+// looks designed while a photo loads — or if it never does.
 
 import * as React from 'react';
 
@@ -66,3 +74,44 @@ export const txt = (v) => (v == null ? '' : String(v).trim());
 // rows(d.services, 'name')  → services that actually have a name.
 export const rows = (arr, ...keys) =>
   Array.isArray(arr) ? arr.filter((r) => r && keys.some((k) => txt(r[k]) !== '')) : [];
+
+// ── Photos ───────────────────────────────────────────────────────────────────
+
+// Owner-supplied photo URLs win slot-by-slot; empty inputs fall back to the
+// template's curated defaults, so the preview is never photo-less.
+//   mergePhotos({hero:'', gallery:['x','']}, DEFAULTS) → hero: default, gallery: ['x']
+export const mergePhotos = (photos, defaults) => {
+  const p = photos && typeof photos === 'object' ? photos : {};
+  const ownGallery = Array.isArray(p.gallery) ? p.gallery.map(txt).filter(Boolean) : [];
+  return {
+    hero: txt(p.hero) || defaults.hero,
+    gallery: ownGallery.length ? ownGallery : defaults.gallery,
+  };
+};
+
+// Scoped CSS for the fail-safe stack. `scope` is the template's root class
+// (e.g. '.jpwt'); `tile` is the crafted underlayer background (each template
+// derives it from its palette so a missing photo still reads on-brand).
+export const PH_CSS = (scope, tile) => `
+${scope} .jpw-ph{position:relative;overflow:hidden;margin:0;background:${tile};}
+${scope} .jpw-ph>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
+${scope} .jpw-ph-fx{position:absolute;inset:0;display:block;pointer-events:none;}
+${scope} .jpw-ph-fx svg{width:100%;height:100%;display:block;}
+`;
+
+// Fail-safe <img>: the crafted `fx` scene renders UNDER the photo, so it is
+// what the visitor sees while the photo loads; if the photo 404s/blocks, the
+// img unmounts (and the wrapper gains .jpw-ph-noimg) leaving a designed tile
+// instead of a broken-image glyph.
+export function Ph({ src, alt, className = '', fx, style }) {
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => { setFailed(false); }, [src]);
+  return (
+    <figure className={`jpw-ph ${className}${failed ? ' jpw-ph-noimg' : ''}`} style={style}>
+      {fx ? <span className="jpw-ph-fx" aria-hidden="true">{fx}</span> : null}
+      {!failed && (
+        <img src={src} alt={alt || ''} loading="lazy" onError={() => setFailed(true)} />
+      )}
+    </figure>
+  );
+}

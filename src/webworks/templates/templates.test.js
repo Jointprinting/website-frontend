@@ -11,13 +11,17 @@
 //   3. tel:/mailto: links are real (the phone CTA is the whole point of a
 //      small-business one-pager).
 //   4. An unknown paletteId falls back to the first palette instead of
-//      exploding. Run via:  CI=true npm test
+//      exploding.
+//   5. PHOTOS are fail-safe: every template renders its curated default set
+//      when data.photos is absent, owner URLs override slot-for-slot, and a
+//      photo that fails to load collapses to the crafted underlayer tile
+//      (never a broken-image glyph). Run via:  CI=true npm test
 //
 // The registry's Component fields are React.lazy, so tests render inside
 // <Suspense>. `findBy*` waits for the lazy chunk to resolve.
 
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TEMPLATES, getTemplate } from './index';
 
 const FULL_DATA = {
@@ -112,5 +116,44 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
   test('unknown paletteId falls back to the first palette', async () => {
     renderTpl(tpl, { ...FULL_DATA, paletteId: 'not-a-palette' });
     expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+  });
+
+  test('curated default photos render through the fail-safe stack', async () => {
+    const { container } = renderTpl(tpl, FULL_DATA); // no data.photos → defaults
+    await screen.findAllByText(/North Pine Plumbing/);
+    // Fail-safe tiles exist, each with its crafted underlayer in place…
+    const tiles = container.querySelectorAll('.jpw-ph');
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.jpw-ph-fx').length).toBeGreaterThan(0);
+    // …and the default photo set is the curated Unsplash one.
+    const img = container.querySelector('.jpw-ph img');
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('src')).toContain('images.unsplash.com');
+  });
+
+  test('owner photo URLs override the curated defaults', async () => {
+    const { container } = renderTpl(tpl, {
+      ...FULL_DATA,
+      photos: { hero: 'https://example.com/hero.jpg', gallery: ['https://example.com/g1.jpg'] },
+    });
+    await screen.findAllByText(/North Pine Plumbing/);
+    // The hero lands somewhere (CSS background stack or an <img>)…
+    expect(container.innerHTML).toContain('https://example.com/hero.jpg');
+    // …and every fail-safe tile now shows owner photos, none of the defaults.
+    const srcs = [...container.querySelectorAll('.jpw-ph img')].map((i) => i.getAttribute('src'));
+    expect(srcs.length).toBeGreaterThan(0);
+    for (const src of srcs) expect(src).toMatch(/^https:\/\/example\.com\//);
+  });
+
+  test('a failed photo collapses to the crafted tile, not a broken glyph', async () => {
+    const { container } = renderTpl(tpl, FULL_DATA);
+    await screen.findAllByText(/North Pine Plumbing/);
+    const img = container.querySelector('.jpw-ph img');
+    fireEvent.error(img);
+    // The wrapper flags the failure, unmounts the img, keeps the crafted fx.
+    const failed = container.querySelector('.jpw-ph-noimg');
+    expect(failed).toBeTruthy();
+    expect(failed.querySelector('img')).toBeNull();
+    expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
   });
 });

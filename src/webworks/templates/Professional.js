@@ -2,14 +2,67 @@
 // JPW template: PROFESSIONAL — law, accounting, insurance, consulting.
 // Design voice: composed and credible. Baskerville serif headings on a strict
 // ruled grid, a navy/slate/burgundy authority color, an "At a glance" facts
-// panel in the hero, numbered practice areas. Zero decoration that doesn't
-// carry information — the discipline IS the style.
+// panel floating on a MUTED photo header band (heavy paper wash + fine rules
+// over the photo — presence without noise), numbered practice areas, and a
+// restrained photo strip. Photos are fail-safe: curated office/desk defaults
+// ship with the template (owner URLs override via data.photos) over crafted
+// pinstripe underlayers.
 
 import * as React from 'react';
-import { useGoogleFonts, resolvePalette, initialsOf, telHref, txt, rows } from './_kit';
+import {
+  useGoogleFonts, resolvePalette, initialsOf, telHref, txt, rows,
+  mergePhotos, Ph, PH_CSS,
+} from './_kit';
 import { PROFESSIONAL_PALETTES } from './_meta';
 
-const css = (c) => `
+// Curated defaults — well-known Unsplash office/practice photography. Owner-
+// supplied data.photos.{hero,gallery} replace these slot-for-slot.
+const DEFAULT_PHOTOS = {
+  hero: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1800&q=80',
+  gallery: [
+    'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=80',
+  ],
+};
+
+// Crafted no-photo tile: paper field, fine pinstripes, a ruled emblem.
+function ProfessionalFx({ c, glyph }) {
+  const uid = React.useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  return (
+    <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <pattern id={`pfx-${uid}`} width="14" height="14" patternUnits="userSpaceOnUse">
+          <path d="M0 14L14 0" stroke={c.dark} strokeWidth=".8" opacity=".1" />
+        </pattern>
+      </defs>
+      <rect width="400" height="300" fill={c.soft} />
+      <rect width="400" height="300" fill={`url(#pfx-${uid})`} />
+      <rect x="14" y="14" width="372" height="272" fill="none" stroke={c.dark} strokeWidth="1" opacity=".35" />
+      <rect x="20" y="20" width="360" height="260" fill="none" stroke={c.dark} strokeWidth=".6" opacity=".25" />
+      <path d="M120 150h56M224 150h56" stroke={c.accent} strokeWidth="1.5" opacity=".8" />
+      <g transform="translate(200 150)" fill="none" stroke={c.dark}
+        strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" opacity=".6">
+        {glyph === 'column' && (<>
+          <path d="M-18 -26h36M-18 26h36M-22 32h44" />
+          <path d="M-12 -26v52M0 -26v52M12 -26v52" />
+          <path d="M-20 -32h40l-20 -8z" />
+        </>)}
+        {glyph === 'pen' && (<>
+          <path d="M-24 24L14 -14l10 10L-14 34l-14 4z" />
+          <path d="M14 -14l6 -6c3 -3 8 -3 10 0c3 2 3 7 0 10l-6 6" />
+        </>)}
+        {glyph === 'scale' && (<>
+          <path d="M0 -30v56M-16 30h32" />
+          <path d="M-26 -18h52" />
+          <path d="M-26 -18l-10 22a12 8 0 0 0 20 0zM26 -18l-10 22a12 8 0 0 0 20 0z" />
+        </>)}
+      </g>
+    </svg>
+  );
+}
+
+const css = (c, hero) => `
 .jpwp{--max:1100px;font-family:'Libre Franklin','Helvetica Neue',Arial,sans-serif;background:${c.bg};color:${c.ink};line-height:1.65;overflow-x:clip;min-height:100%;}
 .jpwp *,.jpwp *::before,.jpwp *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpwp a{text-decoration:none;}
@@ -35,8 +88,17 @@ const css = (c) => `
 @media(max-width:860px){.jpwp-links{display:none;}}
 @media(max-width:560px){.jpwp-phone{display:none;}.jpwp-consult{margin-left:auto;}}
 
-/* Hero — split: statement / at-a-glance panel */
-.jpwp-hero{padding:clamp(52px,8vw,100px) 0;}
+/* Hero — split: statement / at-a-glance panel, floating on a MUTED photo
+   header band: heavy paper wash + fine ruled overlay over the photo, so the
+   photo is presence, not noise. The wash alone still reads composed. */
+.jpwp-hero{padding:clamp(52px,8vw,100px) 0;border-bottom:1px solid ${c.line};position:relative;
+  background-color:${c.soft};
+  background-image:
+    repeating-linear-gradient(0deg,transparent 0 52px,${c.line}66 52px 53px),
+    linear-gradient(97deg,${c.bg}fc 0%,${c.bg}f5 44%,${c.bg}b3 100%),
+    url('${hero}'),
+    linear-gradient(120deg,${c.soft},${c.bg} 70%);
+  background-size:auto,cover,cover,cover;background-position:center;}
 .jpwp-hero-grid{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(28px,5vw,64px);align-items:start;}
 .jpwp-eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
 .jpwp-eyebrow::before{content:'';width:34px;height:2px;background:${c.accent};}
@@ -73,6 +135,11 @@ const css = (c) => `
 .jpwp-about-grid .txt{border-left:2px solid ${c.accent};padding-left:clamp(18px,3vw,32px);font-size:clamp(15px,1.9vw,16.5px);color:${c.sub};white-space:pre-line;overflow-wrap:anywhere;}
 @media(max-width:720px){.jpwp-about-grid{grid-template-columns:1fr;}.jpwp-about-grid .txt{border-left:none;padding-left:0;border-top:2px solid ${c.accent};padding-top:18px;}}
 
+/* Photo strip — restrained, ruled captions */
+.jpwp-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:18px;}
+.jpwp-strip .jpw-ph{aspect-ratio:4/3;border:1px solid ${c.line};border-top:4px solid ${c.accent};}
+.jpwp-strip .jpw-ph>img{filter:saturate(.72) contrast(.98);}
+
 /* Testimonials — bordered columns */
 .jpwp-q-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:18px;}
 .jpwp-q{border:1px solid ${c.line};border-left:4px solid ${c.accent};padding:24px 22px;background:${c.surface};min-width:0;}
@@ -106,7 +173,11 @@ export default function ProfessionalTemplate({ data }) {
   const d = data || {};
   useGoogleFonts('family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700');
   const pal = resolvePalette(PROFESSIONAL_PALETTES, d.paletteId);
-  const style = React.useMemo(() => css(pal.c), [pal]);
+  const photos = React.useMemo(() => mergePhotos(d.photos, DEFAULT_PHOTOS), [d.photos]);
+  const style = React.useMemo(
+    () => css(pal.c, photos.hero) + PH_CSS('.jpwp', `linear-gradient(135deg,${pal.c.soft},${pal.c.bg})`),
+    [pal, photos.hero]
+  );
 
   const name = txt(d.businessName) || 'Your Business';
   const phone = txt(d.phone);
@@ -215,8 +286,25 @@ export default function ProfessionalTemplate({ data }) {
         </section>
       )}
 
+      {photos.gallery.length > 0 && (
+        <section className="jpwp-sec" aria-label="Photos">
+          <div className="jpwp-wrap">
+            <div className="jpwp-sec-head">
+              <h2 className="jpwp-serif">The practice</h2>
+              <span className="jpwp-sc">In brief</span>
+            </div>
+            <div className="jpwp-strip">
+              {photos.gallery.map((src, i) => (
+                <Ph key={i} src={src} alt={`${name} — the practice`}
+                  fx={<ProfessionalFx c={pal.c} glyph={['column', 'pen', 'scale'][i % 3]} />} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {quotes.length > 0 && (
-        <section className="jpwp-sec">
+        <section className="jpwp-sec" style={{ paddingTop: photos.gallery.length ? 0 : undefined }}>
           <div className="jpwp-wrap">
             <div className="jpwp-sec-head">
               <h2 className="jpwp-serif">Client words</h2>
