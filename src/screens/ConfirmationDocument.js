@@ -43,8 +43,12 @@ export const DOC = {
   amber:    '#fbbf24',
 };
 
-const card = { bgcolor: DOC.panel, border: `1px solid ${DOC.line}`, borderRadius: 3 };
-const eyebrow = { fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: DOC.green };
+// `onAccent` (text on a green fill) isn't in the legacy DOC set — default it so
+// the light tokens the caller passes light up correctly and the dark default
+// (builder preview) is unchanged.
+const DEFAULT_TOKENS = { ...DOC, onAccent: '#06140c' };
+const sxCard = (D) => ({ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3 });
+const sxEyebrow = (D) => ({ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: D.green });
 const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
 
 export function money(n) {
@@ -134,14 +138,14 @@ function itemTotalQty(it) {
 // A graceful image tile. If `src` is falsy OR the image fails to load, we show a
 // neutral placeholder — never a broken-image icon (H1 / MED: lightbox never
 // opens a broken image because onZoom is only wired when there's a live src).
-function DocImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
+function DocImg({ src, alt = '', onZoom, sx = {}, badge = true, D = DEFAULT_TOKENS }) {
   const [broken, setBroken] = React.useState(false);
   const live = !!src && !broken;
   return (
     <Box
       sx={{
         position: 'relative', flexShrink: 0, cursor: live && onZoom ? 'zoom-in' : 'default',
-        borderRadius: 'inherit', overflow: 'hidden', bgcolor: DOC.inset,
+        borderRadius: 'inherit', overflow: 'hidden', bgcolor: D.inset,
         display: 'flex', alignItems: 'center', justifyContent: 'center', ...sx,
         '&:hover .zoom-badge': { opacity: live ? 1 : 0 },
         '&:hover img.zimg': { transform: live ? 'scale(1.05)' : 'none' },
@@ -158,7 +162,7 @@ function DocImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
           onError={() => setBroken(true)}
           sx={{ width: '100%', height: '100%', objectFit: 'inherit', display: 'block' }} />
       ) : (
-        <ImageNotSupportedOutlinedIcon sx={{ color: DOC.faint, fontSize: 30 }} />
+        <ImageNotSupportedOutlinedIcon sx={{ color: D.faint, fontSize: 30 }} />
       )}
       {badge && live && onZoom && (
         <Box className="zoom-badge" sx={{
@@ -187,7 +191,12 @@ function DocImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
 //   onZoom             (src) => void  — opens the lightbox (optional; preview pane
 //                      passes a no-op or omits it).
 // ─────────────────────────────────────────────────────────────────────────────
-export default function ConfirmationDocument({ conf, project = {}, logo, resolveItemImages, onZoom }) {
+export default function ConfirmationDocument({ conf, project = {}, logo, resolveItemImages, onZoom, tokens }) {
+  // `tokens` themes the document (the client approval page passes its light/dark
+  // set). Omitted → the dark default, so the owner's builder preview is unchanged.
+  const D = tokens || DEFAULT_TOKENS;
+  const card = sxCard(D);
+  const eyebrow = sxEyebrow(D);
   const confItems = Array.isArray(conf?.items) ? conf.items : [];
   const totals = computeConfTotals(conf);
   const shipTos = Array.isArray(conf?.shipTos) ? conf.shipTos : [];
@@ -199,13 +208,13 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
 
   return (
     <Box sx={{
-      color: DOC.text,
+      color: D.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     }}>
       {/* Header — branded lockup + client / invoice / date */}
       <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, position: 'relative', overflow: 'hidden' }}>
         <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: `linear-gradient(90deg, ${DOC.greenDk}, ${DOC.green}, ${DOC.greenDk})` }} />
+          background: `linear-gradient(90deg, ${D.greenDk}, ${D.green}, ${D.greenDk})` }} />
         <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
           <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
             sx={{ width: 46, height: 46, flexShrink: 0, objectFit: 'contain',
@@ -227,28 +236,28 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
 
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between"
           alignItems={{ xs: 'flex-start', sm: 'flex-end' }} gap={1.5}
-          sx={{ mt: 2.5, pt: 2.5, borderTop: `1px solid ${DOC.line}` }}>
+          sx={{ mt: 2.5, pt: 2.5, borderTop: `1px solid ${D.line}` }}>
           <Box sx={{ minWidth: 0, maxWidth: '100%' }}>
-            <Typography sx={{ ...eyebrow, color: DOC.faint, mb: 0.5 }}>Prepared for</Typography>
+            <Typography sx={{ ...eyebrow, color: D.faint, mb: 0.5 }}>Prepared for</Typography>
             {/* Long company / contact names wrap instead of overflowing (MED). */}
             <Typography sx={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2, overflowWrap: 'anywhere' }}>
               {project.companyName || project.clientName || conf?.orderTitle || 'Untitled'}
             </Typography>
             {project.clientName && project.companyName && project.clientName !== project.companyName && (
-              <Typography sx={{ color: DOC.muted, fontSize: 13, mt: 0.2, overflowWrap: 'anywhere' }}>{project.clientName}</Typography>
+              <Typography sx={{ color: D.muted, fontSize: 13, mt: 0.2, overflowWrap: 'anywhere' }}>{project.clientName}</Typography>
             )}
           </Box>
           {(project.orderNumber || project.orderDate) && (
             <Stack direction="row" gap={3} sx={{ textAlign: { xs: 'left', sm: 'right' }, flexShrink: 0 }}>
               {project.orderNumber && (
                 <Box>
-                  <Typography sx={{ ...eyebrow, color: DOC.faint, mb: 0.5 }}>Invoice</Typography>
+                  <Typography sx={{ ...eyebrow, color: D.faint, mb: 0.5 }}>Invoice</Typography>
                   <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>#{project.orderNumber}</Typography>
                 </Box>
               )}
               {project.orderDate && (
                 <Box>
-                  <Typography sx={{ ...eyebrow, color: DOC.faint, mb: 0.5 }}>Date</Typography>
+                  <Typography sx={{ ...eyebrow, color: D.faint, mb: 0.5 }}>Date</Typography>
                   <Typography sx={{ fontSize: 14, fontWeight: 800 }}>
                     {new Date(project.orderDate).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                   </Typography>
@@ -260,8 +269,8 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
       </Box>
 
       {project.confirmationMessage && (
-        <Box sx={{ ...card, mt: 2, p: 2, borderLeft: `3px solid ${DOC.green}` }}>
-          <Typography sx={{ color: DOC.text, fontSize: 13.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+        <Box sx={{ ...card, mt: 2, p: 2, borderLeft: `3px solid ${D.green}` }}>
+          <Typography sx={{ color: D.text, fontSize: 13.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
             {project.confirmationMessage}
           </Typography>
         </Box>
@@ -271,7 +280,7 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
       <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5 }}>
         <Typography sx={{ ...eyebrow, mb: 2 }}>Your order</Typography>
         {confItems.length === 0 ? (
-          <Typography sx={{ color: DOC.faint, fontSize: 13, fontStyle: 'italic' }}>No items yet.</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 13, fontStyle: 'italic' }}>No items yet.</Typography>
         ) : (
           <Stack gap={2}>
             {confItems.map((it, idx) => {
@@ -279,16 +288,16 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
               const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
               const imgs = resolveImgs(it) || [];
               return (
-                <Box key={idx} sx={{ border: `1px solid ${DOC.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: DOC.inset }}>
+                <Box key={idx} sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: D.inset }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} gap={{ xs: 2, sm: 2.5 }} alignItems="flex-start">
                     {imgs.length > 0 && (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>
                         {imgs.map((src, i) => (
-                          <DocImg key={i} src={src} onZoom={onZoom}
+                          <DocImg key={i} src={src} onZoom={onZoom} D={D}
                             sx={{ width: { xs: 120, sm: 140 }, height: { xs: 120, sm: 140 }, objectFit: 'cover', borderRadius: 2,
-                              border: `1px solid ${DOC.line}`, bgcolor: DOC.panel,
+                              border: `1px solid ${D.line}`, bgcolor: D.panel,
                               transition: 'box-shadow 200ms ease, border-color 200ms ease',
-                              '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.45)', borderColor: DOC.lineHi } }} />
+                              '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.45)', borderColor: D.lineHi } }} />
                         ))}
                       </Box>
                     )}
@@ -300,23 +309,23 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                             <tr>
                               {['Size', 'Qty', 'Unit price'].map((h, hi) => (
                                 <th key={h} style={{ textAlign: hi === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase',
-                                  letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '5px 8px', borderBottom: `1px solid ${DOC.line}` }}>{h}</th>
+                                  letterSpacing: '0.5px', color: D.faint, padding: '5px 8px', borderBottom: `1px solid ${D.line}` }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {sizes.map((sz, i) => (
                               <tr key={i}>
-                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${DOC.line}`, color: DOC.text }}>{sz.label || '—'}</td>
-                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${DOC.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: DOC.text }}>{Number(sz.qty) || 0}</td>
-                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${DOC.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: DOC.text }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
+                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${D.line}`, color: D.text }}>{sz.label || '—'}</td>
+                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${D.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: D.text }}>{Number(sz.qty) || 0}</td>
+                                <td style={{ padding: '6px 8px', borderBottom: `1px solid ${D.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: D.text }}>{sz.unitPrice ? money(sz.unitPrice) : ''}</td>
                               </tr>
                             ))}
                           </tbody>
                         </Box>
                       )}
                       <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2} sx={{ mt: 1.25 }}>
-                        <Typography sx={{ ...eyebrow, color: DOC.faint }}>Item subtotal</Typography>
+                        <Typography sx={{ ...eyebrow, color: D.faint }}>Item subtotal</Typography>
                         <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>{money(itemSubtotal)}</Typography>
                       </Stack>
                     </Box>
@@ -340,31 +349,31 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                   .filter(r => r.qty > 0);
                 const tax = taxByKey[st.key];
                 return (
-                  <Box key={st.key || si} sx={{ border: `1px solid ${DOC.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.25 }, bgcolor: DOC.inset }}>
+                  <Box key={st.key || si} sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.25 }, bgcolor: D.inset }}>
                     <Typography sx={{ fontWeight: 800, fontSize: 14, overflowWrap: 'anywhere' }}>
                       {st.label || st.name || `Location ${si + 1}`}
                     </Typography>
                     {(st.name && st.label) && (
-                      <Typography sx={{ color: DOC.muted, fontSize: 12, mt: 0.2, overflowWrap: 'anywhere' }}>{st.name}</Typography>
+                      <Typography sx={{ color: D.muted, fontSize: 12, mt: 0.2, overflowWrap: 'anywhere' }}>{st.name}</Typography>
                     )}
                     {(st.street || st.cityStateZip) && (
-                      <Typography sx={{ color: DOC.muted, fontSize: 12, mt: 0.2, lineHeight: 1.45, overflowWrap: 'anywhere' }}>
+                      <Typography sx={{ color: D.muted, fontSize: 12, mt: 0.2, lineHeight: 1.45, overflowWrap: 'anywhere' }}>
                         {[st.street, st.cityStateZip].filter(Boolean).join(', ')}
                       </Typography>
                     )}
                     {rows.length > 0 && (
-                      <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${DOC.line}` }}>
+                      <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${D.line}` }}>
                         {rows.map((r, ri) => (
                           <Stack key={ri} direction="row" justifyContent="space-between" gap={2} sx={{ py: 0.4 }}>
-                            <Typography sx={{ fontSize: 12.5, color: DOC.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
+                            <Typography sx={{ fontSize: 12.5, color: D.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
                             <Typography sx={{ fontSize: 12.5, fontWeight: 700, flexShrink: 0, ...mono }}>{r.qty}</Typography>
                           </Stack>
                         ))}
                       </Box>
                     )}
                     {tax && tax.value > 0 && (
-                      <Stack direction="row" justifyContent="space-between" gap={2} sx={{ mt: 1, pt: 1, borderTop: `1px dashed ${DOC.line}` }}>
-                        <Typography sx={{ fontSize: 11.5, color: DOC.muted }}>{tax.label}</Typography>
+                      <Stack direction="row" justifyContent="space-between" gap={2} sx={{ mt: 1, pt: 1, borderTop: `1px dashed ${D.line}` }}>
+                        <Typography sx={{ fontSize: 11.5, color: D.muted }}>{tax.label}</Typography>
                         <Typography sx={{ fontSize: 11.5, fontWeight: 700, flexShrink: 0, ...mono }}>{money(tax.value)}</Typography>
                       </Stack>
                     )}
@@ -374,33 +383,33 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
             </Box>
             {/* Unassigned units — never silently drop/dup a split (C2). For each
                 item, units not assigned to any location surface here explicitly. */}
-            <UnassignedUnits confItems={confItems} shipTos={shipTos} />
+            <UnassignedUnits confItems={confItems} shipTos={shipTos} D={D} />
           </Box>
         )}
 
         {/* Totals — recessed panel, big green grand total. Subtotal row present
             so the client page, builder preview, and PDF all agree. */}
-        <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: DOC.inset, border: `1px solid ${DOC.line}` }}>
+        <Box sx={{ mt: 2.5, p: { xs: 2, md: 2.5 }, borderRadius: 2.5, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
           <Stack direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
-            <Box sx={{ color: DOC.muted }}>Subtotal</Box>
+            <Box sx={{ color: D.muted }}>Subtotal</Box>
             <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(totals.itemsSubtotal)}</Box>
           </Stack>
           {totals.lines.map((l, i) => (
             <Stack key={i} direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
-              <Box sx={{ color: DOC.muted, overflowWrap: 'anywhere' }}>{l.label}</Box>
+              <Box sx={{ color: D.muted, overflowWrap: 'anywhere' }}>{l.label}</Box>
               <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(l.value)}</Box>
             </Stack>
           ))}
-          <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${DOC.green}` }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={4} sx={{ mt: 1.25, pt: 1.5, borderTop: `2px solid ${D.green}` }}>
             <Box sx={{ fontWeight: 800, fontSize: 17 }}>Total</Box>
-            <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: { xs: 21, md: 24 }, color: DOC.green, letterSpacing: -0.5, overflowWrap: 'anywhere', ...mono }}>{money(totals.grandTotal)}</Box>
+            <Box sx={{ minWidth: 96, textAlign: 'right', fontWeight: 900, fontSize: { xs: 21, md: 24 }, color: D.green, letterSpacing: -0.5, overflowWrap: 'anywhere', ...mono }}>{money(totals.grandTotal)}</Box>
           </Stack>
         </Box>
 
         {project.confirmationTerms && (
-          <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${DOC.line}` }}>
-            <Typography sx={{ ...eyebrow, color: DOC.faint, mb: 0.75 }}>Terms</Typography>
-            <Typography sx={{ color: DOC.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{project.confirmationTerms}</Typography>
+          <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${D.line}` }}>
+            <Typography sx={{ ...eyebrow, color: D.faint, mb: 0.75 }}>Terms</Typography>
+            <Typography sx={{ color: D.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{project.confirmationTerms}</Typography>
           </Box>
         )}
       </Box>
@@ -414,7 +423,8 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
 // in amber rather than producing a negative count; the owner-side share guard
 // blocks an over-allocated split from ever reaching the client, so this is the
 // defensive display for already-saved data.
-function UnassignedUnits({ confItems, shipTos }) {
+function UnassignedUnits({ confItems, shipTos, D = DEFAULT_TOKENS }) {
+  const eyebrow = sxEyebrow(D);
   const keys = new Set((shipTos || []).map(s => s.key));
   const rows = confItems.map((it, idx) => {
     const total = itemTotalQty(it);
@@ -426,16 +436,16 @@ function UnassignedUnits({ confItems, shipTos }) {
   if (rows.length === 0) return null;
   const anyOver = rows.some(r => r.over);
   return (
-    <Box sx={{ mt: 1.5, border: `1px solid ${anyOver ? 'rgba(251,191,36,0.4)' : DOC.line}`, borderRadius: 2.5,
-      p: { xs: 1.75, md: 2 }, bgcolor: anyOver ? 'rgba(251,191,36,0.06)' : DOC.inset }}>
-      <Typography sx={{ ...eyebrow, color: anyOver ? DOC.amber : DOC.faint, mb: 0.75 }}>
+    <Box sx={{ mt: 1.5, border: `1px solid ${anyOver ? 'rgba(251,191,36,0.4)' : D.line}`, borderRadius: 2.5,
+      p: { xs: 1.75, md: 2 }, bgcolor: anyOver ? 'rgba(251,191,36,0.06)' : D.inset }}>
+      <Typography sx={{ ...eyebrow, color: anyOver ? D.amber : D.faint, mb: 0.75 }}>
         {anyOver ? 'Allocation needs attention' : 'Not yet assigned to a location'}
       </Typography>
       {rows.map((r, ri) => (
         <Stack key={ri} direction="row" justifyContent="space-between" gap={2} sx={{ py: 0.4 }}>
-          <Typography sx={{ fontSize: 12.5, color: DOC.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
+          <Typography sx={{ fontSize: 12.5, color: D.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Typography>
           {r.over ? (
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: DOC.amber, flexShrink: 0, ...mono }}>over-assigned</Typography>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: D.amber, flexShrink: 0, ...mono }}>over-assigned</Typography>
           ) : (
             <Typography sx={{ fontSize: 12.5, fontWeight: 700, flexShrink: 0, ...mono }}>{r.unassigned}</Typography>
           )}

@@ -22,6 +22,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
@@ -32,32 +34,51 @@ import ConfirmationDocument, { computeConfTotals } from './ConfirmationDocument'
 // transparency; it never changes the owner's stored confirmation total.
 const PAY_FEES = { cc: 0.0299, ach: 0.01 };
 
-// ── Brand tokens (dark) ──────────────────────────────────────────────────────
-const T = {
-  bg:       '#070b09',                    // near-black canvas (site = #050806)
-  panel:    '#0e1613',                    // elevated, green-tinted dark panel
-  panelHi:  '#13201a',                    // hover / selected panel
-  inset:    '#0a110d',                    // recessed (tables, totals)
-  line:     'rgba(255,255,255,0.08)',     // hairline
-  lineHi:   'rgba(74,222,128,0.45)',      // active green border
-  green:    '#4ade80',                    // lime accent
-  greenDk:  '#0e3b22',                    // deep green
-  glow:     'rgba(74,222,128,0.22)',
-  text:     '#f3f7f4',
-  muted:    'rgba(255,255,255,0.56)',
-  faint:    'rgba(255,255,255,0.34)',
-  amber:    '#fbbf24',
+// ── Brand tokens — light + dark. The client can flip the whole page (the owner
+// found the dark read "murky", so both are offered and the choice persists).
+// The key set matches ConfirmationDocument's DOC so the SAME tokens theme both
+// the picker and the confirmation document. `onAccent` = text on a green fill. ─
+const TOKENS = {
+  dark: {
+    bg:      '#0b1210',                    // lifted near-black canvas (was murky at #070b09)
+    panel:   '#111c17',                    // elevated, green-tinted dark panel
+    panelHi: '#16241d',                    // hover / selected panel
+    inset:   '#0d1712',                    // recessed (tables, totals)
+    line:    'rgba(255,255,255,0.09)',     // hairline
+    lineHi:  'rgba(74,222,128,0.45)',      // active green border
+    green:   '#4ade80',                    // lime accent (also legible as text on dark)
+    greenDk: '#0e3b22',                    // deep green (gradients)
+    glow:    'rgba(74,222,128,0.22)',
+    text:    '#f3f7f4',
+    muted:   'rgba(255,255,255,0.60)',
+    faint:   'rgba(255,255,255,0.40)',
+    amber:   '#fbbf24',
+    onAccent:'#06140c',                    // near-black text on a green fill
+    aura:    'rgba(74,222,128,0.10)',      // top-of-page glow
+    shadow:  '0 24px 60px rgba(0,0,0,0.55)',
+  },
+  light: {
+    bg:      '#f4f7f4',                    // soft off-white, faint green bias
+    panel:   '#ffffff',
+    panelHi: '#edf5ef',                    // hover / selected
+    inset:   '#f1f6f2',                    // recessed
+    line:    'rgba(9,28,18,0.12)',
+    lineHi:  'rgba(21,128,61,0.55)',
+    green:   '#15803d',                    // deep green — legible as text/accent on white
+    greenDk: '#bfe8cd',                    // pale green (light-mode gradients)
+    glow:    'rgba(21,128,61,0.16)',
+    text:    '#0c1a12',
+    muted:   'rgba(9,28,18,0.64)',
+    faint:   'rgba(9,28,18,0.46)',
+    amber:   '#b45309',
+    onAccent:'#ffffff',                    // white text on the deep-green fill
+    aura:    'rgba(21,128,61,0.10)',
+    shadow:  '0 24px 50px rgba(11,30,20,0.15)',
+  },
 };
 
-const card = {
-  bgcolor: T.panel,
-  border: `1px solid ${T.line}`,
-  borderRadius: 3,
-};
-const eyebrow = {
-  fontSize: 11, fontWeight: 800, letterSpacing: 2,
-  textTransform: 'uppercase', color: T.green,
-};
+const sxCard = (T) => ({ bgcolor: T.panel, border: `1px solid ${T.line}`, borderRadius: 3 });
+const sxEyebrow = (T) => ({ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: T.green });
 const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
 
 function money(n) {
@@ -110,7 +131,7 @@ function ZoomImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
 // ── 3-step progress rail (Choose → Review → Approve) ─────────────────────────
 // One glance tells the client where they are in the flow. `states` is a
 // 3-tuple of 'done' | 'current' | 'building' | 'todo'.
-function ProgressRail({ states }) {
+function ProgressRail({ states, T }) {
   const labels = ['Choose', 'Review', 'Approve'];
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: { xs: 0.5, sm: 1.5 }, px: 1 }}>
@@ -130,7 +151,7 @@ function ProgressRail({ states }) {
               <Box sx={{
                 width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0, fontSize: 12, fontWeight: 800, ...mono,
-                color: done ? '#06140c' : (active ? T.green : T.faint),
+                color: done ? T.onAccent : (active ? T.green : T.faint),
                 bgcolor: done ? T.green : 'transparent',
                 border: `2px solid ${done || active ? T.green : T.line}`,
                 boxShadow: active ? `0 0 0 0 ${T.green}` : 'none',
@@ -184,6 +205,30 @@ export default function ApprovalView() {
   const [payMethod, setPayMethod] = useState('');   // '' | 'cc' | 'ach' — client's payment choice
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
   const [lightbox, setLightbox] = useState(null);    // enlarged image src, or null when closed
+
+  // Light / dark — the owner found the dark "murky", so the client can flip it.
+  // Persisted per browser; first visit follows the OS preference, defaulting to
+  // the brand dark.
+  const [mode, setMode] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('jpw-approve-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+    } catch (_) { /* SSR / privacy mode — fall through */ }
+    return 'dark';
+  });
+  const toggleMode = () => setMode((m) => {
+    const next = m === 'dark' ? 'light' : 'dark';
+    try { window.localStorage.setItem('jpw-approve-theme', next); } catch (_) { /* ignore */ }
+    return next;
+  });
+  const T = TOKENS[mode] || TOKENS.dark;
+  // Theme-derived shared styles (re-computed when the client flips the toggle).
+  const card = sxCard(T);
+  const eyebrow = sxEyebrow(T);
+  const primaryBtn = sxPrimaryBtn(T);
+  const ghostBtn = sxGhostBtn(T);
+  const darkField = sxField(T);
 
   // Derived from the server's approvalStatus so reopening the link shows the
   // same locked state for the client every time.
@@ -474,9 +519,10 @@ export default function ApprovalView() {
   return (
     <Box sx={{
       minHeight: '100vh', bgcolor: T.bg, color: T.text,
+      transition: 'background-color 200ms ease, color 200ms ease',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       // Subtle green aura at the top — the page glows like the brand, not flat.
-      backgroundImage: `radial-gradient(120% 60% at 50% -10%, rgba(74,222,128,0.10), rgba(7,11,9,0) 60%)`,
+      backgroundImage: `radial-gradient(120% 60% at 50% -10%, ${T.aura}, rgba(7,11,9,0) 60%)`,
       '@keyframes rise':      { from: { opacity: 0, transform: 'translateY(12px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
       '@keyframes railPulse': { '0%,100%': { boxShadow: `0 0 0 0 ${T.glow}` }, '50%': { boxShadow: `0 0 0 6px rgba(74,222,128,0)` } },
       '@keyframes railBlink': { '0%,100%': { opacity: 0.35 }, '50%': { opacity: 1 } },
@@ -496,6 +542,17 @@ export default function ApprovalView() {
       )}
 
       <Box sx={{ maxWidth: 780, mx: 'auto', p: { xs: 2, md: 4 } }}>
+        {/* Light / dark toggle — always reachable, top-right. */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <IconButton onClick={toggleMode} size="small"
+            aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            sx={{ color: T.muted, border: `1px solid ${T.line}`, borderRadius: 999, px: 1.25, py: 0.5, gap: 0.6,
+              transition: 'color 150ms ease, border-color 150ms ease',
+              '&:hover': { color: T.green, borderColor: T.lineHi, bgcolor: T.panelHi } }}>
+            {mode === 'dark' ? <LightModeOutlinedIcon sx={{ fontSize: 17 }} /> : <DarkModeOutlinedIcon sx={{ fontSize: 17 }} />}
+            <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 700 }}>{mode === 'dark' ? 'Light' : 'Dark'}</Typography>
+          </IconButton>
+        </Box>
         {/* Header — branded lockup + client / invoice / date. In the
             confirmation stage the shared ConfirmationDocument renders its own
             (identical) header + message, so we suppress this one to avoid a
@@ -560,7 +617,7 @@ export default function ApprovalView() {
 
         {/* Progress rail */}
         <Box sx={{ mt: 2.5, mb: 0.5, animation: 'rise 500ms ease both', animationDelay: '60ms' }}>
-          <ProgressRail states={railStates} />
+          <ProgressRail states={railStates} T={T} />
         </Box>
 
         {stage !== 'confirmation' && p.confirmationMessage && (
@@ -590,32 +647,23 @@ export default function ApprovalView() {
         {/* ── Stage body ─────────────────────────────────────────────────── */}
         {stage === 'picker' ? (
           <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
-            <Typography sx={eyebrow}>Choose what you'd like</Typography>
-            <Typography sx={{ color: T.text, fontSize: { xs: 22, md: 26 }, fontWeight: 800, mt: 0.75, lineHeight: 1.2, letterSpacing: -0.3 }}>
-              Pick the options you want — you don't have to take everything.
+            <Typography sx={eyebrow}>Step 1 of 3 · Choose</Typography>
+            <Typography sx={{ color: T.text, fontSize: { xs: 25, md: 30 }, fontWeight: 800, mt: 0.75, lineHeight: 1.15, letterSpacing: -0.4 }}>
+              Pick what you'd like
             </Typography>
-            <Typography sx={{ color: T.muted, fontSize: 14, mt: 1, mb: 1.5, lineHeight: 1.65, maxWidth: 620 }}>
-              Every price is <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>all-in per unit</Box> — printing,
-              blanks and shipping included, nothing added later. For a group of alternatives, tap the one you like (or tap it
-              again to skip that group entirely). Tapping a design also signs off that artwork.
+            <Typography sx={{ color: T.muted, fontSize: { xs: 14.5, md: 15 }, mt: 1.25, mb: 3, lineHeight: 1.6, maxWidth: 540 }}>
+              Tap the options you want — you don't have to take everything. Every price is all-in per unit.
+              <Box component="span" sx={{ display: 'block', mt: 1, color: T.faint, fontSize: 13.5 }}>
+                Next you'll get your full confirmation — pricing, mockups &amp; details — to review and approve.
+                You're just choosing here; nothing's final yet.
+              </Box>
             </Typography>
-            {/* Set expectations for what's next — Nate's ask: make it clear the
-                next step is a full confirmation with mockups for art approval. */}
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 3, p: 1.5, borderRadius: 2,
-              bgcolor: T.inset, border: `1px solid ${T.line}` }}>
-              <ArrowForwardIcon sx={{ fontSize: 17, color: T.green, mt: 0.2, flexShrink: 0 }} />
-              <Typography sx={{ color: T.muted, fontSize: 12.5, lineHeight: 1.55 }}>
-                <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>Next:</Box> once you lock in, we build your
-                confirmation page — every item, size, price and mockup in one place — and send it back here so you can
-                give the final art approval. No payment or commitment on this step.
-              </Typography>
-            </Box>
             {groupNames.map((g, gi) => (
               <Box key={g} sx={{ mb: 3.5 }}>
                 <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
                   <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, ...mono,
-                    color: pickFor(g) !== undefined ? '#06140c' : T.green,
+                    color: pickFor(g) !== undefined ? T.onAccent : T.green,
                     bgcolor: pickFor(g) !== undefined ? T.green : 'transparent',
                     border: `2px solid ${T.green}`, transition: 'all 180ms ease' }}>
                     {pickFor(g) !== undefined ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
@@ -646,7 +694,7 @@ export default function ApprovalView() {
                           alignItems: 'center', justifyContent: 'center',
                           bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}`,
                           transition: 'all 160ms ease' }}>
-                          {sel && <CheckIcon sx={{ fontSize: 16, color: '#06140c', animation: 'popCheck 240ms ease' }} />}
+                          {sel && <CheckIcon sx={{ fontSize: 16, color: T.onAccent, animation: 'popCheck 240ms ease' }} />}
                         </Box>
                         {l.image && (
                           <ZoomImg src={l.image} onZoom={openLightbox} badge={false}
@@ -709,18 +757,15 @@ export default function ApprovalView() {
                 <Typography sx={{ color: T.green, fontSize: { xs: 28, sm: 34 }, fontWeight: 900, letterSpacing: -0.8, ...mono, lineHeight: 1 }}>
                   {money(selectionTotal)}
                 </Typography>
-                <Typography sx={{ color: T.faint, fontSize: 11, mt: 0.2 }}>estimated total</Typography>
               </Box>
             </Box>
-            {lockedNote && <LockedNote text={lockedNote} />}
+            {lockedNote && <LockedNote text={lockedNote} T={T} />}
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mt: 1 }}>
               <Button fullWidth disabled={pickBusy || !canSubmitPicks} onClick={submitPicks}
                 endIcon={!pickBusy && canSubmitPicks ? <ArrowForwardIcon /> : null}
                 sx={{ ...primaryBtn, flex: 2 }}>
-                {pickBusy ? <CircularProgress size={18} sx={{ color: '#06140c' }} />
-                  : canSubmitPicks
-                    ? `Lock in ${pickedGroupCount || standaloneLines.length} & approve the designs`
-                    : 'Tap the options you want'}
+                {pickBusy ? <CircularProgress size={18} sx={{ color: T.onAccent }} />
+                  : canSubmitPicks ? 'Continue to review' : 'Tap the options you want'}
               </Button>
               <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy} sx={{ ...ghostBtn, flex: 1 }}>
                 Ask a question
@@ -791,6 +836,7 @@ export default function ApprovalView() {
               logo={logo}
               resolveItemImages={confItemImages}
               onZoom={openLightbox}
+              tokens={T}
             />
           </Box>
         ) : (
@@ -859,7 +905,7 @@ export default function ApprovalView() {
                 <Box sx={{ textAlign: 'center', mb: 3 }}>
                   <Box sx={{ width: 60, height: 60, mx: 'auto', mb: 1.5, borderRadius: '50%', display: 'flex', alignItems: 'center',
                     justifyContent: 'center', bgcolor: T.green, animation: 'popCheck 360ms ease both' }}>
-                    <CheckIcon sx={{ color: '#06140c', fontSize: 34 }} />
+                    <CheckIcon sx={{ color: T.onAccent, fontSize: 34 }} />
                   </Box>
                   <Typography sx={{ fontWeight: 900, fontSize: 21 }}>You&apos;re all set — thank you!</Typography>
                   <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 0.75, lineHeight: 1.55 }}>
@@ -879,9 +925,9 @@ export default function ApprovalView() {
                   </Typography>
                 </Box>
                 {payMethod && (
-                  <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked />
+                  <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked T={T} />
                 )}
-                <TrackingTimeline steps={p.tracking?.steps || []} />
+                <TrackingTimeline steps={p.tracking?.steps || []} T={T} />
               </Box>
             ) : (
               <>
@@ -892,8 +938,8 @@ export default function ApprovalView() {
                 {/* Payment method + its fee, shown before approval so the client
                     sees the CC/ACH cost up front. Optional — approval still works
                     without choosing; it just records their preference. */}
-                <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} />
-                {lockedNote && <LockedNote text={lockedNote} />}
+                <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} T={T} />
+                {lockedNote && <LockedNote text={lockedNote} T={T} />}
                 {/* Brief, low-key "approval is final" notice. Lives inside the
                     pending action panel, which only renders on the finalized
                     confirmation/legacy view — never the picker/quoting stage. */}
@@ -905,7 +951,7 @@ export default function ApprovalView() {
                 </Box>
                 <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                   <Button onClick={handleApprove} disabled={actionBusy} endIcon={!actionBusy ? <ArrowForwardIcon /> : null}
-                    startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: '#06140c' }} /> : null}
+                    startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: T.onAccent }} /> : null}
                     sx={{ ...primaryBtn, flex: 1 }}>
                     Approve &amp; proceed
                   </Button>
@@ -923,21 +969,27 @@ export default function ApprovalView() {
         </Typography>
       </Box>
 
-      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="sm" fullWidth fullScreen={fullScreenDialog}
-        PaperProps={{ sx: { bgcolor: T.panel, color: T.text, border: `1px solid ${T.line}`, borderRadius: { xs: 0, sm: 3 }, backgroundImage: 'none' } }}>
-        <DialogTitle sx={{ fontWeight: 800 }}>Request edits</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: T.muted, fontSize: 13, mb: 1.5 }}>
-            What would you like changed? Be as specific as you like — colors, sizes, copy, anything at all.
+      <Dialog open={changesOpen} onClose={() => setChangesOpen(false)} maxWidth="xs" fullWidth fullScreen={fullScreenDialog}
+        PaperProps={{ sx: { bgcolor: T.panel, color: T.text, border: `1px solid ${T.line}`, borderRadius: { xs: 0, sm: 3 },
+          backgroundImage: 'none', boxShadow: T.shadow, overflow: 'hidden' } }}>
+        {/* Brand accent bar, so the dialog reads on-brand and finished, not bare. */}
+        <Box sx={{ height: 3, background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
+        <DialogTitle sx={{ px: { xs: 2.5, sm: 3 }, pt: 2.5, pb: 0.5 }}>
+          <Typography sx={{ ...eyebrow, mb: 0.5 }}>We&apos;re listening</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: 20, color: T.text, lineHeight: 1.2 }}>Send us a note</Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: { xs: 2.5, sm: 3 } }}>
+          <Typography sx={{ color: T.muted, fontSize: 13.5, mb: 1.75, lineHeight: 1.55 }}>
+            A question or a tweak — colors, sizes, copy, anything at all. We&apos;ll get right back to you.
           </Typography>
           <TextField fullWidth multiline minRows={4} autoFocus value={changesText} onChange={e => setChangesText(e.target.value)}
-            placeholder="e.g. Move the back logo up a couple inches, change shirt color to forest green, swap the hoodie sizes M → L."
+            placeholder="e.g. Can we see the hoodie in forest green? And bump the back logo up a couple inches."
             sx={darkField} />
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setChangesOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+        <DialogActions sx={{ px: { xs: 2.5, sm: 3 }, pb: 2.5, pt: 1, gap: 1 }}>
+          <Button onClick={() => setChangesOpen(false)} sx={{ ...ghostBtn, py: 0.9 }}>Cancel</Button>
           <Button onClick={handleRequestChanges} disabled={actionBusy || !changesText.trim()} sx={primaryBtn}>
-            {actionBusy ? <CircularProgress size={16} sx={{ color: '#06140c' }} /> : 'Send to team'}
+            {actionBusy ? <CircularProgress size={16} sx={{ color: T.onAccent }} /> : 'Send'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -963,27 +1015,27 @@ export default function ApprovalView() {
   );
 }
 
-// ── Shared button + field styles ─────────────────────────────────────────────
-const primaryBtn = {
-  bgcolor: T.green, color: '#06140c', fontWeight: 800, textTransform: 'none', px: 3, py: 1.25, fontSize: 14.5,
-  borderRadius: 999, boxShadow: `0 6px 20px ${T.glow}`, transition: 'transform 150ms ease, box-shadow 200ms ease, background 150ms ease',
-  '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 28px ${T.glow}` },
-  '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.25)', color: 'rgba(6,20,12,0.5)', boxShadow: 'none' },
-};
-const ghostBtn = {
+// ── Shared button + field styles (theme-aware) ───────────────────────────────
+const sxPrimaryBtn = (T) => ({
+  bgcolor: T.green, color: T.onAccent, fontWeight: 800, textTransform: 'none', px: 3, py: 1.25, fontSize: 14.5,
+  borderRadius: 999, boxShadow: `0 6px 20px ${T.glow}`, transition: 'transform 150ms ease, box-shadow 200ms ease, filter 150ms ease',
+  '&:hover': { bgcolor: T.green, filter: 'brightness(1.08)', transform: 'translateY(-1px)', boxShadow: `0 10px 28px ${T.glow}` },
+  '&.Mui-disabled': { bgcolor: T.green, opacity: 0.4, color: T.onAccent, boxShadow: 'none' },
+});
+const sxGhostBtn = (T) => ({
   color: T.text, border: `1px solid ${T.line}`, fontWeight: 700, textTransform: 'none', px: 3, py: 1.25, fontSize: 14, borderRadius: 999,
   transition: 'border-color 180ms ease, background 180ms ease',
-  '&:hover': { borderColor: 'rgba(255,255,255,0.3)', bgcolor: 'rgba(255,255,255,0.04)' },
-};
-const darkField = {
+  '&:hover': { borderColor: T.lineHi, bgcolor: T.panelHi },
+});
+const sxField = (T) => ({
   '& .MuiOutlinedInput-root': { bgcolor: T.inset, color: T.text, borderRadius: 2,
-    '& fieldset': { borderColor: T.line }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.25)' },
+    '& fieldset': { borderColor: T.line }, '&:hover fieldset': { borderColor: T.lineHi },
     '&.Mui-focused fieldset': { borderColor: T.green } },
   '& .MuiInputBase-input::placeholder': { color: T.faint, opacity: 1 },
-};
+});
 
 // Small amber "someone already decided" note.
-function LockedNote({ text }) {
+function LockedNote({ text, T }) {
   return (
     <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)' }}>
       <Typography sx={{ color: T.amber, fontSize: 13, lineHeight: 1.5 }}>{text}</Typography>
@@ -998,7 +1050,8 @@ function LockedNote({ text }) {
 // + a record of their choice; it does NOT change the order's stored total (the
 // owner owns that on the confirmation). `value` is '' | 'cc' | 'ach'. When
 // `locked` (post-approval) it renders read-only as a confirmation of the choice.
-function PaymentChoice({ value, onChange, baseTotal, locked = false }) {
+function PaymentChoice({ value, onChange, baseTotal, locked = false, T }) {
+  const eyebrow = sxEyebrow(T);
   const opts = [
     { key: 'cc',  label: 'Credit / debit card', sub: '2.99% processing fee' },
     { key: 'ach', label: 'ACH bank transfer',   sub: '1% processing fee' },
@@ -1031,7 +1084,7 @@ function PaymentChoice({ value, onChange, baseTotal, locked = false }) {
               <Box sx={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
                 bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}` }}>
-                {sel && <CheckIcon sx={{ fontSize: 13, color: '#06140c' }} />}
+                {sel && <CheckIcon sx={{ fontSize: 13, color: T.onAccent }} />}
               </Box>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: T.text }}>{o.label}</Typography>
@@ -1055,7 +1108,8 @@ function PaymentChoice({ value, onChange, baseTotal, locked = false }) {
 // TrackingTimeline — post-approval client view of where the project is. Dark
 // card, green progress meter, per-step optional carrier link.
 // ─────────────────────────────────────────────────────────────────────────────
-function TrackingTimeline({ steps }) {
+function TrackingTimeline({ steps, T }) {
+  const eyebrow = sxEyebrow(T);
   if (!Array.isArray(steps) || steps.length === 0) return null;
 
   let lastDoneIdx = -1;
@@ -1100,7 +1154,7 @@ function TrackingTimeline({ steps }) {
               )}
               <Box sx={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0, zIndex: 1, bgcolor: done ? T.green : T.panel,
-                border: done ? `2px solid ${T.green}` : `2px solid ${T.line}`, color: done ? '#06140c' : T.faint, transition: 'all 0.3s ease' }}>
+                border: done ? `2px solid ${T.green}` : `2px solid ${T.line}`, color: done ? T.onAccent : T.faint, transition: 'all 0.3s ease' }}>
                 {done ? <CheckIcon sx={{ fontSize: 15 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />}
               </Box>
               <Box sx={{ ml: 1.75, flex: 1, pt: 0.15, minWidth: 0 }}>
