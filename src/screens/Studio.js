@@ -1984,7 +1984,7 @@ const TIER_COLS = {
 // records. A new-site-inquiry row (from the hub's unseen-inquiry count) leads the
 // list, and the backup nudge (client-gated by localStorage) trails it; the whole
 // section still vanishes on a clean day.
-function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries }) {
+function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage }) {
   const [open, setOpen] = React.useState({});
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
@@ -1995,15 +1995,38 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries }) {
   // snoozes; the row body opens the Backup tab.
   const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
   const [hddDismissedAt, setHddDismissedAt] = React.useState(() => readTs(K_HDD_REMINDER));
+  // AI-budget warning: same dismiss pattern, plus the dismissed level so a
+  // warn → blocked escalation re-surfaces the (now red) row immediately instead
+  // of staying snoozed.
+  const [aiSnoozedAt, setAiSnoozedAt] = React.useState(() => readTs(K_AI_BUDGET_SNOOZE));
+  const [aiSnoozedLevel, setAiSnoozedLevel] = React.useState(() => {
+    try { return localStorage.getItem(K_AI_BUDGET_LEVEL) || ''; } catch (_) { return ''; }
+  });
   const now = Date.now();
   const dismiss = (key, setter) => (e) => {
     e.stopPropagation();
     try { localStorage.setItem(key, String(Date.now())); } catch (_) {}
     setter(Date.now());
   };
+  const dismissAi = (level) => (e) => {
+    e.stopPropagation();
+    try {
+      localStorage.setItem(K_AI_BUDGET_SNOOZE, String(Date.now()));
+      localStorage.setItem(K_AI_BUDGET_LEVEL, level);
+    } catch (_) {}
+    setAiSnoozedAt(Date.now());
+    setAiSnoozedLevel(level);
+  };
   const showOverdue = !!(backup && backup.isDue) && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
   const showHdd = !showOverdue && (now - hddDismissedAt > REMIND_HDD_MS);
   const s = (n) => (n === 1 ? '' : 's');
+
+  // AI-copywriting budget: show a row at 'warn' (amber) / 'blocked' (red). It
+  // recurs after the snooze window, and re-appears at once when warn escalates
+  // to blocked (a level we haven't dismissed yet).
+  const aiLevel = aiUsage && aiUsage.level;
+  const aiActive = aiLevel === 'warn' || aiLevel === 'blocked';
+  const showAi = aiActive && (aiLevel !== aiSnoozedLevel || (now - aiSnoozedAt > SNOOZE_AI_BUDGET_MS));
 
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
@@ -2055,6 +2078,30 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries }) {
       label: `${unseenContact} new inquir${unseenContact === 1 ? 'y' : 'ies'} from the site`,
       onClick: () => onPick && onPick('submissions'),
     });
+  }
+
+  // AI-copywriting budget row. Blocked is urgent → lead the list (red);
+  // warn is a heads-up → sit with the other nudges (amber). Body opens the
+  // JP Webworks Websites tab (where the spend happens); ✕ snoozes.
+  if (showAi) {
+    const pct = Math.round((Number(aiUsage.pct) || 0) * 100);
+    const budget = Number(aiUsage.budgetUsd) || 0;
+    const used = (Number(aiUsage.estCostUsd) || 0).toFixed(2);
+    const aiRow = aiLevel === 'blocked'
+      ? {
+        key: 'ai-budget', tone: '#f87171',
+        label: 'AI copywriting is paused — monthly budget reached. Top up Anthropic credit / raise the budget.',
+        onClick: () => onPick && onPick('jpwsites'),
+        onDismiss: dismissAi('blocked'),
+      }
+      : {
+        key: 'ai-budget', tone: D.amber,
+        label: `AI copywriting is at ${pct}% of this month's $${budget} budget (~$${used} used)`,
+        onClick: () => onPick && onPick('jpwsites'),
+        onDismiss: dismissAi('warn'),
+      };
+    if (aiLevel === 'blocked') rows.unshift(aiRow);
+    else rows.push(aiRow);
   }
 
   // Backup nudge rows (client-gated), appended after the data signals.
@@ -2165,7 +2212,7 @@ function PulseBar({ pulse }) {
   );
 }
 
-function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, isOwner, token }) {
+function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, aiUsage, isOwner, token }) {
   // "On hold" sub-lists (a group's dismissed tools) collapse by default —
   // present but out of the way. State keyed by brand so each remembers its own
   // open/closed for this session.
@@ -2197,7 +2244,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
-      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} />
+      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} aiUsage={aiUsage} />
 
       {HUB_GROUPS.map((group) => (
         <Box key={group.brand}>
@@ -2353,6 +2400,10 @@ function StudioBody({ token, onLogout }) {
   // tile wears `contact`, the JP Webworks tile wears `webworks`. Fetched as
   // two source-scoped counts so each badge clears only when ITS view opens.
   const [unseenInquiries, setUnseenInquiries] = React.useState({ contact: 0, webworks: 0 });
+  // AI-copywriting budget snapshot (GET /api/jpw/ai-usage) — powers the hub's
+  // low-credit Signal row so the owner isn't surprised by a drained Anthropic
+  // balance. Null until the fetch lands (or if it fails — then no row shows).
+  const [aiUsage, setAiUsage] = React.useState(null);
   // Command-center signals shown in the hub's Signals panel: orders aging past the
   // owner's 2–3 week turnaround, overdue/due-today follow-ups, and the backup nudge.
   // Each fetch fails silent — a down endpoint just drops its row. (Missing-receipt
@@ -2416,6 +2467,12 @@ function StudioBody({ token, onLogout }) {
         .then((res) => { if (!cancelled) setUnseenInquiries((u) => ({ ...u, [source]: res.data?.count || 0 })); })
         .catch(() => { /* silent — bubble just won't show */ });
     });
+    // AI-credit guardrail snapshot — a 'warn'/'blocked' level lights up a
+    // dismissible Signal row (see SignalsPanel). Silent-fails so an old backend
+    // (no /ai-usage) just hides the row.
+    axios.get(`${config.backendUrl}/api/jpw/ai-usage`, authH)
+      .then((res) => { if (!cancelled) setAiUsage(res.data || null); })
+      .catch(() => { /* silent — AI-budget row just won't show */ });
     return () => { cancelled = true; };
   }, [view, token]);
 
@@ -2668,7 +2725,7 @@ function StudioBody({ token, onLogout }) {
         </Fade>
 
         {isHub ? (
-          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} isOwner={isOwner} token={token} />
+          <Hub onPick={handlePick} onNavigate={navigate} signals={signals} sweepNeeded={sweepNeeded} sweepBlocked={sweepBlocked} nextResetAt={nextResetAt} unseenInquiries={unseenInquiries} aiUsage={aiUsage} isOwner={isOwner} token={token} />
         ) : (
           <Grow in timeout={350}>
             <Paper elevation={0} sx={{
@@ -2817,6 +2874,13 @@ const SNOOZE_OVERDUE_MS = 7  * 24 * 60 * 60 * 1000;   // a week
 const REMIND_HDD_MS     = 30 * 24 * 60 * 60 * 1000;   // ~monthly
 const K_OVERDUE_SNOOZE  = 'jpBackupOverdueSnoozedAt';
 const K_HDD_REMINDER    = 'jpHddReminderDismissedAt';
+// AI-budget warning: dismissible but recurring (re-nags after ~half a day), and
+// re-surfaces immediately if the level escalates warn → blocked (a different
+// dismissed-level than the current one clears the snooze). Mirrors the backup
+// nudge's localStorage-gated pattern.
+const SNOOZE_AI_BUDGET_MS = 12 * 60 * 60 * 1000;      // half a day
+const K_AI_BUDGET_SNOOZE  = 'jpAiBudgetSnoozedAt';
+const K_AI_BUDGET_LEVEL   = 'jpAiBudgetSnoozedLevel';
 
 function readTs(key) {
   try { const v = parseInt(localStorage.getItem(key), 10); return Number.isFinite(v) ? v : 0; }

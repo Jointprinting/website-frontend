@@ -45,6 +45,9 @@ import { TEMPLATES, getTemplate } from '../../webworks/templates';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/jpw/sites`;
+// AI-credit guardrail snapshot — mirrors the Studio hub's Signal row, shown small
+// right by the Generate button so the spend is visible where it happens.
+const AI_USAGE_API = `${config.backendUrl}/api/jpw/ai-usage`;
 
 // Status vocabulary — mirrors the backend JpwSite status enum.
 const SITE_STATUS = {
@@ -651,6 +654,16 @@ export default function JpwSitesTab({ token }) {
 
   const openNew = (tplId = null) => { setPreselectTpl(tplId); setNewOpen(true); };
 
+  // AI-copywriting budget snapshot (GET /api/jpw/ai-usage). Silent-fails so an
+  // old backend just hides the little "$X of $Y used" line.
+  const [aiBudget, setAiBudget] = React.useState(null);
+  const loadAiBudget = React.useCallback(async () => {
+    try {
+      const { data } = await axios.get(AI_USAGE_API, authHdr);
+      setAiBudget(data || null);
+    } catch (_) { /* silent — the budget line just won't show */ }
+  }, [authHdr]);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setLoadErr('');
@@ -663,7 +676,7 @@ export default function JpwSitesTab({ token }) {
       setLoading(false);
     }
   }, [authHdr]);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { load(); loadAiBudget(); }, [load, loadAiBudget]);
 
   // ── Autosave (600ms debounce, single-flight, edit-sequence tracked) ─────────
   // Three guarantees the naive debounce version lacked:
@@ -825,8 +838,12 @@ export default function JpwSitesTab({ token }) {
       queueSave({ ...draft, data: nextData });
       setGenOpen(false);
       flash(`Site written — review and tweak, then publish.${needs.length ? ` Still add: ${needs.join(', ')}.` : ''}`);
+      loadAiBudget();                          // refresh the "$X of $Y used" line after a spend
     } catch (e) {
+      // Includes the budget-block message ("AI budget reached for this month…")
+      // when the backend refuses — shown plainly, no spinner left hanging.
       flash(e.response?.data?.message || 'Could not write the site — try again.', 'error');
+      loadAiBudget();                          // a block may mean level just flipped — resync
     } finally {
       setGenBusy(false);
     }
@@ -980,6 +997,18 @@ export default function JpwSitesTab({ token }) {
               <T sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, textAlign: 'center' }}>
                 Paste the client&apos;s email or notes and the AI writes the whole site — then you tweak it.
               </T>
+              {aiBudget && aiBudget.configured && aiBudget.budgetUsd > 0 && (
+                <T sx={{
+                  mt: 0.4, textAlign: 'center', fontSize: 11,
+                  fontWeight: aiBudget.level === 'ok' ? 400 : 700,
+                  color: aiBudget.level === 'blocked' ? '#f87171'
+                    : aiBudget.level === 'warn' ? D.amber : D.faint,
+                }}>
+                  {aiBudget.level === 'blocked'
+                    ? `AI paused — $${(Number(aiBudget.estCostUsd) || 0).toFixed(2)} of $${aiBudget.budgetUsd} monthly AI budget used`
+                    : `~$${(Number(aiBudget.estCostUsd) || 0).toFixed(2)} of $${aiBudget.budgetUsd} AI budget used this month`}
+                </T>
+              )}
             </Box>
 
             <Section title="Basics">
