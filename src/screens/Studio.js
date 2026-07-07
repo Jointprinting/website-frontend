@@ -2410,7 +2410,12 @@ function StudioBody({ token, onLogout }) {
     }
     if (id === 'submissions' && unseenInquiries > 0) {
       setUnseenInquiries(0);
-      axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, {},
+      // SCOPE the mark-seen to what the owner is actually about to look at: the
+      // JP Webworks Inquiries tile opens a webworks-filtered view, so it must
+      // not wipe the unseen state of contact-form leads he never saw. (An older
+      // backend ignores the body — harmless.)
+      const markBody = innerView === 'webworks' ? { source: 'webworks' } : {};
+      axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, markBody,
         { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
         .catch(() => { /* best-effort; badge already cleared locally */ });
     }

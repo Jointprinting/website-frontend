@@ -1,7 +1,10 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { CssBaseline, ThemeProvider } from '@mui/material';
+import axios from 'axios';
 import theme from './theme';
+import config from './config.json';
+import { isAppHost } from './webworks/hostGate';
 import AnnouncementBar from './common/AnnouncementBar';
 import Navbar from './common/Navbar';
 import Footer from './common/Footer';
@@ -30,6 +33,8 @@ const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
 // isClientSite below). The static /webworks marketing + demo pages live in
 // public/ and never reach the router; only /p/* falls through to the SPA.
 const WebworksPreview = lazy(() => import('./screens/WebworksPreview'));
+// A LIVE client site on its own CONNECTED domain (see HostGate below).
+const ClientSite = lazy(() => import('./screens/ClientSite'));
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
@@ -141,12 +146,54 @@ function AppShell() {
   );
 }
 
+// ── Connected-domain gate ─────────────────────────────────────────────────────
+// A paid JP Webworks client's domain points at THIS Vercel project, so their
+// requests run this same bundle. Before showing any Joint Printing chrome,
+// classify the hostname: our own hosts render the normal app; anything else is
+// looked up against the live client sites (public by-domain endpoint) and, when
+// it matches, renders the CLIENT's site full-page instead. Unknown hosts fall
+// through to the normal app so an unrecognized alias of the main site never
+// bricks. The check runs once per page load (hostname can't change without one).
+function HostGate({ children }) {
+  const [state, setState] = React.useState(() => (isAppHost(window.location.hostname) ? 'app' : 'checking'));
+  const [site, setSite] = React.useState(null);
+  React.useEffect(() => {
+    if (state !== 'checking') return undefined;
+    let alive = true;
+    axios.get(`${config.backendUrl}/api/jpw/sites/public/domain/${encodeURIComponent(window.location.hostname)}`, { timeout: 15000 })
+      .then((res) => {
+        if (!alive) return;
+        const s = res.data?.site;
+        if (s) { setSite(s); setState('client'); } else setState('app');
+      })
+      .catch(() => { if (alive) setState('app'); });
+    return () => { alive = false; };
+  }, [state]);
+  if (state === 'checking') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6f7f6' }}>
+        <JpLoader size={64} tone="light" />
+      </div>
+    );
+  }
+  if (state === 'client' && site) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#f6f7f6' }} />}>
+        <ClientSite site={site} />
+      </Suspense>
+    );
+  }
+  return children;
+}
+
 function App() {
   return (
     <div className="App" style={{ overflowX: 'hidden' }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <AppShell />
+        <HostGate>
+          <AppShell />
+        </HostGate>
       </ThemeProvider>
     </div>
   );
