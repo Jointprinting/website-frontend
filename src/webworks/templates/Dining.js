@@ -70,7 +70,9 @@ const css = (c, p) => `
 .jpwd *,.jpwd *::before,.jpwd *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpwd a{text-decoration:none;}
 .jpwd-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(16px,4vw,32px);}
-.jpwd-serif{font-family:'Fraunces',Georgia,serif;font-weight:500;line-height:1.15;overflow-wrap:anywhere;}
+/* display serif never breaks mid-word — break-word only splits a word wider
+   than the whole line, which real headlines never are at these clamps */
+.jpwd-serif{font-family:'Fraunces',Georgia,serif;font-weight:500;line-height:1.15;overflow-wrap:break-word;}
 
 /* Nav — warm, hairline, round call pill */
 .jpwd-nav{position:sticky;top:0;z-index:50;background:${c.bg};border-bottom:1px solid ${c.line};}
@@ -161,14 +163,11 @@ const css = (c, p) => `
 .jpwd-q + .jpwd-q{margin-top:28px;position:relative;padding-top:34px;}
 .jpwd-q + .jpwd-q::before{content:'✦';position:absolute;top:0;left:50%;transform:translateX(-50%);color:${c.accent};font-size:13px;}
 
-/* Gallery — fail-safe photo tiles, gently framed */
-.jpwd-gal{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:16px;max-width:960px;margin:0 auto;}
+/* Gallery — fail-safe photo tiles, gently framed, top-aligned */
+.jpwd-gal{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:16px;max-width:960px;margin:0 auto;align-items:start;}
 .jpwd-gal .jpw-ph{aspect-ratio:4/3;border-radius:6px;border:1px solid ${c.line};
   box-shadow:0 18px 36px -26px rgba(30,16,8,.55);transition:transform .18s;}
 .jpwd-gal .jpw-ph:hover{transform:translateY(-3px);}
-.jpwd-gal .jpw-ph:nth-child(2){transform:translateY(14px);}
-.jpwd-gal .jpw-ph:nth-child(2):hover{transform:translateY(11px);}
-@media(max-width:700px){.jpwd-gal .jpw-ph:nth-child(2){transform:none;}}
 
 /* Hours + visit — twin cards */
 .jpwd-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:18px;max-width:860px;margin:0 auto;}

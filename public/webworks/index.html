@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JP Webworks — Your website, built free. Pay when it's live.</title>
+<title>JP Webworks — Your website, built free. Pay when it’s live.</title>
 <meta name="description" content="JP Webworks builds and runs websites for local businesses. See your finished site before you pay a dollar — plans from $99 a month, no build fee, no big upfront cost." />
 <meta name="robots" content="noindex" />
 <link rel="icon" href="/favicon.ico" />
@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <!-- Roboto Condensed + Work Sans = the Joint Printing brand type (src/brand.js).
      Bitter + Sora are loaded at one weight each purely so the two example-site
-     preview cards can show each demo's real wordmark. -->
+     preview cards can show each demo’s real wordmark. -->
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Work+Sans:wght@400;500;600;700&family=Bitter:wght@800&family=Sora:wght@800&display=swap" rel="stylesheet" />
 <style>
   /* JP brand tokens — mirrors src/brand.js (forest / emerald / ink / paper). */
@@ -64,10 +64,8 @@
   .navlinks{display:flex;align-items:center;gap:26px;font-size:14.5px;font-weight:500;color:var(--on-dark-muted)}
   .navlinks a:hover{color:var(--on-dark)}
   .navlinks .btn{padding:10px 20px;font-size:14.5px}
-  @media(max-width:800px){
-    nav{flex-wrap:wrap;padding:12px 0}
-    .navlinks{width:100%;flex-wrap:wrap;gap:14px 20px}
-  }
+  /* mobile: logo + the Get-started pill only — the hero starts on screen one */
+  @media(max-width:800px){.navlinks a:not(.btn){display:none}}
 
   /* ── Hero — copy left, the PRODUCT right: layered live-site previews ── */
   .hero{position:relative;color:var(--on-dark);padding:72px 0 0;isolation:isolate;overflow:hidden;
@@ -136,7 +134,7 @@
   .chrome i:nth-child(1){background:#e8a69b}.chrome i:nth-child(2){background:#ead9a1}.chrome i:nth-child(3){background:#b5d4ae}
   .chrome .url{margin-left:8px;flex:1;min-width:0;font-size:11px;color:#8b8b84;background:#fff;
     border-radius:6px;padding:4px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* mini homepage renders — drawn from each demo's REAL new design */
+  /* mini homepage renders — drawn from each demo’s REAL new design */
   .pv{height:246px;overflow:hidden;pointer-events:none;position:relative}
   .pv *{min-width:0}
   /* Northpine mini — photo-dark pine hero, amber board, cream badge strip */
@@ -285,7 +283,7 @@
   .annual{margin:34px 0 0;font-size:15.5px;color:var(--on-dark-muted);
     border:1px solid rgba(74,222,128,.4);background:rgba(74,222,128,.07);border-radius:12px;padding:15px 20px}
   .annual b{color:var(--emerald)}
-  .fineprint{color:rgba(244,248,245,.44);font-size:13.5px;margin:16px 0 0}
+  .fineprint{color:rgba(244,248,245,.72);font-size:14px;margin:16px 0 0}
 
   /* ── Straight terms ──────────────────────────────────────────────── */
   .terms{background:var(--pale)}
@@ -359,7 +357,7 @@
     <div>
       <span class="eyebrow" style="color:var(--emerald)">Websites for local businesses</span>
       <h1 style="margin-top:16px">Your work is great. Your website should <em>look like it.</em></h1>
-      <p class="lede">JP Webworks builds and runs websites for local businesses — plumbers, landscapers, salons, shops. <strong>You see your finished site before you pay a dollar.</strong> Plans from $99 a month, no build fee, no big upfront cost.</p>
+      <p class="lede">JP Webworks — the web side of Joint Printing — builds and runs websites for local businesses: plumbers, landscapers, salons, shops. <strong>You see your finished site before you pay a dollar.</strong> Plans from $99 a month, no build fee, no big upfront cost.</p>
       <div class="cta">
         <a class="btn solid" href="/webworks/start">Get my site built — free</a>
         <a class="btn ghost" href="#work">See two example sites</a>
@@ -382,7 +380,7 @@
             <div class="tl"><svg viewBox="0 0 300 26" preserveAspectRatio="none"><path d="M0 26L0 18 12 8l6 7 8-11 7 10 5-6 9 12 8-14 6 9 5-5 8 10 7-12 7 10 4-5 9 11 7-13 7 11 5-6 8 10 8-12 6 9 5-5 9 11 6-11 8 12 5-6 8 9 7-12 7 11 5-5 8 9 8-13 6 10 5-5 9 11 7-12 6 9 6-6 8 11 7-12 6 9V26z" fill="#101c13"/></svg></div>
             <div class="l">
               <div class="eb"></div>
-              <div class="h">A yard you're proud to pull up to.</div>
+              <div class="h">A yard you’re proud to pull up to.</div>
               <div class="t"></div><div class="t"></div>
               <div class="bt"><i></i><i></i></div>
             </div>
@@ -409,7 +407,7 @@
           <div class="cw-hero">
             <div class="l">
               <div class="eb"></div>
-              <div class="h">You swim. We'll handle the water.</div>
+              <div class="h">You swim. We’ll handle the water.</div>
               <div class="t"></div><div class="t"></div>
               <div class="bt"><i></i><i></i></div>
             </div>
@@ -441,7 +439,7 @@
     <div class="sec-head">
       <span class="eyebrow">The work</span>
       <h2>Look first. Then decide.</h2>
-      <p>Two example sites, built the way we'd build yours — a landscaping crew and a pool company. Click in and tap around; they work just as well on your phone.</p>
+      <p>Two example sites, built the way we’d build yours — a landscaping crew and a pool company. Click in and tap around; they work just as well on your phone.</p>
     </div>
     <div class="ex">
       <a class="card" href="/webworks/northpine">
@@ -457,7 +455,7 @@
             <div class="tl"><svg viewBox="0 0 300 26" preserveAspectRatio="none"><path d="M0 26L0 18 12 8l6 7 8-11 7 10 5-6 9 12 8-14 6 9 5-5 8 10 7-12 7 10 4-5 9 11 7-13 7 11 5-6 8 10 8-12 6 9 5-5 9 11 6-11 8 12 5-6 8 9 7-12 7 11 5-5 8 9 8-13 6 10 5-5 9 11 7-12 6 9 6-6 8 11 7-12 6 9V26z" fill="#101c13"/></svg></div>
             <div class="l">
               <div class="eb"></div>
-              <div class="h">A yard you're proud to pull up to.</div>
+              <div class="h">A yard you’re proud to pull up to.</div>
               <div class="t"></div><div class="t"></div>
               <div class="bt"><i></i><i></i></div>
             </div>
@@ -489,7 +487,7 @@
           <div class="cw-hero">
             <div class="l">
               <div class="eb"></div>
-              <div class="h">You swim. We'll handle the water.</div>
+              <div class="h">You swim. We’ll handle the water.</div>
               <div class="t"></div><div class="t"></div>
               <div class="bt"><i></i><i></i></div>
             </div>
@@ -519,7 +517,7 @@
     <div class="sec-head">
       <span class="eyebrow">How it works</span>
       <h2>You see it before you buy it.</h2>
-      <p>No proposals, no mockups, no deposit. We build the real thing first — that's the whole pitch.</p>
+      <p>No proposals, no mockups, no deposit. We build the real thing first — that’s the whole pitch.</p>
     </div>
     <div class="steps">
       <div class="step">
@@ -535,12 +533,12 @@
       <div class="step">
         <div class="n">3</div>
         <h3>Like it? We put it live</h3>
-        <p>We launch it on your own domain and keep it running — hosting, updates, edits by text. That's what the monthly plan covers, and it starts then. Not before.</p>
+        <p>We launch it on your own domain and keep it running — hosting, updates, edits by text. That’s what the monthly plan covers, and it starts then. Not before.</p>
       </div>
     </div>
     <div class="promise">
-      <b>If you don't love it, you owe nothing.</b>
-      <span>We build first because it's the easiest way to prove we're good at this. Worst case, you spent five minutes and got a free look at what your business could have.</span>
+      <b>If you don’t love it, you owe nothing.</b>
+      <span>We build first because it’s the easiest way to prove we’re good at this. Worst case, you spent five minutes and got a free look at what your business could have.</span>
     </div>
   </div>
 </section>
@@ -549,7 +547,7 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow" style="color:var(--emerald)">Pricing</span>
-      <h2>One monthly price. That's the whole bill.</h2>
+      <h2>One monthly price. That’s the whole bill.</h2>
       <p>The build, hosting, updates, and every change are all in the plan — no hourly billing, no surprise invoices.</p>
     </div>
     <div class="tiers">
@@ -619,15 +617,15 @@
     <div class="grid">
       <div>
         <h3>One per trade, per town</h3>
-        <p>We never build for your competitor. If we've got the plumber in your town, we don't take another — first come holds the spot.</p>
+        <p>We never build for your competitor. If we’ve got the plumber in your town, we don’t take another — first come holds the spot.</p>
       </div>
       <div>
         <h3>Edits are a text message</h3>
-        <p>New hours, a new service, a photo swap — text it over and it's done. No change requests, no invoices, no waiting on a ticket.</p>
+        <p>New hours, a new service, a photo swap — text it over and it’s done. No change requests, no invoices, no waiting on a ticket.</p>
       </div>
       <div>
-        <h3>What's yours stays yours</h3>
-        <p>Your domain and your content always leave with you. The site itself runs as part of your plan — you're a customer, not a hostage.</p>
+        <h3>What’s yours stays yours</h3>
+        <p>Your domain and your content always leave with you. The site itself runs as part of your plan — you’re a customer, not a hostage.</p>
       </div>
       <div>
         <h3>Built to get found</h3>
@@ -642,8 +640,8 @@
     <div class="avatar" aria-hidden="true">N</div>
     <div>
       <span class="eyebrow" style="color:var(--emerald)">Who builds it</span>
-      <h2>You're hiring a person, not an agency.</h2>
-      <p class="body">I'm Nate. I run Joint Printing, and Webworks is me building websites for local businesses the way I'd want mine built — fast, clean, no runaround. When you text about a change, you're texting me. No account managers, no ticket queue, no handoff. And because I take one company per trade in each town, I've got the time to actually care about yours.</p>
+      <h2>You’re hiring a person, not an agency.</h2>
+      <p class="body">I’m Nate. I run Joint Printing, and Webworks is me building websites for local businesses the way I’d want mine built — fast, clean, no runaround. When you text about a change, you’re texting me. No account managers, no ticket queue, no handoff. And because I take one company per trade in each town, I’ve got the time to actually care about yours.</p>
       <div class="sig">— Nate <span>· Joint Printing</span></div>
       <div><a class="btn ghost" href="/webworks/start">Start with a quick chat</a></div>
     </div>
@@ -659,11 +657,11 @@
     <div class="faq">
       <details open>
         <summary>What does the free build actually cost me?</summary>
-        <p>Nothing. We build your site and send you a link to the real thing. If you want it live, you pick a plan and we launch it on your domain — the monthly price starts then. If you don't, we part friends and you owe nothing.</p>
+        <p>Nothing. We build your site and send you a link to the real thing. If you want it live, you pick a plan and we launch it on your domain — the monthly price starts then. If you don’t, we part friends and you owe nothing.</p>
       </details>
       <details>
         <summary>How fast will I see my site?</summary>
-        <p>Usually three to five business days from the moment we have your info. Bigger multi-page builds take a little longer, but you'll have something real to look at within the first week either way.</p>
+        <p>Usually three to five business days from the moment we have your info. Bigger multi-page builds take a little longer, but you’ll have something real to look at within the first week either way.</p>
       </details>
       <details>
         <summary>Do I actually own the site?</summary>
@@ -679,11 +677,11 @@
       </details>
       <details>
         <summary>Do I have to write the words or have good photos?</summary>
-        <p>No. Tell me about your business on a quick call and I'll draft everything — you just read it over and tell me what to fix. Phone photos are plenty to start; the site is designed to look sharp either way.</p>
+        <p>No. Tell me about your business on a quick call and I’ll draft everything — you just read it over and tell me what to fix. Phone photos are plenty to start; the site is designed to look sharp either way.</p>
       </details>
       <details>
         <summary>I already have a website. Is that a problem?</summary>
-        <p>It's usually easier. We build the new one fresh, you compare it to what you have, and if it wins we move your domain over with no downtime. Your phone number, email, and Google reviews all stay put.</p>
+        <p>It’s usually easier. We build the new one fresh, you compare it to what you have, and if it wins we move your domain over with no downtime. Your phone number, email, and Google reviews all stay put.</p>
       </details>
     </div>
   </div>
@@ -693,7 +691,7 @@
   <div class="wrap row">
     <div>
       <h2>See your website before you spend a dollar.</h2>
-      <p>Send the form — you'll hear back within a business day, and see your real site within the week.</p>
+      <p>Send the form — you’ll hear back within a business day, and see your real site within the week.</p>
     </div>
     <a class="btn solid" href="/webworks/start">Get started free</a>
   </div>

@@ -103,7 +103,7 @@
       url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1800&q=80');
     background-size:cover;background-position:center 38%}
   .heroGrid{display:grid;grid-template-columns:1.12fr .88fr;gap:56px;align-items:center;
-    padding:clamp(64px,9vw,110px) 0 clamp(88px,11vw,132px)}
+    padding-top:clamp(64px,9vw,110px);padding-bottom:clamp(88px,11vw,132px)}
   @media(max-width:900px){.heroGrid{grid-template-columns:1fr;gap:44px;padding-bottom:96px}}
   .hero .kicker{display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:800;
     letter-spacing:.2em;text-transform:uppercase;color:var(--amber-lite)}
@@ -281,7 +281,10 @@
   /* ── sticky mobile call bar ────────────────────────────────────────── */
   .callbar{display:none}
   @media(max-width:767px){
-    body{padding-bottom:76px}
+    /* bottom clearance ≥ the fixed bar's height, carried by the footer so the
+       bar can never hide the page's last content at any scroll position (and
+       the gap stays footer-dark, not page-cream) */
+    footer.site{padding-bottom:calc(36px + 92px + env(safe-area-inset-bottom))}
     .callbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;gap:10px;
       padding:10px 14px calc(10px + env(safe-area-inset-bottom));
       background:rgba(16,28,19,.96);backdrop-filter:blur(8px);
@@ -298,7 +301,7 @@
 <div class="util">
   <div class="wrap">
     <span class="hrs">Mon–Fri 7am–5pm · Sat 8am–2pm</span>
-    <span>Call or text <a href="tel:+15555550137">(555) 555-0137</a></span>
+    <span>Call or text <a href="tel:+16095550137">(609) 555-0137</a></span>
   </div>
 </div>
 
@@ -346,11 +349,11 @@
   <div class="wrap heroGrid">
     <div>
       <span class="kicker">Locally owned · Licensed &amp; insured · Est. 2013</span>
-      <h1>A yard you're proud to pull up to.</h1>
+      <h1>A yard you’re proud to pull up to.</h1>
       <p class="lede">Mowing, beds, cleanups, and tree work — one local crew that shows up the day we said, does it right, and leaves it spotless.</p>
       <div class="cta">
-        <a class="btn amber" href="tel:+15555550137">Call (555) 555-0137</a>
-        <a class="btn creamline" href="sms:+15555550137">Text us a photo</a>
+        <a class="btn amber" href="tel:+16095550137">Call (609) 555-0137</a>
+        <a class="btn creamline" href="sms:+16095550137">Text us a photo</a>
       </div>
       <div class="sub">
         <span><i></i>Free written estimates</span>
@@ -502,7 +505,7 @@
         <p class="bp">Dead maples, storm splits, limbs over the roof — we rig, cut, and lower in pieces so nothing touches the house, the fence, or the flower bed under it.</p>
         <ul>
           <li>Free on-site quote, in writing, before a saw starts</li>
-          <li>Roped takedowns in yards a bucket truck can't reach</li>
+          <li>Roped takedowns in yards a bucket truck can’t reach</li>
           <li>Wood bucked and stacked or hauled — your call</li>
         </ul>
         <span class="tagline">Winter is takedown season — the schedule fills fast.</span>
@@ -527,13 +530,13 @@
     <div class="sec-head">
       <span class="eyebrow" style="color:var(--amber-lite)">Year-round</span>
       <h2>We work the whole calendar.</h2>
-      <p>A good yard isn't a one-weekend job. Here's what the crew is doing, season by season.</p>
+      <p>A good yard isn’t a one-weekend job. Here’s what the crew is doing, season by season.</p>
     </div>
     <div class="sgrid">
       <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21c-4 0-7-3-7-7 0-5 4-9 7-11 3 2 7 6 7 11 0 4-3 7-7 7z"/></svg>Spring</b><p>Cleanups, bed edging, mulch, and first cuts. The schedule fills by March — get on the list early.</p></div>
-      <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>Summer</b><p>Weekly mowing, trimming, and keeping the beds ahead of the weeds while you're on vacation.</p></div>
+      <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>Summer</b><p>Weekly mowing, trimming, and keeping the beds ahead of the weeds while you’re on vacation.</p></div>
       <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4c-6 1-11 5-13 11l-2 5 5-2c6-2 10-7 11-13l-1-1z"/></svg>Fall</b><p>Leaf cleanups, final cuts, gutters cleared, and beds put to bed before the first freeze.</p></div>
-      <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11M8.5 4.5L12 8l3.5-3.5M8.5 19.5L12 16l3.5 3.5"/></svg>Winter</b><p>The best time for tree work — removals and pruning while everything's dormant. We also sharpen a lot of blades.</p></div>
+      <div class="sea"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11M8.5 4.5L12 8l3.5-3.5M8.5 19.5L12 16l3.5 3.5"/></svg>Winter</b><p>The best time for tree work — removals and pruning while everything’s dormant. We also sharpen a lot of blades.</p></div>
     </div>
   </div>
 </section>
@@ -542,8 +545,8 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">Our work</span>
-      <h2>Yards we're proud of too.</h2>
-      <p>A few recent jobs — text us a photo of yours and we'll tell you what's possible.</p>
+      <h2>Yards we’re proud of too.</h2>
+      <p>A few recent jobs — text us a photo of yours and we’ll tell you what’s possible.</p>
     </div>
     <div class="wgrid">
       <figure class="wtile">
@@ -622,7 +625,7 @@
         <span class="stars" role="img" aria-label="5 out of 5 stars">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg>
         </span>
-        <p>Texted a photo of a half-dead maple on Monday, had a written price Tuesday, tree was gone Friday. You couldn't tell a crew had been in the yard.</p>
+        <p>Texted a photo of a half-dead maple on Monday, had a written price Tuesday, tree was gone Friday. You couldn’t tell a crew had been in the yard.</p>
         <footer><span class="in">MT</span><cite>Mike T. <span>tree removal</span></cite></footer>
       </blockquote>
       <blockquote class="q">
@@ -635,7 +638,7 @@
     </div>
     <p class="rev-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4.5"/></svg>
-      Every review is from a real customer on our route list — ask and we'll put you in touch with a neighbor we work for.
+      Every review is from a real customer on our route list — ask and we’ll put you in touch with a neighbor we work for.
     </p>
   </div>
 </section>
@@ -648,7 +651,7 @@
     </div>
     <div class="grid">
       <div class="g"><b><i>1.</i> Call, or text a photo</b><p>A picture of the yard or the tree is usually all we need to get started. Texting is fastest.</p></div>
-      <div class="g"><b><i>2.</i> We walk it with you</b><p>You get a written estimate on the spot or by the next day. That number doesn't move.</p></div>
+      <div class="g"><b><i>2.</i> We walk it with you</b><p>You get a written estimate on the spot or by the next day. That number doesn’t move.</p></div>
       <div class="g"><b><i>3.</i> The crew shows up</b><p>On the day we said, with everything we need — and we leave the place cleaner than we found it.</p></div>
     </div>
   </div>
@@ -666,10 +669,10 @@
     <div>
       <span class="eyebrow" style="color:var(--amber-lite)">Free estimate</span>
       <h2 style="margin-top:14px">Want it handled this season?</h2>
-      <p class="p">Call or text — tell us what's bugging you about the yard and we'll put a straight number on it, free.</p>
+      <p class="p">Call or text — tell us what’s bugging you about the yard and we’ll put a straight number on it, free.</p>
       <div class="cta">
-        <a class="btn amber" href="tel:+15555550137">Call (555) 555-0137</a>
-        <a class="btn creamline" href="sms:+15555550137">Text us a photo</a>
+        <a class="btn amber" href="tel:+16095550137">Call (609) 555-0137</a>
+        <a class="btn creamline" href="sms:+16095550137">Text us a photo</a>
       </div>
     </div>
     <div class="info">
@@ -689,7 +692,7 @@
       Northpine
     </a>
     <div class="meta">
-      <div>Northpine Landscape &amp; Tree · (555) 555-0137 · Licensed &amp; insured · Est. 2013</div>
+      <div>Northpine Landscape &amp; Tree · (609) 555-0137 · Licensed &amp; insured · Est. 2013</div>
       <div class="credit"><a href="/webworks">Website by JP Webworks →</a></div>
     </div>
   </div>
@@ -697,8 +700,8 @@
 
 <!-- sticky mobile call bar -->
 <div class="callbar" aria-label="Quick contact">
-  <a class="c1" href="tel:+15555550137"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call the crew</a>
-  <a class="c2" href="sms:+15555550137"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg>Text a photo</a>
+  <a class="c1" href="tel:+16095550137"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call the crew</a>
+  <a class="c2" href="sms:+16095550137"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg>Text a photo</a>
 </div>
 </body>
 </html>

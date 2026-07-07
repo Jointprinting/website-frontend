@@ -56,7 +56,7 @@ export function useGoogleFonts(query) {
 export const resolvePalette = (palettes, id) =>
   palettes.find((p) => p.id === id) || palettes[0];
 
-// "North Pine Plumbing" → "NP". The initials plate is the templates' logo
+// "Ironside Plumbing" → "IP". The initials plate is the templates' logo
 // stand-in so a site with zero uploaded art still looks finished.
 export const initialsOf = (name) => {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);

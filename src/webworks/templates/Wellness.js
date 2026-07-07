@@ -69,7 +69,9 @@ const css = (c) => `
 .jpww *,.jpww *::before,.jpww *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpww a{text-decoration:none;}
 .jpww-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(18px,5vw,36px);}
-.jpww-serif{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;line-height:1.18;overflow-wrap:anywhere;}
+/* display serif never breaks mid-word — break-word only splits a word wider
+   than the whole line, which the clamps below never allow for real content */
+.jpww-serif{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;line-height:1.18;overflow-wrap:break-word;}
 .jpww-cap{font-size:11.5px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:${c.sub};}
 
 /* Nav — quiet, blurred, underline call link */
@@ -99,9 +101,8 @@ const css = (c) => `
   font-size:11.5px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:${c.sub};white-space:nowrap;}
 .jpww-hero h1{font-size:clamp(38px,7.2vw,74px);font-weight:500;max-width:18ch;margin:22px auto 0;}
 .jpww-hero .jpww-tag{margin:20px auto 0;max-width:46ch;font-size:clamp(15px,1.9vw,17.5px);color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
-.jpww-rule{width:1px;height:52px;background:${c.accent};margin:34px auto 0;opacity:.6;}
-.jpww-hero-ctas{display:flex;justify-content:center;flex-wrap:wrap;gap:14px;margin-top:34px;}
-.jpww-btn{display:inline-block;border:1px solid ${c.ink};color:${c.ink};font-size:12.5px;letter-spacing:.2em;text-transform:uppercase;padding:14px 34px;border-radius:999px;transition:background .18s,color .18s,border-color .18s;}
+.jpww-hero-ctas{display:flex;justify-content:center;flex-wrap:wrap;gap:14px;margin-top:38px;}
+.jpww-btn{display:inline-block;background:${c.bg};border:1px solid ${c.ink};color:${c.ink};font-size:12.5px;letter-spacing:.2em;text-transform:uppercase;padding:14px 34px;border-radius:999px;transition:background .18s,color .18s,border-color .18s;}
 .jpww-btn:hover{background:${c.ink};color:${c.bg};}
 .jpww-btn-solid{background:${c.accent};border-color:${c.accent};color:${c.accentInk};}
 .jpww-btn-solid:hover{background:${c.dark};border-color:${c.dark};color:${c.darkInk};}
@@ -116,8 +117,8 @@ const css = (c) => `
 .jpww-orow{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr) minmax(0,2fr);gap:10px 26px;align-items:baseline;padding:22px 4px;border-bottom:1px solid ${c.line};transition:background .18s;}
 .jpww-orow:hover{background:${c.surface};}
 .jpww-orow .n{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:clamp(19px,2.4vw,23px);overflow-wrap:anywhere;}
-.jpww-orow .d{font-size:14px;color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
-.jpww-orow .p{text-align:right;font-size:13px;letter-spacing:.12em;color:${c.ink};white-space:nowrap;}
+.jpww-orow .d{font-size:15.5px;color:color-mix(in srgb,${c.ink} 76%,${c.sub});font-weight:400;overflow-wrap:anywhere;}
+.jpww-orow .p{text-align:right;font-size:14px;font-weight:500;letter-spacing:.1em;color:${c.ink};white-space:nowrap;}
 @media(max-width:640px){.jpww-orow{grid-template-columns:minmax(0,1fr) auto;}.jpww-orow .d{grid-column:1 / -1;}}
 
 /* Philosophy — split with vertical hairline */
@@ -192,6 +193,11 @@ export default function WellnessTemplate({ data }) {
   const ctaHref = phone ? telHref(phone) : (email ? `mailto:${email}` : null);
   const hasVisit = !!(phone || email || address);
   const year = new Date().getFullYear();
+  // The hero eyebrow and the caption under the arch each pick from the same
+  // facts — never the same one twice, so "Since 2019" can't render two times.
+  const eyebrow = area || (established ? `Since ${established}` : 'Welcome');
+  const archCap = [area, established && `Since ${established}`, name]
+    .filter(Boolean).find((t) => t !== eyebrow) || '';
 
   const navLinks = [
     services.length && ['#offerings', 'Offerings'],
@@ -219,12 +225,11 @@ export default function WellnessTemplate({ data }) {
       <header className="jpww-hero">
         <div className="jpww-orb" aria-hidden="true" />
         <div className="jpww-wrap jpww-hero-in">
-          <span className="jpww-cap">{area ? area : (established ? `Since ${established}` : 'Welcome')}</span>
+          <span className="jpww-cap">{eyebrow}</span>
           <h1 className="jpww-serif">{headline}</h1>
           {txt(d.tagline) && txt(d.tagline) !== headline && (
             <p className="jpww-tag">{txt(d.tagline)}</p>
           )}
-          <div className="jpww-rule" aria-hidden="true" />
           {ctaHref && (
             <div className="jpww-hero-ctas">
               <a className="jpww-btn jpww-btn-solid" href={ctaHref}>{ctaLabel}</a>
@@ -239,7 +244,7 @@ export default function WellnessTemplate({ data }) {
             fx={<WellnessFx c={pal.c} glyph="leaf" />} />
           <span className="jpww-arch-side" aria-hidden="true" />
         </div>
-        <span className="jpww-arch-cap">{area || (established ? `Since ${established}` : name)}</span>
+        {archCap && <span className="jpww-arch-cap">{archCap}</span>}
       </header>
 
       {services.length > 0 && (

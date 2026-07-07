@@ -67,7 +67,9 @@ const css = (c, hero) => `
 .jpwp *,.jpwp *::before,.jpwp *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpwp a{text-decoration:none;}
 .jpwp-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(16px,4vw,32px);}
-.jpwp-serif{font-family:'Libre Baskerville',Georgia,serif;font-weight:700;line-height:1.2;overflow-wrap:anywhere;}
+/* display serif never breaks mid-word — break-word only splits a word wider
+   than the whole line, which real headlines never are at these clamps */
+.jpwp-serif{font-family:'Libre Baskerville',Georgia,serif;font-weight:700;line-height:1.2;overflow-wrap:break-word;}
 .jpwp-sc{font-size:11.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:${c.sub};}
 
 /* Nav — white, monogram, consult button */
@@ -91,7 +93,7 @@ const css = (c, hero) => `
 /* Hero — split: statement / at-a-glance panel, floating on a MUTED photo
    header band: heavy paper wash + fine ruled overlay over the photo, so the
    photo is presence, not noise. The wash alone still reads composed. */
-.jpwp-hero{padding:clamp(52px,8vw,100px) 0;border-bottom:1px solid ${c.line};position:relative;
+.jpwp-hero{padding:clamp(30px,4.5vw,52px) 0 clamp(52px,8vw,100px);border-bottom:1px solid ${c.line};position:relative;
   background-color:${c.soft};
   background-image:
     repeating-linear-gradient(0deg,transparent 0 52px,${c.line}66 52px 53px),

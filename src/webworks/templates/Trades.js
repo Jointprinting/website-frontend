@@ -68,7 +68,9 @@ const css = (c, hero) => `
 .jpwt img,.jpwt svg{max-width:100%;display:block;}
 .jpwt a{text-decoration:none;}
 .jpwt-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(16px,4vw,32px);}
-.jpwt-h{font-family:'Oswald','Arial Narrow',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-weight:600;line-height:1.12;overflow-wrap:anywhere;}
+/* display type never breaks mid-word — break-word only splits a word wider
+   than the whole line, which real headlines never are at these clamps */
+.jpwt-h{font-family:'Oswald','Arial Narrow',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-weight:600;line-height:1.12;overflow-wrap:break-word;}
 
 /* Nav — dark sticky bar, initials plate, phone CTA */
 .jpwt-nav{position:sticky;top:0;z-index:50;background:${c.dark};color:${c.darkInk};border-bottom:3px solid ${c.accent};}
@@ -125,8 +127,9 @@ const css = (c, hero) => `
 .jpwt-kicker::before{content:'';width:26px;height:3px;background:${c.accent};}
 .jpwt-sec-head h2{font-size:clamp(26px,4.4vw,40px);margin-top:10px;}
 
-/* Services — numbered cards */
-.jpwt-svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:18px;}
+/* Services — numbered cards. Wide two-up at desktop so four services land as
+   a clean 2×2 (a 3-col grid strands #04 alone on its own row). */
+.jpwt-svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));gap:18px;}
 .jpwt-svc{background:${c.surface};border:1px solid ${c.line};border-left:4px solid ${c.accent};padding:24px 22px 22px;position:relative;overflow:hidden;transition:transform .18s,box-shadow .18s;min-width:0;}
 .jpwt-svc:hover{transform:translateY(-3px);box-shadow:0 14px 30px -18px rgba(10,16,22,.35);}
 .jpwt-svc-num{position:absolute;top:6px;right:10px;font-family:'Oswald',sans-serif;font-weight:700;font-size:44px;color:${c.soft};line-height:1;user-select:none;}

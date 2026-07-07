@@ -530,7 +530,7 @@ function NewSiteDialog({ open, onClose, onCreate, busy, preselect }) {
             <MenuItem value="Other">Other</MenuItem>
           </TextField>
           <TextField
-            label="Business name" placeholder="North Pine Plumbing" value={name}
+            label="Business name" placeholder="Ironside Plumbing & Heating" value={name}
             onChange={(e) => setName(e.target.value)} size="small" fullWidth sx={fieldSx}
             helperText=" " inputRef={nameRef}
           />

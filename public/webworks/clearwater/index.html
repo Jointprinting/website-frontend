@@ -7,7 +7,7 @@
 <meta name="description" content="Clearwater Pool Care — weekly pool service with the same tech every visit, chemicals included, and a photo report after every stop. Openings, closings, repairs, green-to-clean." />
 <meta name="robots" content="noindex" />
 <meta property="og:title" content="Clearwater Pool Care" />
-<meta property="og:description" content="Weekly pool service with the same tech every visit, chemicals included, and a photo report after every stop. You swim — we'll handle the water." />
+<meta property="og:description" content="Weekly pool service with the same tech every visit, chemicals included, and a photo report after every stop. You swim — we’ll handle the water." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d3853'/%3E%3Cpath d='M16 5.2s7.4 7.8 7.4 13.2a7.4 7.4 0 1 1-14.8 0C8.6 13 16 5.2 16 5.2z' fill='%232fc3da'/%3E%3Cpath d='M12.6 18.4a3.4 3.4 0 0 0 3.4 3.4' stroke='%23e8f4f9' stroke-width='1.6' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -97,7 +97,7 @@
       url('https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?auto=format&fit=crop&w=1800&q=80');
     background-size:cover;background-position:center 62%}
   .heroGrid{display:grid;grid-template-columns:1.12fr .88fr;gap:56px;align-items:center;
-    padding:clamp(60px,9vw,104px) 0 clamp(72px,9vw,104px)}
+    padding-top:clamp(60px,9vw,104px);padding-bottom:clamp(72px,9vw,104px)}
   @media(max-width:900px){.heroGrid{grid-template-columns:1fr;gap:44px}}
   .hero .kicker{display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:800;
     letter-spacing:.18em;text-transform:uppercase;color:var(--aqua-lite)}
@@ -320,7 +320,10 @@
   /* ── sticky mobile call bar ────────────────────────────────────────── */
   .callbar{display:none}
   @media(max-width:767px){
-    body{padding-bottom:76px}
+    /* bottom clearance ≥ the fixed bar's height, carried by the footer so the
+       bar can never hide the page's last content at any scroll position (and
+       the gap stays footer-dark, not page-white) */
+    footer.site{padding-bottom:calc(36px + 92px + env(safe-area-inset-bottom))}
     .callbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;gap:10px;
       padding:10px 14px calc(10px + env(safe-area-inset-bottom));
       background:rgba(7,30,47,.96);backdrop-filter:blur(8px);
@@ -388,11 +391,11 @@
   <div class="wrap heroGrid">
     <div>
       <span class="kicker">Weekly pool care · Locally owned</span>
-      <h1>You swim. <em>We'll handle the water.</em></h1>
-      <p class="lede">Weekly service with the same tech every visit, chemicals included, and a photo report to your phone when we're done. Openings, closings, and repairs too.</p>
+      <h1>You swim. <em>We’ll handle the water.</em></h1>
+      <p class="lede">Weekly service with the same tech every visit, chemicals included, and a photo report to your phone when we’re done. Openings, closings, and repairs too.</p>
       <div class="cta">
         <a class="btn aqua" href="#quote">Get a free quote</a>
-        <a class="btn mistline" href="tel:+15555550164">Call or text (555) 555-0164</a>
+        <a class="btn mistline" href="tel:+18565550164">Call or text (856) 555-0164</a>
       </div>
       <div class="sub">
         <span><i></i>Chemicals included</span>
@@ -479,7 +482,7 @@
         <a class="btn" href="#quote">Start with a quote</a>
       </div>
     </div>
-    <p class="plansnote">Exact price depends on pool size and equipment — send a photo and we'll confirm your number in one text.</p>
+    <p class="plansnote">Exact price depends on pool size and equipment — send a photo and we’ll confirm your number in one text.</p>
   </div>
 </section>
 
@@ -491,7 +494,7 @@
     <div class="sec-head">
       <span class="eyebrow">Green-to-clean</span>
       <h2>Swamp on Monday. Swimmable by Friday.</h2>
-      <p>A green pool isn't a lost summer. Shock, filter, vacuum, balance — most rescues are done in three to five days, for the price we quoted before we started.</p>
+      <p>A green pool isn’t a lost summer. Shock, filter, vacuum, balance — most rescues are done in three to five days, for the price we quoted before we started.</p>
     </div>
     <div class="ba" role="img" aria-label="Before and after: a green pool on day one, clear blue water by day five">
       <div class="side after">
@@ -521,8 +524,8 @@
       <span class="lbl l2">Day 5 · swimmable</span>
     </div>
     <div class="fine">
-      <p>Rescues start at $400 — text a photo of the water and we'll tell you exactly what it'll take and what it'll cost before we touch it.</p>
-      <a class="btn aqua" href="sms:+15555550164">Text a photo of the green</a>
+      <p>Rescues start at $400 — text a photo of the water and we’ll tell you exactly what it’ll take and what it’ll cost before we touch it.</p>
+      <a class="btn aqua" href="sms:+18565550164">Text a photo of the green</a>
     </div>
   </div>
 </section>
@@ -534,7 +537,7 @@
     <div class="sec-head">
       <span class="eyebrow">Beyond the weekly</span>
       <h2>The rate sheet, no mystery.</h2>
-      <p>One-time jobs, priced like we'd want to be quoted — a real number up front.</p>
+      <p>One-time jobs, priced like we’d want to be quoted — a real number up front.</p>
     </div>
     <div class="menu">
       <div class="mi"><span class="nm">Spring opening<small>cover off, equipment started, balanced</small></span><span class="dots"></span><span class="pr">$295</span></div>
@@ -555,8 +558,8 @@
     </div>
     <div class="steps">
       <div class="stp"><div class="n">1</div><h3>Text us a photo</h3><p>Your pool and your zip — we reply with a flat monthly price, usually same day.</p></div>
-      <div class="stp"><div class="n">2</div><h3>Meet your tech</h3><p>The same certified pro every week. You'll know them by name; they'll know your gate code.</p></div>
-      <div class="stp"><div class="n">3</div><h3>We show up</h3><p>Same day every week, whether you're home or not, with a photo report after each stop.</p></div>
+      <div class="stp"><div class="n">2</div><h3>Meet your tech</h3><p>The same certified pro every week. You’ll know them by name; they’ll know your gate code.</p></div>
+      <div class="stp"><div class="n">3</div><h3>We show up</h3><p>Same day every week, whether you’re home or not, with a photo report after each stop.</p></div>
       <div class="stp"><div class="n">4</div><h3>You just swim</h3><p>Clear water, balanced chemistry, equipment watched — nothing left for you to think about.</p></div>
     </div>
   </div>
@@ -641,7 +644,7 @@
         <span class="stars" role="img" aria-label="5 out of 5 stars">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg>
         </span>
-        <p>We've had three pool companies in ten years. Clearwater is the first one I never think about — the water is just always right, and the photo after every visit means I never wonder whether they came.</p>
+        <p>We’ve had three pool companies in ten years. Clearwater is the first one I never think about — the water is just always right, and the photo after every visit means I never wonder whether they came.</p>
         <cite>Susan &amp; Bill K. <span>Full Service, second season</span></cite>
       </blockquote>
       <div class="rside">
@@ -656,7 +659,7 @@
           <span class="stars" role="img" aria-label="5 out of 5 stars">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z"/></svg>
           </span>
-          <p>“Same tech every single week. Marcus knows our gate code, our dog, and our filter. That's worth a lot.”</p>
+          <p>“Same tech every single week. Marcus knows our gate code, our dog, and our filter. That’s worth a lot.”</p>
           <cite>Tom D. <span>· Chem Check</span></cite>
         </blockquote>
       </div>
@@ -672,7 +675,7 @@
     </div>
     <div class="faq">
       <details open>
-        <summary>What's actually included in weekly service?</summary>
+        <summary>What’s actually included in weekly service?</summary>
         <p>Every visit we test and balance the water, skim, and empty the baskets. On Full Service and up we also brush, vacuum, net, and check the filter — and every plan gets a photo report texted after each stop.</p>
       </details>
       <details>
@@ -681,15 +684,15 @@
       </details>
       <details>
         <summary>My pool turned green — can you save it?</summary>
-        <p>Almost always, and usually within a few days. Text a photo and we'll tell you exactly what it'll take and what it'll cost before we touch it.</p>
+        <p>Almost always, and usually within a few days. Text a photo and we’ll tell you exactly what it’ll take and what it’ll cost before we touch it.</p>
       </details>
       <details>
         <summary>Do I need to be home for service?</summary>
-        <p>No. As long as we can reach the gate and the equipment, you never have to be there — the photo report shows you it's done.</p>
+        <p>No. As long as we can reach the gate and the equipment, you never have to be there — the photo report shows you it’s done.</p>
       </details>
       <details>
         <summary>Am I locked into a contract?</summary>
-        <p>No. Weekly service is month to month through the season — pause or cancel anytime. We keep customers because the water's clear, not because of fine print.</p>
+        <p>No. Weekly service is month to month through the season — pause or cancel anytime. We keep customers because the water’s clear, not because of fine print.</p>
       </details>
     </div>
   </div>
@@ -712,11 +715,11 @@
   <div class="wrap grid">
     <div>
       <span class="eyebrow" style="color:var(--aqua-lite)">Free quote</span>
-      <h2 style="margin-top:14px">Ready for a pool you don't have to think about?</h2>
-      <p class="p">Text a photo of your pool and your zip code — you'll have a flat monthly price back, usually the same day.</p>
+      <h2 style="margin-top:14px">Ready for a pool you don’t have to think about?</h2>
+      <p class="p">Text a photo of your pool and your zip code — you’ll have a flat monthly price back, usually the same day.</p>
       <div class="cta">
-        <a class="btn aqua" href="sms:+15555550164">Text us a photo</a>
-        <a class="btn mistline" href="tel:+15555550164">Call (555) 555-0164</a>
+        <a class="btn aqua" href="sms:+18565550164">Text us a photo</a>
+        <a class="btn mistline" href="tel:+18565550164">Call (856) 555-0164</a>
       </div>
     </div>
     <div class="info">
@@ -736,7 +739,7 @@
       Clearwater
     </a>
     <div class="meta">
-      <div>Clearwater Pool Care · (555) 555-0164 · Licensed &amp; insured · Est. 2016</div>
+      <div>Clearwater Pool Care · (856) 555-0164 · Licensed &amp; insured · Est. 2016</div>
       <div class="credit"><a href="/webworks">Website by JP Webworks →</a></div>
     </div>
   </div>
@@ -744,8 +747,8 @@
 
 <!-- sticky mobile call bar -->
 <div class="callbar" aria-label="Quick contact">
-  <a class="c1" href="tel:+15555550164"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call Clearwater</a>
-  <a class="c2" href="sms:+15555550164"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg>Text a photo</a>
+  <a class="c1" href="tel:+18565550164"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call Clearwater</a>
+  <a class="c2" href="sms:+18565550164"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg>Text a photo</a>
 </div>
 </body>
 </html>

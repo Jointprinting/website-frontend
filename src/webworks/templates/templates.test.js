@@ -25,12 +25,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { TEMPLATES, getTemplate } from './index';
 
 const FULL_DATA = {
-  businessName: 'North Pine Plumbing',
+  businessName: 'Ironside Plumbing & Heating',
   tagline: 'Honest work, done right',
   heroHeadline: 'Plumbing you can trust',
   ctaLabel: 'Call for a free estimate',
   phone: '(609) 555-0143',
-  email: 'office@northpine.example',
+  email: 'office@ironside.example',
   serviceArea: 'Burlington County',
   address: '12 Main St, Mount Holly, NJ',
   hours: [{ days: 'Mon – Fri', hours: '8:00 AM – 6:00 PM' }],
@@ -82,14 +82,14 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
   test('renders full data: name, services, hours, quote, tel/mailto links', async () => {
     const { container } = renderTpl(tpl, { ...FULL_DATA, paletteId: tpl.palettes[1].id });
     // Business name shows (nav + footer at minimum).
-    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
     // Services + hours + testimonial content made it in.
     expect(screen.getAllByText(/Drain cleaning/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/8:00 AM – 6:00 PM/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Showed up on time/).length).toBeGreaterThan(0);
     // Contact links are real.
     expect(container.querySelector('a[href="tel:6095550143"]')).toBeTruthy();
-    expect(container.querySelector('a[href="mailto:office@northpine.example"]')).toBeTruthy();
+    expect(container.querySelector('a[href="mailto:office@ironside.example"]')).toBeTruthy();
     // Every anchor nav link points at a section that exists.
     for (const a of container.querySelectorAll('a[href^="#"]')) {
       const target = a.getAttribute('href').slice(1);
@@ -115,12 +115,12 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
 
   test('unknown paletteId falls back to the first palette', async () => {
     renderTpl(tpl, { ...FULL_DATA, paletteId: 'not-a-palette' });
-    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
   });
 
   test('curated default photos render through the fail-safe stack', async () => {
     const { container } = renderTpl(tpl, FULL_DATA); // no data.photos → defaults
-    await screen.findAllByText(/North Pine Plumbing/);
+    await screen.findAllByText(/Ironside Plumbing/);
     // Fail-safe tiles exist, each with its crafted underlayer in place…
     const tiles = container.querySelectorAll('.jpw-ph');
     expect(tiles.length).toBeGreaterThan(0);
@@ -136,7 +136,7 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
       ...FULL_DATA,
       photos: { hero: 'https://example.com/hero.jpg', gallery: ['https://example.com/g1.jpg'] },
     });
-    await screen.findAllByText(/North Pine Plumbing/);
+    await screen.findAllByText(/Ironside Plumbing/);
     // The hero lands somewhere (CSS background stack or an <img>)…
     expect(container.innerHTML).toContain('https://example.com/hero.jpg');
     // …and every fail-safe tile now shows owner photos, none of the defaults.
@@ -147,7 +147,7 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
 
   test('a failed photo collapses to the crafted tile, not a broken glyph', async () => {
     const { container } = renderTpl(tpl, FULL_DATA);
-    await screen.findAllByText(/North Pine Plumbing/);
+    await screen.findAllByText(/Ironside Plumbing/);
     const img = container.querySelector('.jpw-ph img');
     fireEvent.error(img);
     // The wrapper flags the failure, unmounts the img, keeps the crafted fx.

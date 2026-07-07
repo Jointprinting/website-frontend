@@ -71,7 +71,10 @@ const css = (c) => `
 .jpwr *,.jpwr *::before,.jpwr *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpwr a{text-decoration:none;}
 .jpwr-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(16px,4vw,32px);}
-.jpwr-black{font-family:'Archivo',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;line-height:1.04;overflow-wrap:anywhere;}
+/* Display type NEVER breaks mid-word: break-word is a last resort that only
+   splits a word longer than the whole line — the clamps below are sized so
+   real headlines never get there. */
+.jpwr-black{font-family:'Archivo',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;line-height:1.04;overflow-wrap:break-word;}
 
 /* Nav — thick ink rule, sticker call chip */
 .jpwr-nav{position:sticky;top:0;z-index:50;background:${c.bg};border-bottom:3px solid ${c.ink};}
@@ -112,7 +115,7 @@ const css = (c) => `
 .jpwr-shelf .jpw-ph:nth-child(even){transform:rotate(1.4deg);}
 .jpwr-shelf .jpw-ph:hover{transform:rotate(0) translate(-2px,-2px);box-shadow:8px 8px 0 ${c.ink};}
 .jpwr-badge{display:inline-block;background:${c.pop};color:${c.popInk};border:2px solid ${c.ink};border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:7px 16px;transform:rotate(-2deg);box-shadow:3px 3px 0 ${c.ink};margin-bottom:22px;}
-.jpwr-hero h1{font-size:clamp(38px,8vw,84px);max-width:14ch;}
+.jpwr-hero h1{font-size:clamp(36px,6.4vw,66px);max-width:15ch;overflow-wrap:normal;}
 .jpwr-hero h1 .hl{color:${c.accent};-webkit-text-stroke:0;}
 .jpwr-hero .tag{margin-top:18px;font-size:clamp(16px,2.2vw,19px);color:${c.sub};max-width:50ch;overflow-wrap:anywhere;}
 .jpwr-ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px;}
