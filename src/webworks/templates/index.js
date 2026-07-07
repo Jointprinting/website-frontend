@@ -20,7 +20,12 @@
 // models/JpwSite `data` bag): businessName, tagline, heroHeadline, ctaLabel,
 // phone, email, serviceArea, address, hours[{days,hours}],
 // services[{name,desc,price}], about, testimonials[{quote,name}], paletteId,
-// established, license.
+// established, license, photos{hero,gallery[]}.
+//
+// photos is fail-safe: each template ships a curated default set (so every
+// preview looks photographed from the first render) and owner-supplied URLs
+// override slot-for-slot. Every photo renders through the _kit Ph/background
+// stack — a crafted palette scene paints when the photo is loading or gone.
 
 import { lazy } from 'react';
 import {

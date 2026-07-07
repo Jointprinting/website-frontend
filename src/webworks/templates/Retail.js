@@ -2,19 +2,79 @@
 // JPW template: RETAIL — boutiques, gift shops, record stores.
 // Design voice: playful, chunky, sticker-sheet energy. Archivo 900 headlines,
 // two loud duotone colors, hard offset shadows, a scrolling tagline marquee,
-// tilted quote cards. Everything is drawn with borders and color blocks — no
-// photography needed for it to feel merchandised.
+// tilted quote cards — and PHOTOS treated like stickers: duotone-tinted,
+// ink-framed, hard-shadowed, slightly rotated. Photos are fail-safe: curated
+// shop defaults ship with the template (owner URLs override via data.photos)
+// over crafted sticker-sheet underlayers, so nothing ever looks broken.
 
 import * as React from 'react';
-import { useGoogleFonts, resolvePalette, telHref, txt, rows } from './_kit';
+import {
+  useGoogleFonts, resolvePalette, telHref, txt, rows,
+  mergePhotos, Ph, PH_CSS,
+} from './_kit';
 import { RETAIL_PALETTES } from './_meta';
+
+// Curated defaults — well-known Unsplash shop photography. Owner-supplied
+// data.photos.{hero,gallery} replace these slot-for-slot.
+const DEFAULT_PHOTOS = {
+  hero: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80',
+  gallery: [
+    'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80',
+  ],
+};
+
+// Crafted no-photo tile: sticker-sheet energy — tint field, checker corners,
+// one loud glyph. Loud on purpose; it should feel merchandised, not "missing".
+function RetailFx({ c, glyph }) {
+  return (
+    <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+      <rect width="400" height="300" fill={c.tint} />
+      <g fill={c.pop} opacity=".9">
+        <rect x="0" y="0" width="18" height="18" /><rect x="36" y="0" width="18" height="18" />
+        <rect x="18" y="18" width="18" height="18" /><rect x="54" y="18" width="18" height="18" />
+        <rect x="346" y="264" width="18" height="18" /><rect x="382" y="264" width="18" height="18" />
+        <rect x="364" y="282" width="18" height="18" /><rect x="328" y="282" width="18" height="18" />
+      </g>
+      <rect x="12" y="12" width="376" height="276" fill="none" stroke={c.ink}
+        strokeWidth="2" strokeDasharray="8 7" opacity=".5" rx="10" />
+      {glyph === 'star' && (
+        <g transform="translate(200 150) scale(4.4)">
+          <path transform="translate(-12 -12)" fill={c.accent} stroke={c.ink} strokeWidth=".9"
+            d="M12 2.7l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9L12 2.7z" />
+        </g>
+      )}
+      {glyph === 'smile' && (
+        <g transform="translate(200 150)">
+          <circle r="52" fill={c.pop} stroke={c.ink} strokeWidth="4" />
+          <circle cx="-18" cy="-12" r="6" fill={c.ink} /><circle cx="18" cy="-12" r="6" fill={c.ink} />
+          <path d="M-24 12c8 14 40 14 48 0" fill="none" stroke={c.ink} strokeWidth="5" strokeLinecap="round" />
+        </g>
+      )}
+      {glyph === 'tag' && (
+        <g transform="translate(200 150) rotate(-14)">
+          <path d="M-58 -34h74l42 34-42 34h-74a10 10 0 0 1 -10 -10v-48a10 10 0 0 1 10 -10z"
+            fill={c.accent} stroke={c.ink} strokeWidth="4" strokeLinejoin="round" />
+          <circle cx="34" cy="0" r="7" fill={c.tint} stroke={c.ink} strokeWidth="3" />
+          <circle cx="-38" cy="-12" r="9" fill="none" stroke={c.accentInk} strokeWidth="4" />
+          <circle cx="-10" cy="14" r="9" fill="none" stroke={c.accentInk} strokeWidth="4" />
+          <path d="M-8 -18L-40 20" stroke={c.accentInk} strokeWidth="4" strokeLinecap="round" />
+        </g>
+      )}
+    </svg>
+  );
+}
 
 const css = (c) => `
 .jpwr{--max:1080px;font-family:'Space Grotesk','Helvetica Neue',Arial,sans-serif;background:${c.bg};color:${c.ink};line-height:1.6;overflow-x:clip;min-height:100%;}
 .jpwr *,.jpwr *::before,.jpwr *::after{box-sizing:border-box;margin:0;padding:0;}
 .jpwr a{text-decoration:none;}
 .jpwr-wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(16px,4vw,32px);}
-.jpwr-black{font-family:'Archivo',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;line-height:1.04;overflow-wrap:anywhere;}
+/* Display type NEVER breaks mid-word: break-word is a last resort that only
+   splits a word longer than the whole line — the clamps below are sized so
+   real headlines never get there. */
+.jpwr-black{font-family:'Archivo',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;line-height:1.04;overflow-wrap:break-word;}
 
 /* Nav — thick ink rule, sticker call chip */
 .jpwr-nav{position:sticky;top:0;z-index:50;background:${c.bg};border-bottom:3px solid ${c.ink};}
@@ -30,10 +90,32 @@ const css = (c) => `
 .jpwr-nav .jpwr-links + .jpwr-chip{margin-left:0;}
 @media(max-width:760px){.jpwr-links{display:none;}}
 
-/* Hero — stacked chunk type + sticker badge */
+/* Hero — chunk type beside a duotone sticker-framed photo */
 .jpwr-hero{padding:clamp(52px,9vw,110px) 0 clamp(40px,7vw,80px);position:relative;}
+.jpwr-hero-grid{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(28px,5vw,64px);align-items:center;}
+@media(max-width:800px){.jpwr-hero-grid{grid-template-columns:1fr;}}
+.jpwr-hero-ph{position:relative;justify-self:center;width:min(400px,100%);transform:rotate(2deg);}
+@media(max-width:800px){.jpwr-hero-ph{width:min(320px,86%);}}
+.jpwr-hero-ph .jpw-ph{aspect-ratio:4/5;box-shadow:8px 8px 0 ${c.ink};}
+.jpwr-hero-tag{position:absolute;top:-14px;right:-10px;z-index:2;background:${c.pop};color:${c.popInk};
+  border:2px solid ${c.ink};border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.05em;
+  text-transform:uppercase;padding:7px 15px;transform:rotate(6deg);box-shadow:3px 3px 0 ${c.ink};white-space:nowrap;}
+
+/* duotone treatment — grayscale under an accent color-blend, sticker frame */
+.jpwr .jpw-ph{border:2px solid ${c.ink};border-radius:14px;}
+.jpwr .jpw-ph>img{filter:grayscale(1) contrast(1.06);}
+.jpwr .jpw-ph:not(.jpw-ph-noimg)::after{content:'';position:absolute;inset:0;z-index:1;
+  background:${c.accent};mix-blend-mode:color;opacity:.9;pointer-events:none;}
+
+/* the shelf — tilted duotone tiles under the marquee */
+.jpwr-shelf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,3vw,26px);}
+@media(max-width:760px){.jpwr-shelf{grid-template-columns:1fr;max-width:380px;margin:0 auto;}}
+.jpwr-shelf .jpw-ph{aspect-ratio:4/3;box-shadow:5px 5px 0 ${c.ink};transition:transform .14s,box-shadow .14s;}
+.jpwr-shelf .jpw-ph:nth-child(odd){transform:rotate(-1.4deg);}
+.jpwr-shelf .jpw-ph:nth-child(even){transform:rotate(1.4deg);}
+.jpwr-shelf .jpw-ph:hover{transform:rotate(0) translate(-2px,-2px);box-shadow:8px 8px 0 ${c.ink};}
 .jpwr-badge{display:inline-block;background:${c.pop};color:${c.popInk};border:2px solid ${c.ink};border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:7px 16px;transform:rotate(-2deg);box-shadow:3px 3px 0 ${c.ink};margin-bottom:22px;}
-.jpwr-hero h1{font-size:clamp(38px,8vw,84px);max-width:14ch;}
+.jpwr-hero h1{font-size:clamp(36px,6.4vw,66px);max-width:15ch;overflow-wrap:normal;}
 .jpwr-hero h1 .hl{color:${c.accent};-webkit-text-stroke:0;}
 .jpwr-hero .tag{margin-top:18px;font-size:clamp(16px,2.2vw,19px);color:${c.sub};max-width:50ch;overflow-wrap:anywhere;}
 .jpwr-ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px;}
@@ -112,7 +194,11 @@ export default function RetailTemplate({ data }) {
   const d = data || {};
   useGoogleFonts('family=Archivo:wght@600;700;900&family=Space+Grotesk:wght@400;500;700');
   const pal = resolvePalette(RETAIL_PALETTES, d.paletteId);
-  const style = React.useMemo(() => css(pal.c), [pal]);
+  const photos = React.useMemo(() => mergePhotos(d.photos, DEFAULT_PHOTOS), [d.photos]);
+  const style = React.useMemo(
+    () => css(pal.c) + PH_CSS('.jpwr', `linear-gradient(140deg,${pal.c.tint},${pal.c.soft})`),
+    [pal]
+  );
 
   const name = txt(d.businessName) || 'Your Business';
   const phone = txt(d.phone);
@@ -160,20 +246,26 @@ export default function RetailTemplate({ data }) {
       </nav>
 
       <header className="jpwr-hero">
-        <div className="jpwr-wrap">
-          <span className="jpwr-badge">
-            {established ? `Est. ${established}` : (area || 'Hello!')}
-          </span>
-          <h1 className="jpwr-black"><Chunk text={headline} /></h1>
-          {txt(d.tagline) && txt(d.tagline) !== headline && (
-            <p className="tag">{txt(d.tagline)}</p>
-          )}
-          {(ctaHref || services.length > 0) && (
-            <div className="jpwr-ctas">
-              {ctaHref && <a className="jpwr-btn" href={ctaHref}>{ctaLabel}</a>}
-              {services.length > 0 && <a className="jpwr-btn jpwr-btn-alt" href="#goods">Browse the goods</a>}
-            </div>
-          )}
+        <div className="jpwr-wrap jpwr-hero-grid">
+          <div>
+            <span className="jpwr-badge">
+              {established ? `Est. ${established}` : (area || 'Hello!')}
+            </span>
+            <h1 className="jpwr-black"><Chunk text={headline} /></h1>
+            {txt(d.tagline) && txt(d.tagline) !== headline && (
+              <p className="tag">{txt(d.tagline)}</p>
+            )}
+            {(ctaHref || services.length > 0) && (
+              <div className="jpwr-ctas">
+                {ctaHref && <a className="jpwr-btn" href={ctaHref}>{ctaLabel}</a>}
+                {services.length > 0 && <a className="jpwr-btn jpwr-btn-alt" href="#goods">Browse the goods</a>}
+              </div>
+            )}
+          </div>
+          <div className="jpwr-hero-ph">
+            <span className="jpwr-hero-tag" aria-hidden="true">local + loved</span>
+            <Ph src={photos.hero} alt={name} fx={<RetailFx c={pal.c} glyph="star" />} />
+          </div>
         </div>
       </header>
 
@@ -186,6 +278,25 @@ export default function RetailTemplate({ data }) {
           ))}
         </div>
       </div>
+
+      {photos.gallery.length > 0 && (
+        <section className="jpwr-sec" aria-label="Photos" style={{ paddingBottom: 0 }}>
+          <div className="jpwr-wrap">
+            <div className="jpwr-sec-head">
+              <h2 className="jpwr-black">The vibe</h2>
+              <svg className="doodle" width="46" height="18" viewBox="0 0 46 18" fill="none" aria-hidden="true">
+                <path d="M2 12 Q 8 2 14 10 T 26 10 T 38 10 T 44 6" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="jpwr-shelf">
+              {photos.gallery.map((src, i) => (
+                <Ph key={i} src={src} alt={`Inside ${name}`}
+                  fx={<RetailFx c={pal.c} glyph={['smile', 'tag', 'star'][i % 3]} />} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {services.length > 0 && (
         <section className="jpwr-sec" id="goods">

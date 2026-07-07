@@ -70,6 +70,8 @@ const seedData = (businessName, template) => ({
   testimonials: [],
   paletteId: template?.palettes?.[0]?.id || '',
   established: '', license: '',
+  // Empty = the template's curated placeholder photos; owner URLs override.
+  photos: { hero: '', gallery: ['', '', ''] },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -528,7 +530,7 @@ function NewSiteDialog({ open, onClose, onCreate, busy, preselect }) {
             <MenuItem value="Other">Other</MenuItem>
           </TextField>
           <TextField
-            label="Business name" placeholder="North Pine Plumbing" value={name}
+            label="Business name" placeholder="Ironside Plumbing & Heating" value={name}
             onChange={(e) => setName(e.target.value)} size="small" fullWidth sx={fieldSx}
             helperText=" " inputRef={nameRef}
           />
@@ -746,6 +748,17 @@ export default function JpwSitesTab({ token }) {
   if (draft) {
     const tpl = getTemplate(draft.templateId);
     const d = draft.data || {};
+    // Photos are optional URL slots — empty keeps the template's curated
+    // placeholder set, so the form always shows hero + 3 gallery inputs.
+    const photos = d.photos && typeof d.photos === 'object' ? d.photos : {};
+    const gallery = Array.isArray(photos.gallery) ? photos.gallery : [];
+    const setPhotoHero = (v) =>
+      setData('photos', { hero: v, gallery: [0, 1, 2].map((i) => gallery[i] || '') });
+    const setPhotoGallery = (i, v) => {
+      const g = [0, 1, 2].map((j) => gallery[j] || '');
+      g[i] = v;
+      setData('photos', { hero: photos.hero || '', gallery: g });
+    };
     const isDraftStatus = draft.status === 'draft';
     const isPreview = draft.status === 'preview';
     const isLive = draft.status === 'live';
@@ -916,6 +929,15 @@ export default function JpwSitesTab({ token }) {
                   { key: 'quote', label: 'Quote', wide: true, minRows: 2 },
                 ]}
               />
+            </Section>
+
+            <Section title="Photos" hint="Paste image links — leave empty to keep the template's placeholder photos.">
+              <F label="Hero photo URL" value={photos.hero} onChange={setPhotoHero}
+                placeholder="https://…/storefront.jpg" />
+              {[0, 1, 2].map((i) => (
+                <F key={i} label={`Gallery photo ${i + 1} URL`} value={gallery[i]}
+                  onChange={(v) => setPhotoGallery(i, v)} placeholder="https://…" />
+              ))}
             </Section>
 
             <Section title="Style" hint={`${tpl ? tpl.label : 'Template'} palettes — the whole site recolors instantly.`}>

@@ -11,22 +11,26 @@
 //   3. tel:/mailto: links are real (the phone CTA is the whole point of a
 //      small-business one-pager).
 //   4. An unknown paletteId falls back to the first palette instead of
-//      exploding. Run via:  CI=true npm test
+//      exploding.
+//   5. PHOTOS are fail-safe: every template renders its curated default set
+//      when data.photos is absent, owner URLs override slot-for-slot, and a
+//      photo that fails to load collapses to the crafted underlayer tile
+//      (never a broken-image glyph). Run via:  CI=true npm test
 //
 // The registry's Component fields are React.lazy, so tests render inside
 // <Suspense>. `findBy*` waits for the lazy chunk to resolve.
 
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TEMPLATES, getTemplate } from './index';
 
 const FULL_DATA = {
-  businessName: 'North Pine Plumbing',
+  businessName: 'Ironside Plumbing & Heating',
   tagline: 'Honest work, done right',
   heroHeadline: 'Plumbing you can trust',
   ctaLabel: 'Call for a free estimate',
   phone: '(609) 555-0143',
-  email: 'office@northpine.example',
+  email: 'office@ironside.example',
   serviceArea: 'Burlington County',
   address: '12 Main St, Mount Holly, NJ',
   hours: [{ days: 'Mon – Fri', hours: '8:00 AM – 6:00 PM' }],
@@ -78,14 +82,14 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
   test('renders full data: name, services, hours, quote, tel/mailto links', async () => {
     const { container } = renderTpl(tpl, { ...FULL_DATA, paletteId: tpl.palettes[1].id });
     // Business name shows (nav + footer at minimum).
-    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
     // Services + hours + testimonial content made it in.
     expect(screen.getAllByText(/Drain cleaning/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/8:00 AM – 6:00 PM/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Showed up on time/).length).toBeGreaterThan(0);
     // Contact links are real.
     expect(container.querySelector('a[href="tel:6095550143"]')).toBeTruthy();
-    expect(container.querySelector('a[href="mailto:office@northpine.example"]')).toBeTruthy();
+    expect(container.querySelector('a[href="mailto:office@ironside.example"]')).toBeTruthy();
     // Every anchor nav link points at a section that exists.
     for (const a of container.querySelectorAll('a[href^="#"]')) {
       const target = a.getAttribute('href').slice(1);
@@ -111,6 +115,45 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
 
   test('unknown paletteId falls back to the first palette', async () => {
     renderTpl(tpl, { ...FULL_DATA, paletteId: 'not-a-palette' });
-    expect((await screen.findAllByText(/North Pine Plumbing/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
+  });
+
+  test('curated default photos render through the fail-safe stack', async () => {
+    const { container } = renderTpl(tpl, FULL_DATA); // no data.photos → defaults
+    await screen.findAllByText(/Ironside Plumbing/);
+    // Fail-safe tiles exist, each with its crafted underlayer in place…
+    const tiles = container.querySelectorAll('.jpw-ph');
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.jpw-ph-fx').length).toBeGreaterThan(0);
+    // …and the default photo set is the curated Unsplash one.
+    const img = container.querySelector('.jpw-ph img');
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('src')).toContain('images.unsplash.com');
+  });
+
+  test('owner photo URLs override the curated defaults', async () => {
+    const { container } = renderTpl(tpl, {
+      ...FULL_DATA,
+      photos: { hero: 'https://example.com/hero.jpg', gallery: ['https://example.com/g1.jpg'] },
+    });
+    await screen.findAllByText(/Ironside Plumbing/);
+    // The hero lands somewhere (CSS background stack or an <img>)…
+    expect(container.innerHTML).toContain('https://example.com/hero.jpg');
+    // …and every fail-safe tile now shows owner photos, none of the defaults.
+    const srcs = [...container.querySelectorAll('.jpw-ph img')].map((i) => i.getAttribute('src'));
+    expect(srcs.length).toBeGreaterThan(0);
+    for (const src of srcs) expect(src).toMatch(/^https:\/\/example\.com\//);
+  });
+
+  test('a failed photo collapses to the crafted tile, not a broken glyph', async () => {
+    const { container } = renderTpl(tpl, FULL_DATA);
+    await screen.findAllByText(/Ironside Plumbing/);
+    const img = container.querySelector('.jpw-ph img');
+    fireEvent.error(img);
+    // The wrapper flags the failure, unmounts the img, keeps the crafted fx.
+    const failed = container.querySelector('.jpw-ph-noimg');
+    expect(failed).toBeTruthy();
+    expect(failed.querySelector('img')).toBeNull();
+    expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
   });
 });
