@@ -32,6 +32,7 @@ import {
   Typography as T, Grow, Fade, Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -455,6 +456,72 @@ function ConnectDomainDialog({ open, onClose, onConnect, busy, siteName }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Generate-content dialog — the "write the whole site from a brief" moment
+// ─────────────────────────────────────────────────────────────────────────────
+// The owner pastes the client's email / notes / a description + services and
+// the backend (shared Anthropic key) writes every copy field. It refuses to
+// invent contact details, prices, or reviews — same honesty rule the JP
+// Webworks marketing site follows — so the note sets that expectation.
+function GenerateDialog({ open, onClose, onGenerate, busy }) {
+  const [brief, setBrief] = React.useState('');
+  const [tone, setTone] = React.useState('');
+  // Reset per open so a second generate starts from a clean sheet.
+  React.useEffect(() => { if (open) { setBrief(''); setTone(''); } }, [open]);
+  const canGo = brief.trim().length > 0 && !busy;
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, borderRadius: 3, border: `1px solid ${D.line}` } }}>
+      <DialogTitle sx={{ borderBottom: `1px solid ${D.line}` }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <AutoAwesomeIcon sx={{ fontSize: 18, color: D.green }} />
+          <T fontWeight={800} fontSize={17}>Generate the site copy</T>
+        </Stack>
+        <T variant="caption" sx={{ color: D.muted }}>Paste what you know — the builder writes the words.</T>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '18px !important' }}>
+        <Stack spacing={1.75}>
+          <TextField
+            label="Tell me about the business"
+            placeholder="Paste the client's email or notes, or just describe them: what they do, their services, what makes them good, hours, the area they serve. More detail = better copy."
+            value={brief} onChange={(e) => setBrief(e.target.value)}
+            multiline minRows={8} fullWidth sx={fieldSx} autoFocus disabled={busy}
+          />
+          <TextField
+            select label="Tone (optional)" value={tone} onChange={(e) => setTone(e.target.value)}
+            size="small" fullWidth sx={fieldSx} disabled={busy}
+          >
+            <MenuItem value="">Match the template</MenuItem>
+            <MenuItem value="Friendly">Friendly</MenuItem>
+            <MenuItem value="Professional">Professional</MenuItem>
+            <MenuItem value="Bold">Bold</MenuItem>
+          </TextField>
+          <Alert severity="info" sx={{
+            borderRadius: 2, bgcolor: 'rgba(96,165,250,0.08)', color: '#93c5fd',
+            border: '1px solid rgba(96,165,250,0.25)', '& .MuiAlert-icon': { color: '#60a5fa' },
+            fontSize: 12.5,
+          }}>
+            This writes the site&apos;s words from your brief. It won&apos;t invent phone numbers,
+            prices, or reviews — you&apos;ll add those. Costs a few cents per generate.
+          </Alert>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ borderTop: `1px solid ${D.line}`, px: 3, py: 2 }}>
+        <Button onClick={onClose} disabled={busy} sx={{ textTransform: 'none', color: D.muted, '&:hover': { color: D.text } }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => onGenerate({ brief: brief.trim(), tone })} disabled={!canGo}
+          variant="contained" sx={{ ...dropPrimaryBtn, px: 3 }}
+          startIcon={busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <AutoAwesomeIcon />}
+        >
+          {busy ? 'Writing the site…' : 'Generate'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  New Site dialog — template picker → business type → name
 // ─────────────────────────────────────────────────────────────────────────────
 // `preselect` (a template id) seeds the picker — the landing's template
@@ -579,6 +646,8 @@ export default function JpwSitesTab({ token }) {
   const [preselectTpl, setPreselectTpl] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [domainOpen, setDomainOpen] = React.useState(false);
+  const [genOpen, setGenOpen] = React.useState(false);
+  const [genBusy, setGenBusy] = React.useState(false);
 
   const openNew = (tplId = null) => { setPreselectTpl(tplId); setNewOpen(true); };
 
@@ -732,6 +801,37 @@ export default function JpwSitesTab({ token }) {
     }
   };
 
+  // ── AI: write the whole site from a brief ───────────────────────────────────
+  // POSTs the brief to the backend, then MERGES the returned copy into the live
+  // draft — replacing the written copy fields but keeping the palette, photos,
+  // and any contact/name the owner already set that the brief didn't supply
+  // (those keys come back absent, so the spread preserves them). Normal autosave
+  // then persists it, so the owner reviews before it publishes.
+  const generateContent = async ({ brief, tone }) => {
+    if (!draft) return;
+    setGenBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/${draft._id}/generate`, { brief, tone }, authHdr);
+      const copy = data?.data || {};
+      const needs = data?.meta?.needs || [];
+      const cur = draft.data || {};
+      const nextData = {
+        ...cur,
+        ...copy,                              // written copy fields replace the old ones
+        businessName: cur.businessName || draft.name, // keep the owner's business name
+        paletteId: cur.paletteId,             // keep the chosen palette
+        photos: cur.photos,                   // keep photo URLs (never AI-generated)
+      };
+      queueSave({ ...draft, data: nextData });
+      setGenOpen(false);
+      flash(`Site written — review and tweak, then publish.${needs.length ? ` Still add: ${needs.join(', ')}.` : ''}`);
+    } catch (e) {
+      flash(e.response?.data?.message || 'Could not write the site — try again.', 'error');
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
   const copyLink = async (slug) => {
     const url = previewUrl(slug);
     try {
@@ -867,6 +967,21 @@ export default function JpwSitesTab({ token }) {
         }}>
           {/* ── Form ── */}
           <Stack spacing={3} sx={{ display: { xs: mobilePane === 'form' ? 'flex' : 'none', md: 'flex' }, minWidth: 0 }}>
+            {/* The first thing you'd do on a new site: paste the client's info
+                and let the builder write every field. */}
+            <Box>
+              <Button
+                fullWidth variant="contained" startIcon={<AutoAwesomeIcon />}
+                onClick={() => setGenOpen(true)}
+                sx={{ ...dropPrimaryBtn, py: 1.1, fontSize: 14 }}
+              >
+                Generate content
+              </Button>
+              <T sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, textAlign: 'center' }}>
+                Paste the client&apos;s email or notes and the AI writes the whole site — then you tweak it.
+              </T>
+            </Box>
+
             <Section title="Basics">
               <F label="Business name" value={draft.name} onChange={setBizName} />
               <F label="Tagline" value={d.tagline} onChange={(v) => setData('tagline', v)}
@@ -989,6 +1104,11 @@ export default function JpwSitesTab({ token }) {
             const ok = await putStatus({ status: 'live', domain }, `Live — ${domain} recorded`);
             if (ok) setDomainOpen(false);
           }}
+        />
+
+        <GenerateDialog
+          open={genOpen} onClose={() => setGenOpen(false)} busy={genBusy}
+          onGenerate={generateContent}
         />
 
         <Snackbar open={!!snack} autoHideDuration={4500} onClose={() => setSnack(null)}
