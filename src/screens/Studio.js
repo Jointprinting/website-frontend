@@ -8,7 +8,9 @@
 //     2) Mockup Studio — launches /jpstudio/ in a new tab
 //   JP Webworks tools:
 //     3) Websites — build/preview/publish client subscription sites (JpwSitesTab)
-//     4) Inquiries — the same Submissions inbox, opened pre-filtered to webworks
+//     4) Inquiries — JP Webworks' OWN inbox (view 'jpwinquiries'): the same
+//        SubmissionsTab component HARD-locked to webworks leads, with its own
+//        unseen badge — fully separate from the Joint Printing Inquiries tile
 //     5) Cold Call Tree + Lead Recon — kept, but collapsed under "On hold"
 
 import * as React from 'react';
@@ -67,6 +69,7 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0 } from './studio/_shared';
+import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
@@ -430,28 +433,19 @@ function MockupLauncherTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Submissions tab (mini-CRM)
 // ─────────────────────────────────────────────────────────────────────────────
-// Which lead pipe a submission came down. 'contact' = the Joint Printing
-// contact form (source unset/anything else); 'webworks' = /webworks/start.
-// Client-side only — the API returns all sources and we slice here.
-const SOURCE_FILTERS = [
-  { value: 'all',      label: 'All sources' },
-  { value: 'webworks', label: 'JP Webworks' },
-  { value: 'contact',  label: 'Contact form' },
-];
-const matchesSource = (item, filter) =>
-  filter === 'all' ? true
-    : filter === 'webworks' ? item.source === 'webworks'
-    : item.source !== 'webworks';
-
-// `initialSource` seeds the source filter — the hub's JP Webworks "Inquiries"
-// tile opens this same inbox pre-filtered to webworks leads (see handlePick).
-function SubmissionsTab({ token, onOpenClients, initialSource }) {
+// Source vocabulary (SOURCE_FILTERS / matchesSource / visibleSubmissions) lives
+// in ./studio/_submissions — extracted so the slice logic is unit-tested.
+//
+// `lockedSource` HARD-scopes the inbox to one lead pipe: the JP Webworks
+// Inquiries view (Studio view 'jpwinquiries') renders this same component with
+// lockedSource="webworks", so it shows ONLY /webworks/start leads, hides the
+// source chips, and reads as the Webworks inbox. Unset → the full Joint
+// Printing inbox with the source filter chips.
+function SubmissionsTab({ token, onOpenClients, lockedSource }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [sourceFilter, setSourceFilter] = React.useState(
-    initialSource === 'webworks' ? 'webworks' : 'all'
-  );
+  const [sourceFilter, setSourceFilter] = React.useState('all');
   const [selected, setSelected] = React.useState(null);
   const [projectCreated, setProjectCreated] = React.useState(null); // { projectNumber } for the success toast
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -515,11 +509,12 @@ function SubmissionsTab({ token, onOpenClients, initialSource }) {
     } catch { return iso; }
   };
 
-  // Source filter applies first; the status pills then count within that slice
-  // so the numbers always agree with the rows on screen.
+  // Source filter applies first (a lockedSource always wins); the status pills
+  // then count within that slice so the numbers always agree with the rows on
+  // screen.
   const visible = React.useMemo(
-    () => items.filter((it) => matchesSource(it, sourceFilter)),
-    [items, sourceFilter]
+    () => visibleSubmissions(items, { sourceFilter, lockedSource }),
+    [items, sourceFilter, lockedSource]
   );
 
   const sourceCounts = React.useMemo(() => ({
@@ -538,22 +533,29 @@ function SubmissionsTab({ token, onOpenClients, initialSource }) {
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <MuiTypography variant="body2" sx={{ color: BRAND.muted, mb: 2.5 }}>
-        Every contact form submission is saved here so you don&apos;t lose a lead even
-        if email hiccups. Filter, click any row for details, update as you work.
+        {lockedSource === 'webworks'
+          ? <>Every website lead from /webworks/start lands here — its own inbox,
+              separate from the Joint Printing contact-form leads. Click a row for
+              details, update as you work.</>
+          : <>Every contact form submission is saved here so you don&apos;t lose a lead even
+              if email hiccups. Filter, click any row for details, update as you work.</>}
       </MuiTypography>
 
       {/* Source row — which business the lead belongs to. Webworks leads keep
-          their green chip on the row; this just slices the inbox. */}
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.25 }}>
-        {SOURCE_FILTERS.map((s) => (
-          <FilterPill
-            key={s.value}
-            active={sourceFilter === s.value} label={s.label} count={sourceCounts[s.value] || 0}
-            onClick={() => setSourceFilter(s.value)}
-            color={s.value === 'webworks' ? '#17b878' : BRAND.green}
-          />
-        ))}
-      </Stack>
+          their green chip on the row; this just slices the inbox. Hidden when
+          the view is hard-locked to one source (the JP Webworks inbox). */}
+      {!lockedSource && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.25 }}>
+          {SOURCE_FILTERS.map((s) => (
+            <FilterPill
+              key={s.value}
+              active={sourceFilter === s.value} label={s.label} count={sourceCounts[s.value] || 0}
+              onClick={() => setSourceFilter(s.value)}
+              color={s.value === 'webworks' ? '#17b878' : BRAND.green}
+            />
+          ))}
+        </Stack>
+      )}
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
         <FilterPill
@@ -586,12 +588,16 @@ function SubmissionsTab({ token, onOpenClients, initialSource }) {
           <Box py={8} textAlign="center">
             <InboxIcon sx={{ fontSize: 56, color: 'rgba(255,255,255,0.18)', mb: 2 }} />
             <MuiTypography sx={{ color: BRAND.muted }}>
-              {sourceFilter !== 'all' && items.length > 0
+              {lockedSource === 'webworks'
+                ? (statusFilter === 'all' ? 'No JP Webworks inquiries yet.' : `No "${statusMeta(statusFilter).label}" inquiries.`)
+                : sourceFilter !== 'all' && items.length > 0
                 ? `No ${SOURCE_FILTERS.find((s) => s.value === sourceFilter)?.label} submissions here.`
                 : statusFilter === 'all' ? 'No submissions yet.' : `No "${statusMeta(statusFilter).label}" submissions.`}
             </MuiTypography>
             <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
-              They&apos;ll appear here as soon as someone fills out your contact form.
+              {lockedSource === 'webworks'
+                ? <>They&apos;ll appear here as soon as someone finishes /webworks/start.</>
+                : <>They&apos;ll appear here as soon as someone fills out your contact form.</>}
             </MuiTypography>
           </Box>
         </Fade>
@@ -1657,9 +1663,11 @@ const HUB_GROUPS = [
         id: 'jpw',
         tools: [
           { id: 'jpwsites', label: 'Websites', desc: 'Build & preview client sites', Icon: LanguageOutlinedIcon },
-          // Same Submissions inbox, deep-linked: `view` seeds the source filter
-          // so it opens showing only /webworks/start leads (see handlePick).
-          { id: 'jpwinquiries', target: 'submissions', view: 'webworks', label: 'Inquiries', desc: 'Leads from /webworks/start', Icon: InboxIcon },
+          // JP Webworks' OWN inbox — its own view id (no target redirect), so
+          // it's fully separate from the Joint Printing Inquiries tile: the
+          // SubmissionsTab renders hard-locked to webworks leads, and the tile
+          // carries its own webworks-scoped unseen badge (see StudioBody).
+          { id: 'jpwinquiries', label: 'Inquiries', desc: 'Leads from /webworks/start', Icon: InboxIcon },
         ],
       },
     ],
@@ -1911,7 +1919,12 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
       {tools.map((t, i) => {
         const showNotice = t.id === 'jpwrecon' && sweepNeeded;
         const showResetCountdown = t.id === 'jpwrecon' && !sweepNeeded && sweepBlocked && nextResetAt;
-        const badge = t.id === 'submissions' ? (unseenInquiries || 0) : 0;
+        // Each Inquiries tile wears ITS OWN source-scoped unseen count — the
+        // Joint Printing tile the contact-form leads, the JP Webworks tile the
+        // /webworks/start leads — so one badge never clears the other's.
+        const badge = t.id === 'submissions' ? (unseenInquiries?.contact || 0)
+          : t.id === 'jpwinquiries' ? (unseenInquiries?.webworks || 0)
+          : 0;
         return (
           <HubCard
             key={t.id}
@@ -1971,7 +1984,7 @@ const TIER_COLS = {
 // records. A new-site-inquiry row (from the hub's unseen-inquiry count) leads the
 // list, and the backup nudge (client-gated by localStorage) trails it; the whole
 // section still vanishes on a clean day.
-function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries = 0 }) {
+function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries }) {
   const [open, setOpen] = React.useState({});
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
@@ -2021,13 +2034,25 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries = 0 }) {
     }
   }
 
-  // A new site inquiry is a live inbound lead — surface it FIRST. The row opens the
-  // Submissions inbox (which marks them seen), same as the hub tile.
-  if (unseenInquiries > 0) {
+  // A new inquiry is a live inbound lead — surface it FIRST, one row per lead
+  // pipe. Each row opens ITS OWN inbox (which marks only that source seen),
+  // same as the hub tiles: contact-form leads → the Joint Printing Inquiries
+  // inbox; /webworks/start leads → the JP Webworks one.
+  const unseenWebworks = unseenInquiries?.webworks || 0;
+  const unseenContact  = unseenInquiries?.contact || 0;
+  if (unseenWebworks > 0) {
     rows.unshift({
-      key: 'inquiry',
+      key: 'inquiry-webworks',
+      tone: '#17b878',
+      label: `${unseenWebworks} new JP Webworks lead${unseenWebworks === 1 ? '' : 's'}`,
+      onClick: () => onPick && onPick('jpwinquiries'),
+    });
+  }
+  if (unseenContact > 0) {
+    rows.unshift({
+      key: 'inquiry-contact',
       tone: D.green,
-      label: `${unseenInquiries} new inquir${unseenInquiries === 1 ? 'y' : 'ies'} from the site`,
+      label: `${unseenContact} new inquir${unseenContact === 1 ? 'y' : 'ies'} from the site`,
       onClick: () => onPick && onPick('submissions'),
     });
   }
@@ -2324,7 +2349,10 @@ function StudioBody({ token, onLogout }) {
   // nudge dot. nextResetAt is the server-reported UTC midnight ISO string.
   const [sweepBlocked, setSweepBlocked] = React.useState(false);
   const [nextResetAt, setNextResetAt]   = React.useState(null);
-  const [unseenInquiries, setUnseenInquiries] = React.useState(0);
+  // Unseen inquiry counts, one per lead pipe — the Joint Printing Inquiries
+  // tile wears `contact`, the JP Webworks tile wears `webworks`. Fetched as
+  // two source-scoped counts so each badge clears only when ITS view opens.
+  const [unseenInquiries, setUnseenInquiries] = React.useState({ contact: 0, webworks: 0 });
   // Command-center signals shown in the hub's Signals panel: orders aging past the
   // owner's 2–3 week turnaround, overdue/due-today follow-ups, and the backup nudge.
   // Each fetch fails silent — a down endpoint just drops its row. (Missing-receipt
@@ -2332,11 +2360,6 @@ function StudioBody({ token, onLogout }) {
   // Which Outreach sub-view to open when the tool is entered (e.g. the hub's reply
   // alert jumps straight to Replies). Null → the Outreach dashboard on a plain open.
   const [outreachView, setOutreachView] = React.useState(null);
-  // Source filter the Submissions inbox opens with. The JP Webworks "Inquiries"
-  // tile (target 'submissions', view 'webworks') seeds 'webworks' so the inbox
-  // lands pre-filtered to /webworks/start leads; every other entry point clears
-  // it. Same handlePick entry-seeding pattern as crmEntry/outreachView.
-  const [subsSource, setSubsSource] = React.useState(null);
   const [signals, setSignals] = React.useState({
     groups: { critical: [], warning: [], info: [] }, counts: {}, backup: null,
   });
@@ -2385,10 +2408,14 @@ function StudioBody({ token, onLogout }) {
         setNextResetAt(u.next_reset_at || null);
       })
       .catch(() => { /* if endpoint fails, hide the dot */ });
-    axios.get(`${config.backendUrl}/api/submissions/unseen-count`,
-      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
-      .then((res) => { if (!cancelled) setUnseenInquiries(res.data?.count || 0); })
-      .catch(() => { /* silent — bubble just won't show */ });
+    // One source-scoped unseen count per Inquiries tile (?source= ships with
+    // the backend counterpart; an older backend ignores the param and both
+    // tiles briefly show the global count — harmless, self-heals on deploy).
+    ['contact', 'webworks'].forEach((source) => {
+      axios.get(`${config.backendUrl}/api/submissions/unseen-count?source=${source}`, authH)
+        .then((res) => { if (!cancelled) setUnseenInquiries((u) => ({ ...u, [source]: res.data?.count || 0 })); })
+        .catch(() => { /* silent — bubble just won't show */ });
+    });
     return () => { cancelled = true; };
   }, [view, token]);
 
@@ -2408,20 +2435,20 @@ function StudioBody({ token, onLogout }) {
       // (same origin), so the token never lands in server logs or browser history.
       try { window.open('/jpstudio/', '_blank', 'noopener,noreferrer'); } catch (_) {}
     }
-    if (id === 'submissions' && unseenInquiries > 0) {
-      setUnseenInquiries(0);
-      // SCOPE the mark-seen to what the owner is actually about to look at: the
-      // JP Webworks Inquiries tile opens a webworks-filtered view, so it must
-      // not wipe the unseen state of contact-form leads he never saw. (An older
-      // backend ignores the body — harmless.)
-      const markBody = innerView === 'webworks' ? { source: 'webworks' } : {};
-      axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, markBody,
-        { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
-        .catch(() => { /* best-effort; badge already cleared locally */ });
+    // Opening an Inquiries surface clears ITS badge and marks seen ONLY its
+    // source: the Joint Printing inbox owns the contact-form leads, the JP
+    // Webworks inbox the /webworks/start leads — so opening one never wipes
+    // the unseen state of leads the owner hasn't looked at in the other. (An
+    // older backend ignores the body and marks everything — harmless.)
+    if (id === 'submissions' || id === 'jpwinquiries') {
+      const source = id === 'jpwinquiries' ? 'webworks' : 'contact';
+      if ((unseenInquiries[source] || 0) > 0) {
+        setUnseenInquiries((u) => ({ ...u, [source]: 0 }));
+        axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, { source },
+          { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
+          .catch(() => { /* best-effort; badge already cleared locally */ });
+      }
     }
-    // Seed (or clear) the Submissions source filter: the JP Webworks Inquiries
-    // tile carries view:'webworks'; the plain Inquiries tile carries none.
-    if (id === 'submissions') setSubsSource(innerView === 'webworks' ? 'webworks' : null);
     if (id === 'crm') setCrmEntry((p) => ({ view: innerView || 'companies', companyKey: null, nonce: p.nonce + 1 }));
     // Entering Orders/Vendors from the hub bumps their entry nonce with a CLEARED
     // target, so the tool remounts fresh — a stale deep-linked drawer from an
@@ -2693,7 +2720,11 @@ function StudioBody({ token, onLogout }) {
 
               <Fade in key={view} timeout={300}>
                 <Box>
-                  {view === 'submissions' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} initialSource={subsSource} />}
+                  {/* Two Inquiries surfaces, one component: the Joint Printing
+                      inbox shows every source (with filter chips); the JP
+                      Webworks one is hard-locked to /webworks/start leads. */}
+                  {view === 'submissions'  && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
+                  {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}

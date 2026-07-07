@@ -2,8 +2,12 @@
 // JP Webworks — Websites. The build-and-preview cockpit for the website
 // subscription business. The whole workflow lives here:
 //
-//   1. NEW SITE   — pick a template (visual cards, palette swatches), pick the
-//                   business type, name it. POST /api/jpw/sites → editor.
+//   1. NEW SITE   — the landing is template-forward: with no sites yet it IS a
+//                   rich template gallery (mock-up thumbs + palette bands drawn
+//                   from the registry meta); with sites, one "New site" header
+//                   button plus a slim template-chip row under the list. Either
+//                   template click opens the New Site dialog PRE-selected, pick
+//                   the business type, name it. POST /api/jpw/sites → editor.
 //   2. EDIT       — two-pane editor: form left, the REAL template component
 //                   rendering live on the right (scaled with transform).
 //                   Autosaves via debounced PUT — no Save button to hunt.
@@ -87,8 +91,10 @@ function StatusPill({ site }) {
 
 // Stylized mini-preview for a template card — a fake one-pager drawn from the
 // template's first palette (nav band, headline bars, a button dot). No
-// screenshots to maintain; it always matches the palette data.
-function TemplateThumb({ tpl }) {
+// screenshots to maintain; it always matches the palette data. `rich` adds a
+// services-tile row (the empty-state gallery cards get the fuller mock-up);
+// `sx` lets the gallery run it full-bleed inside its card.
+function TemplateThumb({ tpl, rich, sx }) {
   const [deep, accent, bg] = tpl.palettes[0].swatches;
   const bar = (w, c, h = 6) => (
     <Box sx={{ width: w, height: h, borderRadius: 99, bgcolor: c }} />
@@ -96,7 +102,8 @@ function TemplateThumb({ tpl }) {
   return (
     <Box sx={{
       borderRadius: 1.5, overflow: 'hidden', border: `1px solid ${D.line}`,
-      bgcolor: bg, aspectRatio: '16 / 10', display: 'flex', flexDirection: 'column',
+      bgcolor: bg, aspectRatio: rich ? '16 / 11' : '16 / 10',
+      display: 'flex', flexDirection: 'column', ...sx,
     }}>
       {/* nav strip */}
       <Box sx={{ bgcolor: deep, px: 1, py: 0.6, display: 'flex', alignItems: 'center', gap: 0.6 }}>
@@ -115,7 +122,83 @@ function TemplateThumb({ tpl }) {
           <Box sx={{ width: 22, height: 9, borderRadius: 99, border: `1px solid ${deep}55` }} />
         </Box>
       </Box>
+      {/* services tiles — only on the rich (gallery) variant */}
+      {rich && (
+        <Box sx={{ px: 1.1, pb: 1.1, display: 'flex', gap: 0.6 }}>
+          {[0, 1, 2].map((i) => (
+            <Box key={i} sx={{
+              flex: 1, borderRadius: 0.75, bgcolor: 'rgba(255,255,255,0.75)',
+              border: `1px solid ${deep}22`, p: 0.6,
+              display: 'flex', flexDirection: 'column', gap: 0.45,
+            }}>
+              <Box sx={{ width: 9, height: 9, borderRadius: 0.5, bgcolor: i === 1 ? accent : `${deep}cc` }} />
+              <Box sx={{ width: '85%', height: 3, borderRadius: 99, bgcolor: `${deep}55` }} />
+              <Box sx={{ width: '60%', height: 3, borderRadius: 99, bgcolor: `${deep}33` }} />
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
+  );
+}
+
+// Rich gallery card for the Websites landing (empty state) — the template
+// registry's own meta rendered big: full-bleed mock-up, a band of every
+// palette swatch, name, one-line description, business-type chips. Clicking
+// anywhere opens the New Site dialog with this template pre-selected.
+function TemplateGalleryCard({ tpl, onPick, delay }) {
+  const typeChipSx = {
+    height: 20, fontSize: 10.5, fontWeight: 600, borderRadius: 999,
+    bgcolor: 'rgba(255,255,255,0.05)', color: D.muted, border: `1px solid ${D.line}`,
+    '& .MuiChip-label': { px: 1 },
+  };
+  const shown = tpl.businessTypes.slice(0, 3);
+  const more = tpl.businessTypes.length - shown.length;
+  return (
+    <Grow in timeout={delay}>
+      <Paper
+        elevation={0}
+        onClick={() => onPick(tpl.id)}
+        role="button" tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(tpl.id); } }}
+        sx={{
+          borderRadius: 2.5, overflow: 'hidden', cursor: 'pointer', bgcolor: D.inset,
+          border: `1px solid ${D.line}`, display: 'flex', flexDirection: 'column',
+          transition: 'border-color .18s ease, transform .18s ease, box-shadow .2s ease',
+          '&:hover': {
+            borderColor: D.lineHi, transform: 'translateY(-3px)',
+            boxShadow: `0 14px 32px -16px ${D.glow}`,
+            '& .tpl-cta': { color: D.green },
+          },
+          '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+        }}
+      >
+        <TemplateThumb tpl={tpl} rich sx={{ borderRadius: 0, border: 'none' }} />
+        {/* palette band — every palette's swatches in one strip, so the card
+            says "this template ships in all these colorways" at a glance */}
+        <Box sx={{ display: 'flex', height: 6, flexShrink: 0 }}>
+          {tpl.palettes.flatMap((p) => p.swatches).map((c, i) => (
+            <Box key={i} sx={{ flex: 1, bgcolor: c }} />
+          ))}
+        </Box>
+        <Box sx={{ p: 1.75, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75, flex: 1 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+            <T sx={{ fontWeight: 800, fontSize: 14.5, color: D.text }}>{tpl.label}</T>
+            <T className="tpl-cta" sx={{
+              ...mono, fontSize: 10.5, fontWeight: 700, color: D.faint,
+              whiteSpace: 'nowrap', transition: 'color .18s ease',
+            }}>
+              Start →
+            </T>
+          </Stack>
+          <T sx={{ color: D.muted, fontSize: 12, lineHeight: 1.5 }}>{tpl.description}</T>
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 'auto', pt: 0.5 }}>
+            {shown.map((b) => <Chip key={b} label={b} size="small" sx={typeChipSx} />)}
+            {more > 0 && <Chip label={`+${more} more`} size="small" sx={typeChipSx} />}
+          </Stack>
+        </Box>
+      </Paper>
+    </Grow>
   );
 }
 
@@ -372,21 +455,29 @@ function ConnectDomainDialog({ open, onClose, onConnect, busy, siteName }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  New Site dialog — template picker → business type → name
 // ─────────────────────────────────────────────────────────────────────────────
-function NewSiteDialog({ open, onClose, onCreate, busy }) {
+// `preselect` (a template id) seeds the picker — the landing's template
+// gallery / chips open the dialog with their template already chosen, so
+// focus jumps straight to the business-name field and the owner just types.
+function NewSiteDialog({ open, onClose, onCreate, busy, preselect }) {
   const [tplId, setTplId] = React.useState(null);
   const [bizType, setBizType] = React.useState('');
   const [name, setName] = React.useState('');
   const tpl = getTemplate(tplId);
+  const nameRef = React.useRef(null);
 
-  // Reset per open so a second new-site starts clean.
+  // Reset per open so a second new-site starts clean (seeded from the gallery
+  // pick, when there was one).
   React.useEffect(() => {
-    if (open) { setTplId(null); setBizType(''); setName(''); }
-  }, [open]);
+    if (open) { setTplId(preselect || null); setBizType(''); setName(''); }
+  }, [open, preselect]);
 
   const canCreate = !!(tpl && bizType && name.trim());
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="md" fullWidth
+      // With a template pre-chosen the next thing to do is type the name —
+      // put the caret there once the dialog finishes opening.
+      TransitionProps={{ onEntered: () => { if (preselect && nameRef.current) nameRef.current.focus(); } }}
       PaperProps={{ sx: { bgcolor: D.panel, color: D.text, borderRadius: 3, border: `1px solid ${D.line}` } }}>
       <DialogTitle sx={{ borderBottom: `1px solid ${D.line}` }}>
         <T fontWeight={800} fontSize={17}>New client site</T>
@@ -439,7 +530,7 @@ function NewSiteDialog({ open, onClose, onCreate, busy }) {
           <TextField
             label="Business name" placeholder="North Pine Plumbing" value={name}
             onChange={(e) => setName(e.target.value)} size="small" fullWidth sx={fieldSx}
-            helperText=" "
+            helperText=" " inputRef={nameRef}
           />
         </Stack>
       </DialogContent>
@@ -481,8 +572,13 @@ export default function JpwSitesTab({ token }) {
   const [mobilePane, setMobilePane] = React.useState('form'); // xs-only: form|preview
 
   const [newOpen, setNewOpen] = React.useState(false);
+  // Template id the New Site dialog opens pre-selected to (from a gallery
+  // card / template chip); null = the plain "New site" button, owner picks.
+  const [preselectTpl, setPreselectTpl] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [domainOpen, setDomainOpen] = React.useState(false);
+
+  const openNew = (tplId = null) => { setPreselectTpl(tplId); setNewOpen(true); };
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -884,20 +980,28 @@ export default function JpwSitesTab({ token }) {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  //  Render: site list
+  //  Render: site list / template-forward landing
   // ───────────────────────────────────────────────────────────────────────────
+  // With sites: the list + ONE "New site" button in the header, and a slim
+  // template-chip row under the list. Empty: NO header button — the landing IS
+  // the template gallery (rich cards from the same registry the dialog picker
+  // uses), so the first screen answers "what can this thing make?" and one
+  // click starts a site with that template pre-selected.
+  const hasSites = !loading && !loadErr && sites.length > 0;
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
-      <Stack direction="row" alignItems="flex-start" spacing={2} sx={{ mb: 2.5 }}>
-        <T variant="body2" sx={{ color: D.muted, flex: 1 }}>
-          Build a client&apos;s site as a free preview, send them the public link,
-          and connect their real domain once they subscribe.
-        </T>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNewOpen(true)}
-          sx={{ ...dropPrimaryBtn, px: 2.25, py: 0.9, fontSize: 13.5, flexShrink: 0 }}>
-          New site
-        </Button>
-      </Stack>
+      {hasSites && (
+        <Stack direction="row" alignItems="flex-start" spacing={2} sx={{ mb: 2.5 }}>
+          <T variant="body2" sx={{ color: D.muted, flex: 1 }}>
+            Build a client&apos;s site as a free preview, send them the public link,
+            and connect their real domain once they subscribe.
+          </T>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openNew()}
+            sx={{ ...dropPrimaryBtn, px: 2.25, py: 0.9, fontSize: 13.5, flexShrink: 0 }}>
+            New site
+          </Button>
+        </Stack>
+      )}
 
       {loading ? (
         <Box display="flex" justifyContent="center" py={8}>
@@ -910,23 +1014,50 @@ export default function JpwSitesTab({ token }) {
         </Box>
       ) : sites.length === 0 ? (
         <Fade in>
-          <Box py={7} textAlign="center">
-            <LanguageOutlinedIcon sx={{ fontSize: 56, color: 'rgba(255,255,255,0.18)', mb: 2 }} />
-            <T sx={{ color: D.text, fontWeight: 800, fontSize: 17, mb: 0.75 }}>
-              No client sites yet
-            </T>
-            <T sx={{ color: D.muted, fontSize: 14, maxWidth: 420, mx: 'auto', mb: 3 }}>
-              The pitch that closes: build their site for free, text them the
-              preview link, and flip on their domain the day they pay. First
-              one takes about ten minutes.
-            </T>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNewOpen(true)}
-              sx={{ ...dropPrimaryBtn, px: 3, py: 1 }}>
-              Build the first site
-            </Button>
+          <Box>
+            {/* The whole business model in one line, then straight into the
+                templates — no dead "empty" screen, no duplicate buttons. */}
+            <Paper elevation={0} sx={{
+              p: { xs: 1.75, sm: 2 }, mb: 3, borderRadius: 2.5,
+              bgcolor: D.inset, border: `1px solid ${D.line}`,
+              display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap',
+            }}>
+              <Box sx={{
+                width: 38, height: 38, borderRadius: 2, flexShrink: 0,
+                bgcolor: D.greenDk, color: D.green,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <LanguageOutlinedIcon sx={{ fontSize: 20 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 220 }}>
+                <T sx={{ fontWeight: 800, fontSize: 14.5, color: D.text, lineHeight: 1.35 }}>
+                  Build it free → text them the preview link → connect their
+                  domain the day they subscribe.
+                </T>
+                <T sx={{ color: D.muted, fontSize: 12, mt: 0.25 }}>
+                  Pick a template below — the first site takes about ten minutes.
+                </T>
+              </Box>
+            </Paper>
+
+            <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}>
+              <T sx={{ ...eyebrow, fontSize: 10.5, letterSpacing: 1.8 }}>Start from a template</T>
+              <Box sx={{ flex: 1, height: 1, bgcolor: D.line, alignSelf: 'center' }} />
+            </Stack>
+
+            <Box sx={{
+              display: 'grid', gap: 1.75,
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+            }}>
+              {TEMPLATES.map((t, i) => (
+                <TemplateGalleryCard key={t.id} tpl={t} onPick={openNew}
+                  delay={Math.min(250 + i * 80, 650)} />
+              ))}
+            </Box>
           </Box>
         </Fade>
       ) : (
+        <Box>
         <Stack spacing={1.2}>
           {sites.map((s, idx) => {
             const tpl = getTemplate(s.templateId);
@@ -996,9 +1127,36 @@ export default function JpwSitesTab({ token }) {
             );
           })}
         </Stack>
+
+        {/* Slim template launcher under the list — the gallery's click-through
+            (dialog opens pre-selected) at chip size, so starting the next site
+            from a look is one tap even after the empty state is gone. */}
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+          <T sx={{ ...eyebrow, fontSize: 10, letterSpacing: 1.6, color: D.faint }}>
+            Start from a template
+          </T>
+          {TEMPLATES.map((t) => (
+            <Box key={t.id} onClick={() => openNew(t.id)}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNew(t.id); } }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.75,
+                px: 1.25, py: 0.5, borderRadius: 999, cursor: 'pointer',
+                bgcolor: D.inset, border: `1px solid ${D.line}`,
+                transition: 'border-color .15s ease',
+                '&:hover': { borderColor: D.lineHi },
+                '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+              }}>
+              <SwatchDots swatches={t.palettes[0].swatches} size={9} />
+              <T sx={{ fontSize: 12, fontWeight: 700, color: D.muted }}>{t.label}</T>
+            </Box>
+          ))}
+        </Stack>
+        </Box>
       )}
 
-      <NewSiteDialog open={newOpen} onClose={() => setNewOpen(false)} onCreate={createSite} busy={creating} />
+      <NewSiteDialog open={newOpen} onClose={() => setNewOpen(false)} onCreate={createSite}
+        busy={creating} preselect={preselectTpl} />
 
       <Snackbar open={!!snack} autoHideDuration={4500} onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
