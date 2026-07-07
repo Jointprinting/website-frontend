@@ -20,6 +20,8 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
+import KeyboardArrowUpIcon     from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon   from '@mui/icons-material/KeyboardArrowDown';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -146,6 +148,19 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   };
   const addLine    = () => { setLines(prev => [...prev, emptyLine()]); setDirty(true); };
   const removeLine = (i) => { setLines(prev => prev.filter((_, idx) => idx !== i)); setDirty(true); };
+  // Reorder a line up/down. Order is what the client sees on the approval
+  // page — the array order IS the sort order (Mongo preserves it), so this is
+  // all it takes to let Nate arrange the pitch the way he wants to present it.
+  const moveLine = (i, dir) => {
+    setLines(prev => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+    setDirty(true);
+  };
 
   const setMeta = (setter) => (v) => { setter(v); setDirty(true); };
 
@@ -242,6 +257,29 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           </QF>
         </Box>
 
+        {/* Flow explainer — sets expectations for how a finished quote reaches
+            the client, so the pitch → pick → confirm → approve steps are clear. */}
+        <Box sx={{ mb: 2.5, p: 1.5, borderRadius: 2.5, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase', mb: 0.75 }}>
+            How this reaches your client
+          </Typography>
+          <Stack direction="row" gap={0.75} flexWrap="wrap" alignItems="center" sx={{ color: D.muted, fontSize: 11.5, lineHeight: 1.6 }}>
+            {['Build options here', 'Share the link', 'Client picks what they want', 'You build the confirmation', 'They approve + sign off art']
+              .map((step, i, a) => (
+                <React.Fragment key={step}>
+                  <Box component="span" sx={{ color: D.text, fontWeight: 600 }}>
+                    <Box component="span" sx={{ color: D.green, fontWeight: 800, ...mono, mr: 0.5 }}>{i + 1}</Box>{step}
+                  </Box>
+                  {i < a.length - 1 && <Box component="span" sx={{ color: D.faint }}>→</Box>}
+                </React.Fragment>
+              ))}
+          </Stack>
+          <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
+            Group alternatives (3 brands of tee) so the client picks one. They don't have to take everything —
+            pitch 10, and they can keep just the 5 they want. Nothing counts toward the project total until they pick.
+          </Typography>
+        </Box>
+
         {/* Lines */}
         {/* Shared datalist so typing a group name autocompletes to ones
             already used on this quote. Lines sharing a group are alternative
@@ -265,10 +303,12 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
         ) : (
           <Stack gap={2}>
             {lines.map((line, i) => (
-              <QuoteLineCard key={i} line={line} accent={accentFor(line.group)}
+              <QuoteLineCard key={i} line={line} accent={accentFor(line.group)} index={i}
                 onPatch={(patch) => setLine(i, patch)}
                 onSelectTier={(pct) => selectTier(i, pct)}
-                onRemove={() => removeLine(i)} />
+                onRemove={() => removeLine(i)}
+                onMoveUp={i > 0 ? () => moveLine(i, -1) : null}
+                onMoveDown={i < lines.length - 1 ? () => moveLine(i, +1) : null} />
             ))}
           </Stack>
         )}
@@ -354,7 +394,7 @@ function DesignAttach({ line, onPatch, tf }) {
   );
 }
 
-function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
+function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, onMoveUp, onMoveDown }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -406,7 +446,7 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
       {/* Line header — what is this option: group chip, product, style, qty */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.75,
         display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
-        <QF label="Group (client picks 1)" sx={{ width: { xs: '100%', sm: 190 } }}>
+        <QF label="Group (client picks 1, or skips)" sx={{ width: { xs: '100%', sm: 190 } }}>
           <TextField size="small" fullWidth value={line.group || ''} placeholder="Bucket Hats"
             inputProps={{ list: 'quote-group-options' }}
             onChange={e => onPatch({ group: e.target.value })} sx={groupChip} />
@@ -424,6 +464,17 @@ function QuoteLineCard({ line, accent, onPatch, onSelectTier, onRemove }) {
             onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
         </QF>
         <DesignAttach line={line} onPatch={onPatch} tf={tf} />
+        {/* Reorder — arrange the pitch the way you want the client to see it. */}
+        <Stack sx={{ mb: 0.3 }}>
+          <IconButton size="small" onClick={onMoveUp} disabled={!onMoveUp} title="Move up"
+            sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+            <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+          <IconButton size="small" onClick={onMoveDown} disabled={!onMoveDown} title="Move down"
+            sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+            <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Stack>
         <IconButton size="small" onClick={onRemove} title="Remove line"
           sx={{ color: D.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
             '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>

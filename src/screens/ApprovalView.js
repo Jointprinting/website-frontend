@@ -372,20 +372,42 @@ export default function ApprovalView() {
         ? 'legacy'   // terminal decision already made — read-only table + status panel
         : ((alreadyPicked && !repicking) ? 'picked' : 'picker');
 
+  // Current selection for a group. Explicit picks state wins (null = the client
+  // deselected/skipped it); otherwise fall back to any server-accepted line so a
+  // re-pick opens on what they had. undefined = nothing chosen for this group.
   const pickFor = (g) => {
-    if (picks[g] !== undefined) return picks[g];
+    if (Object.prototype.hasOwnProperty.call(picks, g)) return picks[g] == null ? undefined : picks[g];
     const acc = quoteLines.findIndex(l => l.group === g && l.accepted);
     return acc >= 0 ? acc : undefined;
   };
-  const allPicked = groupNames.every(g => pickFor(g) !== undefined);
+  // Toggle: click the selected option again to skip the whole group. Clients are
+  // NOT required to pick every group — pitch 10, keep the 5 you want.
+  const togglePick = (g, idx) => setPicks(prev => {
+    const has = Object.prototype.hasOwnProperty.call(prev, g);
+    const cur = has ? prev[g] : (() => { const a = quoteLines.findIndex(l => l.group === g && l.accepted); return a >= 0 ? a : null; })();
+    return { ...prev, [g]: cur === idx ? null : idx };
+  });
+  const pickedGroupCount = groupNames.filter(g => pickFor(g) !== undefined).length;
+  // Ready to continue when they've kept at least one option — or the quote
+  // carries standalone lines that are always part of the order.
+  const canSubmitPicks = pickedGroupCount > 0 || standaloneLines.length > 0;
+  // Live total of what they've kept so far (chosen options + standalone lines).
+  const selectionTotal =
+    groupNames.reduce((s, g) => {
+      const idx = pickFor(g);
+      if (idx === undefined) return s;
+      const l = quoteLines[idx] || {};
+      return s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
+    }, 0) +
+    standaloneLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
 
   const submitPicks = async () => {
     if (isPreview) { alert("Preview only — this is exactly what your client sees. Picks work on the real link, not in preview."); return; }
-    if (!allPicked) return;
+    if (!canSubmitPicks) return;
     setPickBusy(true);
     try {
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`,
-        { picks: groupNames.map(g => pickFor(g)) });
+        { picks: groupNames.map(g => pickFor(g)).filter(i => i !== undefined) });
       setRepicking(false);
       await refresh();
     } catch (e) {
@@ -568,19 +590,40 @@ export default function ApprovalView() {
         {/* ── Stage body ─────────────────────────────────────────────────── */}
         {stage === 'picker' ? (
           <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
-            <Typography sx={eyebrow}>Your options</Typography>
-            <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 0.75, mb: 3, lineHeight: 1.6 }}>
-              Pick one for each product — every price already includes printing and shipping. Locking in your
-              picks also signs off the designs shown; if anything needs a tweak first, hit &ldquo;Ask a question&rdquo;.
+            <Typography sx={eyebrow}>Choose what you'd like</Typography>
+            <Typography sx={{ color: T.text, fontSize: { xs: 22, md: 26 }, fontWeight: 800, mt: 0.75, lineHeight: 1.2, letterSpacing: -0.3 }}>
+              Pick the options you want — you don't have to take everything.
             </Typography>
+            <Typography sx={{ color: T.muted, fontSize: 14, mt: 1, mb: 1.5, lineHeight: 1.65, maxWidth: 620 }}>
+              Every price is <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>all-in per unit</Box> — printing,
+              blanks and shipping included, nothing added later. For a group of alternatives, tap the one you like (or tap it
+              again to skip that group entirely). Tapping a design also signs off that artwork.
+            </Typography>
+            {/* Set expectations for what's next — Nate's ask: make it clear the
+                next step is a full confirmation with mockups for art approval. */}
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 3, p: 1.5, borderRadius: 2,
+              bgcolor: T.inset, border: `1px solid ${T.line}` }}>
+              <ArrowForwardIcon sx={{ fontSize: 17, color: T.green, mt: 0.2, flexShrink: 0 }} />
+              <Typography sx={{ color: T.muted, fontSize: 12.5, lineHeight: 1.55 }}>
+                <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>Next:</Box> once you lock in, we build your
+                confirmation page — every item, size, price and mockup in one place — and send it back here so you can
+                give the final art approval. No payment or commitment on this step.
+              </Typography>
+            </Box>
             {groupNames.map((g, gi) => (
               <Box key={g} sx={{ mb: 3.5 }}>
-                <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }}>
-                  <Box sx={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${T.green}`, color: T.green,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, ...mono }}>
-                    {gi + 1}
+                <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
+                  <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, ...mono,
+                    color: pickFor(g) !== undefined ? '#06140c' : T.green,
+                    bgcolor: pickFor(g) !== undefined ? T.green : 'transparent',
+                    border: `2px solid ${T.green}`, transition: 'all 180ms ease' }}>
+                    {pickFor(g) !== undefined ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
                   </Box>
-                  <Typography sx={{ fontWeight: 800, fontSize: 16 }}>{g}</Typography>
+                  <Typography sx={{ fontWeight: 800, fontSize: 17 }}>{g}</Typography>
+                  <Box component="span" sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>
+                    Pick one · optional
+                  </Box>
                 </Stack>
                 <Stack gap={1.25}>
                   {quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g).map((l) => {
@@ -589,35 +632,40 @@ export default function ApprovalView() {
                     const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
                     const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
                     return (
-                      <Box key={l.idx} onClick={() => setPicks(prev => ({ ...prev, [g]: l.idx }))}
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2.5, cursor: 'pointer',
+                      <Box key={l.idx} onClick={() => togglePick(g, l.idx)}
+                        role="button" tabIndex={0} aria-pressed={sel}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePick(g, l.idx); } }}
+                        sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, p: { xs: 1.75, sm: 2 }, borderRadius: 2.5, cursor: 'pointer',
                           position: 'relative', border: `1.5px solid ${sel ? T.green : T.line}`,
                           bgcolor: sel ? T.panelHi : T.inset,
                           boxShadow: sel ? `0 0 0 3px ${T.glow}, 0 8px 24px rgba(0,0,0,0.35)` : 'none',
                           transition: 'border-color 180ms ease, background 180ms ease, box-shadow 220ms ease, transform 160ms ease',
-                          '&:hover': { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)', transform: 'translateY(-1px)' } }}>
-                        <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
+                          '&:hover': { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)', transform: 'translateY(-1px)' },
+                          '&:focus-visible': { outline: `2px solid ${T.green}`, outlineOffset: 2 } }}>
+                        <Box sx={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex',
                           alignItems: 'center', justifyContent: 'center',
                           bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}`,
                           transition: 'all 160ms ease' }}>
-                          {sel && <CheckIcon sx={{ fontSize: 15, color: '#06140c', animation: 'popCheck 240ms ease' }} />}
+                          {sel && <CheckIcon sx={{ fontSize: 16, color: '#06140c', animation: 'popCheck 240ms ease' }} />}
                         </Box>
                         {l.image && (
                           <ZoomImg src={l.image} onZoom={openLightbox} badge={false}
-                            sx={{ width: 58, height: 58, objectFit: 'cover', borderRadius: 1.5,
-                              border: `1px solid ${T.line}`, bgcolor: T.inset }} />
+                            sx={{ width: { xs: 60, sm: 68 }, height: { xs: 60, sm: 68 }, objectFit: 'cover', borderRadius: 2,
+                              border: `1px solid ${T.line}`, bgcolor: T.inset, flexShrink: 0 }} />
                         )}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 700, fontSize: 14.5 }}>{desc || 'Option'}</Typography>
-                          {detail && <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2 }}>{detail}</Typography>}
+                          <Typography sx={{ fontWeight: 700, fontSize: 15.5, lineHeight: 1.3 }}>{desc || 'Option'}</Typography>
+                          {detail && <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.3 }}>{detail}</Typography>}
+                          <Typography sx={{ color: T.faint, fontSize: 12, mt: 0.3, ...mono }}>
+                            {Number(l.qty) || 0} units · {money((Number(l.qty) || 0) * unit)} total
+                          </Typography>
                         </Box>
                         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                          <Typography sx={{ fontWeight: 800, fontSize: 15, color: sel ? T.green : T.text, ...mono }}>
-                            {money(unit)}<Typography component="span" sx={{ color: T.faint, fontSize: 11, fontWeight: 600 }}>/unit</Typography>
+                          <Typography sx={{ fontWeight: 900, fontSize: { xs: 24, sm: 28 }, letterSpacing: -0.5,
+                            color: sel ? T.green : T.text, ...mono, lineHeight: 1 }}>
+                            {money(unit)}
                           </Typography>
-                          <Typography sx={{ color: T.muted, fontSize: 11, ...mono }}>
-                            {Number(l.qty) || 0} units · {money((Number(l.qty) || 0) * unit)}
-                          </Typography>
+                          <Typography sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600, mt: 0.2 }}>per unit</Typography>
                         </Box>
                       </Box>
                     );
@@ -627,7 +675,7 @@ export default function ApprovalView() {
             ))}
             {standaloneLines.length > 0 && (
               <Box sx={{ mb: 2.5 }}>
-                <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>Also in your order</Typography>
+                <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>Always included</Typography>
                 {standaloneLines.map((l) => (
                   <Stack key={l.idx} direction="row" alignItems="center" gap={1.5} justifyContent="space-between"
                     sx={{ py: 1.1, borderBottom: `1px solid ${T.line}` }}>
@@ -643,13 +691,36 @@ export default function ApprovalView() {
                 ))}
               </Box>
             )}
+            {/* Running selection total — updates live as they keep/skip options,
+                so the price is never a tiny afterthought at the bottom. */}
+            <Box sx={{ mt: 1, mb: 2, p: { xs: 2, sm: 2.5 }, borderRadius: 2.5,
+              bgcolor: T.inset, border: `1px solid ${canSubmitPicks ? T.lineHi : T.line}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap',
+              transition: 'border-color 200ms ease' }}>
+              <Box>
+                <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.3 }}>Your selection so far</Typography>
+                <Typography sx={{ color: T.muted, fontSize: 13 }}>
+                  {pickedGroupCount > 0
+                    ? `${pickedGroupCount} option${pickedGroupCount === 1 ? '' : 's'} kept${standaloneLines.length ? ' + your included items' : ''}`
+                    : (standaloneLines.length ? 'Your included items' : 'Nothing kept yet — tap the options you want')}
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography sx={{ color: T.green, fontSize: { xs: 28, sm: 34 }, fontWeight: 900, letterSpacing: -0.8, ...mono, lineHeight: 1 }}>
+                  {money(selectionTotal)}
+                </Typography>
+                <Typography sx={{ color: T.faint, fontSize: 11, mt: 0.2 }}>estimated total</Typography>
+              </Box>
+            </Box>
             {lockedNote && <LockedNote text={lockedNote} />}
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mt: 1 }}>
-              <Button fullWidth disabled={pickBusy || !allPicked} onClick={submitPicks}
-                endIcon={!pickBusy && allPicked ? <ArrowForwardIcon /> : null}
+              <Button fullWidth disabled={pickBusy || !canSubmitPicks} onClick={submitPicks}
+                endIcon={!pickBusy && canSubmitPicks ? <ArrowForwardIcon /> : null}
                 sx={{ ...primaryBtn, flex: 2 }}>
                 {pickBusy ? <CircularProgress size={18} sx={{ color: '#06140c' }} />
-                  : allPicked ? 'Lock in picks & approve designs' : 'Pick one option per product'}
+                  : canSubmitPicks
+                    ? `Lock in ${pickedGroupCount || standaloneLines.length} & approve the designs`
+                    : 'Tap the options you want'}
               </Button>
               <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy} sx={{ ...ghostBtn, flex: 1 }}>
                 Ask a question
@@ -664,9 +735,10 @@ export default function ApprovalView() {
             <Typography sx={{ fontWeight: 900, fontSize: 22, mt: 1.5, letterSpacing: 0.2 }}>
               Locked in — building your confirmation
             </Typography>
-            <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 1, mb: 2.5, lineHeight: 1.6, maxWidth: 460, mx: 'auto' }}>
-              Nice picks — these are with our team now. We&apos;ll put your final confirmation together and email you
-              the moment it&apos;s ready to review and approve, right here on this page. No action needed from you for now.
+            <Typography sx={{ color: T.muted, fontSize: 13.5, mt: 1, mb: 2.5, lineHeight: 1.6, maxWidth: 480, mx: 'auto' }}>
+              Nice picks — these are with our team now. We&apos;ll put your full confirmation together — every item, size,
+              price and mockup for final art approval — and email you the moment it&apos;s ready, right here on this page.
+              No action needed from you for now.
             </Typography>
             {/* A calm "received" shimmer. Deliberately NOT a progress bar that
                 implies live percentage — nothing is actively ticking, and a fake

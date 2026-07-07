@@ -1292,9 +1292,20 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         </Typography>
 
         <Stack direction="row" alignItems="center" justifyContent="space-between" mt={1}>
-          <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
-            {project.totalValue > 0 ? fmt(project.totalValue) : '—'}
-          </Typography>
+          {project.totalValue > 0 ? (
+            <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
+              {fmt(project.totalValue)}
+            </Typography>
+          ) : (
+            // A quote is worth $0 to the pipeline until the client actually
+            // picks — so show its STATE, not a fake dollar figure. (Backend
+            // computeQuoteTotals gates the money on selection; this mirrors it.)
+            <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 600, fontStyle: 'italic' }}>
+              {(project.quoteLines || []).length > 0
+                ? (project.status === 'quoted' ? 'Quote — awaiting selection' : '—')
+                : 'No quote yet'}
+            </Typography>
+          )}
           <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
             {project.orderNumber ? `INV #${project.orderNumber}` : 'no invoice'}
           </Typography>
