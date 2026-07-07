@@ -65,21 +65,25 @@ function KpiTile({ label, value, sub, tone, verdict }) {
   );
 }
 
-function Funnel({ overall }) {
+function Funnel({ overall, openTracking = true }) {
   const { enrolled = 0, sent = 0, opened = 0, replied = 0, unsubscribed = 0 } = overall;
   const openRate = pct(opened, sent);
   const replyRate = pct(replied, sent);
   // Nested funnel scaled to sent (the real conversion): Sent 100% ⊇ Opened ⊇ Replied.
+  // When the open pixel is OFF, "0% opened" would be a lie — drop the Opened bar
+  // and say so on the tile instead of implying nobody opens.
   const stages = [
     { label: 'Sent', value: sent, color: C.sent, of: 100 },
-    { label: 'Opened', value: opened, color: C.opened, of: pct(opened, sent) },
+    ...(openTracking ? [{ label: 'Opened', value: opened, color: C.opened, of: pct(opened, sent) }] : []),
     { label: 'Replied', value: replied, color: C.replied, of: pct(replied, sent) },
   ];
   return (
     <Stack spacing={1.75}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         <KpiTile label="Enrolled" value={enrolled.toLocaleString()} tone={D.text} sub={`${sent} sent`} />
-        <KpiTile label="Open rate" value={sent ? `${openRate}%` : '—'} tone={C.opened} sub={`${opened.toLocaleString()} opened`} />
+        <KpiTile label="Open rate" value={openTracking ? (sent ? `${openRate}%` : '—') : 'Off'}
+          tone={openTracking ? C.opened : D.faint}
+          sub={openTracking ? `${opened.toLocaleString()} opened` : 'open tracking disabled'} />
         <KpiTile label="Reply rate" value={sent ? `${replyRate}%` : '—'} tone={C.replied} sub={`${replied.toLocaleString()} replied`}
           verdict={sent ? replyVerdict(replied / sent) : null} />
         <KpiTile label="Unsub" value={unsubscribed.toLocaleString()} tone={unsubscribed > 0 ? C.unsub : D.muted} sub={sent ? `${pct(unsubscribed, sent)}% of sent` : ''} />
@@ -414,13 +418,13 @@ function AbTestStrip({ abTest }) {
 
 // The per-campaign view — one campaign's own numbers, using the very same chart
 // components as the overview so the vocabulary is identical.
-function CampaignPanel({ c }) {
+function CampaignPanel({ c, openTracking = true }) {
   const sent = c.stats.sent || 0;
   return (
     <Stack spacing={2}>
       <HealthLine health={c.health} status={c.status} />
       <Card title="Sending performance — open &amp; reply rates">
-        <Funnel overall={c.stats} />
+        <Funnel overall={c.stats} openTracking={openTracking} />
       </Card>
       {c.abTest && (
         <Card title="Subject A/B test — which line wins">
@@ -474,6 +478,8 @@ export default function AnalyticsView({ analytics, loading }) {
   if (!analytics) return null;
 
   const { overall, perState = [], trend = [], coverage = [], stepFunnel = [], deliverability = null, campaigns = [] } = analytics;
+  // Older backends don't send the flag — treat missing as "tracking on" (no change).
+  const openTracking = analytics.openTracking !== false;
   const nothing = overall.enrolled === 0 && coverage.length === 0;
   if (nothing) {
     return (
@@ -494,11 +500,11 @@ export default function AnalyticsView({ analytics, loading }) {
       <CampaignPicker campaigns={campaigns} sel={selected ? sel : 'overview'} onSelect={setSel} />
 
       {selected ? (
-        <CampaignPanel c={selected} />
+        <CampaignPanel c={selected} openTracking={openTracking} />
       ) : (
         <>
           <Card title="Sending performance — open &amp; reply rates">
-            <Funnel overall={overall} />
+            <Funnel overall={overall} openTracking={openTracking} />
           </Card>
           <Card title="Deliverability health — inbox vs. spam">
             <DeliverabilityCard deliverability={deliverability} overall={overall} />

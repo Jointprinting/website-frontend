@@ -4,100 +4,113 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Start your site — JP Webworks</title>
-<meta name="description" content="Tell JP Webworks about your business and get a simple plan and a price back — usually within one business day. No pressure, nothing owed." />
+<meta name="description" content="Tell JP Webworks about your business and we'll build your website free — you see the real thing before you pay a dollar. Reply within one business day." />
 <meta name="robots" content="noindex" />
 <link rel="icon" href="/favicon.ico" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
+  /* JP brand tokens — mirrors src/brand.js and the /webworks hub. */
   :root{
-    --ink:#0e1613; --paper:#f7f4ee; --paper-2:#efeae0; --line:#e2ddd1;
-    --muted:#57635c; --green:#17b877; --green-deep:#0f8f5c; --pine:#0d271d; --pine-2:#123227;
-    --card:#ffffff; --r:18px; --max:1080px;
-    --shadow:0 1px 2px rgba(14,22,19,.05),0 24px 50px -30px rgba(14,22,19,.5);
+    --forest:#1a3d2b; --forest-deep:#14301f;
+    --emerald:#4ade80; --emerald-deep:#22c55e;
+    --ink:#111816; --charcoal:#28282a;
+    --paper:#f5f5f5; --white:#ffffff; --line:#e2e4e0; --muted:#5b655e;
+    --on-dark:#f4f8f5; --on-dark-muted:rgba(244,248,245,.66);
+    --max:1080px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;color:#fff;background:radial-gradient(120% 90% at 85% -10%,var(--pine-2),var(--pine) 60%);
-    font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;line-height:1.6;
-    -webkit-font-smoothing:antialiased;min-height:100vh}
-  h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;line-height:1.04;letter-spacing:-.025em;margin:0;text-wrap:balance}
+  html,body{overflow-x:clip}
+  body{margin:0;color:var(--on-dark);background:linear-gradient(180deg,var(--forest),var(--forest-deep) 70%);
+    font-family:'Work Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+  h1,h2,h3{font-family:'Roboto Condensed','Arial Narrow',sans-serif;font-weight:700;
+    line-height:1.06;letter-spacing:-.01em;margin:0;text-wrap:balance}
   a{color:inherit;text-decoration:none}
-  .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+  :focus-visible{outline:2.5px solid var(--emerald);outline-offset:3px;border-radius:3px}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 22px}
 
-  header{padding:22px 0}
-  .brand{display:inline-flex;align-items:center;gap:11px;font-family:'Bricolage Grotesque';font-weight:700;font-size:19px;color:#fff}
-  .brand img{width:30px;height:30px;border-radius:8px}
-  .brand b{color:var(--green)}
-  .back{float:right;color:rgba(255,255,255,.7);font-size:14px;font-weight:500;padding-top:6px}
+  header{padding:20px 0}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .brand{display:inline-flex;align-items:center;gap:10px;font-family:'Roboto Condensed';font-weight:700;font-size:19px;color:var(--on-dark)}
+  .brand img{width:30px;height:30px;border-radius:7px;display:block}
+  .brand b{color:var(--emerald)}
+  .back{color:var(--on-dark-muted);font-size:14px;font-weight:500}
   .back:hover{color:#fff}
 
   .grid{display:grid;grid-template-columns:1fr 1.05fr;gap:52px;align-items:start;padding:26px 0 80px}
-  @media(max-width:900px){.grid{grid-template-columns:1fr;gap:34px}}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;gap:36px;padding-bottom:56px}}
 
-  /* Left — reassurance */
-  .pitch .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--green);
-    display:inline-flex;align-items:center;gap:9px;margin-bottom:16px}
-  .pitch .eyebrow::before{content:"";width:26px;height:2px;background:var(--green);border-radius:2px}
-  .pitch h1{font-size:clamp(34px,5vw,52px)}
-  .pitch .lede{color:rgba(255,255,255,.8);font-size:18px;margin:18px 0 30px;max-width:42ch}
+  /* Left — the pitch: what happens after you hit send */
+  .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--emerald);
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:16px}
+  .eyebrow::before{content:"";width:24px;height:3px;background:var(--emerald);flex:0 0 auto}
+  .pitch h1{font-size:clamp(34px,5vw,54px);color:#fff}
+  .pitch .lede{color:var(--on-dark-muted);font-size:17.5px;margin:16px 0 30px;max-width:44ch}
+  .pitch .lede strong{color:var(--on-dark);font-weight:600}
   .steps{list-style:none;padding:0;margin:0 0 30px;display:flex;flex-direction:column;gap:16px}
   .steps li{display:flex;gap:14px;align-items:flex-start}
-  .steps .n{flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:rgba(23,184,119,.14);border:1px solid rgba(23,184,119,.3);
-    color:var(--green);font-family:'Bricolage Grotesque';font-weight:800;font-size:14px;display:grid;place-items:center}
-  .steps b{color:#fff;font-weight:700;font-family:'Bricolage Grotesque'}
-  .steps p{margin:2px 0 0;color:rgba(255,255,255,.72);font-size:14.5px}
-  .assure{display:flex;flex-wrap:wrap;gap:10px 18px;color:rgba(255,255,255,.85);font-size:13.5px}
+  .steps .n{flex:0 0 32px;width:32px;height:32px;border-radius:9px;background:rgba(74,222,128,.13);
+    border:1px solid rgba(74,222,128,.32);color:var(--emerald);font-family:'Roboto Condensed';
+    font-weight:700;font-size:14.5px;display:grid;place-items:center}
+  .steps b{color:#fff;font-weight:700;font-family:'Roboto Condensed';font-size:17px;letter-spacing:.01em}
+  .steps p{margin:3px 0 0;color:var(--on-dark-muted);font-size:14.5px}
+  .assure{display:flex;flex-wrap:wrap;gap:10px 20px;color:rgba(244,248,245,.85);font-size:13.5px;font-weight:500}
   .assure div{display:flex;align-items:center;gap:8px}
-  .assure svg{width:16px;height:16px;color:var(--green);flex:0 0 auto}
+  .assure svg{width:15px;height:15px;color:var(--emerald);flex:0 0 auto}
 
   /* Right — form card */
-  .card{background:var(--card);color:var(--ink);border-radius:22px;padding:34px;box-shadow:var(--shadow)}
-  .card h2{font-size:23px}
+  .card{background:var(--white);color:var(--charcoal);border-radius:18px;padding:32px;
+    box-shadow:0 1px 2px rgba(17,24,22,.06),0 30px 60px -35px rgba(17,24,22,.6)}
+  .card h2{font-size:25px;color:var(--ink)}
   .card .sub{color:var(--muted);font-size:14.5px;margin:6px 0 22px}
-  .planpill{display:none;align-items:center;gap:8px;background:rgba(23,184,119,.1);border:1px solid rgba(23,184,119,.4);
-    color:var(--green-deep);font-weight:600;font-size:13.5px;padding:9px 14px;border-radius:12px;margin-bottom:20px}
+  .planpill{display:none;align-items:center;gap:8px;background:rgba(34,197,94,.09);border:1px solid rgba(34,197,94,.4);
+    color:#15803d;font-weight:600;font-size:13.5px;padding:9px 14px;border-radius:10px;margin-bottom:20px}
   .planpill.show{display:flex}
   .field{margin-bottom:15px}
   .field.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:460px){.field.two{grid-template-columns:1fr}}
-  label{display:block;font-size:13px;font-weight:600;color:#2a352f;margin-bottom:6px}
-  label .opt{color:#9aa39c;font-weight:500}
-  input,select,textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:#fbfaf7;
-    border:1.5px solid var(--line);border-radius:11px;padding:12px 14px;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
-  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2357635c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  label{display:block;font-size:13px;font-weight:600;color:#33413a;margin-bottom:6px}
+  label .opt{color:#98a09b;font-weight:500}
+  input,select,textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:#fafaf8;
+    border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;
+    transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b655e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
     background-repeat:no-repeat;background-position:right 13px center;padding-right:40px}
   textarea{resize:vertical;min-height:92px}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,184,119,.15)}
-  input.err,select.err{border-color:#e0564e;box-shadow:0 0 0 3px rgba(224,86,78,.12)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--emerald-deep);box-shadow:0 0 0 3px rgba(34,197,94,.16)}
+  input.err,select.err{border-color:#dd5449;box-shadow:0 0 0 3px rgba(221,84,73,.12)}
   .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
-  .submit{width:100%;margin-top:8px;background:var(--green);color:#052b1c;font-weight:700;font-size:16px;border:0;
-    border-radius:999px;padding:15px;cursor:pointer;box-shadow:0 12px 28px -10px rgba(23,184,119,.6);
-    transition:background .16s,transform .16s,opacity .16s}
-  .submit:hover{background:var(--green-deep);color:#fff;transform:translateY(-1px)}
+  .submit{width:100%;margin-top:8px;background:var(--emerald-deep);color:#0b2413;font-weight:700;font-size:16px;
+    border:0;border-radius:999px;padding:15px;cursor:pointer;
+    transition:background .15s,transform .15s,opacity .15s}
+  .submit:hover{background:var(--emerald);transform:translateY(-1px)}
+  .submit:focus-visible{outline:2.5px solid var(--forest);outline-offset:3px}
   .submit:disabled{opacity:.6;cursor:default;transform:none}
   .formnote{text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px}
-  .formerr{background:rgba(224,86,78,.1);border:1px solid rgba(224,86,78,.4);color:#b23b34;font-size:14px;
-    border-radius:11px;padding:12px 14px;margin-bottom:16px;display:none}
+  .formerr{background:rgba(221,84,73,.08);border:1px solid rgba(221,84,73,.4);color:#b23b34;font-size:14px;
+    border-radius:10px;padding:12px 14px;margin-bottom:16px;display:none}
   .formerr.show{display:block}
 
   /* Success */
   .done{display:none;text-align:center;padding:20px 6px}
   .done.show{display:block}
-  .done .check{width:66px;height:66px;margin:0 auto 18px;border-radius:50%;background:rgba(23,184,119,.12);
+  .done .check{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;background:rgba(34,197,94,.12);
     display:grid;place-items:center}
-  .done .check svg{width:34px;height:34px;color:var(--green-deep)}
-  .done h2{font-size:24px}
-  .done p{color:var(--muted);font-size:15.5px;margin:12px auto 0;max-width:40ch}
-  .done .home{display:inline-block;margin-top:22px;color:var(--green-deep);font-weight:700;font-size:15px}
+  .done .check svg{width:32px;height:32px;color:#15803d}
+  .done h2{font-size:26px;color:var(--ink)}
+  .done p{color:var(--muted);font-size:15.5px;margin:12px auto 0;max-width:42ch}
+  .done .home{display:inline-block;margin-top:22px;color:#15803d;font-weight:700;font-size:15px}
+  .done .home:hover{text-decoration:underline;text-underline-offset:3px}
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
-    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
-    <a class="back" href="/webworks">← Back</a>
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="" /> JP<b>Webworks</b></a>
+    <a class="back" href="/webworks">← Back to JP Webworks</a>
   </div>
 </header>
 
@@ -106,22 +119,22 @@
     <div class="pitch">
       <span class="eyebrow">Start your site</span>
       <h1>Tell me about your business.</h1>
-      <p class="lede">A few quick details is all I need to send back a simple plan and a price — usually within one business day.</p>
+      <p class="lede">A minute of your time is all this takes. Then <strong>we build your site free</strong> — you see the real thing before you pay a dollar.</p>
       <ul class="steps">
-        <li><span class="n">1</span><div><b>You fill this out</b><p>The basics about what you do — no long questionnaire.</p></div></li>
-        <li><span class="n">2</span><div><b>I send a plan + price</b><p>A clear recommendation and a flat monthly number, no pressure.</p></div></li>
-        <li><span class="n">3</span><div><b>We build it, fast</b><p>Say yes and your site is usually live within a week.</p></div></li>
+        <li><span class="n">1</span><div><b>You fill this out</b><p>Just the basics — no long questionnaire, no sales call unless you want one.</p></div></li>
+        <li><span class="n">2</span><div><b>We build your site — free</b><p>Within a few days you get a link to your actual website, built for your business.</p></div></li>
+        <li><span class="n">3</span><div><b>Like it? It goes live</b><p>We launch it on your domain and the monthly plan starts then. If it's not right, you owe nothing.</p></div></li>
       </ul>
       <div class="assure">
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Reply within 1 business day</div>
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> No pressure, nothing owed</div>
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> You own the site, always</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Reply within 1 business day</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Free to see — no deposit</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> You own the site, always</div>
       </div>
     </div>
 
     <div class="card">
       <div id="formWrap">
-        <h2>Get your plan &amp; price</h2>
+        <h2>Get your site built — free</h2>
         <div class="sub">Takes about a minute. Just your name, business, email, and phone.</div>
         <div class="planpill" id="planpill"></div>
         <div class="formerr" id="formerr"></div>
@@ -148,17 +161,17 @@
           </div>
           <div class="field">
             <label for="businessType">What does your business do? <span class="opt">(optional)</span></label>
-            <input id="businessType" name="businessType" type="text" placeholder="e.g. tree care, pool service, HVAC, bakery" />
+            <input id="businessType" name="businessType" type="text" placeholder="e.g. landscaping, pool service, HVAC, bakery" />
           </div>
           <div class="field two">
             <div>
               <label for="currentWebsite">Current website <span class="opt">(optional)</span></label>
-              <input id="currentWebsite" name="currentWebsite" type="text" placeholder="yoursite.com — or leave blank" />
+              <input id="currentWebsite" name="currentWebsite" type="text" placeholder="yoursite.com" />
             </div>
             <div>
               <label for="planInterest">Plan that fits <span class="opt">(optional)</span></label>
               <select id="planInterest" name="planInterest">
-                <option value="Not sure yet">Not sure yet — help me pick</option>
+                <option value="Not sure yet">Not sure yet</option>
                 <option value="Bronze">Bronze — Starter ($99/mo)</option>
                 <option value="Silver">Silver — Growth ($249/mo)</option>
                 <option value="Gold">Gold — Pro ($499/mo)</option>
@@ -171,15 +184,15 @@
             <textarea id="notes" name="notes" placeholder="What you're hoping the site does, a deadline, examples you like…"></textarea>
           </div>
           <div class="hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
-          <button class="submit" id="submitBtn" type="submit">Send it →</button>
-          <div class="formnote">By sending this you're just starting a conversation — no commitment.</div>
+          <button class="submit" id="submitBtn" type="submit">Start my free site →</button>
+          <div class="formnote">Sending this starts a conversation, not a bill — no commitment.</div>
         </form>
       </div>
 
       <div class="done" id="done">
         <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></div>
         <h2>Got it — thank you!</h2>
-        <p id="doneMsg">Your request is in. I'll get back to you with a plan and a price, usually within one business day.</p>
+        <p id="doneMsg">Your request is in. I'll get back to you within one business day — and you'll have a link to your real site a few days after that.</p>
         <a class="home" href="/webworks">← Back to JP Webworks</a>
       </div>
     </div>
@@ -242,7 +255,7 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       })
       .catch(function () {
-        btn.disabled = false; btn.textContent = 'Send it →';
+        btn.disabled = false; btn.textContent = 'Start my free site →';
         errBox.textContent = "Something went wrong sending that. Please try again, or email nate@jointprinting.com directly.";
         errBox.classList.add('show');
       });

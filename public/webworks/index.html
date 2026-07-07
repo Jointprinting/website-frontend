@@ -3,309 +3,405 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JP Webworks — Websites for local businesses, built fast</title>
-<meta name="description" content="JP Webworks builds fast, modern websites for local service businesses. No big upfront — one simple monthly plan, live in days, and a site you actually own." />
+<title>JP Webworks — Your website, built free. Pay when it's live.</title>
+<meta name="description" content="JP Webworks builds and runs websites for local businesses. See your finished site before you pay a dollar — plans from $99 a month, no build fee, no contract." />
 <meta name="robots" content="noindex" />
 <link rel="icon" href="/favicon.ico" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=Oswald:wght@600;700&family=Sora:wght@700;800&display=swap" rel="stylesheet" />
+<!-- Roboto Condensed + Work Sans = the Joint Printing brand type (src/brand.js).
+     Bitter + Sora are loaded at one weight each purely so the two example-site
+     preview cards can show each demo's real wordmark. -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Work+Sans:wght@400;500;600;700&family=Bitter:wght@800&family=Sora:wght@800&display=swap" rel="stylesheet" />
 <style>
+  /* JP brand tokens — mirrors src/brand.js (forest / emerald / ink / paper). */
   :root{
-    --ink:#0e1613; --ink-2:#16211c; --paper:#f7f4ee; --paper-2:#efeae0; --line:#e2ddd1;
-    --muted:#57635c; --green:#17b877; --green-deep:#0f8f5c; --pine:#0d271d; --pine-2:#123227;
-    --card:#ffffff; --r:18px; --max:1140px;
-    /* metals */
-    --bronze:#c07a3e; --bronze-2:#8a5222; --bronze-lite:#f0d9c2;
-    --silver:#98a4ac; --silver-2:#5f6b73; --silver-lite:#e7ecef;
-    --gold:#d3a029; --gold-2:#9c7212; --gold-lite:#f6e7bf;
-    --plat:#3fb6a2; --plat-2:#1f7d78; --plat-lite:#d7efe9;
-    --shadow:0 1px 2px rgba(14,22,19,.05),0 24px 50px -30px rgba(14,22,19,.4);
+    --forest:#1a3d2b; --forest-deep:#14301f;
+    --emerald:#4ade80; --emerald-deep:#22c55e;
+    --ink:#111816; --charcoal:#28282a;
+    --paper:#f5f5f5; --pale:#e3ede2; --white:#ffffff;
+    --line:#e2e4e0; --muted:#5b655e;
+    --on-dark:#f4f8f5; --on-dark-muted:rgba(244,248,245,.66);
+    /* plan-tier accents (Bronze/Silver/Gold/Platinum names are the product) */
+    --bronze:#c98a4b; --silver:#a7b1b9; --gold:#d9ab3a; --platinum:#45c0ab;
+    --max:1120px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:var(--paper);color:var(--ink);
-    font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-  h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;line-height:1.0;
-    letter-spacing:-.025em;margin:0;text-wrap:balance}
+  html,body{overflow-x:clip}
+  body{margin:0;background:var(--paper);color:var(--charcoal);
+    font-family:'Work Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:'Roboto Condensed','Arial Narrow',sans-serif;font-weight:700;
+    line-height:1.05;letter-spacing:-.01em;margin:0;text-wrap:balance}
   a{color:inherit;text-decoration:none}
-  .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
-  .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--green-deep);
-    display:inline-flex;align-items:center;gap:9px}
-  .eyebrow::before{content:"";width:26px;height:2px;background:var(--green);border-radius:2px}
-  .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;font-size:16px;
-    padding:15px 26px;border-radius:999px;transition:transform .16s ease,box-shadow .16s ease,background .16s ease,color .16s ease;cursor:pointer;border:0}
-  .btn.primary{background:var(--green);color:#052b1c;box-shadow:0 12px 28px -10px rgba(23,184,119,.6)}
-  .btn.primary:hover{background:var(--green-deep);color:#fff;transform:translateY(-2px)}
-  .btn.ghost{background:transparent;color:inherit;border:1.6px solid currentColor}
-  .btn.ghost:hover{background:currentColor}
-  .btn.ghost:hover span{color:var(--pine)}
+  :focus-visible{outline:2.5px solid var(--emerald-deep);outline-offset:3px;border-radius:3px}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 22px}
+  .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--emerald-deep);display:inline-flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:24px;height:3px;background:var(--emerald);flex:0 0 auto}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;font-weight:600;
+    font-size:16px;padding:14px 26px;border-radius:999px;border:0;cursor:pointer;
+    transition:background .15s ease,color .15s ease,transform .15s ease,border-color .15s ease}
+  .btn.solid{background:var(--emerald-deep);color:#0b2413}
+  .btn.solid:hover{background:var(--emerald);transform:translateY(-1px)}
+  .btn.ghost{background:transparent;border:1.5px solid rgba(244,248,245,.45);color:var(--on-dark)}
+  .btn.ghost:hover{border-color:var(--emerald);color:var(--emerald)}
 
-  /* Nav */
-  header{position:sticky;top:0;z-index:30;background:rgba(13,39,29,.72);backdrop-filter:blur(14px) saturate(1.2);
-    border-bottom:1px solid rgba(255,255,255,.08)}
-  nav{display:flex;align-items:center;justify-content:space-between;height:70px}
-  .brand{display:flex;align-items:center;gap:11px;font-family:'Bricolage Grotesque';font-weight:700;font-size:19px;letter-spacing:-.01em;color:#fff}
-  .brand img{width:32px;height:32px;border-radius:8px}
-  .brand b{color:var(--green)}
-  .navlinks{display:flex;align-items:center;gap:30px;font-weight:500;font-size:15px;color:rgba(255,255,255,.82)}
-  .navlinks a:hover{color:#fff}
-  @media(max-width:760px){
-    nav{flex-wrap:wrap;height:auto;padding:12px 0;row-gap:10px}
-    .navlinks{width:100%;justify-content:center;flex-wrap:wrap;gap:18px}
+  /* ── Nav ─────────────────────────────────────────────────────────── */
+  header.top{position:sticky;top:0;z-index:40;background:var(--ink);
+    border-bottom:1px solid rgba(244,248,245,.1)}
+  nav{display:flex;align-items:center;justify-content:space-between;min-height:66px;gap:14px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Roboto Condensed';font-weight:700;
+    font-size:19px;color:var(--on-dark);letter-spacing:.01em}
+  .brand img{width:30px;height:30px;border-radius:7px;display:block}
+  .brand b{color:var(--emerald);font-weight:700}
+  .navlinks{display:flex;align-items:center;gap:26px;font-size:14.5px;font-weight:500;color:var(--on-dark-muted)}
+  .navlinks a:hover{color:var(--on-dark)}
+  .navlinks .btn{padding:10px 20px;font-size:14.5px}
+  @media(max-width:800px){
+    nav{flex-wrap:wrap;padding:12px 0}
+    .navlinks{width:100%;flex-wrap:wrap;gap:14px 20px}
   }
 
-  /* Hero — dramatic pine, floating site mock */
-  .hero{background:radial-gradient(120% 90% at 85% -10%,var(--pine-2),var(--pine) 55%);color:#fff;position:relative;overflow:hidden;
-    padding:88px 0 96px}
-  .hero::before{content:"";position:absolute;inset:0;
-    background:radial-gradient(60% 50% at 88% 20%,rgba(23,184,119,.22),transparent 70%);pointer-events:none}
-  .hero::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:80px;
-    background:linear-gradient(180deg,transparent,var(--paper));pointer-events:none;z-index:3}
-  .heroGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center;position:relative;z-index:2}
-  .hero h1{font-size:clamp(42px,6.6vw,80px);letter-spacing:-.035em}
-  .hero h1 em{font-style:normal;color:var(--green);position:relative;white-space:nowrap}
-  .hero .lede{font-size:clamp(18px,2.3vw,22px);color:rgba(255,255,255,.78);max-width:40ch;margin:24px 0 34px}
+  /* ── Hero ────────────────────────────────────────────────────────── */
+  .hero{background:var(--forest);color:var(--on-dark);padding:80px 0 0}
+  .hero h1{font-size:clamp(40px,7vw,76px);max-width:17ch;color:#fff}
+  .hero h1 em{font-style:normal;color:var(--emerald)}
+  .hero .lede{font-size:clamp(17px,2.2vw,20px);color:var(--on-dark-muted);max-width:52ch;margin:22px 0 32px}
+  .hero .lede strong{color:var(--on-dark);font-weight:600}
   .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
-  .hero .stat{display:flex;gap:40px;margin-top:56px;flex-wrap:wrap}
-  .hero .stat b{font-family:'Bricolage Grotesque';font-size:30px;display:block;line-height:1;color:#fff}
-  .hero .stat span{font-size:13.5px;color:rgba(255,255,255,.6)}
-  .badge{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
-    color:rgba(255,255,255,.9);font-size:13px;font-weight:600;padding:7px 14px;border-radius:999px;margin-bottom:22px}
-  .badge i{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(23,184,119,.22);animation:pulse 2.4s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  /* CSS browser mock */
-  .mock{background:#fff;border-radius:16px;box-shadow:0 40px 80px -30px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06);
-    overflow:hidden;transform:rotate(1.4deg);animation:float 7s ease-in-out infinite}
-  @keyframes float{0%,100%{transform:rotate(1.4deg) translateY(0)}50%{transform:rotate(1.4deg) translateY(-12px)}}
-  .mock .bar{display:flex;align-items:center;gap:6px;padding:11px 14px;background:#f0efec;border-bottom:1px solid #e4e2dd}
-  .mock .bar i{width:11px;height:11px;border-radius:50%;background:#d6d4ce}
-  .mock .bar .url{margin-left:10px;font-size:11px;color:#8a8880;background:#fff;border-radius:6px;padding:5px 12px;flex:1}
-  .mock .body{padding:20px}
-  .mock .h{height:12px;border-radius:6px;background:var(--pine);width:62%}
-  .mock .t{height:8px;border-radius:5px;background:#e6e4de;margin-top:11px}
-  .mock .t.s{width:88%}.mock .t.m{width:70%}
-  .mock .cta2{height:34px;width:130px;border-radius:999px;background:var(--green);margin-top:18px}
-  .mock .row{display:flex;gap:10px;margin-top:18px}
-  .mock .tile{flex:1;height:64px;border-radius:10px;background:linear-gradient(135deg,#eef1ee,#e3e7e2)}
-  @media(max-width:900px){.heroGrid{grid-template-columns:1fr;gap:38px}.mock{max-width:440px}}
+  /* plain-facts row — echoes the cred bar on the client templates */
+  .facts{display:flex;flex-wrap:wrap;border-top:1px solid rgba(244,248,245,.16);margin-top:56px}
+  .fact{flex:1 1 230px;min-width:0;padding:22px 26px 26px 0;border-left:1px solid rgba(244,248,245,.16);padding-left:26px}
+  .fact:first-child{border-left:none;padding-left:0}
+  .fact b{display:block;font-family:'Roboto Condensed';font-weight:700;font-size:26px;color:#fff;letter-spacing:.01em}
+  .fact span{font-size:14px;color:var(--on-dark-muted)}
+  @media(max-width:700px){
+    .fact{flex:1 1 100%;border-left:none;padding-left:0;border-top:1px solid rgba(244,248,245,.14);padding:16px 0}
+    .fact:first-child{border-top:none}
+    .facts{margin-top:40px}
+  }
 
-  /* Sections */
-  section{padding:88px 0}
-  .sec-head{max-width:56ch}
-  .sec-head h2{font-size:clamp(31px,4.6vw,50px);margin-top:14px}
-  .sec-head p{color:var(--muted);margin-top:15px;font-size:18px}
+  /* ── Sections ────────────────────────────────────────────────────── */
+  section{padding:84px 0}
+  .sec-head{max-width:58ch}
+  .sec-head h2{font-size:clamp(30px,4.6vw,48px);margin-top:12px;color:var(--ink)}
+  .sec-head p{color:var(--muted);margin:14px 0 0;font-size:17.5px}
+  @media(max-width:600px){section{padding:60px 0}.hero{padding-top:56px}}
 
-  /* Steps */
-  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
-  .step{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:30px;position:relative;
+  /* ── The work — browser-framed previews of the two demo sites ───── */
+  .work{background:var(--paper)}
+  .ex{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:44px}
+  @media(max-width:820px){.ex{grid-template-columns:1fr}}
+  .ex a.card{display:block;background:var(--white);border:1px solid var(--line);border-radius:16px;
+    overflow:hidden;box-shadow:0 1px 2px rgba(17,24,22,.05),0 20px 44px -30px rgba(17,24,22,.35);
     transition:transform .18s ease,box-shadow .18s ease}
-  .step:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-  .step .n{font-family:'Bricolage Grotesque';font-weight:800;font-size:15px;color:var(--green);background:rgba(23,184,119,.12);
-    width:38px;height:38px;border-radius:11px;display:grid;place-items:center;margin-bottom:20px;border:1px solid rgba(23,184,119,.24)}
-  .step h3{font-size:21px}
-  .step p{color:var(--muted);margin:11px 0 0;font-size:16px}
+  .ex a.card:hover{transform:translateY(-5px);box-shadow:0 30px 56px -30px rgba(17,24,22,.4)}
+  .chrome{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#ececea;border-bottom:1px solid #dfdfdc}
+  .chrome i{width:10px;height:10px;border-radius:50%;background:#cfcfc9}
+  .chrome .url{margin-left:8px;flex:1;min-width:0;font-size:11px;color:#8b8b84;background:#fff;
+    border-radius:6px;padding:4px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* mini homepage renders — drawn in each demo's real palette + display face */
+  .pv{height:246px;overflow:hidden;pointer-events:none;position:relative}
+  .pv *{min-width:0}
+  /* Northpine mini */
+  .pv.np{background:#f6f1e6}
+  .np-util{height:6px;background:#182b1e}
+  .np-head{display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid #e6dcc6;background:#f6f1e6}
+  .np-head .mk{width:20px;height:20px;border-radius:4px;background:#d5942f;color:#182b1e;display:grid;place-items:center;flex:0 0 auto}
+  .np-head .mk svg{width:13px;height:13px}
+  .np-head .wd{font-family:'Bitter',serif;font-weight:800;font-size:13px;color:#221a10}
+  .np-head .pill{margin-left:auto;background:#d5942f;border-radius:3px;font-size:8px;font-weight:700;color:#221a10;padding:4px 8px;letter-spacing:.04em}
+  .np-hero{display:flex;gap:14px;padding:18px 16px 0;align-items:flex-start}
+  .np-hero .l{flex:1.2;min-width:0}
+  .np-hero .eb{width:74px;height:4px;background:#d5942f;border-radius:2px;margin-bottom:9px}
+  .np-hero .h{font-family:'Bitter',serif;font-weight:800;font-size:17px;line-height:1.15;color:#221a10}
+  .np-hero .t{height:5px;border-radius:3px;background:#ddd2ba;margin-top:8px;width:88%}
+  .np-hero .t+.t{width:64%}
+  .np-hero .bt{display:flex;gap:6px;margin-top:12px}
+  .np-hero .bt i{height:16px;border-radius:3px}
+  .np-hero .bt i:first-child{width:64px;background:#d5942f}
+  .np-hero .bt i:last-child{width:56px;background:transparent;border:1.4px solid #24402c}
+  .np-board{flex:.9;background:#182b1e;border-radius:8px;padding:12px 12px 14px;min-width:0}
+  .np-board .bh{font-family:'Bitter',serif;font-weight:800;font-size:10px;color:#e9b45a;margin-bottom:8px;letter-spacing:.02em}
+  .np-board .r{display:flex;align-items:baseline;gap:6px;margin-top:7px}
+  .np-board .r i{flex:1;border-bottom:1px dotted rgba(244,240,228,.35);transform:translateY(-2px)}
+  .np-board .r s,.np-board .r b{font-size:8.5px;text-decoration:none;color:rgba(244,240,228,.85);font-weight:400;white-space:nowrap}
+  .np-board .r b{color:#e9b45a;font-weight:700}
+  .np-cards{display:flex;gap:8px;padding:14px 16px 0}
+  .np-cards i{flex:1;height:44px;border-radius:6px;background:#fffdf6;border:1px solid #e6dcc6}
+  /* Clearwater mini */
+  .pv.cw{background:#f7fbfd}
+  .cw-head{display:flex;align-items:center;gap:8px;padding:9px 16px;background:#fff;border-bottom:1px solid #d8e7ee}
+  .cw-head .mk{width:20px;height:20px;border-radius:6px;background:linear-gradient(140deg,#2fc3da,#137bb4);color:#fff;display:grid;place-items:center;flex:0 0 auto}
+  .cw-head .mk svg{width:11px;height:11px}
+  .cw-head .wd{font-family:'Sora',sans-serif;font-weight:800;font-size:12.5px;color:#14293a;letter-spacing:-.02em}
+  .cw-head .pill{margin-left:auto;background:#137bb4;border-radius:999px;font-size:8px;font-weight:700;color:#fff;padding:4px 9px}
+  .cw-hero{display:flex;gap:14px;padding:18px 16px 0;align-items:flex-start}
+  .cw-hero .l{flex:1.2;min-width:0}
+  .cw-hero .eb{width:88px;height:4px;background:#2fc3da;border-radius:2px;margin-bottom:9px}
+  .cw-hero .h{font-family:'Sora',sans-serif;font-weight:800;font-size:15.5px;line-height:1.2;color:#14293a;letter-spacing:-.02em}
+  .cw-hero .t{height:5px;border-radius:3px;background:#d8e7ee;margin-top:8px;width:86%}
+  .cw-hero .t+.t{width:60%}
+  .cw-hero .bt{display:flex;gap:6px;margin-top:12px}
+  .cw-hero .bt i{height:16px;border-radius:999px}
+  .cw-hero .bt i:first-child{width:70px;background:#137bb4}
+  .cw-hero .bt i:last-child{width:52px;background:transparent;border:1.4px solid #14293a}
+  .cw-card{flex:.95;background:#fff;border:1px solid #d8e7ee;border-radius:8px;padding:11px 12px;min-width:0;box-shadow:0 8px 18px -12px rgba(13,56,83,.3)}
+  .cw-card .ch{font-family:'Sora',sans-serif;font-weight:800;font-size:9px;color:#0d3853;margin-bottom:7px}
+  .cw-card .r{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .cw-card .r em{width:9px;height:9px;border-radius:3px;background:#e2f4f8;border:1px solid #2fc3da;flex:0 0 auto;position:relative}
+  .cw-card .r em::after{content:"";position:absolute;inset:1.5px;background:#2fc3da;border-radius:1.5px}
+  .cw-card .r s{font-size:8.5px;color:#547081;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cw-tiles{display:flex;gap:8px;padding:14px 16px 0}
+  .cw-tiles i{flex:1;height:44px;border-radius:8px;background:#fff;border:1px solid #d8e7ee}
+  .cw-tiles i.md{border-color:#2fc3da;box-shadow:0 6px 14px -10px rgba(47,195,218,.7)}
+  /* caption under each preview */
+  .ex .meta{padding:20px 22px 22px;border-top:1px solid var(--line)}
+  .ex .meta .k{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .ex .meta h3{font-size:22px;margin:7px 0 6px;color:var(--ink)}
+  .ex .meta p{margin:0 0 10px;color:var(--muted);font-size:15px}
+  .ex .meta .go{color:var(--emerald-deep);font-weight:600;font-size:15px}
+  .ex a.card:hover .go{text-decoration:underline;text-underline-offset:3px}
+
+  /* ── How it works ────────────────────────────────────────────────── */
+  .how{background:var(--white);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:44px}
   @media(max-width:820px){.steps{grid-template-columns:1fr}}
+  .step{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:26px 24px;
+    transition:transform .15s ease,box-shadow .15s ease}
+  .step:hover{transform:translateY(-3px);box-shadow:0 18px 36px -26px rgba(17,24,22,.4)}
+  .step .n{font-family:'Roboto Condensed';font-weight:700;font-size:14px;color:var(--forest);
+    background:var(--pale);border:1px solid #cfdccd;width:34px;height:34px;border-radius:9px;
+    display:grid;place-items:center;margin-bottom:16px}
+  .step h3{font-size:21px;color:var(--ink)}
+  .step h3 small{display:block;font-family:'Work Sans';font-weight:600;font-size:12px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--emerald-deep);margin-top:5px}
+  .step p{color:var(--muted);font-size:15.5px;margin:10px 0 0}
+  .promise{margin-top:26px;background:var(--pale);border-left:5px solid var(--emerald-deep);
+    border-radius:0 14px 14px 0;padding:26px 28px;display:flex;flex-wrap:wrap;gap:8px 40px;align-items:baseline}
+  .promise b{font-family:'Roboto Condensed';font-weight:700;font-size:clamp(21px,3vw,27px);color:var(--forest);letter-spacing:-.01em}
+  .promise span{color:#41544a;font-size:15px;max-width:52ch}
 
-  /* Pricing — metallic tiers, the showpiece */
-  .pricing{background:var(--ink);color:#fff;position:relative}
-  .pricing .sec-head{margin:0 auto;text-align:center;max-width:60ch}
+  /* ── Pricing ─────────────────────────────────────────────────────── */
+  .pricing{background:var(--ink);color:var(--on-dark)}
   .pricing .sec-head h2{color:#fff}
-  .pricing .sec-head p{color:rgba(255,255,255,.64)}
-  .tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:52px}
-  .tier{position:relative;border-radius:20px;padding:30px 24px 28px;display:flex;flex-direction:column;
-    background:var(--ink-2);border:1px solid rgba(255,255,255,.09);transition:transform .2s ease,box-shadow .2s ease}
-  .tier:hover{transform:translateY(-6px)}
-  /* metal top-edge + name chip */
-  .tier .metal{font-family:'Bricolage Grotesque';font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;
-    display:inline-flex;align-items:center;gap:9px;margin-bottom:16px}
-  .tier .metal i{width:15px;height:15px;border-radius:50%}
-  .tier h3{font-size:23px;margin-bottom:2px}
-  .tier .who{color:rgba(255,255,255,.5);font-size:13.5px;margin-bottom:16px}
-  .tier .price{font-family:'Bricolage Grotesque';font-weight:800;font-size:44px;line-height:1}
-  .tier .price small{font-size:15px;font-weight:500;color:rgba(255,255,255,.55);font-family:Inter}
-  .tier ul{list-style:none;padding:0;margin:20px 0 26px;display:flex;flex-direction:column;gap:12px}
-  .tier li{position:relative;padding-left:26px;color:rgba(255,255,255,.84);font-size:14.5px;line-height:1.45}
-  .tier li::before{content:"✓";position:absolute;left:0;top:0;font-weight:800;font-size:13px}
-  .tier .btn{margin-top:auto;justify-content:center;width:100%;font-size:15px;padding:13px}
-  /* metal identities */
-  .tier.bronze{border-top:3px solid var(--bronze)}
-  .tier.bronze .metal{color:var(--bronze-lite)} .tier.bronze .metal i{background:linear-gradient(135deg,#e6a86a,var(--bronze-2))}
-  .tier.bronze li::before{color:var(--bronze)} .tier.bronze .btn{background:rgba(192,122,62,.16);color:var(--bronze-lite);border:1px solid rgba(192,122,62,.4)}
-  .tier.bronze .btn:hover{background:var(--bronze);color:#2a1608}
-  .tier.silver{border-top:3px solid var(--silver)}
-  .tier.silver .metal{color:var(--silver-lite)} .tier.silver .metal i{background:linear-gradient(135deg,#dfe6ea,var(--silver-2))}
-  .tier.silver li::before{color:var(--silver)} .tier.silver .btn{background:rgba(152,164,172,.16);color:var(--silver-lite);border:1px solid rgba(152,164,172,.4)}
-  .tier.silver .btn:hover{background:var(--silver);color:#1c2226}
-  .tier.gold{border-top:3px solid var(--gold)}
-  .tier.gold .metal{color:var(--gold-lite)} .tier.gold .metal i{background:linear-gradient(135deg,#f4d475,var(--gold-2))}
-  .tier.gold li::before{color:var(--gold)} .tier.gold .btn{background:rgba(211,160,41,.16);color:var(--gold-lite);border:1px solid rgba(211,160,41,.42)}
-  .tier.gold .btn:hover{background:var(--gold);color:#2c2005}
-  .tier.platinum{border-top:3px solid var(--plat)}
-  .tier.platinum .metal{color:var(--plat-lite)} .tier.platinum .metal i{background:linear-gradient(135deg,#8fe6d4,var(--plat-2))}
-  .tier.platinum li::before{color:var(--plat)} .tier.platinum .btn{background:rgba(63,182,162,.16);color:var(--plat-lite);border:1px solid rgba(63,182,162,.45)}
-  .tier.platinum .btn:hover{background:var(--plat);color:#052b25}
-  /* Featured tier (Silver = most popular): green-accented, lifted, with the tag +
-     a solid green CTA. Placed after the metal identities so its button wins. */
-  .tier.featured{border:1.5px solid rgba(23,184,119,.55);border-top-width:1.5px;
-    background:linear-gradient(180deg,rgba(23,184,119,.07),var(--ink-2));
-    box-shadow:0 36px 74px -34px rgba(23,184,119,.5);transform:translateY(-6px);z-index:1}
-  .tier.featured:hover{transform:translateY(-11px)}
-  .tier.featured .btn{background:var(--green);color:#052b1c;border:0;box-shadow:0 12px 26px -12px rgba(23,184,119,.7)}
-  .tier.featured .btn:hover{background:var(--green-deep);color:#fff}
-  .tier .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);white-space:nowrap;
-    background:linear-gradient(135deg,#2ee89a,var(--green-deep));color:#04231a;font-size:11.5px;font-weight:700;letter-spacing:.06em;
-    padding:6px 15px;border-radius:999px;box-shadow:0 8px 20px -8px rgba(23,184,119,.7)}
-  @media(max-width:1024px){.tier.featured{transform:none}.tier.featured:hover{transform:translateY(-6px)}}
-  @media(max-width:1024px){.tiers{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:560px){.tiers{grid-template-columns:1fr}}
-  .annual{margin:34px auto 0;max-width:620px;display:flex;align-items:center;justify-content:center;gap:9px;text-align:center;
-    background:rgba(23,184,119,.1);border:1.5px solid rgba(23,184,119,.5);border-radius:16px;padding:15px 24px;font-size:15.5px;flex-wrap:wrap}
-  .annual b{color:var(--green)}
-  .fineprint{color:rgba(255,255,255,.46);font-size:13.5px;margin-top:16px;text-align:center}
+  .pricing .sec-head p{color:var(--on-dark-muted)}
+  .tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:46px}
+  @media(max-width:1020px){.tiers{grid-template-columns:1fr 1fr}}
+  @media(max-width:580px){.tiers{grid-template-columns:1fr}}
+  .tier{display:flex;flex-direction:column;background:#191f1c;border:1px solid rgba(244,248,245,.1);
+    border-radius:14px;padding:26px 22px 24px;position:relative;
+    transition:transform .18s ease,border-color .18s ease}
+  .tier:hover{transform:translateY(-4px)}
+  .tier::before{content:"";position:absolute;top:0;left:22px;right:22px;height:3px;border-radius:0 0 3px 3px;background:var(--tm)}
+  .tier.bronze{--tm:var(--bronze)} .tier.silver{--tm:var(--silver)}
+  .tier.gold{--tm:var(--gold)} .tier.platinum{--tm:var(--platinum)}
+  .tier .metal{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--tm)}
+  .tier .pop{display:inline-block;background:var(--emerald-deep);color:#0b2413;font-size:11.5px;font-weight:700;
+    letter-spacing:.05em;padding:4px 12px;border-radius:999px;margin-left:10px;vertical-align:2px}
+  .tier h3{font-size:24px;color:#fff;margin-top:12px}
+  .tier .who{color:var(--on-dark-muted);font-size:13.5px;margin-top:3px}
+  .tier .price{font-family:'Roboto Condensed';font-weight:700;font-size:44px;color:#fff;margin-top:16px;line-height:1}
+  .tier .price small{font-family:'Work Sans';font-weight:500;font-size:15px;color:var(--on-dark-muted)}
+  .tier ul{list-style:none;padding:0;margin:18px 0 24px;display:flex;flex-direction:column;gap:11px}
+  .tier li{position:relative;padding-left:24px;font-size:14.5px;line-height:1.45;color:rgba(244,248,245,.85)}
+  .tier li::before{content:"✓";position:absolute;left:0;top:0;font-size:12.5px;font-weight:700;color:var(--tm)}
+  .tier li.lead{padding-left:0;color:var(--on-dark-muted);font-size:13.5px}
+  .tier li.lead::before{content:none}
+  .tier .btn{margin-top:auto;width:100%;font-size:15px;padding:12px;
+    background:transparent;border:1.5px solid var(--tm);color:var(--tm)}
+  .tier .btn:hover{background:var(--tm);color:var(--ink)}
+  .tier.featured{border-color:rgba(74,222,128,.55);background:linear-gradient(180deg,rgba(34,197,94,.1),#191f1c 55%)}
+  .tier.featured::before{background:var(--emerald)}
+  .tier.featured .btn{background:var(--emerald-deep);border-color:var(--emerald-deep);color:#0b2413}
+  .tier.featured .btn:hover{background:var(--emerald);border-color:var(--emerald)}
+  .annual{margin:34px 0 0;font-size:15.5px;color:var(--on-dark-muted);
+    border:1px solid rgba(74,222,128,.4);background:rgba(74,222,128,.07);border-radius:12px;padding:15px 20px}
+  .annual b{color:var(--emerald)}
+  .fineprint{color:rgba(244,248,245,.44);font-size:13.5px;margin:16px 0 0}
 
-  /* Examples */
-  .ex{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px}
-  .ex a{display:block;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:var(--card);
-    box-shadow:var(--shadow);transition:transform .2s ease,box-shadow .2s ease}
-  .ex a:hover{transform:translateY(-6px);box-shadow:0 40px 70px -34px rgba(14,22,19,.45)}
-  .ex .top{height:210px;display:grid;place-items:center;position:relative;overflow:hidden}
-  .ex .top::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.28))}
-  .ex .np{background:radial-gradient(120% 120% at 30% 0%,#2f7c56,#0e2c1f)}
-  .ex .cw{background:radial-gradient(120% 120% at 70% 0%,#2aa5d6,#0b3f66)}
-  /* Each card previews the example company's actual logo — its brandmark + its
-     own typeface — so the slot reads as that business, not a JPW label. */
-  .ex .exlogo{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
-  .ex .exmark{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
-    box-shadow:0 10px 22px -10px rgba(0,0,0,.5)}
-  .ex .exmark svg{width:27px;height:27px}
-  .ex .exword{font-size:30px;line-height:1}
-  .ex .exlogo.np .exmark{background:#e0a13a;color:#15382a}
-  .ex .exlogo.np .exword{font-family:'Oswald',sans-serif;text-transform:uppercase;font-weight:700;letter-spacing:.02em;color:#fff}
-  .ex .exlogo.np .exword b{color:#eab657;font-weight:700}
-  .ex .exlogo.cw .exmark{background:linear-gradient(140deg,#38c6d9,#1a86c9);color:#fff}
-  .ex .exlogo.cw .exword{font-family:'Sora',sans-serif;font-weight:800;letter-spacing:-.02em;color:#fff}
-  .ex .exlogo.cw .exword b{color:#9fe9ff;font-weight:800}
-  .ex .meta{padding:24px}
-  .ex .meta .k{font-size:12.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-  .ex .meta h3{font-size:21px;margin:8px 0 8px}
-  .ex .meta .go{color:var(--green-deep);font-weight:700;font-size:15px}
-  @media(max-width:760px){.ex{grid-template-columns:1fr}}
+  /* ── Straight terms ──────────────────────────────────────────────── */
+  .terms{background:var(--pale)}
+  .terms .grid{display:grid;grid-template-columns:1fr 1fr;gap:26px 52px;margin-top:40px}
+  @media(max-width:720px){.terms .grid{grid-template-columns:1fr}}
+  .terms h3{font-size:20px;color:var(--ink);display:flex;align-items:center;gap:11px}
+  .terms h3::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--emerald-deep);flex:0 0 auto}
+  .terms p{color:#41544a;font-size:15.5px;margin:8px 0 0 21px}
 
-  /* Why */
-  .whywrap{background:var(--paper-2)}
-  .why{display:grid;grid-template-columns:repeat(2,1fr);gap:24px 52px;margin-top:48px}
-  .why div h3{font-size:20px;display:flex;align-items:center;gap:10px}
-  .why div h3::before{content:"";width:11px;height:11px;border-radius:3px;background:var(--green)}
-  .why div p{color:var(--muted);margin:9px 0 0 21px;font-size:16px}
-  @media(max-width:760px){.why{grid-template-columns:1fr}}
+  /* ── Founder ─────────────────────────────────────────────────────── */
+  .founder{background:var(--forest);color:var(--on-dark)}
+  .founderGrid{display:grid;grid-template-columns:auto 1fr;gap:36px;align-items:start}
+  @media(max-width:640px){.founderGrid{grid-template-columns:1fr;gap:22px}}
+  .avatar{width:92px;height:92px;border-radius:50%;background:var(--emerald-deep);color:#0b2413;
+    font-family:'Roboto Condensed';font-weight:700;font-size:42px;display:grid;place-items:center;
+    box-shadow:0 0 0 5px rgba(74,222,128,.18)}
+  .founder h2{color:#fff;font-size:clamp(27px,4vw,42px);margin-top:10px}
+  .founder .body{color:rgba(244,248,245,.82);font-size:17px;max-width:64ch;margin:16px 0 22px}
+  .founder .sig{font-family:'Roboto Condensed';font-weight:700;font-size:18px;color:#fff;margin-bottom:24px}
+  .founder .sig span{font-family:'Work Sans';font-weight:400;font-size:14.5px;color:var(--on-dark-muted)}
 
-  /* Founder — the human behind it (anti-agency, anti-template) */
-  .founder{background:var(--pine)}
-  .founderGrid{display:grid;grid-template-columns:auto 1fr;gap:36px;align-items:center;color:#fff}
-  .founder .avatar{width:104px;height:104px;flex:0 0 104px;border-radius:50%;
-    background:linear-gradient(140deg,var(--green),var(--green-deep));color:#04231a;
-    font-family:'Bricolage Grotesque';font-weight:800;font-size:46px;display:grid;place-items:center;
-    box-shadow:0 0 0 6px rgba(23,184,119,.16),0 24px 44px -20px rgba(0,0,0,.6)}
-  .founder .eyebrow{color:var(--green)}
-  .founder h2{color:#fff;font-size:clamp(26px,3.8vw,42px);margin-top:12px}
-  .founder p{color:rgba(255,255,255,.82);margin:15px 0 24px;font-size:17.5px;max-width:62ch}
-  .founder .sig{font-family:'Bricolage Grotesque';font-weight:700;color:#fff;font-size:18px;margin-bottom:22px}
-  .founder .sig span{color:rgba(255,255,255,.55);font-weight:400;font-size:15px}
-  .founder .btn.ghost{color:#fff;border-color:rgba(255,255,255,.5)}
-  .founder .btn.ghost:hover{background:#fff}.founder .btn.ghost:hover span{color:var(--pine)}
-  @media(max-width:680px){.founderGrid{grid-template-columns:1fr;gap:22px}.founder .avatar{width:84px;height:84px;flex-basis:84px;font-size:38px}}
-
-  /* FAQ — native <details>, answers inline (no extra page, no dead clicks) */
-  .faqwrap{background:var(--paper-2)}
-  .faq{margin-top:42px;max-width:840px}
-  .faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:box-shadow .18s ease}
-  .faq details[open]{box-shadow:var(--shadow)}
-  .faq summary{list-style:none;cursor:pointer;padding:20px 24px;font-weight:700;font-size:17px;
-    display:flex;align-items:center;justify-content:space-between;gap:16px;font-family:'Bricolage Grotesque'}
+  /* ── FAQ ─────────────────────────────────────────────────────────── */
+  .faq{max-width:820px;margin-top:40px}
+  .faq details{background:var(--white);border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .faq details[open]{box-shadow:0 16px 34px -26px rgba(17,24,22,.4)}
+  .faq summary{list-style:none;cursor:pointer;padding:19px 22px;font-family:'Roboto Condensed';
+    font-weight:700;font-size:18.5px;color:var(--ink);display:flex;justify-content:space-between;
+    align-items:center;gap:16px;transition:color .15s}
+  .faq summary:hover{color:var(--forest)}
   .faq summary::-webkit-details-marker{display:none}
-  .faq summary::after{content:"+";font-size:25px;font-weight:600;color:var(--green-deep);transition:transform .2s ease;line-height:1;flex:0 0 auto}
+  .faq summary::after{content:"+";font-size:24px;font-weight:400;color:var(--emerald-deep);flex:0 0 auto;
+    transition:transform .18s ease;line-height:1}
   .faq details[open] summary::after{transform:rotate(45deg)}
-  .faq details p{padding:0 24px 22px;margin:0;color:var(--muted);font-size:16px}
+  .faq details p{padding:0 22px 20px;margin:0;color:var(--muted);font-size:15.5px}
 
-  /* Final CTA */
-  .final{background:radial-gradient(110% 120% at 50% -20%,var(--pine-2),var(--pine));color:#fff;text-align:center}
-  .final h2{font-size:clamp(32px,5.2vw,56px);max-width:18ch;margin:0 auto;color:#fff}
-  .final p{color:rgba(255,255,255,.72);font-size:19px;margin:20px auto 32px;max-width:46ch}
-
-  footer{background:var(--ink);color:rgba(255,255,255,.6);padding:40px 0;font-size:14px}
-  footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
-  footer .brand{color:#fff}
-  @media(max-width:600px){.hero{padding:60px 0 72px}section{padding:60px 0}}
+  /* ── Final CTA + footer ──────────────────────────────────────────── */
+  .final{background:var(--ink);color:var(--on-dark)}
+  .final .row{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap}
+  .final h2{color:#fff;font-size:clamp(30px,4.8vw,50px);max-width:20ch}
+  .final p{color:var(--on-dark-muted);font-size:17px;margin:14px 0 0;max-width:46ch}
+  footer{background:var(--ink);border-top:1px solid rgba(244,248,245,.1);color:var(--on-dark-muted);
+    padding:34px 0;font-size:14px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 </style>
 </head>
 <body>
-<header>
+<header class="top">
   <nav class="wrap">
-    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="" /> JP<b>Webworks</b></a>
     <div class="navlinks">
+      <a href="#work">The work</a>
       <a href="#how">How it works</a>
       <a href="#pricing">Pricing</a>
-      <a href="#work">Our work</a>
-      <a class="btn primary" href="/webworks/start" style="padding:11px 20px;font-size:15px">Start your site</a>
+      <a href="#faq">Questions</a>
+      <a class="btn solid" href="/webworks/start">Get started</a>
     </div>
   </nav>
 </header>
 
+<main>
 <div class="hero">
   <div class="wrap">
-    <div class="heroGrid">
-      <div>
-        <span class="badge"><i></i>Taking new local businesses now</span>
-        <h1>A website that pulls its <em>weight.</em></h1>
-        <p class="lede">JP Webworks builds fast, modern sites for local service businesses — live in days, one simple monthly plan, and a site you actually own.</p>
-        <div class="cta">
-          <a class="btn primary" href="/webworks/start">Start your site →</a>
-          <a class="btn ghost" href="#work"><span>See live examples</span></a>
-        </div>
-        <div class="stat">
-          <div><b>3–5 days</b><span>kickoff to live</span></div>
-          <div><b>1 per town</b><span>never your competitor</span></div>
-          <div><b>You own it</b><span>domain, site, content</span></div>
-        </div>
-      </div>
-      <div class="mock" aria-hidden="true">
-        <div class="bar"><i></i><i></i><i></i><div class="url">yourbusiness.com</div></div>
-        <div class="body">
-          <div class="h"></div>
-          <div class="t s"></div><div class="t m"></div>
-          <div class="cta2"></div>
-          <div class="row"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
-        </div>
-      </div>
+    <span class="eyebrow" style="color:var(--emerald)">Websites for local businesses</span>
+    <h1 style="margin-top:16px">Your work is great. Your website should <em>look like it.</em></h1>
+    <p class="lede">JP Webworks builds and runs websites for local businesses — plumbers, landscapers, salons, shops. <strong>You see your finished site before you pay a dollar.</strong> Plans from $99 a month, no build fee, no contract.</p>
+    <div class="cta">
+      <a class="btn solid" href="/webworks/start">Get my site built — free</a>
+      <a class="btn ghost" href="#work">See two example sites</a>
+    </div>
+    <div class="facts">
+      <div class="fact"><b>$0 up front</b><span>your site gets built first — free to see, free to say no</span></div>
+      <div class="fact"><b>From $99 a month</b><span>one bill covers the build, hosting, and every update</span></div>
+      <div class="fact"><b>100% yours</b><span>domain, site, and content — keep it all even if you cancel</span></div>
     </div>
   </div>
 </div>
 
-<section id="how">
+<section id="work" class="work">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">The work</span>
+      <h2>Look first. Then decide.</h2>
+      <p>Two example sites, built the way we'd build yours — a landscaping crew and a pool company. Click in and tap around; they work just as well on your phone.</p>
+    </div>
+    <div class="ex">
+      <a class="card" href="/webworks/northpine">
+        <div class="chrome"><i></i><i></i><i></i><span class="url">northpinelandscape.com</span></div>
+        <div class="pv np" aria-hidden="true">
+          <div class="np-util"></div>
+          <div class="np-head">
+            <span class="mk"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.3l3.7 5.6h-2l3 4.6h-2l3.2 4.9H6.1l3.2-4.9h-2l3-4.6h-2L12 2.3z"/><rect x="11" y="16.6" width="2" height="4.3" rx=".4"/></svg></span>
+            <span class="wd">Northpine</span>
+            <span class="pill">FREE ESTIMATE</span>
+          </div>
+          <div class="np-hero">
+            <div class="l">
+              <div class="eb"></div>
+              <div class="h">A yard you're proud to pull up to.</div>
+              <div class="t"></div><div class="t"></div>
+              <div class="bt"><i></i><i></i></div>
+            </div>
+            <div class="np-board">
+              <div class="bh">Straight prices</div>
+              <div class="r"><s>Weekly mowing</s><i></i><b>from $55</b></div>
+              <div class="r"><s>Mulch, installed</s><i></i><b>$85/yd</b></div>
+              <div class="r"><s>Spring cleanup</s><i></i><b>from $325</b></div>
+              <div class="r"><s>Tree removal</s><i></i><b>free quote</b></div>
+            </div>
+          </div>
+          <div class="np-cards"><i></i><i></i><i></i></div>
+        </div>
+        <div class="meta">
+          <div class="k">Landscaping &amp; tree work · example</div>
+          <h3>Northpine Landscape &amp; Tree</h3>
+          <p>Prices right on the page, call-or-text buttons, and the kind of site that makes a crew look established.</p>
+          <span class="go">Open the full site →</span>
+        </div>
+      </a>
+      <a class="card" href="/webworks/clearwater">
+        <div class="chrome"><i></i><i></i><i></i><span class="url">clearwaterpoolcare.com</span></div>
+        <div class="pv cw" aria-hidden="true">
+          <div class="cw-head">
+            <span class="mk"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6s6.2 6.5 6.2 11a6.2 6.2 0 1 1-12.4 0C5.8 9.1 12 2.6 12 2.6z"/></svg></span>
+            <span class="wd">Clearwater</span>
+            <span class="pill">Get a quote</span>
+          </div>
+          <div class="cw-hero">
+            <div class="l">
+              <div class="eb"></div>
+              <div class="h">You swim. We'll handle the water.</div>
+              <div class="t"></div><div class="t"></div>
+              <div class="bt"><i></i><i></i></div>
+            </div>
+            <div class="cw-card">
+              <div class="ch">Visit report — Thu 10:42a</div>
+              <div class="r"><em></em><s>Water tested &amp; balanced</s></div>
+              <div class="r"><em></em><s>Skimmed &amp; vacuumed</s></div>
+              <div class="r"><em></em><s>Baskets emptied</s></div>
+              <div class="r"><em></em><s>Filter pressure normal</s></div>
+            </div>
+          </div>
+          <div class="cw-tiles"><i></i><i class="md"></i><i></i></div>
+        </div>
+        <div class="meta">
+          <div class="k">Pool care · example</div>
+          <h3>Clearwater Pool Care</h3>
+          <p>Weekly plans with prices, a visit report customers love, and a free quote one tap away.</p>
+          <span class="go">Open the full site →</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="how">
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">How it works</span>
-      <h2>Three steps. No agency runaround.</h2>
-      <p>You run the business. I handle the website — start to finish, and every update after.</p>
+      <h2>You see it before you buy it.</h2>
+      <p>No proposals, no mockups, no deposit. We build the real thing first — that's the whole pitch.</p>
     </div>
     <div class="steps">
       <div class="step">
         <div class="n">1</div>
-        <h3>Tell me about your business</h3>
-        <p>A quick call or form — your services, your area, a few photos. That's all I need to get moving.</p>
+        <h3>Tell us about your business</h3>
+        <p>Five minutes — a quick call or a short form. What you do, your hours, how customers should reach you. Photos help, but we can start without them.</p>
       </div>
       <div class="step">
         <div class="n">2</div>
-        <h3>I build it — fast</h3>
-        <p>Using modern tools I design and build your site in days, not months. You review a live draft and we tune it together.</p>
+        <h3>We build your site <small>Free — before you pay anything</small></h3>
+        <p>A few days later you get a link to your actual website. Your name, your services, working on your phone. Not a sketch — the real thing, ready to judge.</p>
       </div>
       <div class="step">
         <div class="n">3</div>
-        <h3>Go live &amp; stay fresh</h3>
-        <p>I launch it on your domain and keep it running — hosting, edits, and updates handled on your monthly plan.</p>
+        <h3>Like it? We put it live</h3>
+        <p>We launch it on your own domain and keep it running — hosting, updates, edits by text. That's what the monthly plan covers, and it starts then. Not before.</p>
       </div>
+    </div>
+    <div class="promise">
+      <b>If you don't love it, you owe nothing.</b>
+      <span>We build first because it's the easiest way to prove we're good at this. Worst case, you spent five minutes and got a free look at what your business could have.</span>
     </div>
   </div>
 </section>
@@ -313,13 +409,13 @@
 <section id="pricing" class="pricing">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow" style="justify-content:center">Pricing</span>
-      <h2>Pick your tier. No big upfront.</h2>
-      <p>No build fee, no hourly billing — one monthly price keeps your site built, hosted, fast, and always up to date. Month-to-month; cancel anytime and keep the site.</p>
+      <span class="eyebrow" style="color:var(--emerald)">Pricing</span>
+      <h2>One monthly price. That's the whole bill.</h2>
+      <p>The build, hosting, updates, and every change are all in the plan — no hourly billing, no surprise invoices. Month to month; cancel anytime and the site is still yours.</p>
     </div>
     <div class="tiers">
       <div class="tier bronze">
-        <span class="metal"><i></i>Bronze</span>
+        <span class="metal">Bronze</span>
         <h3>Starter</h3>
         <div class="who">Get online &amp; get calls.</div>
         <div class="price">$99<small>/mo</small></div>
@@ -327,18 +423,17 @@
           <li>One-page site, custom-designed</li>
           <li>Mobile-perfect, fast &amp; secure</li>
           <li>Click-to-call &amp; contact form</li>
-          <li>Hosting, your domain + 2 edits / month</li>
+          <li>Hosting, your domain + 2 edits a month</li>
         </ul>
         <a class="btn" href="/webworks/start?plan=bronze">Get started</a>
       </div>
       <div class="tier silver featured">
-        <span class="tag">★ Most popular</span>
-        <span class="metal"><i></i>Silver</span>
+        <span class="metal">Silver<span class="pop">Most popular</span></span>
         <h3>Growth</h3>
         <div class="who">Everything a local business needs.</div>
         <div class="price">$249<small>/mo</small></div>
         <ul>
-          <li>Everything in Bronze, plus:</li>
+          <li class="lead">Everything in Bronze, plus:</li>
           <li>Up to 5 pages (services, about, reviews)</li>
           <li>Lead-capturing quote / booking form</li>
           <li>Google Business Profile + local SEO</li>
@@ -347,12 +442,12 @@
         <a class="btn" href="/webworks/start?plan=silver">Get started</a>
       </div>
       <div class="tier gold">
-        <span class="metal"><i></i>Gold</span>
+        <span class="metal">Gold</span>
         <h3>Pro</h3>
         <div class="who">Book &amp; sell, all in one.</div>
         <div class="price">$499<small>/mo</small></div>
         <ul>
-          <li>Everything in Silver, plus:</li>
+          <li class="lead">Everything in Silver, plus:</li>
           <li>Full multi-page site + blog</li>
           <li>Online booking &amp; payments</li>
           <li>Photo galleries + live reviews</li>
@@ -361,73 +456,47 @@
         <a class="btn" href="/webworks/start?plan=gold">Get started</a>
       </div>
       <div class="tier platinum">
-        <span class="metal"><i></i>Platinum</span>
+        <span class="metal">Platinum</span>
         <h3>Elite</h3>
         <div class="who">Multi-location &amp; hands-off.</div>
         <div class="price">$999<small>/mo</small></div>
         <ul>
-          <li>Everything in Gold, plus:</li>
+          <li class="lead">Everything in Gold, plus:</li>
           <li>Multiple locations / custom pages</li>
           <li>New pages &amp; seasonal campaigns</li>
-          <li>Same-day priority support + direct line</li>
+          <li>Same-day support + a direct line</li>
         </ul>
         <a class="btn" href="/webworks/start?plan=platinum">Get started</a>
       </div>
     </div>
-    <div class="annual"><span>💚 Prefer to pay yearly?</span> <b>Get 2 months free</b> <span>— 12 months for the price of 10.</span></div>
-    <p class="fineprint">Every business is a little different — your exact plan is set on our first call. Month-to-month, cancel anytime, keep your site.</p>
+    <p class="annual">Rather pay yearly? <b>Two months free</b> — twelve months for the price of ten.</p>
+    <p class="fineprint">Every business is a little different — your exact plan gets settled on our first call. Month to month, cancel anytime, keep your site.</p>
   </div>
 </section>
 
-<section id="work">
+<section class="terms">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Our work</span>
-      <h2>Real sites, not templates that look like templates.</h2>
-      <p>Two live examples — the kind of site your customers expect from a company they'd trust. Click in and look around.</p>
+      <span class="eyebrow">The deal, in plain terms</span>
+      <h2>No fine print worth hiding.</h2>
     </div>
-    <div class="ex">
-      <a href="/webworks/northpine">
-        <div class="top np">
-          <div class="exlogo np">
-            <span class="exmark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.3l3.7 5.6h-2l3 4.6h-2l3.2 4.9H6.1l3.2-4.9h-2l3-4.6h-2L12 2.3z"/><rect x="11" y="16.6" width="2" height="4.3" rx=".4"/></svg></span>
-            <span class="exword">North<b>pine</b></span>
-          </div>
-        </div>
-        <div class="meta">
-          <div class="k">Tree care &amp; land clearing · example</div>
-          <h3>Rugged, trustworthy, book-a-crew fast</h3>
-          <div class="go">Visit the site →</div>
-        </div>
-      </a>
-      <a href="/webworks/clearwater">
-        <div class="top cw">
-          <div class="exlogo cw">
-            <span class="exmark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6s6.2 6.5 6.2 11a6.2 6.2 0 1 1-12.4 0C5.8 9.1 12 2.6 12 2.6z"/></svg></span>
-            <span class="exword">Clear<b>water</b></span>
-          </div>
-        </div>
-        <div class="meta">
-          <div class="k">Pool service &amp; maintenance · example</div>
-          <h3>Clean, calm, and easy to schedule</h3>
-          <div class="go">Visit the site →</div>
-        </div>
-      </a>
-    </div>
-  </div>
-</section>
-
-<section class="whywrap">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">Why JP Webworks</span>
-      <h2>Local, fast, and actually yours.</h2>
-    </div>
-    <div class="why">
-      <div><h3>Built for how customers decide</h3><p>People call the business whose site looks like it knows what it's doing. Yours will.</p></div>
-      <div><h3>Fast because it's smart</h3><p>Modern AI-assisted build means days, not months — and a price a local shop can say yes to.</p></div>
-      <div><h3>One per area</h3><p>I only take one company per trade in a town, so I'm never building your competitor's site too.</p></div>
-      <div><h3>You own everything</h3><p>Your domain, your site, your content. Cancel the plan and it's still yours to keep.</p></div>
+    <div class="grid">
+      <div>
+        <h3>One per trade, per town</h3>
+        <p>We never build for your competitor. If we've got the plumber in your town, we don't take another — first come holds the spot.</p>
+      </div>
+      <div>
+        <h3>Edits are a text message</h3>
+        <p>New hours, a new service, a photo swap — text it over and it's done. No change requests, no invoices, no waiting on a ticket.</p>
+      </div>
+      <div>
+        <h3>You own everything</h3>
+        <p>Your domain, your site, your words and photos. If you ever cancel, it all goes with you — you're a customer, not a hostage.</p>
+      </div>
+      <div>
+        <h3>Built to get found</h3>
+        <p>On Silver and up we set up your Google Business Profile and the local-search basics, so you show up when people search your trade and your town.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -436,16 +505,16 @@
   <div class="wrap founderGrid">
     <div class="avatar" aria-hidden="true">N</div>
     <div>
-      <span class="eyebrow">Who builds it</span>
+      <span class="eyebrow" style="color:var(--emerald)">Who builds it</span>
       <h2>You're hiring a person, not an agency.</h2>
-      <p>I'm Nate — I run Joint Printing, and JP Webworks is me building sites for local businesses the same way I'd want my own built: fast, clean, and no runaround. When you text about a change, you're texting me — no account managers, no ticket queue, no offshore handoff. I take one company per trade in a town, so I've got the time to actually care about yours.</p>
-      <div class="sig">— Nate, Joint Printing</div>
-      <a class="btn ghost" href="/webworks/start"><span>Start with a quick chat →</span></a>
+      <p class="body">I'm Nate. I run Joint Printing, and Webworks is me building websites for local businesses the way I'd want mine built — fast, clean, no runaround. When you text about a change, you're texting me. No account managers, no ticket queue, no handoff. And because I take one company per trade in each town, I've got the time to actually care about yours.</p>
+      <div class="sig">— Nate <span>· Joint Printing</span></div>
+      <div><a class="btn ghost" href="/webworks/start">Start with a quick chat</a></div>
     </div>
   </div>
 </section>
 
-<section class="faqwrap">
+<section id="faq">
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">Questions</span>
@@ -453,44 +522,51 @@
     </div>
     <div class="faq">
       <details open>
-        <summary>How fast can my site be live?</summary>
-        <p>Usually 3–5 business days from the moment I have your info and a few photos. Bigger multi-page builds take a little longer, but you'll see a live draft within the first week either way.</p>
+        <summary>What does the free build actually cost me?</summary>
+        <p>Nothing. We build your site and send you a link to the real thing. If you want it live, you pick a plan and we launch it on your domain — the monthly price starts then. If you don't, we part friends and you owe nothing.</p>
+      </details>
+      <details>
+        <summary>How fast will I see my site?</summary>
+        <p>Usually three to five business days from the moment we have your info. Bigger multi-page builds take a little longer, but you'll have something real to look at within the first week either way.</p>
       </details>
       <details>
         <summary>Do I actually own the site?</summary>
-        <p>Yes. Your domain, your content, your site. If you ever cancel the plan, the site is yours to keep or move — you're never locked in.</p>
+        <p>Yes. Your domain, your content, your site. If you ever cancel the plan, it's yours to keep or move — you're never locked in.</p>
       </details>
       <details>
         <summary>What if I need changes later?</summary>
-        <p>Just text or email me. Edits are handled on your monthly plan — swap a photo, update your hours, add a service — no per-change invoices and no waiting on a ticket queue.</p>
+        <p>Text or email me. Edits are part of your monthly plan — swap a photo, update your hours, add a service — no per-change bills, no ticket queue.</p>
       </details>
       <details>
         <summary>Will people actually find it on Google?</summary>
-        <p>On Silver and up I set up your Google Business Profile and the on-page basics so you show up when locals search your trade + town. It's built to get found, not just to look good.</p>
+        <p>On Silver and up we set up your Google Business Profile and the on-page basics, so you show up when locals search your trade plus your town. The site is built to get found, not just to look good.</p>
       </details>
       <details>
-        <summary>Do I have to write all the words?</summary>
-        <p>No. Tell me about your business on a quick call and I'll draft the copy for you — you just read it over and tell me what to tweak.</p>
+        <summary>Do I have to write the words or have good photos?</summary>
+        <p>No. Tell me about your business on a quick call and I'll draft everything — you just read it over and tell me what to fix. Phone photos are plenty to start; the site is designed to look sharp either way.</p>
       </details>
       <details>
-        <summary>What if I don't have a domain or business email yet?</summary>
-        <p>I'll help you grab the domain and get everything pointed correctly, and I can set up a matching name@yourbusiness.com email too. You don't need to figure out any of the technical side.</p>
+        <summary>I already have a website. Is that a problem?</summary>
+        <p>It's usually easier. We build the new one fresh, you compare it to what you have, and if it wins we move your domain over with no downtime. Your phone number, email, and Google reviews all stay put.</p>
       </details>
     </div>
   </div>
 </section>
 
-<section id="start" class="final">
-  <div class="wrap">
-    <h2>Let's get your business a site worth clicking.</h2>
-    <p>Tell me a bit about what you do — I'll send back a plan and a price, no pressure.</p>
-    <a class="btn primary" href="/webworks/start">Start your site →</a>
+<section class="final">
+  <div class="wrap row">
+    <div>
+      <h2>See your website before you spend a dollar.</h2>
+      <p>Send the form — you'll hear back within a business day, and see your real site within the week.</p>
+    </div>
+    <a class="btn solid" href="/webworks/start">Get started free</a>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="wrap">
-    <a class="brand" href="/webworks"><img src="/logo192.png" alt="JP Webworks" /> JP<b>Webworks</b></a>
+    <a class="brand" href="/webworks"><img src="/logo192.png" alt="" /> JP<b>Webworks</b></a>
     <span>nate@jointprinting.com · A Joint Printing company</span>
   </div>
 </footer>
