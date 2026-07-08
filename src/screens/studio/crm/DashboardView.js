@@ -532,12 +532,7 @@ function CockpitBucket({ bucket, entries, onOpen, onLog, onReschedule, onArchive
   );
 }
 
-export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested, onClearColdProspects, onGoToday, onOpenStage }) {
-  // Declared before any early return so hook order is stable across the
-  // loading / loaded renders.
-  const [purging, setPurging] = React.useState(false);
-  const [dismissedPurge, setDismissedPurge] = React.useState(false);
-
+export default function DashboardView({ data, loading, onOpen, onLog, onReschedule, onArchive, onSnooze, onNotInterested, onGoToday, onOpenStage }) {
   if (loading && !data) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -560,12 +555,6 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
 
   const overdue = followUps.overdue || 0;
   const dueToday = followUps.dueToday || 0;
-  const coldProspects = data?.coldProspects || 0;
-
-  const clearCold = async () => {
-    setPurging(true);
-    try { await onClearColdProspects(coldProspects); } finally { setPurging(false); }
-  };
 
   // Heads-up items still feed the "biggest deals on the radar" widget below.
   const items = heads.items || [];
@@ -584,37 +573,11 @@ export default function DashboardView({ data, loading, onOpen, onLog, onReschedu
         />
       </Box>
 
-      {/* One-click purge of never-worked cold-outreach prospects the lead-finder
-          parked in the book. Non-destructive (archive — recoverable); the outreach
-          engine's replies still auto-return a lead via warm-handoff. Dismissible. */}
-      {onClearColdProspects && coldProspects > 0 && !dismissedPurge && (
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap',
-          bgcolor: 'rgba(251,191,36,0.06)', border: `1px solid rgba(251,191,36,0.25)`,
-          borderRadius: 2, px: 2, py: 1.25,
-        }}>
-          <Box sx={{ flexGrow: 1, minWidth: 200 }}>
-            <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13.5 }}>
-              {coldProspects} cold-outreach prospect{coldProspects === 1 ? '' : 's'} in your book
-            </Typography>
-            <Typography sx={{ color: D.muted, fontSize: 12 }}>
-              Dispensaries the scanner found + emailed but you never worked. Clear them out — they’re
-              archived (recoverable), and any that reply come back on their own.
-            </Typography>
-          </Box>
-          <Button
-            onClick={clearCold} disabled={purging} size="small"
-            sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12.5, color: D.ink,
-              bgcolor: D.amber, borderRadius: 999, px: 2, '&:hover': { bgcolor: '#f5c542' } }}
-          >
-            {purging ? 'Clearing…' : `Clear ${coldProspects}`}
-          </Button>
-          <Button onClick={() => setDismissedPurge(true)} size="small"
-            sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12, color: D.faint, minWidth: 'auto' }}>
-            Not now
-          </Button>
-        </Box>
-      )}
+      {/* Cold-outreach prospects are handled automatically now — no owner action:
+          the outreach engine keeps emailing the in-sequence ones, the daily
+          crmScheduler auto-archives the dead ones (opted-out / stale) via
+          autoArchiveDeadColdProspects, and they're excluded from every actionable
+          bucket. So there's no "clear N cold prospects" nag here anymore. */}
 
       {/* 2 — Stage funnel: count + $ per stage; each row drills into the
           Companies list filtered to that stage. */}
