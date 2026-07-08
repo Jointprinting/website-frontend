@@ -683,6 +683,7 @@ export default function ApprovalView() {
                     const unit = Number(l.unitPrice) || 0;
                     const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
                     const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
+                    const weeks = Number(l.turnaroundWeeks) || 0;   // shown only when the owner set it
                     return (
                       <Box key={l.idx} onClick={() => togglePick(g, l.idx)}
                         role="button" tabIndex={0} aria-pressed={sel}
@@ -708,6 +709,13 @@ export default function ApprovalView() {
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 700, fontSize: 15.5, lineHeight: 1.3 }}>{desc || 'Option'}</Typography>
                           {detail && <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.3 }}>{detail}</Typography>}
+                          {weeks > 0 && (
+                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 0.6,
+                              px: 0.9, py: 0.3, borderRadius: 999, border: `1px solid ${T.line}`, bgcolor: T.inset,
+                              color: T.muted, fontSize: 11, fontWeight: 700, ...mono }}>
+                              ~{weeks} week{weeks === 1 ? '' : 's'} turnaround
+                            </Box>
+                          )}
                         </Box>
                         {/* Per-unit AND the line total carry equal weight — the client
                             needs both the sticker price and what the run actually costs. */}
@@ -741,6 +749,11 @@ export default function ApprovalView() {
                     )}
                     <Typography sx={{ fontSize: 13, flex: 1, minWidth: 0 }}>
                       {[l.description, l.styleCode && `(${l.styleCode})`].filter(Boolean).join(' ')} × {Number(l.qty) || 0}
+                      {Number(l.turnaroundWeeks) > 0 && (
+                        <Box component="span" sx={{ color: T.faint, fontSize: 11.5, ...mono }}>
+                          {' · '}~{Number(l.turnaroundWeeks)} wk{Number(l.turnaroundWeeks) === 1 ? '' : 's'}
+                        </Box>
+                      )}
                     </Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 700, flexShrink: 0, ...mono }}>{money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</Typography>
                   </Stack>
