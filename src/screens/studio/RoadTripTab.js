@@ -33,6 +33,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import config from '../../config.json';
 import { lsGet, lsSet } from '../../common/jpStorage';
+import { queuedRequest } from '../../common/offlineSync';
 import {
   deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS,
   haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf,
@@ -699,18 +700,25 @@ export default function RoadTripTab({ token, onNavigate }) {
     if (!d.crm) body.stage = visited ? 'contacted' : 'lead';
     else if (d.crm.stage === 'lead' && visited) body.stage = 'contacted';
     try {
-      const r = await axios.patch(`${api}/api/crm/${encodeURIComponent(key)}`, body, authHdr);
-      const stage = r.data?.client?.stage || body.stage || 'lead';
+      // Offline-safe: a pitch/lead captured in a dead zone is queued and synced
+      // when signal returns — never lost. queuedRequest only throws on a real
+      // server refusal (4xx); a connectivity failure resolves as { queued }.
+      const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `CRM · ${d.name}` });
+      const stage = (!res.queued && res.data?.client?.stage) || body.stage || 'lead';
       if (d._id) {
         setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: key, stage } } : x)));
       }
-      showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
-      return r.data;
+      if (res.queued) {
+        showToast(`"${d.name}" saved offline — will sync when you're back on signal.`, 'info');
+      } else {
+        showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+      }
+      return res.data;
     } catch (err) {
       showToast(err?.response?.data?.message || 'CRM add failed.', 'error');
       throw err;
     }
-  }, [api, authHdr, showToast, openInCrm]);
+  }, [api, showToast, openInCrm]);
 
   const saveTodo = React.useCallback(async () => {
     const d = todoTarget;
@@ -731,26 +739,30 @@ export default function RoadTripTab({ token, onNavigate }) {
     };
     if (!d.crm) body.stage = 'lead';
     try {
-      await axios.patch(`${api}/api/crm/${encodeURIComponent(key)}`, body, authHdr);
+      const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `To-do · ${d.name}` });
       if (d._id) {
         setDisps((prev) => prev.map((x) => (x._id === d._id && !x.crm ? { ...x, crm: { companyKey: key, stage: 'lead' } } : x)));
       }
       setTodoTarget(null);
-      showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+      if (res.queued) {
+        showToast(`To-do saved offline — will sync when you're back on signal.`, 'info');
+      } else {
+        showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+      }
     } catch (err) {
       showToast(err?.response?.data?.message || 'To-do save failed.', 'error');
     }
-  }, [api, authHdr, todoTarget, todoForm, showToast, openInCrm]);
+  }, [api, todoTarget, todoForm, showToast, openInCrm]);
 
   const hideDispensary = React.useCallback(async (d) => {
     try {
-      await axios.post(`${api}/api/roadtrip/dispensaries/${d._id}/hide`, {}, authHdr);
+      const res = await queuedRequest({ method: 'post', url: `${api}/api/roadtrip/dispensaries/${d._id}/hide`, body: {}, label: `Hide · ${d.name}` });
       setDisps((prev) => prev.filter((x) => x._id !== d._id));
-      showToast(`Hidden "${d.name}" — won't show again.`, 'success');
+      showToast(res.queued ? `Hidden "${d.name}" — will sync.` : `Hidden "${d.name}" — won't show again.`, 'success');
     } catch {
       showToast('Failed to hide.', 'error');
     }
-  }, [api, authHdr, showToast]);
+  }, [api, showToast]);
 
   // ── Run actions ────────────────────────────────────────────────────────────
   const refreshRun = React.useCallback(async () => {
@@ -813,15 +825,21 @@ export default function RoadTripTab({ token, onNavigate }) {
   }, [api, authHdr, pendingDeleteId, showToast]);
 
   const patchStop = React.useCallback(async (stop, updates) => {
+    // Optimistic first: reflect the visit/outcome on the local run immediately so
+    // the tap "sticks" even with no signal. The write is queued if offline and
+    // synced later; only a real server refusal (4xx) surfaces an error.
+    setRun((prev) => (prev
+      ? { ...prev, stops: (prev.stops || []).map((s) => (String(s._id) === String(stop._id) ? { ...s, ...updates } : s)) }
+      : prev));
     try {
-      const r = await axios.patch(`${api}/api/roadtrip/run/stops/${stop._id}`, updates, authHdr);
-      setRun(r.data?.run || null);
-      return r.data?.run;
+      const res = await queuedRequest({ method: 'patch', url: `${api}/api/roadtrip/run/stops/${stop._id}`, body: updates, label: `Visit · ${stop.name || 'stop'}` });
+      if (!res.queued && res.data?.run) setRun(res.data.run);
+      return res.queued ? null : res.data?.run;
     } catch {
       showToast('Stop update failed.', 'error');
       return null;
     }
-  }, [api, authHdr, showToast]);
+  }, [api, showToast]);
 
   const markVisited = React.useCallback(async (stop) => {
     await patchStop(stop, { status: 'visited' });

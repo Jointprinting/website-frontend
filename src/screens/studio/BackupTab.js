@@ -325,6 +325,17 @@ export default function BackupTab({ token, onBack }) {
               </Box>
             ) : (
               <Box sx={{ mt: 1 }}>
+                {/* Loud alarm if off-site auto-backups appear to have stopped —
+                    the one thing to catch before heading out on the road. */}
+                {drive.stale && (
+                  <Alert severity="warning" sx={{ mb: 1.5 }}>
+                    Off-site auto-backups look stopped —{' '}
+                    {drive.lastBackupAt
+                      ? `last successful push was ${fmtRelative(drive.lastBackupAt)} (over ${drive.staleAfterDays ?? 2}d ago).`
+                      : 'none has run yet.'}{' '}
+                    Run one now to confirm Drive is working before you leave.
+                  </Alert>
+                )}
                 <Stack direction="row" gap={1} alignItems="center" mb={1} flexWrap="wrap">
                   <Chip size="small" label={`Connected${drive.email ? ' · ' + drive.email : ''}`}
                     sx={{ bgcolor: 'rgba(74,222,128,0.12)', color: B.green,
@@ -353,7 +364,7 @@ export default function BackupTab({ token, onBack }) {
                   </Button>
                 </Stack>
                 <Typography sx={{ color: B.muted, fontSize: 11, mt: 1.2 }}>
-                  Auto-runs weekly (Sunday). Saved to a “Joint Printing Backups” folder in your Drive.
+                  {`Auto-runs ${(drive.schedule || 'nightly').toLowerCase()}.`} Saved to a “Joint Printing Backups” folder in your Drive.
                 </Typography>
               </Box>
             )}
