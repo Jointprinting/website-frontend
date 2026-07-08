@@ -26,6 +26,7 @@ import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
+import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import SearchIcon from '@mui/icons-material/Search';
@@ -48,10 +49,13 @@ import CalendarView from './CalendarView';
 import CompaniesView from './CompaniesView';
 import CompanyDetail from './CompanyDetail';
 import PipelineView from './PipelineView';
+import DealsView from './DealsView';
+import DealDialog from './DealDialog';
 import CleanupView from './CleanupView';
 import ReconcileView from './ReconcileView';
 
 const base = `${config.backendUrl}/api/crm`;
+const dealsBase = `${config.backendUrl}/api/deals`;
 
 // Primary tab bar — ordered by daily importance. The segmented company book
 // (Clients / Active leads / Everyone else) leads as the CRM's home, with the
@@ -61,6 +65,7 @@ const base = `${config.backendUrl}/api/crm`;
 const NAV = [
   { id: 'companies', label: 'Clients',   Icon: PeopleAltOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
+  { id: 'deals',     label: 'Deals',     Icon: HandshakeOutlinedIcon },
   { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
   { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
@@ -93,7 +98,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // The segmented company book leads by default (Clients first); a hub deep-link
   // can request a specific landing view (e.g. 'today') via initialView.
   const [view, setView] = React.useState(
-    initialView && ['companies', 'today', 'pipeline', 'calendar', 'dashboard'].includes(initialView)
+    initialView && ['companies', 'today', 'deals', 'pipeline', 'calendar', 'dashboard'].includes(initialView)
       ? initialView : 'companies',
   );
   // company detail overlay (null = closed). A cross-tab deep link
@@ -133,6 +138,15 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const [pipelineLoading, setPipelineLoading] = React.useState(true);
   const [pipeQuery, setPipeQuery] = React.useState('');
   const [pipeTag, setPipeTag] = React.useState('all');
+
+  // Deals board — the deal pipeline (/api/deals). Grouped client-side (small set,
+  // already in memory). migrateStatus powers the reversible "set up from orders"
+  // panel; dealDlg drives the shared create/edit dialog (board = company picker,
+  // profile = fixed company).
+  const [deals, setDeals] = React.useState([]);
+  const [dealsLoading, setDealsLoading] = React.useState(true);
+  const [migrateStatus, setMigrateStatus] = React.useState(null);
+  const [dealDlg, setDealDlg] = React.useState({ open: false, company: null, initial: null });
 
   // Clean up — duplicate groups (/duplicates) + dead/no-follow-up archive
   // candidates. The dead list is derived from an UNFILTERED company fetch (its
@@ -276,13 +290,40 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     // company switch clears to the spinner.
     setDetail((d) => (d && d.client && d.client.companyKey === key ? d : null));
     try {
-      const res = await axios.get(`${base}/${encodeURIComponent(key)}`, authHdr);
-      setDetail(res.data || null);
+      // Pull the company record and its deals together, so the profile's Deals
+      // panel is populated from the same load (deals is additive — a failure there
+      // never blocks opening the card).
+      const [res, dealsRes] = await Promise.all([
+        axios.get(`${base}/${encodeURIComponent(key)}`, authHdr),
+        axios.get(dealsBase, { ...authHdr, params: { companyKey: key } }).catch(() => ({ data: { deals: [] } })),
+      ]);
+      const payload = res.data || null;
+      if (payload) payload.deals = dealsRes.data?.deals || [];
+      setDetail(payload);
     } catch (e) {
       flash('Could not open that company.', 'error');
       setOpenKey(null);
     } finally { setDetailLoading(false); }
   }, [authHdr, flash]);
+
+  // Deals board data + the reversible-migration status (for the "set up from
+  // orders" panel). Small sets — grouped/shaped client-side in DealsView.
+  const loadDeals = React.useCallback(async () => {
+    setDealsLoading(true);
+    try {
+      const res = await axios.get(dealsBase, authHdr);
+      setDeals(res.data?.deals || []);
+    } catch (e) {
+      flash('Could not load deals.', 'error');
+    } finally { setDealsLoading(false); }
+  }, [authHdr, flash]);
+
+  const loadMigrateStatus = React.useCallback(async () => {
+    try {
+      const res = await axios.get(`${dealsBase}/migrate/status`, authHdr);
+      setMigrateStatus(res.data || null);
+    } catch (e) { /* soft — the panel just shows the first-run copy */ }
+  }, [authHdr]);
 
   const loadDuplicates = React.useCallback(async () => {
     setDuplicatesLoading(true);
@@ -365,6 +406,11 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     if (view === 'archived' && !openKey) loadArchived();
   }, [view, openKey, loadArchived]);
 
+  // Deals: load the board + the migration status lazily on first entry.
+  React.useEffect(() => {
+    if (view === 'deals' && !openKey) { loadDeals(); loadMigrateStatus(); }
+  }, [view, openKey, loadDeals, loadMigrateStatus]);
+
   // After any write, refresh whatever's currently visible + the open detail so
   // counts/badges/timelines stay truthful without a blanket refetch of all views.
   const refreshAffected = React.useCallback(() => {
@@ -375,9 +421,10 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     loadPipeline(pipeQuery, pipeTag);
     if (view === 'cleanup') { loadDuplicates(); loadCleanupClients(); }
     if (view === 'archived') loadArchived();
+    if (view === 'deals') loadDeals();
     if (openKey) loadDetail(openKey);
   }, [loadDashboard, loadToday, loadCalendar, calCursor, loadCompanies, query, tagFilter,
-      loadPipeline, pipeQuery, pipeTag, view, loadDuplicates, loadCleanupClients, loadArchived, openKey, loadDetail]);
+      loadPipeline, pipeQuery, pipeTag, view, loadDuplicates, loadCleanupClients, loadArchived, loadDeals, openKey, loadDetail]);
 
   // ── Write transport ───────────────────────────────────────────────────────
   // One PATCH path for everything: field edits, log-a-touch, reschedule. The
@@ -542,6 +589,127 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     refreshAffected();
     setOpenKey(key);
   }, [patchCompany, flash, refreshAffected]);
+
+  // ── Deal writes ─────────────────────────────────────────────────────────────
+  // All deal transport in one place (mirrors patchCompany); the board + the
+  // profile panel are presentational and call these. Each refreshes the affected
+  // surfaces (board, open detail's deals, dashboard) so counts stay truthful.
+  const createDeal = React.useCallback(async (body) => {
+    try {
+      const res = await axios.post(dealsBase, body, authHdr);
+      flash('Deal created.');
+      refreshAffected();
+      return res.data?.deal || null;
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not create the deal.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  const updateDeal = React.useCallback(async (id, patch) => {
+    try {
+      await axios.put(`${dealsBase}/${id}`, patch, authHdr);
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not update the deal.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  // Win a deal → the business is a CLIENT. Winning stamps the deal won on the API,
+  // then we promote the company's stage to 'customer' (labeled "Client") through
+  // the SAME up-only path a manual promotion uses — so the Clients segment, the
+  // dashboard, and the profile all agree without a second source of truth. The
+  // promotion is best-effort/silent: it never blocks the win, and it can only
+  // promote (never demote), preserving "once a client, always a client".
+  const winDeal = React.useCallback(async (deal) => {
+    if (!deal || !deal._id) return;
+    try {
+      await axios.post(`${dealsBase}/${deal._id}/win`, {}, authHdr);
+      if (deal.companyKey) patchCompany(deal.companyKey, { stage: 'customer' }, { silent: true }).catch(() => {});
+      flash('Deal won 🎉 — marked as a client.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not win that deal.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected, patchCompany]);
+
+  const loseDeal = React.useCallback(async (deal, reason = '') => {
+    if (!deal || !deal._id) return;
+    try {
+      await axios.post(`${dealsBase}/${deal._id}/lose`, { reason }, authHdr);
+      flash('Deal marked lost.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not update the deal.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  // Reopen a closed deal back to an open stage (the API's save hook clears the
+  // won/lost stamps). Doesn't touch the company's stage — reopening doesn't undo
+  // an earned client status (they still have the history / other wins).
+  const reopenDeal = React.useCallback((deal) => updateDeal(deal._id, { stage: 'quoted' }), [updateDeal]);
+
+  const archiveDeal = React.useCallback(async (deal) => {
+    if (!deal || !deal._id) return;
+    try {
+      await axios.delete(`${dealsBase}/${deal._id}`, authHdr);
+      flash('Deal removed — recoverable.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not remove the deal.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  // Board drag → the right write: Won wins (promotes to client), Lost closes,
+  // anything else is a plain stage move.
+  const moveDealStage = React.useCallback((deal, toStage) => {
+    if (!deal || !toStage || deal.stage === toStage) return;
+    if (toStage === 'won') return winDeal(deal);
+    if (toStage === 'lost') return loseDeal(deal);
+    return updateDeal(deal._id, { stage: toStage });
+  }, [winDeal, loseDeal, updateDeal]);
+
+  // Open a deal card: linked to an order → deep-link to the Order Tracker (the
+  // same jump order rows use); otherwise open the business profile.
+  const openDeal = React.useCallback((deal) => {
+    if (!deal) return;
+    if (onNavigate && (deal.projectNumber || deal.orderNumber)) {
+      onNavigate({ view: 'clients', projectNumber: deal.projectNumber || undefined, orderNumber: deal.orderNumber || undefined });
+    } else if (deal.companyKey) {
+      setOpenKey(deal.companyKey);
+    }
+  }, [onNavigate]);
+
+  // The shared create/edit dialog's submit: edit if it carries an id, else create.
+  const submitDeal = React.useCallback(async (body) => {
+    const initial = dealDlg.initial;
+    if (initial && initial._id) await updateDeal(initial._id, body);
+    else await createDeal(body);
+  }, [dealDlg.initial, updateDeal, createDeal]);
+
+  // ── Reversible "set up deals from my orders" migration ─────────────────────
+  // preview = dry-run (writes nothing); run = create + return a batch id; undo =
+  // delete exactly that batch. Only ever creates deal cards — never touches Orders
+  // or Clients — so every run is fully reversible (owner's hard requirement).
+  const previewMigrate = React.useCallback(async () => {
+    const res = await axios.post(`${dealsBase}/migrate`, { dryRun: true }, authHdr);
+    return res.data;
+  }, [authHdr]);
+
+  const runMigrate = React.useCallback(async () => {
+    const res = await axios.post(`${dealsBase}/migrate`, {}, authHdr);
+    await loadMigrateStatus();
+    refreshAffected();
+    return res.data;
+  }, [authHdr, loadMigrateStatus, refreshAffected]);
+
+  const undoMigrate = React.useCallback(async (batchId) => {
+    const res = await axios.post(`${dealsBase}/migrate/rollback`, { batchId }, authHdr);
+    await loadMigrateStatus();
+    refreshAffected();
+    return res.data;
+  }, [authHdr, loadMigrateStatus, refreshAffected]);
 
   // ── Action handlers wired into the views/dialogs ──────────────────────────
   const openCompany = (key) => setOpenKey(key);
@@ -942,6 +1110,19 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             });
           } : undefined}
           onOpenVendor={onNavigate ? (vendorName) => onNavigate({ view: 'vendors', vendorName }) : undefined}
+          // Deals on the business profile — the owner's "deal cards attached to
+          // one profile". New/edit reuse the shared dialog with this company fixed.
+          onNewDeal={() => detail?.client && setDealDlg({
+            open: true,
+            company: { companyKey: detail.client.companyKey, companyName: detail.client.companyName || detail.client.clientName || '' },
+            initial: null,
+          })}
+          onEditDeal={(deal) => setDealDlg({ open: true, company: null, initial: deal })}
+          onWinDeal={winDeal}
+          onLoseDeal={loseDeal}
+          onReopenDeal={reopenDeal}
+          onRemoveDeal={archiveDeal}
+          onOpenDeal={openDeal}
         />
       );
     }
@@ -1006,6 +1187,19 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             onOpen={openBoardCard}
             onMoveStage={pipelineMoveStage}
             bindCompany={bindCompany}
+          />
+        );
+      case 'deals':
+        return (
+          <DealsView
+            deals={deals} loading={dealsLoading}
+            onOpenDeal={openDeal}
+            onMoveDealStage={moveDealStage}
+            onNewDeal={() => setDealDlg({ open: true, company: null, initial: null })}
+            migrateStatus={migrateStatus}
+            onPreviewMigrate={previewMigrate}
+            onRunMigrate={runMigrate}
+            onUndoMigrate={undoMigrate}
           />
         );
       case 'calendar':
@@ -1192,7 +1386,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
           data-ctx-chrome opts the empty body space into the global right-click
           fallback (search / back-to-hub) without hijacking text or bound rows. */}
       <Box data-ctx-chrome sx={{
-        maxWidth: (view === 'pipeline' && !openKey) ? 1440 : 1080,
+        maxWidth: ((view === 'pipeline' || view === 'deals') && !openKey) ? 1440 : 1080,
         mx: 'auto', px: { xs: 1.5, sm: 2.5 }, py: { xs: 2, sm: 3 },
       }}>
         {renderView()}
@@ -1226,6 +1420,17 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         onClose={() => setAddOpen(false)}
         onCreate={createCompany}
         onOpenExisting={openCompany}
+      />
+
+      {/* Create / edit a deal — shared by the board (company picker) and the
+          business profile (company fixed). */}
+      <DealDialog
+        open={dealDlg.open}
+        onClose={() => setDealDlg({ open: false, company: null, initial: null })}
+        onSubmit={submitDeal}
+        company={dealDlg.company}
+        initial={dealDlg.initial}
+        companies={clients}
       />
 
       {/* Global search command palette */}

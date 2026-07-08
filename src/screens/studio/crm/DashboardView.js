@@ -387,7 +387,7 @@ function ConversionCard({ totalCompanies, customersWithOrders, pipeline }) {
       <Stack direction="row" spacing={2} alignItems="center">
         <Box sx={{ flexShrink: 0, textAlign: 'center', minWidth: 72 }}>
           <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, color: D.text, lineHeight: 1 }}>{rate}%</Typography>
-          <Typography sx={{ fontSize: 9, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>won</Typography>
+          <Typography sx={{ fontSize: 9, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: 'uppercase' }}>clients</Typography>
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={1} alignItems="baseline">
