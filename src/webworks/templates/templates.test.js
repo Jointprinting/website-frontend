@@ -23,6 +23,7 @@
 import * as React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TEMPLATES, getTemplate } from './index';
+import { topicOf } from './_kit';
 
 const FULL_DATA = {
   businessName: 'Ironside Plumbing & Heating',
@@ -118,17 +119,22 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
     expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
   });
 
-  test('curated default photos render through the fail-safe stack', async () => {
+  test('default photos render through the fail-safe crafted stack', async () => {
     const { container } = renderTpl(tpl, FULL_DATA); // no data.photos → defaults
     await screen.findAllByText(/Ironside Plumbing/);
-    // Fail-safe tiles exist, each with its crafted underlayer in place…
+    // Fail-safe tiles exist, each with its crafted underlayer in place — the
+    // contract that keeps a photo-less draft looking finished.
     const tiles = container.querySelectorAll('.jpw-ph');
     expect(tiles.length).toBeGreaterThan(0);
     expect(container.querySelectorAll('.jpw-ph-fx').length).toBeGreaterThan(0);
-    // …and the default photo set is the curated Unsplash one.
+    // The default photo state is EITHER the template's stock set (Unsplash) OR —
+    // for templates that ship crafted TOPICAL defaults instead of generic stock
+    // (e.g. Trades) — an empty src that collapses to the crafted tile. When a
+    // real default src is present, it must be the curated Unsplash one.
     const img = container.querySelector('.jpw-ph img');
-    expect(img).toBeTruthy();
-    expect(img.getAttribute('src')).toContain('images.unsplash.com');
+    if (img && img.getAttribute('src')) {
+      expect(img.getAttribute('src')).toContain('images.unsplash.com');
+    }
   });
 
   test('owner photo URLs override the curated defaults', async () => {
@@ -155,5 +161,31 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
     expect(failed).toBeTruthy();
     expect(failed.querySelector('img')).toBeNull();
     expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
+  });
+});
+
+// ── topicOf: businessType → topical kind + word (drives crafted defaults) ─────
+describe('topicOf', () => {
+  test('resolves common trades to their kind + display word', () => {
+    expect(topicOf('Emergency Plumbing')).toEqual({ kind: 'plumbing', word: 'Plumbing' });
+    expect(topicOf('Plumber')).toEqual({ kind: 'plumbing', word: 'Plumbing' });
+    expect(topicOf('HVAC & Heating').kind).toBe('hvac');
+    expect(topicOf('Licensed Electrician').kind).toBe('electrical');
+    expect(topicOf('Roofing Co').kind).toBe('roofing');
+    expect(topicOf('Green Thumb Landscaping').kind).toBe('landscaping');
+  });
+
+  test('most-specific keyword wins (barber before salon, pizza before bar)', () => {
+    expect(topicOf('Downtown Barbershop').kind).toBe('barber');
+    expect(topicOf('Hair Salon').kind).toBe('salon');
+    expect(topicOf('Tony\'s Pizzeria').kind).toBe('pizza');
+    expect(topicOf('Corner Bar & Grill').kind).toBe('bar');
+  });
+
+  test('unknown / empty falls back to generic (no crash), word echoes input', () => {
+    expect(topicOf('Underwater Basket Weaving')).toEqual({ kind: 'generic', word: 'Underwater Basket Weaving' });
+    expect(topicOf('')).toEqual({ kind: 'generic', word: '' });
+    expect(topicOf(null)).toEqual({ kind: 'generic', word: '' });
+    expect(topicOf(undefined)).toEqual({ kind: 'generic', word: '' });
   });
 });

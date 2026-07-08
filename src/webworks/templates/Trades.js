@@ -13,20 +13,22 @@
 import * as React from 'react';
 import {
   useGoogleFonts, resolvePalette, initialsOf, telHref, txt, rows,
-  mergePhotos, Ph, PH_CSS,
+  mergePhotos, Ph, PH_CSS, topicOf,
 } from './_kit';
 import { TRADES_PALETTES } from './_meta';
 
-// Curated defaults — well-known Unsplash crew/site photography. Owner-supplied
-// data.photos.{hero,gallery} replace these slot-for-slot.
-const DEFAULT_PHOTOS = {
-  hero: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1800&q=80',
-  gallery: [
-    'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=900&q=80',
-  ],
+// No generic stock defaults. When the owner hasn't added photos, the template
+// paints its OWN crafted, on-brand TOPICAL scene (industrial gradient + steel
+// texture + a per-trade tool glyph) — so a plumbing site reads as plumbing
+// instead of showing off-topic stock. Owner photo URLs override slot-by-slot.
+const DEFAULT_PHOTOS = { hero: '', gallery: ['', '', ''] };
+
+// Business-type → which crafted tool glyph the fail-safe scenes draw.
+const GLYPH_FOR = {
+  plumbing: 'drop', hvac: 'gauge', electrical: 'bolt', landscaping: 'leaf',
+  roofing: 'roof', auto: 'gauge', contractor: 'hex', generic: 'hex',
 };
+const glyphForKind = (kind) => GLYPH_FOR[kind] || 'hex';
 
 // Crafted no-photo tile: slate gradient, faint diagonal steel texture, one
 // accent tool glyph. This is what paints while (or if no) photo loads.
@@ -56,6 +58,14 @@ function TradesFx({ c, glyph }) {
         {glyph === 'gauge' && (<>
           <path d="M-28 16a28 28 0 0 1 56 0" />
           <path d="M0 16L14 -4" /><path d="M-36 16h8M28 16h8M-24 -8l5 5M24 -8l-5 5" />
+        </>)}
+        {glyph === 'drop' && <path d="M0 -32C-6 -20 -20 -6 -20 8a20 20 0 1 0 40 0c0 -14 -14 -28 -20 -40z" />}
+        {glyph === 'leaf' && (<>
+          <path d="M-20 20C-20 -6 -4 -20 20 -20 20 6 4 20 -20 20z" />
+          <path d="M-12 12L12 -12" />
+        </>)}
+        {glyph === 'roof' && (<>
+          <path d="M-30 4L0 -24 30 4" /><path d="M-20 4V24H20V4" />
         </>)}
       </g>
     </svg>
@@ -91,10 +101,10 @@ const css = (c, hero) => `
 .jpwt-hero{color:${c.darkInk};position:relative;
   background-color:${c.dark};
   background-image:
-    linear-gradient(96deg,${c.dark}f2 0%,${c.dark}cc 44%,${c.dark}88 100%),
-    url('${hero}'),
+    ${hero ? `linear-gradient(96deg,${c.dark}f2 0%,${c.dark}cc 44%,${c.dark}88 100%)` : `linear-gradient(96deg,${c.dark}f0 0%,${c.dark}a8 46%,${c.dark}4a 100%)`},
+    ${hero ? `url('${hero}'),` : ''}
     repeating-linear-gradient(-45deg,rgba(255,255,255,.03) 0 2px,transparent 2px 16px),
-    radial-gradient(120% 90% at 88% 8%,${c.accent}2e 0%,transparent 55%),
+    radial-gradient(120% 90% at 88% 8%,${c.accent}${hero ? '2e' : '44'} 0%,transparent 55%),
     linear-gradient(155deg,${c.dark}, ${c.dark} 60%,#000);
   background-size:cover;background-position:center;}
 .jpwt-hero-in{padding:clamp(64px,10vw,124px) 0 clamp(56px,9vw,108px);position:relative;z-index:1;max-width:760px;}
@@ -141,9 +151,10 @@ const css = (c, hero) => `
 .jpwt-band{position:relative;color:${c.darkInk};
   background-color:${c.dark};
   background-image:
-    linear-gradient(90deg,${c.dark}f0 0%,${c.dark}b8 55%,${c.dark}8a 100%),
-    url('${hero}'),
+    ${hero ? `linear-gradient(90deg,${c.dark}f0 0%,${c.dark}b8 55%,${c.dark}8a 100%)` : `linear-gradient(90deg,${c.dark}ee 0%,${c.dark}a6 56%,${c.dark}4d 100%)`},
+    ${hero ? `url('${hero}'),` : ''}
     repeating-linear-gradient(-45deg,rgba(255,255,255,.03) 0 2px,transparent 2px 16px),
+    radial-gradient(90% 120% at 82% 12%,${c.accent}${hero ? '00' : '3a'} 0%,transparent 55%),
     linear-gradient(200deg,${c.dark},#000);
   background-size:cover;background-position:center 30%;background-attachment:scroll;}
 .jpwt-band-in{padding:clamp(48px,7vw,84px) 0;}
@@ -215,6 +226,7 @@ export default function TradesTemplate({ data }) {
   );
 
   const name = txt(d.businessName) || 'Your Business';
+  const topic = topicOf(d.businessType);   // drives the topical watermark + tool glyph
   const phone = txt(d.phone);
   const email = txt(d.email);
   const address = txt(d.address);
@@ -279,7 +291,9 @@ export default function TradesTemplate({ data }) {
               </div>
             )}
           </div>
-          <div className="jpwt-hero-ghost" aria-hidden="true">{initialsOf(name)}</div>
+          {/* Topical watermark — the trade fills the hero's empty right side and
+              reads on-topic (falls back to the business initials). */}
+          <div className="jpwt-hero-ghost" aria-hidden="true">{topic.word || initialsOf(name)}</div>
         </div>
         <div className="jpwt-stripe" aria-hidden="true" />
       </header>
@@ -374,7 +388,7 @@ export default function TradesTemplate({ data }) {
             <div className="jpwt-work">
               {photos.gallery.map((src, i) => (
                 <Ph key={i} src={src} alt={`${name} on the job`}
-                  fx={<TradesFx c={pal.c} glyph={['bolt', 'hex', 'gauge'][i % 3]} />} />
+                  fx={<TradesFx c={pal.c} glyph={glyphForKind(topic.kind)} />} />
               ))}
             </div>
           </div>
