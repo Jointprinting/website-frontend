@@ -207,7 +207,7 @@ function HeadsUpRow({ item, onOpen, onLog, onReschedule, onArchive, onSnooze, on
 // (clients / lost / dormant — results, not pipeline) sit in their own strip.
 // Every stage is a DRILL-DOWN: tap → onOpenStage(stage) → the filtered list.
 // Falls back to count-weighting before any deal value is entered.
-const FLOW_STAGES = ['lead', 'contacted', 'quoting', 'won'];
+const FLOW_STAGES = ['lead', 'contacted', 'awaiting_details', 'quoting', 'won'];
 const OUTCOME_STAGES = ['customer', 'lost', 'dormant'];
 
 function StageFunnel({ stages, onOpenStage }) {

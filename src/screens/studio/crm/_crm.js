@@ -31,16 +31,17 @@ import { D, mono } from '../_shared';
 // 'quoting' by a one-time server boot repair. 'customer' stays the STORED value
 // (order-reality promotion, isCustomer, etc. key on it) but every LABEL reads
 // "Client" — the owner's word for a company that placed an order.
-export const CRM_STAGES = ['lead', 'contacted', 'quoting', 'won', 'customer', 'lost', 'dormant'];
+export const CRM_STAGES = ['lead', 'contacted', 'awaiting_details', 'quoting', 'won', 'customer', 'lost', 'dormant'];
 
 // Once a company is a real CUSTOMER (has placed an order) it stays one — "even if
 // they go cold." These early funnel stages are a DEMOTION below customer, so they're
 // locked off for a customer and the stored stage can never disagree with order reality.
-export const PRE_CUSTOMER_STAGES = ['lead', 'contacted', 'quoting'];
+export const PRE_CUSTOMER_STAGES = ['lead', 'contacted', 'awaiting_details', 'quoting'];
 
 export const STAGE_META = {
   lead:      { label: 'Lead',      color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
   contacted: { label: 'Contacted', color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
+  awaiting_details: { label: 'Awaiting details', color: '#f472b6', bg: 'rgba(244,114,182,0.14)' },
   quoting:   { label: 'Quoting',   color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
   won:       { label: 'Won',       color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
   customer:  { label: 'Client',    color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
@@ -54,7 +55,7 @@ export const stageMeta = (s) => STAGE_META[s] || STAGE_META.lead;
 // fallback map lets the UI label per-stage odds without a round-trip and keeps a
 // single visible source of truth on the client. Keep in sync with the backend.
 export const STAGE_PROBABILITY = {
-  lead: 0.1, contacted: 0.25, quoting: 0.5,
+  lead: 0.1, contacted: 0.25, awaiting_details: 0.35, quoting: 0.5,
   won: 1, customer: 1, lost: 0, dormant: 0,
 };
 
@@ -64,7 +65,7 @@ export const STAGE_PROBABILITY = {
 // (one per order). Mirrors controllers/crm.js BOARD_COLUMNS / BOARD_CLOSED_COLUMNS
 // — keep in sync. The server also sends its `columns` in the /pipeline payload, so
 // this is the labels/colors source of truth + a fallback ordering.
-export const BOARD_COLUMNS         = ['lead', 'contacted', 'quoting', 'approval', 'production', 'shipped', 'delivered'];
+export const BOARD_COLUMNS         = ['lead', 'contacted', 'awaiting_details', 'quoting', 'approval', 'production', 'shipped', 'delivered'];
 export const BOARD_CLOSED_COLUMNS  = ['lost', 'dormant', 'cancelled'];
 
 // Per-column meta (label + colors) for the board. Lead/contacted/lost/dormant
@@ -73,6 +74,7 @@ export const BOARD_CLOSED_COLUMNS  = ['lost', 'dormant', 'cancelled'];
 export const BOARD_COLUMN_META = {
   lead:       STAGE_META.lead,
   contacted:  STAGE_META.contacted,
+  awaiting_details: STAGE_META.awaiting_details,
   quoting:    { label: 'Quoting',    color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
   approval:   { label: 'Approval',   color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
   production: { label: 'Production', color: '#818cf8', bg: 'rgba(129,140,248,0.14)' },
@@ -88,7 +90,7 @@ export const boardColumnMeta = (col) => BOARD_COLUMN_META[col] || STAGE_META.lea
 // Lets the board footer label per-column odds without a round-trip (the weighted
 // forecast itself still comes server-computed on /pipeline). Keep in sync.
 export const BOARD_PROBABILITY = {
-  lead: 0.1, contacted: 0.25, quoting: 0.5, approval: 0.8,
+  lead: 0.1, contacted: 0.25, awaiting_details: 0.35, quoting: 0.5, approval: 0.8,
   production: 0.9, shipped: 0.95, delivered: 1,
   lost: 0, dormant: 0, cancelled: 0,
 };
@@ -105,7 +107,7 @@ export const ORDER_BOARD_COLUMNS = ['quoting', 'approval', 'production', 'shippe
 // Lost / Dormant off-ramps to close it right from the board (the previous list
 // left those unreachable by drag — the owner had to open the card). It still
 // can't jump mid-fulfillment (approval/production/…) — that's an order lifecycle.
-export const LEAD_BOARD_COLUMNS = ['lead', 'contacted', 'quoting', 'lost', 'dormant'];
+export const LEAD_BOARD_COLUMNS = ['lead', 'contacted', 'awaiting_details', 'quoting', 'lost', 'dormant'];
 
 // Map a board column → the Order.status to PERSIST when an order card is dropped
 // there. 'production' lands on 'placed' (the canonical entry to the production
@@ -178,7 +180,7 @@ export const dealTitle = (d) => {
 // climbs. Won and Customer are the same victory rung (Customer = Won + has an
 // order), so the bar fills completely for either. lost/dormant aren't on the
 // ladder (they're off-ramps), so they read as 0 progress with a muted treatment.
-export const FUNNEL_STEPS = ['lead', 'contacted', 'quoting', 'won'];
+export const FUNNEL_STEPS = ['lead', 'contacted', 'awaiting_details', 'quoting', 'won'];
 
 // 0-based level of a stage on the ladder; customer collapses onto won's rung.
 export const stageLevel = (s) => {
@@ -226,7 +228,7 @@ export const SEGMENT_META = {
 export const isClient = (c) => !!(c && (c.isCustomer || isWonStage(c.stage)));
 
 // Warm / in-pipeline lead (and NOT already a client).
-const ACTIVE_LEAD_STAGES = ['contacted', 'quoting'];
+const ACTIVE_LEAD_STAGES = ['contacted', 'awaiting_details', 'quoting'];
 export const isActiveLead = (c) => {
   if (!c || isClient(c)) return false;
   if (ACTIVE_LEAD_STAGES.includes(c.stage)) return true;

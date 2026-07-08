@@ -22,24 +22,24 @@ import {
 } from './_crm';
 
 test('CRM_STAGES mirrors models/Client.js (order matters)', () => {
-  expect(CRM_STAGES).toEqual(['lead', 'contacted', 'quoting', 'won', 'customer', 'lost', 'dormant']);
+  expect(CRM_STAGES).toEqual(['lead', 'contacted', 'awaiting_details', 'quoting', 'won', 'customer', 'lost', 'dormant']);
 });
 
 test('STAGE_PROBABILITY mirrors controllers/crm.js', () => {
   expect(STAGE_PROBABILITY).toEqual({
-    lead: 0.1, contacted: 0.25, quoting: 0.5,
+    lead: 0.1, contacted: 0.25, awaiting_details: 0.35, quoting: 0.5,
     won: 1, customer: 1, lost: 0, dormant: 0,
   });
 });
 
 test('board columns mirror controllers/crm.js (order matters)', () => {
-  expect(BOARD_COLUMNS).toEqual(['lead', 'contacted', 'quoting', 'approval', 'production', 'shipped', 'delivered']);
+  expect(BOARD_COLUMNS).toEqual(['lead', 'contacted', 'awaiting_details', 'quoting', 'approval', 'production', 'shipped', 'delivered']);
   expect(BOARD_CLOSED_COLUMNS).toEqual(['lost', 'dormant', 'cancelled']);
 });
 
 test('BOARD_PROBABILITY mirrors controllers/crm.js', () => {
   expect(BOARD_PROBABILITY).toEqual({
-    lead: 0.1, contacted: 0.25, quoting: 0.5, approval: 0.8,
+    lead: 0.1, contacted: 0.25, awaiting_details: 0.35, quoting: 0.5, approval: 0.8,
     production: 0.9, shipped: 0.95, delivered: 1,
     lost: 0, dormant: 0, cancelled: 0,
   });
