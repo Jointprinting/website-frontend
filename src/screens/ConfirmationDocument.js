@@ -293,11 +293,16 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                     {imgs.length > 0 && (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>
                         {imgs.map((src, i) => (
+                          // `contain` (not cover) so the WHOLE linked mockup shows,
+                          // resized to fit instead of cropped; the lightbox opens the
+                          // same full image. A gentle portrait tile suits garment
+                          // mockups; a clean inset ground makes the letterboxing read
+                          // as intentional. Tap to see the original full-size.
                           <DocImg key={i} src={src} onZoom={onZoom} D={D}
-                            sx={{ width: { xs: 120, sm: 140 }, height: { xs: 120, sm: 140 }, objectFit: 'cover', borderRadius: 2,
-                              border: `1px solid ${D.line}`, bgcolor: D.panel,
+                            sx={{ width: { xs: 138, sm: 168 }, height: { xs: 158, sm: 196 }, objectFit: 'contain', borderRadius: 2,
+                              border: `1px solid ${D.line}`, bgcolor: D.inset, p: 0.75,
                               transition: 'box-shadow 200ms ease, border-color 200ms ease',
-                              '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.45)', borderColor: D.lineHi } }} />
+                              '&:hover': { boxShadow: '0 8px 22px rgba(0,0,0,0.35)', borderColor: D.lineHi } }} />
                         ))}
                       </Box>
                     )}
