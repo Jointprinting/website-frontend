@@ -88,6 +88,8 @@ import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import JpLoader from '../common/JpLoader';
+import PendingSyncBadge from '../common/PendingSyncBadge';
+import { setAuthProvider, startAutoFlush } from '../common/offlineSync';
 
 // JP Webworks Websites tool — lazy so the template registry + editor stay out
 // of the Studio's main chunk until the owner actually opens the tool.
@@ -2850,11 +2852,24 @@ export default function Studio() {
     setRole('owner');
   };
 
+  // Offline field-capture, wired once for the whole authed app: feed the
+  // write-queue the current auth header (read fresh each send so a refreshed
+  // token is honored) and run the background flusher (drains on reconnect /
+  // interval / load). Kept at the root so it survives every tab switch.
+  React.useEffect(() => {
+    if (!token) return undefined;
+    setAuthProvider(() => ({ headers: { Authorization: `Bearer ${token}` } }));
+    return startAutoFlush({ intervalMs: 20000 });
+  }, [token]);
+
   if (!token) return <Login onAuthed={handleAuthed} />;
   // Agents get their own trimmed, self-scoped surface (leads + orders + goal);
-  // they never load the owner's hub or tools.
-  if (role === 'agent') return <AgentHome token={token} onLogout={handleLogout} />;
-  return <StudioBody token={token} onLogout={handleLogout} />;
+  // they never load the owner's hub or tools. The PendingSyncBadge is fixed-
+  // position and global, so it floats over whatever tool/view is open.
+  if (role === 'agent') {
+    return (<><AgentHome token={token} onLogout={handleLogout} /><PendingSyncBadge /></>);
+  }
+  return (<><StudioBody token={token} onLogout={handleLogout} /><PendingSyncBadge /></>);
 }
 
 // ── Backup nudge state ───────────────────────────────────────────────────────
