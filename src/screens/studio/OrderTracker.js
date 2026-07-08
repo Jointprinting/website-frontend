@@ -40,7 +40,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs, normOrderNo, deriveCompanyKey } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1292,9 +1292,13 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
         </Typography>
 
         <Stack direction="row" alignItems="center" justifyContent="space-between" mt={1}>
-          {project.totalValue > 0 ? (
+          {/* The client-approved confirmation is the source of truth for the
+              total, exactly like the drawer + margin strip. Prefer it over the
+              stored totalValue scalar, which can lag if the confirmation is
+              edited after approval. */}
+          {(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : (Number(project.totalValue) || 0)) > 0 ? (
             <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
-              {fmt(project.totalValue)}
+              {fmt(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : project.totalValue)}
             </Typography>
           ) : (
             // A quote is worth $0 to the pipeline until the client actually
@@ -1331,9 +1335,7 @@ function computeNextAction(project) {
 
   const hasQuote = (project.quoteLines || []).length > 0;
   const hasConf = hasConfirmation(project.confirmation);
-  const cutoff = project.approvalSupersededAt ? new Date(project.approvalSupersededAt).getTime() : 0;
-  const evs = project.approvalEvents || [];
-  const approvedByClient = evs.some(e => e.kind === 'approved' && new Date(e.at).getTime() > cutoff);
+  const approvedByClient = clientApproved(project);   // superseded-aware — reverts on link reset
   const clientPicked = !!project.optionsPickedAt || (project.quoteLines || []).some(l => l.accepted);
   const isPaid = !!project.paid;
 
@@ -1957,9 +1959,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         {hasConfirmation(local.confirmation) ? (
           <>
             {/* Money is the approved confirmation's, not hand-typed — the quoter
-                is pre-approval options; the confirmation is the real order. */}
-            <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="From confirmation" />
-            <ReadonlyField label="Est COGS $"  value={fmt(confCogs(local.confirmation))}  hint="From confirmation" />
+                is pre-approval options; the confirmation is the real order.
+                Total = what the client approved; Est COGS = the quote's cost for
+                what they selected (an ESTIMATE — the PO covers print only, so
+                actuals come from the linked receipts below). */}
+            <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="Client-approved confirmation" />
+            <ReadonlyField label="Est COGS $"  value={fmt(confCogs(local.confirmation))}  hint="Estimate from the quote · actual = receipts" />
           </>
         ) : (
           <>
