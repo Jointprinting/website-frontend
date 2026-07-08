@@ -93,11 +93,18 @@ export function confLocationTax(conf) {
 // is byte-identical to a plain order. A legacy tax customLine is dropped when
 // per-location tax is active (double-tax guard); grand total snaps to cents.
 // Mirrors models/Order.js computeConfirmationTotals exactly.
-// A baked card-fee line — dropped from the total in 'client_choice' fee mode, where
-// the client's payment-method pick applies the fee once instead. Mirrors
-// models/Order.js isCardFeeCustomLine (label /card/i, never a tax line).
-function isCardFeeLine(l) {
-  return !!l && !isTaxCustomLine(l) && /card/i.test(String((l && l.label) || ''));
+// A baked payment-fee line (Card or ACH the owner added). Its presence is what
+// tells the approval page to hide its payment-method picker (so the fee is charged
+// once — via this line OR via the client's pick, never both). A discount / shipping
+// / tax line is NOT a payment fee. Mirrors models/Order.js isPaymentFeeCustomLine.
+function isPaymentFeeLine(l) {
+  if (!l || isTaxCustomLine(l)) return false;
+  const label = String(l.label || '');
+  return /card/i.test(label) || /\bach\b|bank transfer/i.test(label);
+}
+// Did the owner bake a payment fee? Drives the client picker (they pick ⟺ none).
+export function hasBakedPaymentFee(conf) {
+  return (conf?.customLines || []).some(isPaymentFeeLine);
 }
 
 export function computeConfTotals(conf) {
@@ -106,12 +113,13 @@ export function computeConfTotals(conf) {
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
   const totalUnits = items.reduce((s, it) => s + itemTotalQty(it), 0);
   const locationTax = confLocationTax(conf);
-  const feeMode = conf?.feeMode || 'owner_fee';
   let running = itemsSubtotal;
   const lines = [];
   (conf?.customLines || []).forEach(l => {
     if (locationTax.active && isTaxCustomLine(l)) return;         // double-tax guard
-    if (feeMode === 'client_choice' && isCardFeeLine(l)) return;  // fee-mode guard (client picker applies it once)
+    // A baked payment fee always applies here; the double-charge is prevented by
+    // hiding the client picker when one exists (see hasBakedPaymentFee), not by
+    // dropping the line.
     const isPct = !!l.isPercent;
     const amt = Number(l.amount) || 0;
     const value = isPct ? running * amt / 100 : amt;

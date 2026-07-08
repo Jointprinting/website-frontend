@@ -342,6 +342,13 @@ export default function DealsView({
   const wonValue = all.filter(isWonDeal).reduce((s, d) => s + (Number(d.value) || 0), 0);
   const openCount = all.filter(isOpenDeal).length;
 
+  // Once the "set up deals from my orders" migration has run, hide its big panel
+  // (the owner doesn't need "Set up" / "Undo this setup" cluttering the board every
+  // day). A small "Deal setup" toggle in the summary band brings it back on demand
+  // — so re-run + undo stay reachable, just out of the way.
+  const migrationRan = (migrateStatus?.migratedDeals || 0) > 0;
+  const [setupOpen, setSetupOpen] = React.useState(false);
+
   // ── Drag state (mirrors PipelineView) ───────────────────────────────────────
   const [dragState, setDragState] = React.useState({ activeKey: null, overCol: null });
   const draggedRef = React.useRef(null);
@@ -393,13 +400,16 @@ export default function DealsView({
 
   return (
     <Stack spacing={2} sx={{ height: '100%' }}>
-      {/* Reversible seed-from-orders panel */}
-      <MigratePanel
-        status={migrateStatus}
-        onPreview={onPreviewMigrate}
-        onRun={onRunMigrate}
-        onUndo={onUndoMigrate}
-      />
+      {/* Reversible seed-from-orders panel — shown on first run, then tucked away
+          (toggled from the summary band) once deals have been seeded. */}
+      {(!migrationRan || setupOpen) && (
+        <MigratePanel
+          status={migrateStatus}
+          onPreview={onPreviewMigrate}
+          onRun={onRunMigrate}
+          onUndo={onUndoMigrate}
+        />
+      )}
 
       {/* Summary band */}
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: { xs: 2, sm: 4 },
@@ -411,6 +421,16 @@ export default function DealsView({
         <Metric label="Won value" value={fmtMoney0(wonValue)} tone={D.green} />
         <Box sx={{ flexGrow: 1 }} />
         {loading && <CircularProgress size={18} sx={{ color: D.green }} />}
+        {/* Quiet access to the seed/undo panel after it's run (kept off the board). */}
+        {migrationRan && (
+          <Button
+            onClick={() => setSetupOpen((v) => !v)} size="small"
+            sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12, color: D.faint, borderRadius: 999,
+              '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.04)' } }}
+          >
+            {setupOpen ? 'Hide setup' : 'Deal setup'}
+          </Button>
+        )}
         <Button
           onClick={onNewDeal} variant="contained" startIcon={<AddIcon />}
           sx={{ ...dropPrimaryBtn, ml: { xs: 0, sm: 1 } }}

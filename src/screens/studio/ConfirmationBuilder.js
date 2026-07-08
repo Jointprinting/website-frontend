@@ -464,6 +464,10 @@ function Editor({ local, update, project, mockups, mockupMap }) {
     update({ customLines: [...lines, line] });
   };
   const isCardFeeLine = (l) => !!l && !l.isTax && /card/i.test(String(l.label || ''));
+  const isAchFeeLine = (l) => !!l && !l.isTax && /\bach\b|bank transfer/i.test(String(l.label || ''));
+  // Did the owner bake a payment fee (Card or ACH)? Drives the helper note + (on the
+  // client side) whether the payment picker shows. Mirrors models/Order.js.
+  const hasBakedPaymentFee = (conf) => ((conf && conf.customLines) || []).some((l) => isCardFeeLine(l) || isAchFeeLine(l));
   const updateItem = (idx, patch) =>
     update({ items: local.items.map((it, i) => i === idx ? { ...it, ...patch } : it) });
   const removeItem = (idx) =>
@@ -574,21 +578,26 @@ function Editor({ local, update, project, mockups, mockupMap }) {
       <Section title="Add-on lines"
         action={
           <Stack direction="row" gap={0.25} alignItems="center">
-            {/* One-tap presets for the two add-ons used most. Both are percent
-                lines, so they apply to the running subtotal in order. */}
-            <Tooltip title={(local.feeMode || 'owner_fee') === 'client_choice'
-              ? 'Client picks the payment method — the fee is applied there, not baked in'
-              : 'Bake a 2.99% card fee into the total'}>
-              <span>
-                <Button size="small" disabled={(local.feeMode || 'owner_fee') === 'client_choice'}
-                  onClick={() => addPresetLine({ label: 'Credit card fee', amount: 2.99, isPercent: true }, isCardFeeLine)}
-                  sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
-                    border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
-                    '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 },
-                    '&:hover': { color: D.green, borderColor: D.lineHi } }}>
-                  + Card&nbsp;fee
-                </Button>
-              </span>
+            {/* One-tap presets. Adding a Card or ACH fee here bakes it into the total
+                AND hides the client's payment picker (so the fee is charged once —
+                your baked line). Add neither and the client picks + pays the fee. */}
+            <Tooltip title="Bake a 2.99% credit-card fee into the total (hides the client payment picker)">
+              <Button size="small"
+                onClick={() => addPresetLine({ label: 'Credit card fee', amount: 2.99, isPercent: true }, isCardFeeLine)}
+                sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                  border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                  '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+                + Card&nbsp;fee
+              </Button>
+            </Tooltip>
+            <Tooltip title="Bake a 1% ACH / bank-transfer fee into the total (hides the client payment picker)">
+              <Button size="small"
+                onClick={() => addPresetLine({ label: 'ACH fee', amount: 1, isPercent: true }, isAchFeeLine)}
+                sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                  border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                  '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+                + ACH&nbsp;fee
+              </Button>
             </Tooltip>
             {/* Suppress the single tax preset whenever per-location tax is in
                 play, so a job can never be taxed both ways. */}
@@ -615,32 +624,16 @@ function Editor({ local, update, project, mockups, mockupMap }) {
           </Stack>
         }>
         <Stack gap={0.6}>
-          {/* Fee model — mutually exclusive, so the card fee is never charged twice.
-              'I add the %'      → you bake a card fee (the "+ Card fee" preset) into
-                                   the Total; the client sees NO payment picker.
-              'Client picks pay' → no baked fee; the client chooses Card (2.99%) or
-                                   ACH (1%) on the approval page and THAT applies the
-                                   fee once. Switching here strips any baked card-fee
-                                   line so the two can't coexist. */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.75 }}>
-            <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.25 }}>
-              Card fee
+          {/* Fee model, derived (never double-charges): if you baked a Card/ACH fee
+              above, the client sees no payment picker (the fee's in the total); if you
+              didn't, the client picks how to pay and the fee is added then. Discounts
+              don't count as a payment fee. */}
+          <Box sx={{ mb: 0.75, px: 0.25 }}>
+            <Typography sx={{ color: hasBakedPaymentFee(local) ? D.green : D.faint, fontSize: 11.5, lineHeight: 1.5 }}>
+              {hasBakedPaymentFee(local)
+                ? '✓ Payment fee added — your client won’t see a payment picker (the fee is in the total).'
+                : 'No payment fee added — your client will pick Card (+2.99%) or ACH (+1%) at approval, and the fee is added then.'}
             </Typography>
-            {[{ v: 'owner_fee', label: 'I add the %' }, { v: 'client_choice', label: 'Client picks payment' }].map((opt) => {
-              const active = (local.feeMode || 'owner_fee') === opt.v;
-              return (
-                <Button key={opt.v} size="small"
-                  onClick={() => (opt.v === 'client_choice'
-                    ? update({ feeMode: 'client_choice', customLines: (local.customLines || []).filter((l) => !isCardFeeLine(l)) })
-                    : update({ feeMode: 'owner_fee' }))}
-                  sx={{ fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 1, borderRadius: 999,
-                    border: `1px solid ${active ? D.lineHi : D.line}`, color: active ? D.green : D.muted,
-                    bgcolor: active ? 'rgba(74,222,128,0.10)' : 'transparent',
-                    '&:hover': { color: D.green, borderColor: D.lineHi } }}>
-                  {opt.label}
-                </Button>
-              );
-            })}
           </Box>
           {(local.customLines || []).map((cl, i) => (
             <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 50px 28px',
