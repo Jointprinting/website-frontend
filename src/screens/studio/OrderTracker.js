@@ -40,7 +40,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, confCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1598,6 +1598,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   if (!project || !local) return null;
 
   const meta = STATUS_META[local.status] || STATUS_META.quoted;
+  // Est COGS is derived LIVE from the quoter's cost side (blank + print +
+  // setup/ship for the selected lines) — never from the confirmation, which is
+  // the client-facing doc with the markup baked in. Fall back to the stored
+  // Order.cogs scalar (also quote-derived on the backend) for import-only /
+  // legacy orders that carry no quote lines. This one value feeds the header
+  // margin strip, the Est COGS field, and the actual-vs-estimate strip so they
+  // can never disagree. Actuals come from linked receipts (PO = print only).
+  const estCogs = quoteCogs(local.quoteLines, local.setupCost, local.shippingCost) || (Number(local.cogs) || 0);
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
   // Stage a change against the CURRENT project. If something for another project
@@ -1699,13 +1707,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         </Box>
         <Box sx={{ flex: 1 }} />
         {(() => {
-          // SAME source as the Total/Est-COGS fields below: once a confirmation
-          // exists it is the truth for revenue + estimated COGS — the stored
-          // totalValue/cogs can lag it (a stale cogs here once showed a -215%
-          // margin while the visible Est COGS read $0.00).
+          // SAME sources as the Total/Est-COGS fields below so nothing disagrees:
+          // Total = the client-approved confirmation's revenue (else the stored
+          // totalValue); Est COGS = the quote's cost basis (the shared `estCogs`
+          // above), NOT the confirmation — the confirmation carries the marked-up
+          // client price, so a COGS off it would understate cost and inflate the
+          // margin (the old path once read $0.00 COGS → a bogus 100% margin).
           const hasConf = hasConfirmation(local.confirmation);
           const total = hasConf ? confRevenue(local.confirmation) : (Number(local.totalValue) || 0);
-          const estCogs = hasConf ? confCogs(local.confirmation) : (Number(local.cogs) || 0);
           // The receipts are the source of truth: when any COGS receipt is linked,
           // the margin headline uses the ACTUAL cost; otherwise it falls back to
           // the estimate (and we flag that no receipts are in yet). hasActual gates
@@ -1964,7 +1973,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 what they selected (an ESTIMATE — the PO covers print only, so
                 actuals come from the linked receipts below). */}
             <ReadonlyField label="Total $" value={fmt(confRevenue(local.confirmation))} hint="Client-approved confirmation" />
-            <ReadonlyField label="Est COGS $"  value={fmt(confCogs(local.confirmation))}  hint="Estimate from the quote · actual = receipts" />
+            <ReadonlyField label="Est COGS $"  value={fmt(estCogs)}  hint="Estimate from the quote (cost, no markup) · actual = receipts" />
           </>
         ) : (
           <>
@@ -1981,7 +1990,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             shown next to the estimate so a gap (or a missing receipt) is obvious.
             The receipts ARE the source of truth; the estimate is the plan. */}
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <ActualCostStrip actual={actual} estCogs={hasConfirmation(local.confirmation) ? confCogs(local.confirmation) : Number(local.cogs) || 0} orderNumber={local.orderNumber}
+          <ActualCostStrip actual={actual} estCogs={estCogs} orderNumber={local.orderNumber}
             active={local.paid === true || ['placed', 'in_production', 'shipped', 'delivered'].includes(local.status)} />
         </Box>
 
