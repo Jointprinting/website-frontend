@@ -64,8 +64,13 @@ const previewUrl = (slug) => `${window.location.origin}/webworks/p/${slug}`;
 // Starter `data` bag for a new site — mirrors the backend JpwSite data shape.
 // businessName is seeded from the site name; everything else starts empty so
 // the templates hide those sections until the owner fills them in.
-const seedData = (businessName, template) => ({
+const seedData = (businessName, template, businessType = '') => ({
   businessName,
+  // Travels WITH the site so every template can render business-type-topical
+  // visuals (a plumbing site reads as plumbing, not generic stock). Mirrors the
+  // top-level JpwSite.businessType; kept here so the render path — which only
+  // receives `data` — can reach it.
+  businessType,
   tagline: '', heroHeadline: '', ctaLabel: '',
   phone: '', email: '', serviceArea: '', address: '',
   hours: [{ days: 'Mon – Fri', hours: '9:00 AM – 5:00 PM' }],
@@ -74,7 +79,8 @@ const seedData = (businessName, template) => ({
   testimonials: [],
   paletteId: template?.palettes?.[0]?.id || '',
   established: '', license: '',
-  // Empty = the template's curated placeholder photos; owner URLs override.
+  // Empty = the template paints its own crafted, on-brand TOPICAL scene (no
+  // generic stock); owner photo URLs override slot-by-slot.
   photos: { hero: '', gallery: ['', '', ''] },
 });
 
@@ -798,7 +804,7 @@ export default function JpwSitesTab({ token }) {
   const createSite = async ({ name, businessType, template }) => {
     setCreating(true);
     try {
-      const body = { name, businessType, templateId: template.id, data: seedData(name, template) };
+      const body = { name, businessType, templateId: template.id, data: seedData(name, template, businessType) };
       const { data } = await axios.post(API, body, authHdr);
       const site = data?.site;
       if (site) {
@@ -832,6 +838,7 @@ export default function JpwSitesTab({ token }) {
         ...cur,
         ...copy,                              // written copy fields replace the old ones
         businessName: cur.businessName || draft.name, // keep the owner's business name
+        businessType: cur.businessType || draft.businessType || '', // keep the topical key
         paletteId: cur.paletteId,             // keep the chosen palette
         photos: cur.photos,                   // keep photo URLs (never AI-generated)
       };

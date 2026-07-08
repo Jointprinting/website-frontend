@@ -75,6 +75,49 @@ export const txt = (v) => (v == null ? '' : String(v).trim());
 export const rows = (arr, ...keys) =>
   Array.isArray(arr) ? arr.filter((r) => r && keys.some((k) => txt(r[k]) !== '')) : [];
 
+// ── Topic (business-type → on-brand topical motif) ───────────────────────────
+// Maps a free-text businessType ("Emergency Plumbing", "Plumber", "HVAC & Heating")
+// to a normalized `kind` (which crafted glyph/motif to draw) plus a short display
+// `word` (e.g. a hero watermark). Keyword-matched + ordered so the more specific
+// wins (barber before the broader salon; pizza before the broader bar). This is
+// what lets a photo-less template read as *its* trade instead of generic stock.
+// `kind: 'generic'` when nothing matches. PURE + unit-tested.
+const TOPICS = [
+  { kind: 'plumbing',    word: 'Plumbing',    re: /plumb/i },
+  { kind: 'hvac',        word: 'HVAC',        re: /hvac|heating|cooling|furnace/i },
+  { kind: 'electrical',  word: 'Electric',    re: /electric/i },
+  { kind: 'roofing',     word: 'Roofing',     re: /roof/i },
+  { kind: 'landscaping', word: 'Landscaping', re: /landscap|lawn|garden|\btree\b|nursery/i },
+  { kind: 'auto',        word: 'Auto',        re: /auto|mechanic|\bcar\b|tire|collision/i },
+  { kind: 'contractor',  word: 'Build',       re: /contract|construct|remodel|handyman|carpen|paint/i },
+  { kind: 'pizza',       word: 'Pizzeria',    re: /pizz/i },
+  { kind: 'bakery',      word: 'Bakery',      re: /bak|pastry|bread|donut|cake/i },
+  { kind: 'cafe',        word: 'Cafe',        re: /caf|coffee|espresso|roaster/i },
+  { kind: 'bar',         word: 'Bar',         re: /\bbar\b|pub|tavern|brew|cocktail|lounge/i },
+  { kind: 'dining',      word: 'Kitchen',     re: /restaur|kitchen|grill|diner|eatery|\bfood\b|cater|bistro|deli/i },
+  { kind: 'barber',      word: 'Barber',      re: /barber/i },
+  { kind: 'salon',       word: 'Salon',       re: /salon|\bhair\b|stylist|blowout/i },
+  { kind: 'nails',       word: 'Nails',       re: /nail|manicure/i },
+  { kind: 'spa',         word: 'Spa',         re: /spa|massage|facial|\bwax\b|wellness/i },
+  { kind: 'yoga',        word: 'Studio',      re: /yoga|pilates|fitness|\bgym\b|barre/i },
+  { kind: 'law',         word: 'Law',         re: /\blaw\b|attorney|legal|counsel/i },
+  { kind: 'accounting',  word: 'Accounting',  re: /account|\btax\b|bookkeep|\bcpa\b|payroll/i },
+  { kind: 'insurance',   word: 'Insurance',   re: /insur/i },
+  { kind: 'realestate',  word: 'Realty',      re: /real estate|realty|realtor|properties|broker/i },
+  { kind: 'finance',     word: 'Advisory',    re: /financ|wealth|invest|advisor|capital/i },
+  { kind: 'consulting',  word: 'Consulting',  re: /consult|agency|strateg|marketing/i },
+  { kind: 'plants',      word: 'Plants',      re: /plant|florist|flower|greenhouse/i },
+  { kind: 'books',       word: 'Books',       re: /book|library|\bread\b|stationer/i },
+  { kind: 'records',     word: 'Records',     re: /record|vinyl|\bmusic\b/i },
+  { kind: 'boutique',    word: 'Boutique',    re: /boutique|apparel|cloth|fashion|vintage|thrift/i },
+  { kind: 'gifts',       word: 'Goods',       re: /gift|home goods|decor|market|candle|jewel/i },
+];
+export function topicOf(businessType) {
+  const s = String(businessType || '');
+  const hit = TOPICS.find((t) => t.re.test(s));
+  return hit ? { kind: hit.kind, word: hit.word } : { kind: 'generic', word: s.trim() };
+}
+
 // ── Photos ───────────────────────────────────────────────────────────────────
 
 // Owner-supplied photo URLs win slot-by-slot; empty inputs fall back to the
