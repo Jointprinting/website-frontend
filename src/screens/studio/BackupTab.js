@@ -331,7 +331,7 @@ export default function BackupTab({ token, onBack }) {
                   <Alert severity="warning" sx={{ mb: 1.5 }}>
                     Off-site auto-backups look stopped —{' '}
                     {drive.lastBackupAt
-                      ? `last successful push was ${fmtRelative(drive.lastBackupAt)} (over ${drive.staleAfterDays ?? 2}d ago).`
+                      ? `last successful push was ${fmtRelative(drive.lastBackupAt)} (over ${drive.staleAfterDays ?? 9}d ago).`
                       : 'none has run yet.'}{' '}
                     Run one now to confirm Drive is working before you leave.
                   </Alert>
@@ -364,7 +364,7 @@ export default function BackupTab({ token, onBack }) {
                   </Button>
                 </Stack>
                 <Typography sx={{ color: B.muted, fontSize: 11, mt: 1.2 }}>
-                  {`Auto-runs ${(drive.schedule || 'nightly').toLowerCase()}.`} Saved to a “Joint Printing Backups” folder in your Drive.
+                  {`Auto-runs ${(drive.schedule || 'weekly').toLowerCase()}.`} Saved to a “Joint Printing Backups” folder in your Drive.
                 </Typography>
               </Box>
             )}
