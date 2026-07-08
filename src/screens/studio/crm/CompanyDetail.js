@@ -34,9 +34,10 @@ import {
 } from '../_shared';
 import {
   StageChip, StageProgress, Eyebrow, TagChips, CRM_STAGES, PRE_CUSTOMER_STAGES, stageMeta,
-  kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage,
+  kindMeta, dateInputValue, followUpStatus, telHref, fmtMoney0, isWonStage, isClientFromDeals,
 } from './_crm';
 import { StatusChip, enrollmentStatusMeta } from '../outreach/_outreach';
+import CompanyDealsPanel from './CompanyDealsPanel';
 
 // The COGS sub-hint under the Profit metric. The headline cost is the ACTUAL one
 // from the receipts linked to this company's orders (finance.cogs — what the
@@ -533,8 +534,8 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor }) {
-  // data = { client, orders, pos, finance, isCustomer }
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal }) {
+  // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
   const pos = data?.pos || [];
@@ -542,9 +543,11 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   const finance = data?.finance || null;
   // Cold-email sequences this company is (or was) enrolled in (server-joined).
   const outreach = data?.outreach || [];
-  // Authoritative "is a customer" from order reality (≥1 linked order), even if
-  // the stored stage is stale. Server returns it at the top level and on client.
-  const isCustomer = data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0);
+  // This business's deals (loaded alongside the record). The deal model is now the
+  // client-making authority: ≥1 won deal ⇒ a client, even before an order lands.
+  const deals = data?.deals || [];
+  // Authoritative "is a client": order reality (≥1 linked order) OR a won deal.
+  const isCustomer = (data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0)) || isClientFromDeals(deals);
 
   // Local editable copies for text fields so typing doesn't fight the round-trip.
   const [name, setName] = React.useState('');
@@ -624,15 +627,15 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             />
             <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
               <StageChip stage={client.stage} glow />
-              {/* Order reality: a company with ≥1 order is a Customer, shown even
-                  if the stored stage hasn't caught up. Never call an order-having
-                  company a Lead. */}
+              {/* Client reality: a business with ≥1 order OR a won deal is a
+                  CLIENT, shown even if the stored stage hasn't caught up. Never
+                  call an order-having / deal-winning company a Lead. */}
               {isCustomer && !isWonStage(client.stage) && (
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
                   px: 1, py: 0.3, borderRadius: 999, bgcolor: 'rgba(45,212,191,0.14)',
                   color: '#2dd4bf', border: '1px solid rgba(45,212,191,0.4)',
                   fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>
-                  <StarRateRoundedIcon sx={{ fontSize: 13 }} /> CUSTOMER
+                  <StarRateRoundedIcon sx={{ fontSize: 13 }} /> CLIENT
                 </Box>
               )}
               <Typography sx={{ color: D.faint, fontSize: 12, ...mono }}>{client.companyKey}</Typography>
@@ -694,6 +697,23 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
       {/* Progress / level — the dopamine spine. Lights up as the deal climbs the
           funnel; a Customer/Won earns the full green bar + a celebratory banner. */}
       <ProgressCard stage={client.stage} isCustomer={isCustomer} />
+
+      {/* Deals — this business's opportunities, each its own card. Winning a deal
+          (its first) is what makes them a Client. Only rendered when the parent
+          wires the deal actions (keeps the panel self-contained + testable). */}
+      {onWinDeal && (
+        <CompanyDealsPanel
+          deals={deals}
+          hasOrders={orders.length > 0}
+          onNew={onNewDeal}
+          onWin={onWinDeal}
+          onLose={onLoseDeal}
+          onReopen={onReopenDeal}
+          onOpen={onOpenDeal}
+          onEdit={onEditDeal}
+          onRemove={onRemoveDeal}
+        />
+      )}
 
       {/* Outreach — cold-email sequences this company is (or was) in. Read-only
           here (the actions live in the Outreach tab); the per-send touches are

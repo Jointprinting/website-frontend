@@ -119,6 +119,60 @@ export const BOARD_COLUMN_TO_ORDER_STATUS = {
   cancelled:  'cancelled',
 };
 
+// ── Deal pipeline vocabulary ──────────────────────────────────────────────────
+// A DEAL is one opportunity/job for a business — the unit the sales pipeline now
+// moves (models/Deal.js on the API). A business (companyKey) has MANY deals, and
+// its "client" status is DERIVED from them (≥1 won deal), replacing the old
+// hand-set won/customer company stage. MIRRORS models/Deal.js DEAL_STAGES — keep
+// the order + values in sync. Ordered open → closed:
+//   qualifying — chasing the order details from a (often cold) lead, pre-quote
+//   quoted     — a quote/order exists (shown as "Quote sent")
+//   won / lost — closed
+export const DEAL_STAGES = ['qualifying', 'quoted', 'won', 'lost'];
+export const DEAL_OPEN_STAGES = ['qualifying', 'quoted'];
+// Board lanes: the forward pipeline across the top; Lost tucked into a closed lane.
+export const DEAL_BOARD_ACTIVE = ['qualifying', 'quoted', 'won'];
+export const DEAL_BOARD_CLOSED = ['lost'];
+
+export const DEAL_STAGE_META = {
+  qualifying: { label: 'Qualifying', color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+  quoted:     { label: 'Quote sent', color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  won:        { label: 'Won',        color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
+  lost:       { label: 'Lost',       color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+};
+export const dealStageMeta = (s) => DEAL_STAGE_META[s] || DEAL_STAGE_META.qualifying;
+
+// A deal that "wins" — the celebratory accent, and the rung that makes a client.
+export const isWonDeal = (d) => !!(d && !d.archived && d.stage === 'won');
+// A deal still in play (a live opportunity), not yet closed.
+export const isOpenDeal = (d) => !!(d && !d.archived && DEAL_OPEN_STAGES.includes(d.stage));
+
+// Is this business a CLIENT by the new rule? ≥1 non-archived won deal. MIRRORS
+// services/dealService.js isClientFromDeals — the single source of truth for
+// "client" once the deal model is the derivation authority.
+export const isClientFromDeals = (deals) =>
+  (Array.isArray(deals) ? deals : []).some(isWonDeal);
+
+// Which deal stage an Order.status maps to — MIRRORS models/Deal.js
+// dealStageFromOrderStatus (placed+ = won; quoted/approved = quoted; cancelled =
+// lost). Keep in sync.
+export const dealStageFromOrderStatus = (status) => {
+  switch (String(status || '')) {
+    case 'placed': case 'in_production': case 'shipped': case 'delivered': return 'won';
+    case 'cancelled': return 'lost';
+    default: return 'quoted';
+  }
+};
+
+// A human title for a deal that has none — mirrors the server's orderDealTitle,
+// so a seeded deal reads the same on the card as it did in the migration plan.
+export const dealTitle = (d) => {
+  if (!d) return 'Deal';
+  if (d.title) return d.title;
+  const n = d.orderNumber || d.projectNumber;
+  return n ? `Order #${n}` : (d.companyName || 'Deal');
+};
+
 // ── Funnel / level progression (the "dopamine" spine) ─────────────────────────
 // The forward sales journey as ordered LEVELS — what the progress indicator
 // climbs. Won and Customer are the same victory rung (Customer = Won + has an

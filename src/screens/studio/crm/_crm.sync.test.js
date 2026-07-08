@@ -15,6 +15,10 @@ import {
   BOARD_COLUMNS,
   BOARD_CLOSED_COLUMNS,
   BOARD_PROBABILITY,
+  DEAL_STAGES,
+  dealStageFromOrderStatus,
+  isClientFromDeals,
+  dealTitle,
 } from './_crm';
 
 test('CRM_STAGES mirrors models/Client.js (order matters)', () => {
@@ -39,4 +43,36 @@ test('BOARD_PROBABILITY mirrors controllers/crm.js', () => {
     production: 0.9, shipped: 0.95, delivered: 1,
     lost: 0, dormant: 0, cancelled: 0,
   });
+});
+
+test('DEAL_STAGES mirrors models/Deal.js (order matters)', () => {
+  expect(DEAL_STAGES).toEqual(['qualifying', 'quoted', 'won', 'lost']);
+});
+
+test('dealStageFromOrderStatus mirrors models/Deal.js', () => {
+  expect(dealStageFromOrderStatus('placed')).toBe('won');
+  expect(dealStageFromOrderStatus('in_production')).toBe('won');
+  expect(dealStageFromOrderStatus('shipped')).toBe('won');
+  expect(dealStageFromOrderStatus('delivered')).toBe('won');
+  expect(dealStageFromOrderStatus('cancelled')).toBe('lost');
+  expect(dealStageFromOrderStatus('quoted')).toBe('quoted');
+  expect(dealStageFromOrderStatus('approved')).toBe('quoted');
+  expect(dealStageFromOrderStatus('')).toBe('quoted');
+});
+
+test('isClientFromDeals — ≥1 non-archived won deal ⇒ client', () => {
+  expect(isClientFromDeals([])).toBe(false);
+  expect(isClientFromDeals([{ stage: 'qualifying' }, { stage: 'quoted' }])).toBe(false);
+  expect(isClientFromDeals([{ stage: 'won' }])).toBe(true);
+  // An archived won deal doesn't count (mirrors services/dealService.js).
+  expect(isClientFromDeals([{ stage: 'won', archived: true }])).toBe(false);
+  expect(isClientFromDeals([{ stage: 'lost' }, { stage: 'won' }])).toBe(true);
+});
+
+test('dealTitle falls back to order number, then company', () => {
+  expect(dealTitle({ title: 'Spring hoodies' })).toBe('Spring hoodies');
+  expect(dealTitle({ orderNumber: '138' })).toBe('Order #138');
+  expect(dealTitle({ projectNumber: '42' })).toBe('Order #42');
+  expect(dealTitle({ companyName: 'Acme Co' })).toBe('Acme Co');
+  expect(dealTitle(null)).toBe('Deal');
 });
