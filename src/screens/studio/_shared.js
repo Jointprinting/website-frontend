@@ -273,6 +273,23 @@ export function confCogs(conf) {
   }, 0);
 }
 
+// Has the CLIENT approved the confirmation for the CURRENT cycle?
+// The single, superseded-aware source of truth for the owner-side "approved"
+// signal. An approval only counts if its event is newer than
+// approvalSupersededAt — so resetting/rotating/reopening the client link
+// (which bumps supersededAt) immediately reverts this to false, exactly like
+// the client-facing page. Do NOT read Order.status === 'approved' for this:
+// that stored lifecycle scalar is set once at approval and never reverts, so a
+// reset would leave it falsely "approved". Mirrors backend
+// controllers/approval.js _currentApprovalStatus.
+export function clientApproved(project) {
+  if (!project) return false;
+  const cutoff = project.approvalSupersededAt ? new Date(project.approvalSupersededAt).getTime() : 0;
+  return (project.approvalEvents || []).some(
+    (e) => e && e.kind === 'approved' && new Date(e.at).getTime() > cutoff,
+  );
+}
+
 export const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 

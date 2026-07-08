@@ -10,7 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Stack, Typography, Tooltip } from '@mui/material';
 import axios from 'axios';
 import config from '../../config.json';
-import { B, hasConfirmation } from './_shared';
+import { B, hasConfirmation, clientApproved } from './_shared';
 
 const STATUS_RANK = { quoted: 0, approved: 1, placed: 2, in_production: 3, shipped: 4, delivered: 5, cancelled: -1 };
 
@@ -31,10 +31,7 @@ export default function FlowPipeline({ project, authHdr, onOpenQuote, onOpenConf
   const rank = STATUS_RANK[project.status] ?? 0;
   const cancelled = project.status === 'cancelled';
 
-  const approvedByClient = (project.approvalEvents || []).some(e => {
-    const cutoff = project.approvalSupersededAt ? new Date(project.approvalSupersededAt).getTime() : 0;
-    return e.kind === 'approved' && new Date(e.at).getTime() > cutoff;
-  });
+  const approvedByClient = clientApproved(project);
 
   const steps = [
     {
@@ -55,8 +52,16 @@ export default function FlowPipeline({ project, authHdr, onOpenQuote, onOpenConf
       hint: 'Open the confirmation builder',
     },
     {
+      // Foolproof against link resets: light green ONLY on a current-cycle
+      // client approval (superseded-aware), or if the order has genuinely
+      // advanced PAST approved into production+ (rank >= 2 = placed/…). We do
+      // NOT accept a bare status === 'approved' (rank 1): that stored scalar is
+      // set once and never reverts, so resetting/reopening the client link
+      // would otherwise leave this falsely green while the client sees a fresh
+      // ask. rank >= 2 only happens after a real approval + payment, so
+      // legacy/manually-advanced orders still show the step done.
       key: 'approved', label: 'Approved',
-      done: approvedByClient || rank >= 1,
+      done: approvedByClient || rank >= 2,
       hint: 'Client signed off the confirmation page',
     },
     {
