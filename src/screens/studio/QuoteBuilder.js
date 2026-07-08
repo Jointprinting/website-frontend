@@ -591,6 +591,13 @@ function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, o
           <TextField size="small" type="number" value={line.unitPrice ?? ''}
             onChange={e => onPatch({ unitPrice: e.target.value })} sx={{ ...tf, width: 130 }} />
         </QF>
+        {/* Optional lead time for THIS option. Purely informational — never
+            touches pricing. Left blank, it shows nothing to the client; typed,
+            it appears as "~N weeks" on their quote/approval page. */}
+        <QF label="Turnaround (wks)">
+          <TextField size="small" type="number" value={line.turnaroundWeeks || ''} placeholder="—"
+            onChange={e => onPatch({ turnaroundWeeks: e.target.value })} sx={{ ...tf, width: 120 }} />
+        </QF>
         <Box>
           <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', mb: 0.5 }}>
             Profit / unit
