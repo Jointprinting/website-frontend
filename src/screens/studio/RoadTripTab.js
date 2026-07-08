@@ -378,6 +378,12 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [showAddCustomPin, setShowAddCustomPin] = React.useState(false);
   const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', notes: '', customType: 'friend' });
 
+  // TODAY cockpit — where you sleep tonight (primary/backup sleep slots on the
+  // road-trip leads) + how many CRM follow-ups are due today. Both are read-only
+  // glances on the Today tab; the follow-up count deep-links into the CRM queue.
+  const [sleepSlots, setSleepSlots] = React.useState({ primary: null, backup: null });
+  const [followUps, setFollowUps] = React.useState({ count: 0, loaded: false });
+
   // TO-DO modal
   const [todoTarget, setTodoTarget] = React.useState(null);
   const [todoForm, setTodoForm] = React.useState({ chipId: 'mockups', note: '', date: tomorrowISO() });
@@ -390,8 +396,8 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [locationResults, setLocationResults] = React.useState([]);
   const [locationSearching, setLocationSearching] = React.useState(false);
 
-  // Mobile
-  const [mobileTab, setMobileTab] = React.useState('map');
+  // Mobile — land on TODAY (the day's cockpit), not the raw map.
+  const [mobileTab, setMobileTab] = React.useState('today');
   const [outcomeStopId, setOutcomeStopId] = React.useState(null);
   const [pendingDeleteId, setPendingDeleteId] = React.useState(null);
   const pendingDeleteTimerRef = React.useRef(null);
@@ -776,8 +782,30 @@ export default function RoadTripTab({ token, onNavigate }) {
     if (!token) return;
     refreshRun();
     axios.get(`${api}/api/roadtrip/leads`, authHdr)
-      .then((r) => setCustomPins((r.data || []).filter((l) => l.source === 'manual')))
+      .then((r) => {
+        const leads = r.data || [];
+        setCustomPins(leads.filter((l) => l.source === 'manual'));
+        // Tonight's sleep: the ACTIVE slots the owner set (isActiveSleep), one
+        // primary + one backup. Falls back to any role-tagged slot so a plan
+        // made without the "tonight" toggle still surfaces.
+        const active = leads.filter((l) => l.isActiveSleep && l.sleepRole);
+        const pool = active.length ? active : leads.filter((l) => l.sleepRole);
+        setSleepSlots({
+          primary: pool.find((l) => l.sleepRole === 'primary') || null,
+          backup:  pool.find((l) => l.sleepRole === 'backup')  || null,
+        });
+      })
       .catch(() => {});
+    // CRM follow-ups needing action now — overdue + due today (the nightly
+    // follow-up discipline). Deep-links into the CRM Today queue. Shape:
+    // { summary: { overdue, dueToday, total }, rows }.
+    axios.get(`${api}/api/crm/today`, authHdr)
+      .then((r) => {
+        const s = (r.data && r.data.summary) || {};
+        const count = (Number(s.overdue) || 0) + (Number(s.dueToday) || 0);
+        setFollowUps({ count, loaded: true });
+      })
+      .catch(() => setFollowUps({ count: 0, loaded: true }));
   }, [token, api, authHdr, refreshRun]);
 
   const addDispToRun = React.useCallback(async (d) => {
@@ -1227,6 +1255,126 @@ export default function RoadTripTab({ token, onNavigate }) {
     </PanelSection>
   );
 
+  // ── TODAY cockpit surface — the whole day at a glance: the durable route
+  //    (your saved run + reopenable Google Maps legs), where you sleep tonight,
+  //    and how many follow-ups are due. Composes existing data + handlers only.
+  const nextStop = (run?.stops || []).find((s) => s.status !== 'visited') || null;
+  const sleepNav = (l) => (l && isFinite(l.lat) && isFinite(l.lng)
+    ? `https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}` : null);
+  const todayHdr = (label, right) => (
+    <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 0.9, mt: 0.5 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.6, color: TERM.muted }}>{label}</Typography>
+      {right || null}
+    </Box>
+  );
+  const todayPanel = (
+    <Box sx={{ mb: 2.5 }}>
+      {/* Route today — the durable run + reopenable legs (never rewrite in gmaps) */}
+      {todayHdr("ROUTE TODAY", run?.stops?.length ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: 9, fontWeight: 800, color: TERM.green }}>
+          {visitedCount}/{run.stops.length} done{runMiles != null ? ` · ~${runMiles}mi` : ''}
+        </Typography>
+      ) : null)}
+      {run?.stops?.length ? (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.green, mb: 1, display: 'flex', alignItems: 'center', gap: 0.6 }}>
+            <Box component="span">✓</Box> Saved — {run.stops.length} stops. Reopen the legs anytime; nothing to rewrite.
+          </Typography>
+          {nextStop && (
+            <Box sx={{ border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, p: 1, mb: 1, bgcolor: 'rgba(74,222,128,0.04)' }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 1, color: TERM.muted }}>NEXT STOP</Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: TERM.text, mt: 0.2 }}>{nextStop.name}</Typography>
+            </Box>
+          )}
+          {gmapsLegs.length > 0 && (
+            <Stack spacing={0.5} sx={{ mb: 1 }}>
+              {gmapsLegs.map((leg, i) => (
+                <Box key={leg.url} role="button" tabIndex={0}
+                  onClick={() => window.open(leg.url, '_blank', 'noopener')}
+                  sx={{
+                    fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                    px: 1, py: 0.7, cursor: 'pointer', borderRadius: 0.5,
+                    display: 'flex', alignItems: 'center', gap: 0.75,
+                    color: TERM.cyan, border: `1px solid ${TERM.cyan}`,
+                    '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+                  }}>
+                  <Box component="span">▶</Box>
+                  {gmapsLegs.length > 1 ? `OPEN LEG ${i + 1}/${gmapsLegs.length}` : 'OPEN IN GOOGLE MAPS'}
+                  <Box component="span" sx={{ ml: 'auto', color: TERM.muted }}>{leg.count} stop{leg.count === 1 ? '' : 's'}</Box>
+                </Box>
+              ))}
+            </Stack>
+          )}
+          <Box role="button" tabIndex={0} onClick={() => setMobileTab('run')}
+            sx={{
+              fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textAlign: 'center',
+              py: 0.7, cursor: 'pointer', borderRadius: 0.5, color: TERM.muted,
+              border: `1px solid ${TERM.borderDim}`, '&:hover': { color: TERM.green, borderColor: TERM.green },
+            }}>OPEN FULL RUN →</Box>
+        </Box>
+      ) : (
+        <Box sx={{ mb: 2 }}>
+          <Box role="button" tabIndex={0} onClick={suggestRun}
+            sx={{
+              fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
+              py: 0.9, mb: 0.75, cursor: 'pointer', borderRadius: 0.5,
+              color: suggesting ? TERM.amber : TERM.greenDk, bgcolor: suggesting ? 'transparent' : TERM.green,
+              border: `1.5px solid ${suggesting ? TERM.amber : TERM.green}`, '&:hover': { opacity: 0.9 },
+            }}>{suggesting ? 'PLANNING…' : '⚡ SUGGEST A RUN NEAR ME'}</Box>
+          <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
+            Or tap any pin on the map → ＋ ADD TO RUN. Your route is saved here — even 20 stops chunk into Google Maps legs you reopen anytime.
+          </Typography>
+        </Box>
+      )}
+
+      {/* Sleep tonight — primary + backup */}
+      {todayHdr("SLEEP TONIGHT")}
+      {(sleepSlots.primary || sleepSlots.backup) ? (
+        <Stack direction="row" spacing={0.75} sx={{ mb: 2 }}>
+          {[{ slot: sleepSlots.primary, role: 'PRIMARY', color: TERM.cyan }, { slot: sleepSlots.backup, role: 'BACKUP', color: TERM.muted }]
+            .filter((x) => x.slot).map(({ slot, role, color }) => (
+              <Box key={role} sx={{ flex: 1, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, p: 1 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 1, color }}>{role}</Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: TERM.text, mt: 0.3, lineHeight: 1.25 }}>{slot.name}</Typography>
+                {slot.sleepKind && <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, mt: 0.2 }}>{String(slot.sleepKind).replace(/_/g, ' ')}</Typography>}
+                {sleepNav(slot) && (
+                  <Box role="button" tabIndex={0} onClick={() => window.open(sleepNav(slot), '_blank', 'noopener')}
+                    sx={{
+                      mt: 0.7, fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.8, textAlign: 'center',
+                      py: 0.5, cursor: 'pointer', borderRadius: 0.25, color, border: `1px solid ${color}`,
+                      '&:hover': { bgcolor: `${color}18` },
+                    }}>NAVIGATE</Box>
+                )}
+              </Box>
+            ))}
+        </Stack>
+      ) : (
+        <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', mb: 2, lineHeight: 1.5 }}>
+          No sleep spot set. Tag a campground/lot pin as tonight's primary or backup and it shows here.
+        </Typography>
+      )}
+
+      {/* Follow-ups due — opens the CRM Today queue */}
+      {todayHdr("NIGHTLY FOLLOW-UP")}
+      <Box role="button" tabIndex={0}
+        onClick={() => onNavigate && onNavigate({ view: 'crm' })}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1.25, cursor: onNavigate ? 'pointer' : 'default',
+          border: `1px solid ${followUps.count > 0 ? TERM.amber : TERM.borderDim}`, borderRadius: 0.5, p: 1,
+          bgcolor: followUps.count > 0 ? 'rgba(251,191,36,0.06)' : 'transparent',
+          '&:hover': onNavigate ? { borderColor: followUps.count > 0 ? TERM.amber : TERM.green } : {},
+        }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, lineHeight: 1, color: followUps.count > 0 ? TERM.amber : TERM.muted }}>
+          {followUps.loaded ? followUps.count : '·'}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.4 }}>
+          {followUps.count > 0 ? 'follow-ups due — buyers waiting on a quote or catalog' : (followUps.loaded ? 'all caught up ✓' : 'loading…')}
+        </Typography>
+        {onNavigate && <Box component="span" sx={{ ml: 'auto', fontFamily: MONO, fontSize: 14, color: followUps.count > 0 ? TERM.amber : TERM.muted }}>→</Box>}
+      </Box>
+    </Box>
+  );
+
   const runPanel = (
     <PanelSection title={`TODAY'S RUN · ${run?.stops?.length || 0}`} persistKey="jpfm-run">
       {(!run || !run.stops?.length) ? (
@@ -1529,6 +1677,7 @@ export default function RoadTripTab({ token, onNavigate }) {
           scrollbarColor: 'rgba(74,222,128,0.18) transparent',
         }}>
           <Box sx={{ p: 2 }}>
+            {todayPanel}
             {navigatePanel}
             {runPanel}
             {chainsPanel}
@@ -1616,6 +1765,19 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       </Box>
 
+      {/* ── Mobile TODAY overlay (the day's cockpit) ──────────────────── */}
+      {mobileTab === 'today' && (
+        <Box sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
+          bgcolor: TERM.panel, flexDirection: 'column', overflow: 'auto',
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-thumb': { background: 'rgba(74,222,128,0.18)', borderRadius: 3 },
+        }}>
+          <Box sx={{ p: 2 }}>{todayPanel}</Box>
+        </Box>
+      )}
+
       {/* ── Mobile RUN overlay ────────────────────────────────────────── */}
       {mobileTab === 'run' && (
         <Box sx={{
@@ -1629,8 +1791,8 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       )}
 
-      {/* ── Mobile TOOLS overlay ───────────────────────────────────────── */}
-      {mobileTab === 'tools' && (
+      {/* ── Mobile LEADS overlay (search pins + chains + filters) ──────── */}
+      {mobileTab === 'leads' && (
         <Box sx={{
           display: { xs: 'flex', md: 'none' },
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
@@ -1653,9 +1815,10 @@ export default function RoadTripTab({ token, onNavigate }) {
         height: 56, bgcolor: TERM.panel, borderTop: `1px solid ${TERM.border}`,
       }}>
         {[
+          { id: 'today', label: 'TODAY', icon: '◎' },
           { id: 'map',   label: 'MAP',   icon: '⊕' },
-          { id: 'run',   label: run?.stops?.length ? `RUN · ${visitedCount}/${run.stops.length}` : 'RUN', icon: '◉' },
-          { id: 'tools', label: 'TOOLS', icon: '⊞' },
+          { id: 'leads', label: 'LEADS', icon: '⊞' },
+          { id: 'run',   label: run?.stops?.length ? `RUN·${visitedCount}/${run.stops.length}` : 'RUN', icon: '◉' },
         ].map((tab) => (
           <Box key={tab.id} role="button" tabIndex={0}
             onClick={() => setMobileTab(tab.id)}

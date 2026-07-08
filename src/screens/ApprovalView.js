@@ -703,7 +703,7 @@ export default function ApprovalView() {
                         </Box>
                         {l.image && (
                           <ZoomImg src={l.image} onZoom={openLightbox} badge={false}
-                            sx={{ width: { xs: 60, sm: 68 }, height: { xs: 60, sm: 68 }, objectFit: 'cover', borderRadius: 2,
+                            sx={{ width: { xs: 92, sm: 116 }, height: { xs: 92, sm: 116 }, objectFit: 'cover', borderRadius: 2.5,
                               border: `1px solid ${T.line}`, bgcolor: T.inset, flexShrink: 0 }} />
                         )}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -717,18 +717,18 @@ export default function ApprovalView() {
                             </Box>
                           )}
                         </Box>
-                        {/* Per-unit AND the line total carry equal weight — the client
-                            needs both the sticker price and what the run actually costs. */}
+                        {/* Reads top→bottom: per-unit price, then the quantity in
+                            bold white, then the line total underneath. */}
                         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
                           <Typography sx={{ fontWeight: 900, fontSize: { xs: 21, sm: 25 }, letterSpacing: -0.4,
                             color: sel ? T.green : T.text, ...mono, lineHeight: 1.05 }}>
                             {money(unit)}<Box component="span" sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600 }}>/unit</Box>
                           </Typography>
-                          <Typography sx={{ color: T.text, fontWeight: 800, fontSize: { xs: 15, sm: 16.5 }, ...mono, mt: 0.5, lineHeight: 1 }}>
-                            {money((Number(l.qty) || 0) * unit)}
+                          <Typography sx={{ color: T.text, fontWeight: 800, fontSize: { xs: 14, sm: 15 }, ...mono, mt: 0.6, lineHeight: 1 }}>
+                            {Number(l.qty) || 0} units
                           </Typography>
-                          <Typography sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600, mt: 0.15 }}>
-                            {Number(l.qty) || 0} units total
+                          <Typography sx={{ color: T.muted, fontSize: { xs: 12.5, sm: 13.5 }, fontWeight: 600, ...mono, mt: 0.35 }}>
+                            {money((Number(l.qty) || 0) * unit)} total
                           </Typography>
                         </Box>
                       </Box>
