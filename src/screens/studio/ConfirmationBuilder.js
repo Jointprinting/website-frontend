@@ -576,13 +576,20 @@ function Editor({ local, update, project, mockups, mockupMap }) {
           <Stack direction="row" gap={0.25} alignItems="center">
             {/* One-tap presets for the two add-ons used most. Both are percent
                 lines, so they apply to the running subtotal in order. */}
-            <Button size="small"
-              onClick={() => addPresetLine({ label: 'Credit card fee', amount: 2.99, isPercent: true }, isCardFeeLine)}
-              sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
-                border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
-                '&:hover': { color: D.green, borderColor: D.lineHi } }}>
-              + Card&nbsp;fee
-            </Button>
+            <Tooltip title={(local.feeMode || 'owner_fee') === 'client_choice'
+              ? 'Client picks the payment method — the fee is applied there, not baked in'
+              : 'Bake a 2.99% card fee into the total'}>
+              <span>
+                <Button size="small" disabled={(local.feeMode || 'owner_fee') === 'client_choice'}
+                  onClick={() => addPresetLine({ label: 'Credit card fee', amount: 2.99, isPercent: true }, isCardFeeLine)}
+                  sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 0.7, borderRadius: 999,
+                    border: `1px solid ${D.line}`, transition: 'color 0.18s ease, border-color 0.18s ease',
+                    '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 },
+                    '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+                  + Card&nbsp;fee
+                </Button>
+              </span>
+            </Tooltip>
             {/* Suppress the single tax preset whenever per-location tax is in
                 play, so a job can never be taxed both ways. */}
             <Tooltip title={hasLocationTax(local)
@@ -608,6 +615,33 @@ function Editor({ local, update, project, mockups, mockupMap }) {
           </Stack>
         }>
         <Stack gap={0.6}>
+          {/* Fee model — mutually exclusive, so the card fee is never charged twice.
+              'I add the %'      → you bake a card fee (the "+ Card fee" preset) into
+                                   the Total; the client sees NO payment picker.
+              'Client picks pay' → no baked fee; the client chooses Card (2.99%) or
+                                   ACH (1%) on the approval page and THAT applies the
+                                   fee once. Switching here strips any baked card-fee
+                                   line so the two can't coexist. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.75 }}>
+            <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.25 }}>
+              Card fee
+            </Typography>
+            {[{ v: 'owner_fee', label: 'I add the %' }, { v: 'client_choice', label: 'Client picks payment' }].map((opt) => {
+              const active = (local.feeMode || 'owner_fee') === opt.v;
+              return (
+                <Button key={opt.v} size="small"
+                  onClick={() => (opt.v === 'client_choice'
+                    ? update({ feeMode: 'client_choice', customLines: (local.customLines || []).filter((l) => !isCardFeeLine(l)) })
+                    : update({ feeMode: 'owner_fee' }))}
+                  sx={{ fontSize: 10.5, textTransform: 'none', minWidth: 'auto', px: 1, borderRadius: 999,
+                    border: `1px solid ${active ? D.lineHi : D.line}`, color: active ? D.green : D.muted,
+                    bgcolor: active ? 'rgba(74,222,128,0.10)' : 'transparent',
+                    '&:hover': { color: D.green, borderColor: D.lineHi } }}>
+                  {opt.label}
+                </Button>
+              );
+            })}
+          </Box>
           {(local.customLines || []).map((cl, i) => (
             <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 50px 28px',
               gap: 0.5, alignItems: 'center' }}>
