@@ -492,7 +492,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               '& > *:nth-of-type(2)': { animationDelay: '70ms' },
               '& > *:nth-of-type(3)': { animationDelay: '140ms' },
               '& > *:nth-of-type(4)': { animationDelay: '210ms' } }}>
-              <Stat label="Revenue" value={money(summary.income)} color={B.white} />
+              <Stat label="Revenue" value={money(summary.income)} color={B.white} sub="Recorded income · cash collected" />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
               <Stat label="Margin" value={`${pct(summary.margin)}%`} color={pct(summary.margin) >= 0 ? B.green : '#f87171'} />
@@ -1490,11 +1490,12 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   );
 }
 
-function Stat({ label, value, color, big }) {
+function Stat({ label, value, color, big, sub }) {
   return (
     <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
       <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</Typography>
       <Typography sx={{ color, fontSize: big ? 24 : 19, fontWeight: 800, fontFamily: 'monospace', mt: 0.25 }}>{value}</Typography>
+      {sub && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, lineHeight: 1.3 }}>{sub}</Typography>}
     </Box>
   );
 }

@@ -728,11 +728,14 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
         {/* Stat strip */}
         <Stack direction="row" gap={{ xs: 2.5, md: 4 }} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', rowGap: 1 }}>
-          <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} accent={B.green} />
-          <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)} />
+          <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} accent={B.green}
+            hint="Order value delivered" />
+          <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)}
+            hint="Order value delivered — recorded income is in Finances" />
           <Stat label="Open orders"           value={String(stats.openOrders || 0)} />
           <Stat label="Open quotes"           value={String(stats.openQuotes || 0)} />
-          <Stat label="Unpaid"                value={fmt(stats.unpaidTotal)} accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined} />
+          <Stat label="Unpaid"                value={fmt(stats.unpaidTotal)} accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined}
+            hint="Order totals not marked paid" />
         </Stack>
 
         {/* Status filter chips + sort */}
@@ -1088,7 +1091,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   );
 }
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent, hint }) {
   return (
     <Box>
       <Typography sx={{ color: B.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>
@@ -1097,6 +1100,11 @@ function Stat({ label, value, accent }) {
       <Typography sx={{ color: accent || B.white, fontSize: 16, fontWeight: 700, fontFamily: 'monospace' }}>
         {value}
       </Typography>
+      {hint && (
+        <Typography sx={{ color: B.muted, fontSize: 8.5, mt: 0.1, lineHeight: 1.25, maxWidth: 150 }}>
+          {hint}
+        </Typography>
+      )}
     </Box>
   );
 }
