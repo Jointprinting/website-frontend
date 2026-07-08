@@ -704,16 +704,20 @@ export default function ApprovalView() {
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 700, fontSize: 15.5, lineHeight: 1.3 }}>{desc || 'Option'}</Typography>
                           {detail && <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.3 }}>{detail}</Typography>}
-                          <Typography sx={{ color: T.faint, fontSize: 12, mt: 0.3, ...mono }}>
-                            {Number(l.qty) || 0} units · {money((Number(l.qty) || 0) * unit)} total
-                          </Typography>
                         </Box>
+                        {/* Per-unit AND the line total carry equal weight — the client
+                            needs both the sticker price and what the run actually costs. */}
                         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                          <Typography sx={{ fontWeight: 900, fontSize: { xs: 24, sm: 28 }, letterSpacing: -0.5,
-                            color: sel ? T.green : T.text, ...mono, lineHeight: 1 }}>
-                            {money(unit)}
+                          <Typography sx={{ fontWeight: 900, fontSize: { xs: 21, sm: 25 }, letterSpacing: -0.4,
+                            color: sel ? T.green : T.text, ...mono, lineHeight: 1.05 }}>
+                            {money(unit)}<Box component="span" sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600 }}>/unit</Box>
                           </Typography>
-                          <Typography sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600, mt: 0.2 }}>per unit</Typography>
+                          <Typography sx={{ color: T.text, fontWeight: 800, fontSize: { xs: 15, sm: 16.5 }, ...mono, mt: 0.5, lineHeight: 1 }}>
+                            {money((Number(l.qty) || 0) * unit)}
+                          </Typography>
+                          <Typography sx={{ color: T.faint, fontSize: 11.5, fontWeight: 600, mt: 0.15 }}>
+                            {Number(l.qty) || 0} units total
+                          </Typography>
                         </Box>
                       </Box>
                     );
