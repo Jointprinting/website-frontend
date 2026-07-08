@@ -2826,7 +2826,13 @@ function dbSave(store,data){
   if (!data.remoteId) data.remoteId = generateUUID();
   return new Promise((res,rej)=>{
     const tx=db.transaction(store,'readwrite');
-    const r=tx.objectStore(store).add(data);
+    // Upsert: when the caller carries an existing local id (a re-save of an already
+    // saved mockup), PUT to update that row in place. Only a brand-new record (no id)
+    // ADDs. Previously this always .add()'d, so every edit spawned a SECOND IndexedDB
+    // row sharing one remoteId — making which twin wins on refresh/sync/tile render
+    // nondeterministic.
+    const store_ = tx.objectStore(store);
+    const r = (data.id != null) ? store_.put(data) : store_.add(data);
     r.onsuccess=()=>{
       const newId = r.result;
       data.id = newId;                                // so markCloudSynced can find this row
@@ -3125,7 +3131,27 @@ async function renderOverview(){
   }).join('');
 }
 function openMockupFromOverview(id){ loadMockup(id); }   // loadMockup hydrates + switches to Studio
-function newMockupFromOverview(){ const b=document.querySelector('.nav-tab[onclick*="studio"]'); if(b) switchTab('studio', b); }
+// Start a genuinely BLANK mockup. The bug this fixes: this used to only flip to the
+// Studio tab, leaving the previously-opened mockup's saved identity
+// (_savedRemoteId/_savedDbId) sitting in state — so the next Save wrote back THROUGH
+// to that existing record (building a new pink design silently overwrote the black
+// mockup you had open). Mirror addPage()'s fresh-template pattern: replace the editor
+// with one fresh page (no saved identity → Save mints a NEW mockup), carrying only the
+// project link forward so it still auto-letters onto the same order.
+function newMockupFromOverview(){
+  saveFormToState();
+  const cur = state.pages[state.currentPage] || {};
+  const fresh = defaultPageInfo();            // fresh identity: no _savedRemoteId/_savedDbId
+  fresh.projectId     = cur.projectId || '';
+  fresh.projectNumber = cur.projectNumber || '';
+  fresh.client        = cur.client || '';
+  state.pages = [fresh];
+  state.currentPage = 0;
+  loadPageIntoForm();
+  renderPageDots();
+  scheduleUpdate();
+  const b=document.querySelector('.nav-tab[onclick*="studio"]'); if(b) switchTab('studio', b);
+}
 
 // ── Placement Side ─────────────────────────────────────────────────
 function setPlaceSide(side) {
@@ -4457,6 +4483,9 @@ async function saveMockupToLibrary() {
     // duplicated. New mockups let dbSave mint a fresh UUID. The internal _saved*
     // identity fields are local bookkeeping — stripped from the synced state.
     remoteId: pg._savedRemoteId || undefined,
+    // Carry the existing LOCAL row id on a re-save so dbSave PUTs (updates in place)
+    // instead of inserting a duplicate IndexedDB row for the same mockup.
+    ...(isExisting && pg._savedDbId != null ? { id: pg._savedDbId } : {}),
     pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})),
   };
   try{

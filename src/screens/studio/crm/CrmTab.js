@@ -26,7 +26,6 @@ import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
-import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
 import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import SearchIcon from '@mui/icons-material/Search';
@@ -65,8 +64,12 @@ const dealsBase = `${config.backendUrl}/api/deals`;
 const NAV = [
   { id: 'companies', label: 'Clients',   Icon: PeopleAltOutlinedIcon },
   { id: 'today',     label: 'Today',     Icon: TodayOutlinedIcon },
-  { id: 'deals',     label: 'Deals',     Icon: HandshakeOutlinedIcon },
-  { id: 'pipeline',  label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
+  // The deal pipeline is THE sales board now (was labeled 'Deals'). It replaces the
+  // old order-centric 'Pipeline' tab, whose quoting→…→delivered columns duplicated
+  // Order.status / the Order Tracker. Kept as id 'deals' internally; PipelineView +
+  // its /pipeline endpoint stay in the codebase, just unlinked from the nav, so the
+  // old board is a one-line restore if ever wanted.
+  { id: 'deals',     label: 'Pipeline',  Icon: ViewKanbanOutlinedIcon },
   { id: 'calendar',  label: 'Calendar',  Icon: CalendarMonthOutlinedIcon },
   { id: 'dashboard', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
 ];

@@ -93,15 +93,25 @@ export function confLocationTax(conf) {
 // is byte-identical to a plain order. A legacy tax customLine is dropped when
 // per-location tax is active (double-tax guard); grand total snaps to cents.
 // Mirrors models/Order.js computeConfirmationTotals exactly.
+// A baked card-fee line — dropped from the total in 'client_choice' fee mode, where
+// the client's payment-method pick applies the fee once instead. Mirrors
+// models/Order.js isCardFeeCustomLine (label /card/i, never a tax line).
+function isCardFeeLine(l) {
+  return !!l && !isTaxCustomLine(l) && /card/i.test(String((l && l.label) || ''));
+}
+
 export function computeConfTotals(conf) {
   const items = Array.isArray(conf?.items) ? conf.items : [];
   const itemsSubtotal = items.reduce((s, it) =>
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
+  const totalUnits = items.reduce((s, it) => s + itemTotalQty(it), 0);
   const locationTax = confLocationTax(conf);
+  const feeMode = conf?.feeMode || 'owner_fee';
   let running = itemsSubtotal;
   const lines = [];
   (conf?.customLines || []).forEach(l => {
-    if (locationTax.active && isTaxCustomLine(l)) return;   // double-tax guard
+    if (locationTax.active && isTaxCustomLine(l)) return;         // double-tax guard
+    if (feeMode === 'client_choice' && isCardFeeLine(l)) return;  // fee-mode guard (client picker applies it once)
     const isPct = !!l.isPercent;
     const amt = Number(l.amount) || 0;
     const value = isPct ? running * amt / 100 : amt;
@@ -113,7 +123,7 @@ export function computeConfTotals(conf) {
     running += t.value;
     lines.push({ label: t.label, value: t.value });
   });
-  return { itemsSubtotal, lines, grandTotal: roundCents(running), locationTax };
+  return { itemsSubtotal, totalUnits, lines, grandTotal: roundCents(running), locationTax };
 }
 
 function confItemTitle(it, idx) {
@@ -286,6 +296,7 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
             {confItems.map((it, idx) => {
               const sizes = (it.sizes || []).filter(sz => Number(sz.qty) > 0);
               const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
+              const itemUnits = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0), 0); // total pieces for this item
               const imgs = resolveImgs(it) || [];
               return (
                 <Box key={idx} sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: D.inset }}>
@@ -330,7 +341,12 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                         </Box>
                       )}
                       <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2} sx={{ mt: 1.25 }}>
-                        <Typography sx={{ ...eyebrow, color: D.faint }}>Item subtotal</Typography>
+                        <Stack direction="row" alignItems="baseline" gap={1} sx={{ flexWrap: 'wrap' }}>
+                          <Typography sx={{ ...eyebrow, color: D.faint }}>Item subtotal</Typography>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, color: D.muted, ...mono }}>
+                            {itemUnits} {itemUnits === 1 ? 'unit' : 'units'}
+                          </Typography>
+                        </Stack>
                         <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>{money(itemSubtotal)}</Typography>
                       </Stack>
                     </Box>
@@ -399,6 +415,13 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
             <Box sx={{ color: D.muted }}>Subtotal</Box>
             <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{money(totals.itemsSubtotal)}</Box>
           </Stack>
+          {/* Total pieces across the whole order, so the client sees how many they're getting. */}
+          {totals.totalUnits > 0 && (
+            <Stack direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
+              <Box sx={{ color: D.muted }}>Total units</Box>
+              <Box sx={{ minWidth: 96, textAlign: 'right', ...mono }}>{totals.totalUnits}</Box>
+            </Stack>
+          )}
           {totals.lines.map((l, i) => (
             <Stack key={i} direction="row" justifyContent="space-between" gap={4} sx={{ fontSize: 13, mb: 0.85 }}>
               <Box sx={{ color: D.muted, overflowWrap: 'anywhere' }}>{l.label}</Box>

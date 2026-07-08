@@ -928,7 +928,7 @@ export default function ApprovalView() {
                       : "It'll have everything you need to complete payment."}
                   </Typography>
                 </Box>
-                {payMethod && (
+                {conf?.feeMode === 'client_choice' && payMethod && (
                   <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked T={T} />
                 )}
                 <TrackingTimeline steps={p.tracking?.steps || []} T={T} />
@@ -937,12 +937,17 @@ export default function ApprovalView() {
               <>
                 <Typography sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13.5, mb: 2, lineHeight: 1.6 }}>
-                  If everything looks good, pick how you&apos;d like to pay and hit approve and we&apos;ll get started. If anything needs a tweak, just send it back — we&apos;re always happy to adjust.
+                  {conf?.feeMode === 'client_choice'
+                    ? "If everything looks good, pick how you'd like to pay and hit approve and we'll get started. If anything needs a tweak, just send it back — we're always happy to adjust."
+                    : "If everything looks good, hit approve and we'll get started. If anything needs a tweak, just send it back — we're always happy to adjust."}
                 </Typography>
-                {/* Payment method + its fee, shown before approval so the client
-                    sees the CC/ACH cost up front. Optional — approval still works
-                    without choosing; it just records their preference. */}
-                <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} T={T} />
+                {/* Payment method + its fee — ONLY in 'client_choice' fee mode, where
+                    the client's pick applies the card/ACH fee. In 'owner_fee' mode the
+                    fee is already baked into the Total (no picker), so showing it here
+                    too would double-charge. */}
+                {conf?.feeMode === 'client_choice' && (
+                  <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} T={T} />
+                )}
                 {lockedNote && <LockedNote text={lockedNote} T={T} />}
                 {/* Brief, low-key "approval is final" notice. Lives inside the
                     pending action panel, which only renders on the finalized
