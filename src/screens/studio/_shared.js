@@ -273,6 +273,33 @@ export function confCogs(conf) {
   }, 0);
 }
 
+// Estimated COGS straight from the QUOTER's cost side — blank + print + setup +
+// shipping for the client-selected lines. This is the TRUE cost basis with NO
+// markup on it: the confirmation is the client-facing document and its unit
+// prices carry the markup, so an order's COGS must NEVER be derived from the
+// confirmation. It's an ESTIMATE — the actual cost comes from the linked
+// receipts (the PO covers print only, not blanks). Mirrors backend
+// models/Order.js computeQuoteTotals().cogs byte-for-byte so this, the stored
+// Order.cogs scalar, and Finances always agree. Returns 0 until the client has
+// picked (nothing accepted) — same gate as the backend.
+export function quoteCogs(lines, orderSetup = 0, orderShip = 0) {
+  const all = Array.isArray(lines) ? lines : [];
+  if (!all.some((l) => l && l.accepted)) return 0;
+  // Accepted picks + always-included standalone (ungrouped) lines. A grouped
+  // alternative the client declined contributes nothing.
+  const arr = all.filter((l) => l && (l.accepted || !l.group));
+  const n = (v) => Number(v) || 0;
+  // Legacy fallback: apply the order-level setup/ship ONLY when no line carries
+  // its own, mirroring the backend so we never double-count.
+  const perLineExtras = arr.reduce((s, l) => s + n(l.setupCost) + n(l.shippingCost), 0);
+  const legacy = perLineExtras === 0 ? (n(orderSetup) + n(orderShip)) : 0;
+  const cogs = arr.reduce(
+    (s, l) => s + n(l.qty) * (n(l.blankCost) + n(l.printCost)) + n(l.setupCost) + n(l.shippingCost),
+    0,
+  ) + legacy;
+  return roundCents(cogs);
+}
+
 // Has the CLIENT approved the confirmation for the CURRENT cycle?
 // The single, superseded-aware source of truth for the owner-side "approved"
 // signal. An approval only counts if its event is newer than
