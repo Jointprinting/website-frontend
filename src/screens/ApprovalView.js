@@ -27,7 +27,7 @@ import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
-import ConfirmationDocument, { computeConfTotals } from './ConfirmationDocument';
+import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 
 // Processing-fee rates by payment method (decimals) — mirrors the backend
 // Order.PAYMENT_FEES single source of truth. Shown to the client for
@@ -478,6 +478,10 @@ export default function ApprovalView() {
   // on the exact number shown), else the project total. Drives the payment-fee
   // preview only; it never changes what's stored.
   const payableTotal = hasConf ? computeConfTotals(conf).grandTotal : total;
+  // Show the "how would you like to pay?" picker by DEFAULT — hide it only when the
+  // owner already baked a Card/ACH fee into the confirmation (then the fee is in the
+  // Total and the picker would double it). Discounts/other lines don't suppress it.
+  const showPayPicker = hasConf && !hasBakedPaymentFee(conf);
   // Index the confirmation's mockups by BOTH the normalized number AND the
   // normalized name. An item that references a mockup with no number stores the
   // mockup's NAME in mockupNum (the picker normalizes name → mockupNum), so
@@ -928,7 +932,7 @@ export default function ApprovalView() {
                       : "It'll have everything you need to complete payment."}
                   </Typography>
                 </Box>
-                {conf?.feeMode === 'client_choice' && payMethod && (
+                {showPayPicker && payMethod && (
                   <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked T={T} />
                 )}
                 <TrackingTimeline steps={p.tracking?.steps || []} T={T} />
@@ -937,15 +941,14 @@ export default function ApprovalView() {
               <>
                 <Typography sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>Take a look whenever you&apos;re ready</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13.5, mb: 2, lineHeight: 1.6 }}>
-                  {conf?.feeMode === 'client_choice'
+                  {showPayPicker
                     ? "If everything looks good, pick how you'd like to pay and hit approve and we'll get started. If anything needs a tweak, just send it back — we're always happy to adjust."
                     : "If everything looks good, hit approve and we'll get started. If anything needs a tweak, just send it back — we're always happy to adjust."}
                 </Typography>
-                {/* Payment method + its fee — ONLY in 'client_choice' fee mode, where
-                    the client's pick applies the card/ACH fee. In 'owner_fee' mode the
-                    fee is already baked into the Total (no picker), so showing it here
-                    too would double-charge. */}
-                {conf?.feeMode === 'client_choice' && (
+                {/* Payment method + its fee — shown by default; hidden only when the
+                    owner baked a Card/ACH fee into the Total (showing it too would
+                    double-charge). */}
+                {showPayPicker && (
                   <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} T={T} />
                 )}
                 {lockedNote && <LockedNote text={lockedNote} T={T} />}
