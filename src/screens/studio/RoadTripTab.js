@@ -649,6 +649,13 @@ export default function RoadTripTab({ token, onNavigate }) {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
       }, authHdr);
+      if (r.data?.error) {
+        // Soft failure (HTTP 200 + {error} — Overpass down or backing off).
+        // Unflag the tile so a later pan retries; otherwise this area would
+        // never scan again this session and its stores would never appear.
+        scannedTilesRef.current.delete(tileKey);
+        return;
+      }
       if ((r.data?.added || 0) > 0 || (r.data?.attached || 0) > 0) {
         loadAreaRef.current(); // surface the fresh finds
       }
@@ -683,10 +690,11 @@ export default function RoadTripTab({ token, onNavigate }) {
   }, [onNavigate, showToast]);
 
   /**
-   * Upsert the company in the REAL CRM. Stage rules:
-   *   no CRM record yet        → 'lead' (or 'contacted' when logging a visit)
-   *   record at 'lead' + visit → bump to 'contacted'
-   *   anything else            → never touch stage (don't demote customers)
+   * Upsert the company in the REAL CRM. Stage is a promote-only SUGGESTION —
+   * the server (crm patchOne `stageSuggest` → promoteStage) moves the funnel
+   * forward only: a fresh record seeds at lead/contacted, a lead + visit bumps
+   * to contacted, and an owner-advanced or closed deal is never touched — no
+   * matter how stale this tab's loaded view of the record is.
    */
   const addOpportunity = React.useCallback(async (d, { visited = false, logText = null } = {}) => {
     // Prefer the MATCHED CRM record's real key (same as openInCrm) — the map
@@ -702,22 +710,27 @@ export default function RoadTripTab({ token, onNavigate }) {
       leadSource: 'Field Visit',
       logText: logText || (visited ? `Field visit — pitched at ${d.name}` : 'Added from Field Map'),
       kind: visited ? 'visit' : 'note',
+      stageSuggest: visited ? 'contacted' : 'lead',
     };
-    if (!d.crm) body.stage = visited ? 'contacted' : 'lead';
-    else if (d.crm.stage === 'lead' && visited) body.stage = 'contacted';
     try {
       // Offline-safe: a pitch/lead captured in a dead zone is queued and synced
       // when signal returns — never lost. queuedRequest only throws on a real
       // server refusal (4xx); a connectivity failure resolves as { queued }.
       const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `CRM · ${d.name}` });
-      const stage = (!res.queued && res.data?.client?.stage) || body.stage || 'lead';
+      // Local pin stage + key: server truth when online (patchOne may have
+      // re-resolved a stale/derived key onto the real card at write time);
+      // offline, keep the stage we already knew (promote-only means it can
+      // only be right or too low) and fall back to the suggestion for a
+      // brand-new record.
+      const stage = (!res.queued && res.data?.client?.stage) || d?.crm?.stage || body.stageSuggest;
+      const realKey = (!res.queued && res.data?.client?.companyKey) || key;
       if (d._id) {
-        setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: key, stage } } : x)));
+        setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: realKey, stage } } : x)));
       }
       if (res.queued) {
         showToast(`"${d.name}" saved offline — will sync when you're back on signal.`, 'info');
       } else {
-        showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+        showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
       }
       return res.data;
     } catch (err) {
@@ -742,18 +755,23 @@ export default function RoadTripTab({ token, onNavigate }) {
       logText: `${chip.logText} — ${d.name}${todoForm.note ? ` · ${todoForm.note}` : ''}`,
       kind: 'next-action',
       nextFollowUp: todoForm.date ? `${todoForm.date}T12:00:00.000Z` : null,
+      // Promote-only: seeds a fresh record at 'lead', never moves an existing
+      // one (the server's promoteStage decides — see addOpportunity).
+      stageSuggest: 'lead',
     };
-    if (!d.crm) body.stage = 'lead';
     try {
       const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `To-do · ${d.name}` });
+      // Server truth for the card's key when online — patchOne may have
+      // re-resolved a stale/derived key onto the real card at write time.
+      const realKey = (!res.queued && res.data?.client?.companyKey) || key;
       if (d._id) {
-        setDisps((prev) => prev.map((x) => (x._id === d._id && !x.crm ? { ...x, crm: { companyKey: key, stage: 'lead' } } : x)));
+        setDisps((prev) => prev.map((x) => (x._id === d._id && !x.crm ? { ...x, crm: { companyKey: realKey, stage: (!res.queued && res.data?.client?.stage) || 'lead' } } : x)));
       }
       setTodoTarget(null);
       if (res.queued) {
         showToast(`To-do saved offline — will sync when you're back on signal.`, 'info');
       } else {
-        showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+        showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
       }
     } catch (err) {
       showToast(err?.response?.data?.message || 'To-do save failed.', 'error');
@@ -877,15 +895,24 @@ export default function RoadTripTab({ token, onNavigate }) {
     setOutcomeStopId(stop._id);
   }, [patchStop]);
 
+  // A run stop as a CRM-writable target, for when its dispensary isn't in the
+  // loaded viewport (runs routinely outlive the map view). The stop carries
+  // the CRM match resolved server-side at ADD time: companyKey is the card's
+  // REAL key (never a derived-key duplicate), crmStage '' means no card
+  // existed then. Stage itself stays promote-only server-side, so even a
+  // stale snapshot can't demote a deal.
+  const stopAsCrmTarget = (s) => ({
+    _id: null, name: s.name, address: s.address, phone: s.phone,
+    companyKey: s.companyKey,
+    crm: s.crmStage ? { companyKey: s.companyKey, stage: s.crmStage } : null,
+  });
+
   const setOutcome = React.useCallback(async (stop, outcome) => {
     await patchStop(stop, { outcome: outcome.id });
     setOutcomeStopId(null);
     if (outcome.id === 'pitched') {
       const d = stop.dispensaryId ? byIdRef.current.get(String(stop.dispensaryId)) : null;
-      await addOpportunity(
-        d || { _id: null, name: stop.name, address: stop.address, phone: stop.phone, companyKey: stop.companyKey, crm: null },
-        { visited: true }
-      );
+      await addOpportunity(d || stopAsCrmTarget(stop), { visited: true });
     }
   }, [patchStop, addOpportunity]);
 
@@ -1133,13 +1160,14 @@ export default function RoadTripTab({ token, onNavigate }) {
     try {
       let lat = mapRef.current?.getCenter().lat ?? 40.5;
       let lng = mapRef.current?.getCenter().lng ?? -74.5;
+      let located = !address.trim(); // no address = map center is the intent
       if (address.trim()) {
         const encoded = encodeURIComponent(address.trim());
         const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`
           + `?access_token=${config.mapboxToken}&limit=1&country=US`;
         const r = await fetch(url);
         const data = await r.json();
-        if (data.features && data.features.length > 0) [lng, lat] = data.features[0].center;
+        if (data.features && data.features.length > 0) { [lng, lat] = data.features[0].center; located = true; }
       }
       const body = {
         source: 'manual', name: name.trim(), address: address.trim(),
@@ -1150,7 +1178,10 @@ export default function RoadTripTab({ token, onNavigate }) {
       setCustomPins((prev) => [res.data, ...prev]);
       setShowAddCustomPin(false);
       setCustomPinForm({ name: '', address: '', notes: '', customType: 'friend' });
-      showToast(`Added "${name.trim()}" to map.`, 'success');
+      // A typed address that didn't geocode must NOT read as a clean add — the
+      // pin landed at the map center, not where the owner thinks it is.
+      if (located) showToast(`Added "${name.trim()}" to map.`, 'success');
+      else showToast(`Couldn't find "${address.trim()}" — "${name.trim()}" was pinned at the map center. Drag the map there or re-add it with a fuller address.`, 'error');
       mapRef.current?.flyTo({ center: [lng, lat], zoom: 13, essential: true, duration: 1200 });
     } catch (err) {
       showToast(err?.response?.data?.message || 'Add failed.', 'error');
@@ -1522,7 +1553,7 @@ export default function RoadTripTab({ token, onNavigate }) {
                     <Box role="button"
                       onClick={() => {
                         const d = s.dispensaryId ? byIdRef.current.get(String(s.dispensaryId)) : null;
-                        setTodoTarget(d || { _id: null, name: s.name, address: s.address, phone: s.phone, companyKey: s.companyKey, crm: null });
+                        setTodoTarget(d || stopAsCrmTarget(s));
                         setTodoForm({ chipId: 'mockups', note: '', date: tomorrowISO() });
                         setOutcomeStopId(null);
                       }}

@@ -2534,10 +2534,29 @@ async function syncFromBackend() {
       const remoteItems = await res.json();
       if (!remoteItems.length) continue;
       const localItems = await dbGetAll(store);
-      const localIds = new Set(localItems.map(i=>i.remoteId).filter(Boolean));
+      const localByRemoteId = new Map(localItems.filter(i=>i.remoteId).map(i=>[i.remoteId, i]));
       for (const ri of remoteItems) {
-        if (ri.remoteId && localIds.has(ri.remoteId)) continue;
-        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Date.now() };
+        // Known item: pull the cloud copy down only when it's NEWER than ours
+        // and our row has nothing unpushed. (syncAll pushes before pulling, so
+        // a clean row here really is behind; a dirty one — push failed — keeps
+        // its local edit rather than being clobbered by the cloud.) This is
+        // what makes an edit on device B actually replace the stale copy on
+        // device A, instead of only ever reaching devices that never saw it.
+        const existing = ri.remoteId ? localByRemoteId.get(ri.remoteId) : null;
+        if (existing) {
+          const remoteNewer = (ri.savedAt || 0) > (existing.savedAt || 0);
+          const localClean = existing.cloudSyncedAt && existing.cloudSyncedAt >= (existing.savedAt || 0);
+          if (!remoteNewer || !localClean) continue;
+          // Never yank a mockup out from under the open editor — the editor's
+          // in-memory pages would win the next save and silently revert the
+          // pulled edit. It comes down on a later sync once it's closed.
+          if (store === 'mockups' && (state.pages||[]).some(p => p && p._savedRemoteId && p._savedRemoteId === ri.remoteId)) continue;
+        }
+        // cloudSyncedAt is stamped at least savedAt so a pulled row is clean BY
+        // CONSTRUCTION even when the pushing device's clock runs ahead of ours;
+        // otherwise the row wedges — it never accepts another pull, and the
+        // badge auto-push re-shrinks and re-uploads it in a loop.
+        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0) };
         // Blanks/logos render from a local `base64` field; the cloud stores the image in `data`, so map it back on hydration.
         if (store === 'blanks' || store === 'logos') local.base64 = local.data || '';
         // Mockups: the cloud copy of pageState has its base64s stripped (see
@@ -2553,8 +2572,40 @@ async function syncFromBackend() {
             local.pageState.backCompositeBase64 = local.data;
             if (!local.pageState.backBlankBase64) local.pageState.backBlankBase64 = local.data;
           }
+          // pageState is schemaless (Mixed) and older shapes lack the print
+          // sub-objects — default them at this hydration boundary so no
+          // downstream consumer (form load, PDF captions) sees a partial page.
+          if (!local.pageState.printFront) local.pageState.printFront = { type:'', dims:'', loc:'' };
+          if (!local.pageState.printBack)  local.pageState.printBack  = { type:'', dims:'', loc:'' };
         }
-        try { await dbSaveRaw(store, local); synced++; } catch(e) {}
+        // The cloud copy is deliberately LOSSY — thumbnail/data are shrunk for
+        // upload and pageState's base64 layers are stripped — so an in-place
+        // pull takes the fresh copy but must never DESTROY image data the
+        // cloud doesn't carry (a rename on device B must not degrade device
+        // A's only full-res original). Blanks/logos: image content is
+        // immutable in practice (edits are renames), keep the local payload
+        // wholesale. Mockups: composites stay remote-first (they ARE the
+        // other device's artwork edit); the stripped layer fields carry over
+        // from the local row so the mockup stays re-editable.
+        if (existing) {
+          if (store === 'blanks' || store === 'logos') {
+            if (existing.base64)    local.base64    = existing.base64;
+            if (existing.data)      local.data      = existing.data;
+            if (existing.thumbnail) local.thumbnail = existing.thumbnail;
+          }
+          if (store === 'mockups' && local.pageState && existing.pageState && typeof existing.pageState === 'object') {
+            for (const k of Object.keys(existing.pageState)) {
+              if (/Base64$/.test(k) && !local.pageState[k] && existing.pageState[k]) local.pageState[k] = existing.pageState[k];
+            }
+          }
+        }
+        try {
+          // Update-in-place keeps the row's IndexedDB id (dbPut); a brand-new
+          // item gets a fresh row (dbSaveRaw uses insert-only .add()).
+          if (existing) { local.id = existing.id; await dbPut(store, local); }
+          else { await dbSaveRaw(store, local); }
+          synced++;
+        } catch(e) {}
       }
     }
     if (synced > 0) { refreshLibrary(); refreshLbGrid(); refreshClientSuggestions(); toast(`Synced ${synced} item(s) from cloud ☁`, 'success'); }
@@ -3261,6 +3312,11 @@ function saveFormToState() {
 }
 function loadPageIntoForm() {
   const pg = state.pages[state.currentPage];
+  // Restored/synced pages (cloud versions, pageState:Mixed) may lack the print
+  // sub-objects — default them so a partial page can't throw mid-load and
+  // leave the form half old page, half new.
+  if (!pg.printFront) pg.printFront = { type:'', dims:'', loc:'' };
+  if (!pg.printBack)  pg.printBack  = { type:'', dims:'', loc:'' };
   document.getElementById('f-title').value    = pg.title    || '';
   document.getElementById('f-subtitle').value = pg.subtitle || '';
   document.getElementById('f-mockupnum').value= pg.mockupNum|| '';
@@ -4054,7 +4110,7 @@ async function buildPdf() {
   return await pdfDoc.save();
 }
 function normalizeColors(arr){ return (arr||[]).map(c=>typeof c==='object'?c:{hex:c,name:''}); }
-function buildCaption(print){ const l=[]; if(print.type)l.push('Type: '+print.type); if(print.dims)l.push('Dims: '+print.dims); if(print.loc)l.push('Location: '+print.loc); return l; }
+function buildCaption(print){ const p=print||{}; const l=[]; if(p.type)l.push('Type: '+p.type); if(p.dims)l.push('Dims: '+p.dims); if(p.loc)l.push('Location: '+p.loc); return l; }
 
 async function renderTemplate1(pdfDoc,page,pg) {
   const {rgb,StandardFonts}=PDFLib;

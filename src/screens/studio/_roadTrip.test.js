@@ -81,4 +81,14 @@ describe('haversineMi', () => {
     expect(d).toBeGreaterThan(70);
     expect(d).toBeLessThan(90);
   });
+
+  it('stays finite at antipodal points (float rounding must not produce NaN)', () => {
+    // Exactly opposite points push the haversine intermediate to (or a hair
+    // past) 1 — unclamped, asin(√h) goes NaN and poisons route mileage.
+    const d = haversineMi({ lat: 40, lng: -74 }, { lat: -40, lng: 106 });
+    expect(Number.isFinite(d)).toBe(true);
+    // Half the Earth's circumference ≈ 12,450 mi.
+    expect(d).toBeGreaterThan(12000);
+    expect(d).toBeLessThan(12900);
+  });
 });
