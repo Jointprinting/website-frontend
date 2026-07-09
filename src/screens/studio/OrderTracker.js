@@ -89,6 +89,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [mockups,       setMockups]       = useState([]);
   const [logos,         setLogos]         = useState([]);
   const [stats,         setStats]         = useState({});
+  const [collectedThisYear, setCollectedThisYear] = useState(null);  // cash from finance ledger (matches Finances tab)
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
   const [statusFilter,  setStatusFilter]  = useState('active');
@@ -134,11 +135,18 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     // allSettled so one slow/broken endpoint doesn't blank the whole tab.
     // We commit each settled response independently — if /dashboard 500s
     // the project list still renders, just with stale stats.
-    const [pr, mk, ds, lg] = await Promise.allSettled([
+    const yr = new Date().getFullYear();
+    const [pr, mk, ds, lg, fn] = await Promise.allSettled([
       axios.get(`${base}/orders/projects`, authHdr),
       axios.get(`${base}/studio/library/mockups?summary=1`, authHdr),
       axios.get(`${base}/orders/dashboard`, authHdr),
       axios.get(`${base}/client-logos`, authHdr),
+      // Cash collected this year — read straight from the finance ledger's OWN
+      // summary endpoint (same rule Finances shows as "Revenue"), so the money
+      // number on this screen is byte-for-byte identical to the Finances tab
+      // instead of drifting from an independent per-order accrual. "Delivered
+      // this year" (order value shipped) stays alongside it as a distinct stat.
+      axios.get(`${base}/finances/summary?year=${yr}`, authHdr),
     ]);
     if (pr.status === 'fulfilled') setProjects(pr.value.data.projects || []);
     else console.error('loadProjects /orders/projects failed:', pr.reason?.message || pr.reason);
@@ -154,6 +162,10 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     else console.error('loadProjects /orders/dashboard failed:', ds.reason?.message || ds.reason);
     if (lg.status === 'fulfilled') setLogos(lg.value.data?.logos || []);
     else setLogos([]);  // client logos are aesthetic only; silently fall back
+    // Cash collected this year (finance ledger). null = couldn't load; the stat
+    // hides rather than showing a misleading $0 next to a non-zero delivered value.
+    if (fn.status === 'fulfilled') setCollectedThisYear(Number(fn.value.data?.income) || 0);
+    else setCollectedThisYear(null);
     setLoading(false);
   }, [authHdr]);
 
@@ -728,8 +740,13 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
         {/* Stat strip */}
         <Stack direction="row" gap={{ xs: 2.5, md: 4 }} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', rowGap: 1 }}>
-          <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} accent={B.green} />
+          {/* Collected = cash actually in (finance ledger, matches Finances tab).
+              Delivered = value of orders shipped this year (accrual). They differ
+              because you get paid up front — both are true, so both are shown. */}
+          {collectedThisYear != null &&
+            <Stat label="Collected this year" value={fmt(collectedThisYear)} accent={B.green} />}
           <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)} />
+          <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} />
           <Stat label="Open orders"           value={String(stats.openOrders || 0)} />
           <Stat label="Open quotes"           value={String(stats.openQuotes || 0)} />
           <Stat label="Unpaid"                value={fmt(stats.unpaidTotal)} accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined} />
