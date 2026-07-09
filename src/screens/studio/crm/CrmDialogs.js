@@ -36,7 +36,11 @@ export function LogTouchDialog({ open, onClose, onSubmit, companyName, defaultKi
     if (!text.trim()) return;
     setBusy(true);
     try {
-      await onSubmit({ logText: text.trim(), kind, nextFollowUp: next || null });
+      // Only send nextFollowUp when the owner actually picked a date here. Sending
+      // null on a blank field would OVERWRITE (wipe) a follow-up date already set on
+      // the card — omitting it preserves that date. (Clearing a follow-up is done
+      // from the Next follow-up field / reschedule, not by logging a note.)
+      await onSubmit({ logText: text.trim(), kind, ...(next ? { nextFollowUp: next } : {}) });
       onClose();
     } catch (_) {
       // Parent surfaces the error; just drop the busy state so they can retry.
