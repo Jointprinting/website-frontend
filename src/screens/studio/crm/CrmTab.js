@@ -181,6 +181,21 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     return () => { cancelled = true; };
   }, [authHdr]);
 
+  // Housekeeping presence — the "•••" overflow (Clean up / Archived) is only worth
+  // showing when there's ACTUALLY something to do: unmerged duplicate companies OR
+  // archived records to restore. On a tidy CRM it disappears entirely (the owner
+  // asked to be rid of it), and quietly returns the moment either exists again — so
+  // the archived-restore path is never stranded. Refreshed on the same signals as
+  // the lists themselves (see the refresh effect below).
+  const [hasHousekeeping, setHasHousekeeping] = React.useState(false);
+  const refreshHousekeeping = React.useCallback(() => {
+    Promise.all([
+      axios.get(`${base}/duplicates`, authHdr).then((r) => (r.data?.groups || []).length).catch(() => 0),
+      axios.get(base, { ...authHdr, params: { archived: '1' } }).then((r) => (r.data?.clients || []).length).catch(() => 0),
+    ]).then(([dups, arch]) => setHasHousekeeping(dups > 0 || arch > 0)).catch(() => {});
+  }, [authHdr]);
+  React.useEffect(() => { refreshHousekeeping(); }, [refreshHousekeeping]);
+
   const [detail, setDetail] = React.useState(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
 
@@ -1333,22 +1348,26 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
                 </Button>
               );
             })}
-            {/* Overflow ("•••") — Clean up / Archived. Highlighted when an
-                overflow view is active so the owner sees where they are. */}
-            <Tooltip title="More — Clean up, Archived">
-              <IconButton
-                onClick={(e) => setOverflowAnchor(e.currentTarget)}
-                size="small"
-                sx={{
-                  ml: 0.25, my: 0.5, borderRadius: 1.5,
-                  color: OVERFLOW_NAV.some((n) => n.id === view) ? D.green : D.muted,
-                  border: `1px solid ${OVERFLOW_NAV.some((n) => n.id === view) ? D.lineHi : 'transparent'}`,
-                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' },
-                }}
-              >
-                <MoreHorizIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
+            {/* Overflow ("•••") — Clean up / Archived. Only shown when there's real
+                housekeeping (duplicates or archived records), the one-time reconcile
+                is still pending, or the owner is already in one of those views — so a
+                tidy CRM stays clutter-free. */}
+            {(hasHousekeeping || !reconcileApplied || OVERFLOW_NAV.some((n) => n.id === view)) && (
+              <Tooltip title="More — Clean up, Archived">
+                <IconButton
+                  onClick={(e) => setOverflowAnchor(e.currentTarget)}
+                  size="small"
+                  sx={{
+                    ml: 0.25, my: 0.5, borderRadius: 1.5,
+                    color: OVERFLOW_NAV.some((n) => n.id === view) ? D.green : D.muted,
+                    border: `1px solid ${OVERFLOW_NAV.some((n) => n.id === view) ? D.lineHi : 'transparent'}`,
+                    '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' },
+                  }}
+                >
+                  <MoreHorizIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+            )}
           </Stack>
         )}
       </Box>
