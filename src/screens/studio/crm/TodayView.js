@@ -69,7 +69,7 @@ function CallRow({ row, onOpen, onLog, onReschedule, bindCompany }) {
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, minWidth: 0 }}>
               {row.name}
             </Typography>
-            <StageChip stage={row.stage} glow />
+            <StageChip stage={row.stage} dot />
             <Typography sx={{ ...mono, color: fu.tone, fontSize: 12, fontWeight: 700 }}>
               {fu.label}
             </Typography>

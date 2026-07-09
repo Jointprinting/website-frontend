@@ -1173,7 +1173,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
 function Stat({ label, value, accent, hint }) {
   return (
-    <Box>
+    <Box sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, px: 1.5, py: 1, minWidth: 116, flex: '0 0 auto' }}>
       <Typography sx={{ color: B.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>
         {label}
       </Typography>

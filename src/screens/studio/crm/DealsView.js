@@ -252,7 +252,7 @@ function DealCard({ deal, onOpen, onDragStart, onDragEnd, dragging, locked }) {
 // here yet," not "broken." Keyed by deal stage; unknown stages fall back.
 const STAGE_EMPTY_HINT = {
   qualifying: 'New leads land here',
-  quote_sent: 'Quotes waiting on a yes',
+  quoted: 'Quotes waiting on a yes',   // stage id is 'quoted' (label "Quote sent")
   won: 'Won deals collect here',
   lost: 'Closed-lost deals',
 };
