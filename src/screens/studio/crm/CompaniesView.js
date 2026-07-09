@@ -89,7 +89,7 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.3 }}>
             {customer && <StarRateRoundedIcon sx={{ fontSize: 16, color: stageMeta('customer').color }} />}
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0 }}>{name}</Typography>
-            <StageChip stage={c.stage} glow />
+            <StageChip stage={c.stage} dot />
             {!customer && <LeadGradeChip grade={c.leadGrade} reasons={c.leadReasons} />}
           </Stack>
           <Typography sx={{ color: D.muted, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
