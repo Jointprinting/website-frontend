@@ -19,6 +19,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import AutoFixHighIcon    from '@mui/icons-material/AutoFixHigh';
 import ChecklistIcon      from '@mui/icons-material/Checklist';
 import CheckIcon          from '@mui/icons-material/Check';
@@ -485,6 +486,37 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       setCleanupLoading(false);
     }
   };
+
+  // Merge duplicate orders: the same job imported twice (a project order + a bare
+  // QuickBooks/Notion invoice import, same company + amount) that double-counts every
+  // stat. Preview first, show the owner exactly what would be archived, then apply on
+  // confirm. Archives (never deletes) — reversible via the returned batch id.
+  const handleDedupOrders = async () => {
+    try {
+      const r = await axios.get(`${base}/orders/dedup/preview`, authHdr);
+      const { ordersToArchive, duplicateGroups, groups = [] } = r.data;
+      if (!ordersToArchive) { flash('No duplicate orders found — your orders are clean. ✓', 'success'); return; }
+      const sample = groups.slice(0, 5).map((g) => {
+        const keep = g.keep[0] || {}; const arch = g.archive[0] || {};
+        const keepId = keep.orderNumber || keep.projectNumber || '?';
+        return `• ${keep.company || ''}: keep #${keepId}, archive #${arch.orderNumber || '?'}  ($${g.amount})`;
+      }).join('\n');
+      const ok = window.confirm(
+        `Found ${ordersToArchive} duplicate order${ordersToArchive === 1 ? '' : 's'} across ${duplicateGroups} job${duplicateGroups === 1 ? '' : 's'} — ` +
+        `the same job imported twice (a QuickBooks invoice # duplicating your project order):\n\n` +
+        `${sample}${groups.length > 5 ? `\n…and ${groups.length - 5} more` : ''}\n\n` +
+        `Archive the ${ordersToArchive} redundant copies so your stats stop double-counting?\n` +
+        `They're archived (not deleted) — fully reversible.`,
+      );
+      if (!ok) return;
+      const a = await axios.post(`${base}/orders/dedup/apply`, { confirm: true }, authHdr);
+      flash(`Archived ${a.data.archived} duplicate order(s) — stats no longer double-count. Undo batch: ${a.data.batchId}`, 'success');
+      await loadProjects();
+    } catch (e) {
+      flash(`Duplicate sweep failed: ${e.response?.data?.message || e.message}`, 'error');
+    }
+  };
+
   const handleCleanupDelete = async (ids) => {
     if (ids.length === 0) return;
     if (!window.confirm(`Delete ${ids.length} empty project${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
@@ -761,6 +793,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
                 secondary="Empty projects + duplicates">Cleanup</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleDedupOrders(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><ContentCopyOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Same job imported twice — reversible">Merge duplicate orders</ListItemText>
             </MenuItem>
           </Menu>
         </Stack>
