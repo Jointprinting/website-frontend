@@ -111,7 +111,20 @@ export default function DealDialog({
             label="What's the deal?" size="small" sx={dropInput}
             value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="Spring hoodies, reorder, banners…" autoFocus={!needsPicker}
+            helperText="Just a nickname for you — editing it never changes the linked order."
+            FormHelperTextProps={{ sx: { color: D.faint, fontSize: 11, ml: 0.5 } }}
           />
+          {/* Reassure: the deal's linked order is a SEPARATE, stable link — this
+              dialog can't touch it, so renaming the deal can't break anything. */}
+          {(initial?.projectNumber || initial?.orderNumber) && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.85, borderRadius: 2,
+              border: `1px solid ${D.line}`, bgcolor: 'rgba(74,222,128,0.06)' }}>
+              <Box component="span" sx={{ fontSize: 13 }}>🔗</Box>
+              <Typography sx={{ color: D.muted, fontSize: 12, fontWeight: 600 }}>
+                Linked to Order #{initial.projectNumber || initial.orderNumber} — stays connected, nothing to change here.
+              </Typography>
+            </Box>
+          )}
           <TextField
             label="Estimated value" size="small" sx={dropInput}
             value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ''))}
