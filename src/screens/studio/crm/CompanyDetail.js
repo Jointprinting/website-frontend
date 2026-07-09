@@ -768,7 +768,16 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 label="Revenue"
                 value={fmt(finance.revenue)}
                 accent={D.text}
-                hint={client.dealValue ? `${fmtMoney0(client.dealValue)} open est.` : null}
+                // The "open est." is the pipeline deal estimate (client.dealValue).
+                // Once a company is fully collected — it has realized orders and
+                // nothing outstanding — a lingering estimate is just stale noise
+                // (the owner asked "where does the 5k open est come from?"), so hide
+                // it. It still shows for genuine open pipeline (unpaid/early work).
+                hint={
+                  client.dealValue && !(finance.paidCount > 0 && finance.outstanding === 0)
+                    ? `${fmtMoney0(client.dealValue)} open est.`
+                    : null
+                }
               />
               <Metric
                 label="Profit"
