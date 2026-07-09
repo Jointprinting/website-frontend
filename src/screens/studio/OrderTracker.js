@@ -611,6 +611,24 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     }
   };
 
+  // "Push to client": make the finalized confirmation LIVE on the client's
+  // existing link (sets confirmation.publishedAt server-side). Never rotates the
+  // token — same link. Returns the API result so the builder can decide whether
+  // to also open the email dialog (first delivery) or just confirm. Refreshes
+  // the project list so the drawer/card reflect the new published state.
+  const publishConfirmationFor = async (projectId) => {
+    if (!projectId) return { ok: false };
+    try {
+      const r = await axios.post(`${base}/orders/${projectId}/confirmation/publish`, {}, authHdr);
+      loadProjects();
+      return { ok: true, ...r.data };
+    } catch (e) {
+      const msg = e.response?.data?.message || e.message;
+      flash(msg, 'error');
+      return { ok: false, message: msg };
+    }
+  };
+
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -913,6 +931,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         token={token}
         onClose={() => setConfirmation(null)}
         onShareApproval={() => confirmation && shareApprovalFor(confirmation._id)}
+        onPublish={() => confirmation ? publishConfirmationFor(confirmation._id) : Promise.resolve({ ok: false })}
         onSave={async (patch) => {
           if (!confirmation) return null;
           const updated = await handleSave(confirmation._id, patch);

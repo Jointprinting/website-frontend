@@ -277,14 +277,22 @@ export default function ApprovalView() {
   // near-real-time when the admin ticks off a step — they don't have to
   // refresh the tab to see "Blanks shipping" turn green. Pauses when the tab
   // is hidden to avoid hammering the server while nobody's looking.
+  // Poll in two situations so an open tab updates itself with no reload:
+  //   • APPROVED — tracking steps turn green as the admin ticks them.
+  //   • WAITING for the confirmation — the client picked and is on the "we're
+  //     finalizing" buffer; the instant the owner hits "Push to client" their
+  //     page flips to the finalized confirmation. (Faster here — 20s — so the
+  //     hand-off feels live.) Both pause when the tab is hidden.
+  const waitingForPush = !!p.optionsPickedAt && !p.hasConfirmation && approvalStatus === 'pending';
   useEffect(() => {
-    if (approvalStatus !== 'approved' || isPreview) return;
+    if (isPreview) return;
+    if (approvalStatus !== 'approved' && !waitingForPush) return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
       refresh();
     };
-    const id = setInterval(tick, 60000);
+    const id = setInterval(tick, waitingForPush ? 20000 : 60000);
     const onVis = () => { if (!document.hidden) tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -293,7 +301,7 @@ export default function ApprovalView() {
       document.removeEventListener('visibilitychange', onVis);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approvalStatus, projectId, token]);
+  }, [approvalStatus, waitingForPush, projectId, token]);
 
   const handleApprove = async () => {
     // Preview renders the client's page 1:1; intercept the action so the admin
@@ -409,10 +417,15 @@ export default function ApprovalView() {
   // and would otherwise re-strand the client; the accepted lines still drive the
   // "what you chose" recap below, just not this gate.
   const alreadyPicked = !!p.optionsPickedAt;
+  // A quote — grouped OR standalone-only — always routes through the buffer:
+  // pick/accept → "we're finalizing" wait → the owner's published confirmation →
+  // approve → track. The client can NEVER approve a raw quote directly. 'legacy'
+  // (direct read-only approve) is reserved for a truly quote-less imported order.
+  const hasQuote = quoteLines.length > 0;
   const stage = (p.hasConfirmation || (Array.isArray(p.confirmation?.items) && p.confirmation.items.length > 0))
     ? 'confirmation'
-    : !hasGroups
-      ? 'legacy'
+    : !hasQuote
+      ? 'legacy'   // imported order with no quote to accept — read-only approve
       : approvalStatus !== 'pending'
         ? 'legacy'   // terminal decision already made — read-only table + status panel
         : ((alreadyPicked && !repicking) ? 'picked' : 'picker');
@@ -653,10 +666,12 @@ export default function ApprovalView() {
           <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
             <Typography sx={eyebrow}>Step 1 of 3 · Choose</Typography>
             <Typography sx={{ color: T.text, fontSize: { xs: 25, md: 30 }, fontWeight: 800, mt: 0.75, lineHeight: 1.15, letterSpacing: -0.4 }}>
-              Pick what you'd like
+              {hasGroups ? "Pick what you'd like" : 'Review your quote'}
             </Typography>
             <Typography sx={{ color: T.muted, fontSize: { xs: 14.5, md: 15 }, mt: 1.25, mb: 3, lineHeight: 1.6, maxWidth: 540 }}>
-              Tap the options you want — you don't have to take everything. Every price is all-in per unit.
+              {hasGroups
+                ? "Tap the options you want — you don't have to take everything. Every price is all-in per unit."
+                : "Here's your quote — every price is all-in per unit. Accept it to move forward and we'll finalize your confirmation."}
               <Box component="span" sx={{ display: 'block', mt: 1, color: T.faint, fontSize: 13.5 }}>
                 Next you'll get your full confirmation — pricing, mockups &amp; details — to review and approve.
                 You're just choosing here; nothing's final yet.
@@ -786,7 +801,7 @@ export default function ApprovalView() {
                 endIcon={!pickBusy && canSubmitPicks ? <ArrowForwardIcon /> : null}
                 sx={{ ...primaryBtn, flex: 2 }}>
                 {pickBusy ? <CircularProgress size={18} sx={{ color: T.onAccent }} />
-                  : canSubmitPicks ? 'Continue to review' : 'Tap the options you want'}
+                  : canSubmitPicks ? (hasGroups ? 'Continue to review' : 'Accept & continue') : 'Tap the options you want'}
               </Button>
               <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy} sx={{ ...ghostBtn, flex: 1 }}>
                 Ask a question

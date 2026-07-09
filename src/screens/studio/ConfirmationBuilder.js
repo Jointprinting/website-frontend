@@ -9,12 +9,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Box, Stack, Typography, Button, TextField, IconButton,
+  Box, Stack, Typography, Button, TextField, IconButton, Snackbar, Alert,
   Dialog, DialogContent, FormControlLabel, Switch, CircularProgress, MenuItem, Select, Tooltip, Collapse,
 } from '@mui/material';
 import CloseIcon              from '@mui/icons-material/Close';
 import PictureAsPdfIcon       from '@mui/icons-material/PictureAsPdf';
 import ShareIcon              from '@mui/icons-material/Share';
+import SendRoundedIcon        from '@mui/icons-material/SendRounded';
 import AddCircleOutlineIcon   from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
@@ -134,13 +135,19 @@ function todayCalendarISO() {
   const d = new Date();
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
 }
-export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval }) {
+export default function ConfirmationBuilder({ open, project, mockupMap, mockups, logo, token, onClose, onSave, onShareApproval, onPublish }) {
   const fullScreen = useMobileFullScreen();
   const [local, setLocal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushToast, setPushToast] = useState({ open: false, msg: '', sev: 'success' });
+  // Whether this confirmation is currently LIVE on the client's link. Seeded from
+  // the server's publish stamp and flipped true the moment the owner pushes, so
+  // the header reads "live" vs "draft — not pushed yet" without a reload.
+  const [pushedLive, setPushedLive] = useState(!!(project && project.confirmation && project.confirmation.publishedAt));
 
   // Load the draft on open. Order of precedence:
   //   1. A localStorage draft for this project (always wins — if you typed
@@ -198,6 +205,8 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     safeSeed.shipTos = Array.isArray(safeSeed.shipTos) ? safeSeed.shipTos : [];
     setLocal(safeSeed);
     setDirty(false);
+    // Reflect the server's publish state for THIS project (draft vs live).
+    setPushedLive(!!(project.confirmation && project.confirmation.publishedAt));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id]);
 
@@ -325,6 +334,48 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     } finally { setShareBusy(false); }
   };
 
+  // "Push to client" — the primary action. Finalize → make the confirmation LIVE
+  // on the client's EXISTING link (never a new link). Saves, runs the same share
+  // guard, then publishes (sets confirmation.publishedAt). If the client already
+  // has the link, their page flips off the "we're finalizing" screen on its own;
+  // if they've never been sent it, we open the email dialog so they get it.
+  const pushToClient = async () => {
+    if (!onPublish) return;
+    const issues = shareIssuesFor(local);
+    if (issues.length > 0) {
+      alert(issues.length === 1 ? issues[0]
+        : `This confirmation isn't ready to push:\n\n• ${issues.join('\n• ')}`);
+      return;
+    }
+    setPushBusy(true);
+    try {
+      if (dirty) await persist();
+      const res = await onPublish();   // POST /orders/:id/confirmation/publish
+      if (res && res.ok) {
+        setPushedLive(true);
+        // First delivery: if the client was never emailed the link, open the
+        // share dialog so they actually receive it. Otherwise just confirm —
+        // their open tab auto-updates and re-emailing is optional.
+        if (!res.hasRecipients && onShareApproval) {
+          setPushToast({ open: true, msg: res.reopened ? 'Revised confirmation is live — send them the link ↓' : 'Confirmation is live — send them the link ↓', sev: 'success' });
+          await onShareApproval();
+        } else {
+          setPushToast({
+            open: true,
+            msg: res.reopened
+              ? '✓ Revised confirmation pushed — live on their existing link (nothing new sent).'
+              : '✓ Pushed — live on the client’s existing link (same link, nothing new sent).',
+            sev: 'success',
+          });
+        }
+      } else {
+        setPushToast({ open: true, msg: 'Could not push the confirmation — please try again.', sev: 'error' });
+      }
+    } catch (e) {
+      setPushToast({ open: true, msg: e?.response?.data?.message || e.message || 'Push failed.', sev: 'error' });
+    } finally { setPushBusy(false); }
+  };
+
   // Closing the dialog now auto-saves dirty changes instead of asking. The
   // localStorage draft was the safety net before; now we just commit on close.
   const closeWithSave = async () => {
@@ -374,34 +425,60 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
               Project #{project.projectNumber || '—'}{saving ? ' · saving…' : (dirty ? ' · saving soon' : ' · saved')}
             </Typography>
           </Box>
+          {/* Publish state: whether the client can see this yet. Shown once there's
+              something to push, so the owner always knows if they're still in the
+              private "buffer" or the confirmation is live for approval. */}
+          {(local?.items?.length > 0) && (
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.9, py: 0.25, borderRadius: 999,
+              border: `1px solid ${pushedLive ? 'rgba(52,211,153,0.40)' : 'rgba(251,191,36,0.40)'}`,
+              bgcolor: pushedLive ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.10)',
+              color: pushedLive ? D.green : D.amber, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+              {pushedLive ? '● Live on client’s link' : '● Draft — not pushed'}
+            </Box>
+          )}
         </Typography>
         {/* The separate "Preview" button is gone: the live pane on the right IS
             the client view now (the shared ConfirmationDocument), so there's
             nothing extra to preview. "Share for approval" and "Download PDF"
             remain. */}
+        {/* Secondary: just get the link to the client (email/copy) WITHOUT
+            changing publish state — for re-sending an already-live link. */}
         {onShareApproval && (
-          <Button size="small" disabled={shareBusy}
+          <Button size="small" disabled={shareBusy || pushBusy}
             startIcon={shareBusy
               ? <CircularProgress size={12} sx={{ color: D.green }} />
               : <ShareIcon sx={{ fontSize: 16 }} />}
             onClick={shareApproval}
-            sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.green, borderRadius: 999,
-              transition: 'color 0.18s ease', '&:hover': { color: '#5cec8e' } }}>
-            Share for approval
+            sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.muted, borderRadius: 999,
+              transition: 'color 0.18s ease', '&:hover': { color: D.text } }}>
+            Email link
           </Button>
         )}
         <Button size="small" disabled={pdfBusy}
           startIcon={pdfBusy
-            ? <CircularProgress size={12} sx={{ color: D.ink }} />
+            ? <CircularProgress size={12} sx={{ color: D.green }} />
             : <PictureAsPdfIcon sx={{ fontSize: 16 }} />}
           onClick={downloadPdf}
-          sx={{ fontSize: 12, fontWeight: 800, px: 1.75, py: 0.5,
-            bgcolor: D.green, color: D.ink, textTransform: 'none', borderRadius: 999,
-            boxShadow: `0 6px 18px ${D.glow}`,
-            transition: 'transform 0.15s ease, box-shadow 0.2s ease, background-color 0.15s ease',
-            '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 26px ${D.glow}` } }}>
-          Download PDF
+          sx={{ fontSize: 12, fontWeight: 700, color: D.muted, textTransform: 'none', borderRadius: 999,
+            transition: 'color 0.18s ease', '&:hover': { color: D.text } }}>
+          PDF
         </Button>
+        {/* PRIMARY: finalize → make the confirmation LIVE on the client's existing
+            link (the buffer's release valve). The single green CTA. */}
+        {onPublish && (
+          <Button size="small" disabled={pushBusy || !(local?.items?.length)}
+            startIcon={pushBusy
+              ? <CircularProgress size={12} sx={{ color: D.ink }} />
+              : <SendRoundedIcon sx={{ fontSize: 16 }} />}
+            onClick={pushToClient}
+            sx={{ fontSize: 12, fontWeight: 800, px: 1.75, py: 0.5,
+              bgcolor: D.green, color: D.ink, textTransform: 'none', borderRadius: 999,
+              boxShadow: `0 6px 18px ${D.glow}`,
+              transition: 'transform 0.15s ease, box-shadow 0.2s ease, background-color 0.15s ease',
+              '&:hover': { bgcolor: '#5cec8e', transform: 'translateY(-1px)', boxShadow: `0 10px 26px ${D.glow}` } }}>
+            {pushedLive ? 'Re-push to client' : 'Push to client'}
+          </Button>
+        )}
         <IconButton size="small" onClick={closeWithSave} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -446,6 +523,16 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           </Box>
         </Box>
       </DialogContent>
+
+      <Snackbar open={pushToast.open} autoHideDuration={5000}
+        onClose={() => setPushToast(t => ({ ...t, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={pushToast.sev} variant="filled"
+          onClose={() => setPushToast(t => ({ ...t, open: false }))}
+          sx={{ fontWeight: 700 }}>
+          {pushToast.msg}
+        </Alert>
+      </Snackbar>
     </Dialog>
   );
 }
@@ -1192,10 +1279,7 @@ function quoteVariantKey(o) {
 }
 
 function seedItemFromQuote(line) {
-  // Sensible default: pull style / brand / color / print from quote, leave
-  // qty unset so the admin distributes across sizes manually.
   const description = line.description || '';
-  const brandGuess = description.split(/\s/)[0] || '';
   // Carry the quote line's true cost/unit (blank + print + setup/ship spread
   // over its qty) so the order's COGS can be derived from the confirmation.
   // Internal only — never rendered on the client-facing doc.
@@ -1203,9 +1287,16 @@ function seedItemFromQuote(line) {
   const setupShip = Math.max(0, Number(line.setupCost) || 0) + Math.max(0, Number(line.shippingCost) || 0);
   const unitCost = (Number(line.blankCost) || 0) + (Number(line.printCost) || 0) + (q > 0 ? setupShip / q : 0);
   return {
-    mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
-    productName: '',
-    brandName: brandGuess,
+    // Carry the line's art too (its studio mockup # or uploaded render), so the
+    // "+ From quote" path lands with the design attached, not just text. The
+    // fresh-open path still overrides with positional auto-matched mockups.
+    mockupNum: line.mockupNum || '', customMockupDataUrl: line.image || '',
+    mockupSnapshots: [], showBack: false,
+    // Faithful to what the client actually picked: their option's product label
+    // is the productName, so the confirmation shows the same thing they approved
+    // (e.g. "Small Rolling Trays") instead of a mangled first-word brand guess.
+    productName: description,
+    brandName: description.split(/\s/)[0] || '',
     styleCode: line.styleCode || '',
     printType: line.printType || '',
     // Carry the decoration detail (e.g. "1 color front") so a print VARIANT
@@ -1216,7 +1307,12 @@ function seedItemFromQuote(line) {
     color:     line.color || '',
     printerName: line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
-    sizes:     DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: Number(line.unitPrice) || 0 })),
+    // Carry the QUANTITY the client picked onto one "OS" (one-size) row at the
+    // approved unit price, so the confirmation opens ~complete with the real
+    // order total — not $0 with seven empty size rows. The owner splits this into
+    // real garment sizes (XS–3XL) when needed; for non-garment items (trays,
+    // glass, stickers) it's already correct.
+    sizes:     [{ label: 'OS', qty: q, unitPrice: Number(line.unitPrice) || 0 }],
   };
 }
 
