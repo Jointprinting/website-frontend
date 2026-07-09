@@ -289,15 +289,20 @@ export default function ApprovalView() {
   // SAME link, so the client's open tab should flip to the fresh ask instead of
   // sitting on the static "we're on it" panel forever.
   const awaitingReopen = approvalStatus === 'requested_changes';
+  // And poll while the client is REVIEWING a published-but-not-yet-approved
+  // confirmation, so the owner's further tweaks (a shipping/price fix after the
+  // push) stream to the client live — they don't have to re-push to update what
+  // the client sees. The initial reveal still requires the push (the buffer).
+  const reviewingConfirmation = p.hasConfirmation && approvalStatus === 'pending';
   useEffect(() => {
     if (isPreview) return;
-    if (approvalStatus !== 'approved' && !waitingForPush && !awaitingReopen) return;
+    if (approvalStatus !== 'approved' && !waitingForPush && !awaitingReopen && !reviewingConfirmation) return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
       refresh();
     };
-    const fast = waitingForPush || awaitingReopen;   // hand-off moments feel live
+    const fast = waitingForPush || awaitingReopen || reviewingConfirmation;   // hand-off moments feel live
     const id = setInterval(tick, fast ? 20000 : 60000);
     const onVis = () => { if (!document.hidden) tick(); };
     document.addEventListener('visibilitychange', onVis);
@@ -307,7 +312,7 @@ export default function ApprovalView() {
       document.removeEventListener('visibilitychange', onVis);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approvalStatus, waitingForPush, awaitingReopen, projectId, token]);
+  }, [approvalStatus, waitingForPush, awaitingReopen, reviewingConfirmation, projectId, token]);
 
   const handleApprove = async () => {
     // Preview renders the client's page 1:1; intercept the action so the admin
