@@ -248,6 +248,15 @@ function DealCard({ deal, onOpen, onDragStart, onDragEnd, dragging, locked }) {
 }
 
 // ── Board column ──────────────────────────────────────────────────────────────
+// A short, purpose-y line for an empty lane so a quiet column reads as "nothing
+// here yet," not "broken." Keyed by deal stage; unknown stages fall back.
+const STAGE_EMPTY_HINT = {
+  qualifying: 'New leads land here',
+  quote_sent: 'Quotes waiting on a yes',
+  won: 'Won deals collect here',
+  lost: 'Closed-lost deals',
+};
+
 function DealColumn({ stage, deals, isOver, onOpen, onDragStart, onDragEnd, onDrop, onDragOverCol, onDragLeaveCol, draggingKey, lockedKeys }) {
   const m = dealStageMeta(stage);
   const won = stage === 'won';
@@ -286,8 +295,13 @@ function DealColumn({ stage, deals, isOver, onOpen, onDragStart, onDragEnd, onDr
       <Box sx={{ p: 1, flexGrow: 1, minHeight: 80, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1,
         '&::-webkit-scrollbar': { width: 5 }, '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 3 } }}>
         {deals.length === 0 ? (
-          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 60 }}>
-            <Typography sx={{ color: D.faint, fontSize: 11.5, opacity: isOver ? 1 : 0.6 }}>{isOver ? 'Drop here' : 'Empty'}</Typography>
+          <Box sx={{ flexGrow: 1, m: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 90, borderRadius: 2, textAlign: 'center', px: 1,
+            border: `1px dashed ${isOver ? D.green : 'rgba(255,255,255,0.09)'}`,
+            bgcolor: isOver ? 'rgba(74,222,128,0.05)' : 'transparent', transition: 'all .12s ease' }}>
+            <Typography sx={{ color: isOver ? D.green : D.faint, fontSize: 11.5, fontWeight: 700, opacity: isOver ? 1 : 0.7 }}>
+              {isOver ? 'Drop here' : (STAGE_EMPTY_HINT[stage] || 'No deals here yet')}
+            </Typography>
           </Box>
         ) : deals.map((d) => (
           <DealCard
@@ -347,7 +361,6 @@ export default function DealsView({
   // day). A small "Deal setup" toggle in the summary band brings it back on demand
   // — so re-run + undo stay reachable, just out of the way.
   const migrationRan = (migrateStatus?.migratedDeals || 0) > 0;
-  const [setupOpen, setSetupOpen] = React.useState(false);
 
   // ── Drag state (mirrors PipelineView) ───────────────────────────────────────
   const [dragState, setDragState] = React.useState({ activeKey: null, overCol: null });
@@ -400,9 +413,10 @@ export default function DealsView({
 
   return (
     <Stack spacing={2} sx={{ height: '100%' }}>
-      {/* Reversible seed-from-orders panel — shown on first run, then tucked away
-          (toggled from the summary band) once deals have been seeded. */}
-      {(!migrationRan || setupOpen) && (
+      {/* Reversible seed-from-orders panel — a ONE-TIME tool. Shown only until it
+          has seeded deals, then it fully retires itself (no lingering setup/undo
+          clutter on a board the owner uses every day). */}
+      {!migrationRan && (
         <MigratePanel
           status={migrateStatus}
           onPreview={onPreviewMigrate}
@@ -421,16 +435,6 @@ export default function DealsView({
         <Metric label="Won value" value={fmtMoney0(wonValue)} tone={D.green} />
         <Box sx={{ flexGrow: 1 }} />
         {loading && <CircularProgress size={18} sx={{ color: D.green }} />}
-        {/* Quiet access to the seed/undo panel after it's run (kept off the board). */}
-        {migrationRan && (
-          <Button
-            onClick={() => setSetupOpen((v) => !v)} size="small"
-            sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12, color: D.faint, borderRadius: 999,
-              '&:hover': { color: D.text, bgcolor: 'rgba(255,255,255,0.04)' } }}
-          >
-            {setupOpen ? 'Hide setup' : 'Deal setup'}
-          </Button>
-        )}
         <Button
           onClick={onNewDeal} variant="contained" startIcon={<AddIcon />}
           sx={{ ...dropPrimaryBtn, ml: { xs: 0, sm: 1 } }}
