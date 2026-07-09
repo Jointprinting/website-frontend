@@ -620,6 +620,15 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     if (!projectId) return { ok: false };
     try {
       const r = await axios.post(`${base}/orders/${projectId}/confirmation/publish`, {}, authHdr);
+      // Stamp publishedAt onto the in-memory project objects the builder/drawer
+      // read, so the "live on client's link" state survives a close/reopen even
+      // before loadProjects() round-trips (loadProjects only refreshes the list).
+      const publishedAt = r.data && r.data.publishedAt;
+      const stamp = (proj) => (proj && proj._id === projectId)
+        ? { ...proj, confirmation: { ...(proj.confirmation || {}), publishedAt } }
+        : proj;
+      setConfirmation(stamp);
+      setActiveProject(stamp);
       loadProjects();
       return { ok: true, ...r.data };
     } catch (e) {

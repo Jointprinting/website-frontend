@@ -270,6 +270,30 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     setDirty(true);
   };
 
+  // Stale-draft guard: the backend lets the client change their picks while the
+  // confirmation is still an unpublished draft — so a confirmation built from an
+  // earlier selection can silently disagree with what they now want. Flag it
+  // conservatively: only when a currently-committed GROUPED pick is missing from
+  // the confirmation items (manual/custom items and standalone lines never
+  // trigger a false alarm). The owner re-seeds before pushing.
+  const committedGroupedPicks = (project.quoteLines || []).filter(l => l && l.accepted && l.group);
+  const seededKeys = new Set((local.items || []).map(quoteVariantKey));
+  const picksChanged = !pushedLive
+    && committedGroupedPicks.length > 0
+    && committedGroupedPicks.some(l => !seededKeys.has(quoteVariantKey(l)));
+
+  // Rebuild the confirmation items from the client's CURRENT committed picks
+  // (drops manual size splits — acceptable for the rare re-pick case).
+  const reseedFromPicks = () => {
+    const matched = inferMockupNumsFor(project, mockups);
+    const items = chosenQuoteLines(project.quoteLines).map((line, i) => ({
+      ...seedItemFromQuote(line),
+      mockupNum: line.mockupNum || matched[i] || '',
+      customMockupDataUrl: line.image || '',
+    }));
+    update({ items });
+  };
+
   const persist = async () => {
     // Snapshot the edit version so keystrokes typed while the save is in
     // flight are never marked "saved" — they re-trigger the autosave.
@@ -329,7 +353,11 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     }
     setShareBusy(true);
     try {
-      if (dirty) await persist();
+      // Always persist first — a freshly auto-seeded confirmation is priced but
+      // still `dirty:false`, so gating on dirty would share/link a doc the server
+      // has never received. persist() is an idempotent PUT (server preserves the
+      // publish stamp), so this is safe to call unconditionally.
+      await persist();
       await onShareApproval();
     } finally { setShareBusy(false); }
   };
@@ -349,27 +377,32 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     }
     setPushBusy(true);
     try {
-      if (dirty) await persist();
+      // Always persist first — a freshly seeded confirmation is priced but still
+      // dirty:false, so gating on dirty would publish a doc the server never
+      // received (→ "nothing to push"). persist() is idempotent (server keeps the
+      // publish stamp).
+      await persist();
       const res = await onPublish();   // POST /orders/:id/confirmation/publish
       if (res && res.ok) {
         setPushedLive(true);
-        // First delivery: if the client was never emailed the link, open the
-        // share dialog so they actually receive it. Otherwise just confirm —
-        // their open tab auto-updates and re-emailing is optional.
-        if (!res.hasRecipients && onShareApproval) {
-          setPushToast({ open: true, msg: res.reopened ? 'Revised confirmation is live — send them the link ↓' : 'Confirmation is live — send them the link ↓', sev: 'success' });
+        // Open the email dialog whenever the client needs to be TOLD: first
+        // delivery (never emailed) OR a reopen after they requested changes — a
+        // reopen is a fresh ask, and their tab may be sitting on the static
+        // "we're on it" panel with nothing to auto-flip it. Otherwise just confirm.
+        if ((!res.hasRecipients || res.reopened) && onShareApproval) {
+          setPushToast({ open: true, msg: res.reopened ? 'Revised confirmation is live — send them the update ↓' : 'Confirmation is live — send them the link ↓', sev: 'success' });
           await onShareApproval();
         } else {
           setPushToast({
             open: true,
-            msg: res.reopened
-              ? '✓ Revised confirmation pushed — live on their existing link (nothing new sent).'
-              : '✓ Pushed — live on the client’s existing link (same link, nothing new sent).',
+            msg: '✓ Pushed — live on the client’s existing link (same link, nothing new sent).',
             sev: 'success',
           });
         }
       } else {
-        setPushToast({ open: true, msg: 'Could not push the confirmation — please try again.', sev: 'error' });
+        // Surface the server's actual reason (e.g. "already approved" — retrying
+        // can't fix that) instead of a generic "try again".
+        setPushToast({ open: true, msg: (res && res.message) || 'Could not push the confirmation — please try again.', sev: 'error' });
       }
     } catch (e) {
       setPushToast({ open: true, msg: e?.response?.data?.message || e.message || 'Push failed.', sev: 'error' });
@@ -489,6 +522,21 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
           borderBottom: `1px solid rgba(248,113,113,0.25)`,
           color: '#f87171', fontSize: 11, fontWeight: 600 }}>
           ⚠ {draftSaveError}
+        </Box>
+      )}
+
+      {picksChanged && (
+        <Box sx={{ px: 2.5, py: 0.85, bgcolor: 'rgba(251,191,36,0.12)',
+          borderBottom: `1px solid rgba(251,191,36,0.28)`,
+          display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Typography sx={{ color: D.amber, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 200 }}>
+            ⚠ The client changed their picks since this was built — it may not match what they selected now.
+          </Typography>
+          <Button size="small" onClick={reseedFromPicks}
+            sx={{ fontSize: 11.5, fontWeight: 800, textTransform: 'none', color: D.ink, bgcolor: D.amber,
+              borderRadius: 999, px: 1.5, '&:hover': { bgcolor: '#fcd34d' } }}>
+            Re-seed from their picks
+          </Button>
         </Box>
       )}
 
@@ -1263,9 +1311,15 @@ function inferMockupNumsFor(project, mockups) {
 // on the backend.
 function chosenQuoteLines(lines) {
   const arr = Array.isArray(lines) ? lines : [];
+  // Before any pick (owner still building the quote) → everything is eligible.
   if (!arr.some(l => l && l.accepted)) return arr;
-  const decided = new Set(arr.filter(l => l && l.accepted).map(l => l.group));
-  return arr.filter(l => l && (l.accepted || !l.group || !decided.has(l.group)));
+  // Once the client has picked: the committed order is their accepted picks PLUS
+  // always-included standalone (ungrouped) lines. Every grouped option they did
+  // NOT pick — including every option of a group they SKIPPED entirely — is
+  // excluded. This mirrors the backend's committed-order filter
+  // (controllers/approval.js: `l.accepted || !l.group`) EXACTLY, so a seed built
+  // from these lines can never bake a declined option's price into the total.
+  return arr.filter(l => l && (l.accepted || !l.group));
 }
 
 // Stable dedupe key for the "+From quote" import (H4): style + color + the print
@@ -1274,7 +1328,12 @@ function chosenQuoteLines(lines) {
 // carry styleCode/color/printType/printDetails). Mirrors backend utils/poCost
 // lineKey.
 function quoteVariantKey(o) {
-  return [o && (o.styleCode || ''), o && (o.color || ''), o && (o.printType || ''), o && (o.printDetails || '')]
+  // Include the descriptive name too: non-garment standalone lines (trays, glass,
+  // stickers) leave style/color/print blank, so without the name every such line
+  // collapses to the same key and the "+ From quote" dedupe would silently drop
+  // all but one. description (quote line) / productName (seeded item) name them.
+  return [o && (o.styleCode || ''), o && (o.color || ''), o && (o.printType || ''), o && (o.printDetails || ''),
+          o && (o.description || o.productName || '')]
     .map(s => String(s || '').trim().toLowerCase()).join('|');
 }
 

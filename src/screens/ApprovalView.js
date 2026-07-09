@@ -284,15 +284,21 @@ export default function ApprovalView() {
   //     page flips to the finalized confirmation. (Faster here — 20s — so the
   //     hand-off feels live.) Both pause when the tab is hidden.
   const waitingForPush = !!p.optionsPickedAt && !p.hasConfirmation && approvalStatus === 'pending';
+  // Also poll after the client requested changes: when the owner re-pushes a
+  // revised confirmation the cycle reopens (status → pending, republished) on the
+  // SAME link, so the client's open tab should flip to the fresh ask instead of
+  // sitting on the static "we're on it" panel forever.
+  const awaitingReopen = approvalStatus === 'requested_changes';
   useEffect(() => {
     if (isPreview) return;
-    if (approvalStatus !== 'approved' && !waitingForPush) return;
+    if (approvalStatus !== 'approved' && !waitingForPush && !awaitingReopen) return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
       refresh();
     };
-    const id = setInterval(tick, waitingForPush ? 20000 : 60000);
+    const fast = waitingForPush || awaitingReopen;   // hand-off moments feel live
+    const id = setInterval(tick, fast ? 20000 : 60000);
     const onVis = () => { if (!document.hidden) tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -301,7 +307,7 @@ export default function ApprovalView() {
       document.removeEventListener('visibilitychange', onVis);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approvalStatus, waitingForPush, projectId, token]);
+  }, [approvalStatus, waitingForPush, awaitingReopen, projectId, token]);
 
   const handleApprove = async () => {
     // Preview renders the client's page 1:1; intercept the action so the admin
