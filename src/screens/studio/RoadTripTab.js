@@ -717,17 +717,20 @@ export default function RoadTripTab({ token, onNavigate }) {
       // when signal returns — never lost. queuedRequest only throws on a real
       // server refusal (4xx); a connectivity failure resolves as { queued }.
       const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `CRM · ${d.name}` });
-      // Local pin stage: server truth when online; offline, keep the stage we
-      // already knew (promote-only means it can only be right or too low) and
-      // fall back to the suggestion for a brand-new record.
+      // Local pin stage + key: server truth when online (patchOne may have
+      // re-resolved a stale/derived key onto the real card at write time);
+      // offline, keep the stage we already knew (promote-only means it can
+      // only be right or too low) and fall back to the suggestion for a
+      // brand-new record.
       const stage = (!res.queued && res.data?.client?.stage) || d?.crm?.stage || body.stageSuggest;
+      const realKey = (!res.queued && res.data?.client?.companyKey) || key;
       if (d._id) {
-        setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: key, stage } } : x)));
+        setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: realKey, stage } } : x)));
       }
       if (res.queued) {
         showToast(`"${d.name}" saved offline — will sync when you're back on signal.`, 'info');
       } else {
-        showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+        showToast(`"${d.name}" → CRM (${stage}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
       }
       return res.data;
     } catch (err) {
@@ -758,14 +761,17 @@ export default function RoadTripTab({ token, onNavigate }) {
     };
     try {
       const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `To-do · ${d.name}` });
+      // Server truth for the card's key when online — patchOne may have
+      // re-resolved a stale/derived key onto the real card at write time.
+      const realKey = (!res.queued && res.data?.client?.companyKey) || key;
       if (d._id) {
-        setDisps((prev) => prev.map((x) => (x._id === d._id && !x.crm ? { ...x, crm: { companyKey: key, stage: 'lead' } } : x)));
+        setDisps((prev) => prev.map((x) => (x._id === d._id && !x.crm ? { ...x, crm: { companyKey: realKey, stage: (!res.queued && res.data?.client?.stage) || 'lead' } } : x)));
       }
       setTodoTarget(null);
       if (res.queued) {
         showToast(`To-do saved offline — will sync when you're back on signal.`, 'info');
       } else {
-        showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: key } }) });
+        showToast(`To-do saved — shows in CRM Today (${todoForm.date}).`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
       }
     } catch (err) {
       showToast(err?.response?.data?.message || 'To-do save failed.', 'error');
