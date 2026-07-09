@@ -2534,9 +2534,20 @@ async function syncFromBackend() {
       const remoteItems = await res.json();
       if (!remoteItems.length) continue;
       const localItems = await dbGetAll(store);
-      const localIds = new Set(localItems.map(i=>i.remoteId).filter(Boolean));
+      const localByRemoteId = new Map(localItems.filter(i=>i.remoteId).map(i=>[i.remoteId, i]));
       for (const ri of remoteItems) {
-        if (ri.remoteId && localIds.has(ri.remoteId)) continue;
+        // Known item: pull the cloud copy down only when it's NEWER than ours
+        // and our row has nothing unpushed. (syncAll pushes before pulling, so
+        // a clean row here really is behind; a dirty one — push failed — keeps
+        // its local edit rather than being clobbered by the cloud.) This is
+        // what makes an edit on device B actually replace the stale copy on
+        // device A, instead of only ever reaching devices that never saw it.
+        const existing = ri.remoteId ? localByRemoteId.get(ri.remoteId) : null;
+        if (existing) {
+          const remoteNewer = (ri.savedAt || 0) > (existing.savedAt || 0);
+          const localClean = existing.cloudSyncedAt && existing.cloudSyncedAt >= (existing.savedAt || 0);
+          if (!remoteNewer || !localClean) continue;
+        }
         const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Date.now() };
         // Blanks/logos render from a local `base64` field; the cloud stores the image in `data`, so map it back on hydration.
         if (store === 'blanks' || store === 'logos') local.base64 = local.data || '';
@@ -2554,7 +2565,13 @@ async function syncFromBackend() {
             if (!local.pageState.backBlankBase64) local.pageState.backBlankBase64 = local.data;
           }
         }
-        try { await dbSaveRaw(store, local); synced++; } catch(e) {}
+        try {
+          // Update-in-place keeps the row's IndexedDB id (dbPut); a brand-new
+          // item gets a fresh row (dbSaveRaw uses insert-only .add()).
+          if (existing) { local.id = existing.id; await dbPut(store, local); }
+          else { await dbSaveRaw(store, local); }
+          synced++;
+        } catch(e) {}
       }
     }
     if (synced > 0) { refreshLibrary(); refreshLbGrid(); refreshClientSuggestions(); toast(`Synced ${synced} item(s) from cloud ☁`, 'success'); }
@@ -3261,6 +3278,11 @@ function saveFormToState() {
 }
 function loadPageIntoForm() {
   const pg = state.pages[state.currentPage];
+  // Restored/synced pages (cloud versions, pageState:Mixed) may lack the print
+  // sub-objects — default them so a partial page can't throw mid-load and
+  // leave the form half old page, half new.
+  if (!pg.printFront) pg.printFront = { type:'', dims:'', loc:'' };
+  if (!pg.printBack)  pg.printBack  = { type:'', dims:'', loc:'' };
   document.getElementById('f-title').value    = pg.title    || '';
   document.getElementById('f-subtitle').value = pg.subtitle || '';
   document.getElementById('f-mockupnum').value= pg.mockupNum|| '';
