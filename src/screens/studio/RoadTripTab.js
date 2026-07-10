@@ -367,7 +367,11 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [segmentsOn, setSegmentsOn] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('jpfm-segments') || 'null');
-      if (Array.isArray(saved) && saved.length) return saved.filter((s) => SEGMENTS.some((x) => x.id === s));
+      // Validate BEFORE the emptiness check — a saved array of stale ids must
+      // fall through to all-on, not initialize zero clickers against a server
+      // that treats the empty param as "no filter".
+      const valid = Array.isArray(saved) ? saved.filter((s) => SEGMENTS.some((x) => x.id === s)) : [];
+      if (valid.length) return valid;
     } catch { /* fall through */ }
     return SEGMENTS.map((s) => s.id);
   });
@@ -1038,7 +1042,10 @@ export default function RoadTripTab({ token, onNavigate }) {
 
   // Manual reorder — move a stop up/down the day list. Optimistic local swap,
   // then persist the full order via PATCH /run {stopOrder} (already supported
-  // server-side; visited stops keep their place at the head).
+  // server-side; visited stops keep their place at the head). Rapid taps fire
+  // overlapping PATCHes — only the LATEST request's response may touch state,
+  // or a slow earlier response visibly reverts the newer optimistic order.
+  const moveSeqRef = React.useRef(0);
   const moveStop = React.useCallback(async (stop, dir) => {
     const stops = [...(run?.stops || [])].sort((a, b) => a.order - b.order);
     const i = stops.findIndex((s) => String(s._id) === String(stop._id));
@@ -1047,10 +1054,12 @@ export default function RoadTripTab({ token, onNavigate }) {
     [stops[i], stops[j]] = [stops[j], stops[i]];
     setRun((prev) => (prev ? { ...prev, stops: stops.map((s, k) => ({ ...s, order: k })) } : prev));
     setRunMiles(null);
+    const seq = ++moveSeqRef.current;
     try {
       const r = await axios.patch(`${api}/api/roadtrip/run`, { stopOrder: stops.map((s) => String(s._id)) }, authHdr);
-      if (r.data?.run) setRun(r.data.run);
+      if (seq === moveSeqRef.current && r.data?.run) setRun(r.data.run);
     } catch {
+      if (seq !== moveSeqRef.current) return; // a newer reorder owns the tray
       showToast('Reorder failed — refreshing.', 'error');
       refreshRun();
     }
