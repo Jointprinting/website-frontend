@@ -508,7 +508,7 @@ select:focus-visible{
 .ov-empty{padding:64px 22px;text-align:center;color:var(--tx3);font-size:13.5px;line-height:1.7}
 .ov-proj{margin-bottom:26px}
 .ov-proj-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
-.ov-proj-name{font-weight:700;font-size:14px;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-proj-name{font-weight:700;font-size:14px;color:var(--tx);min-width:0;overflow-wrap:anywhere;white-space:normal;line-height:1.3}
 .ov-proj-count{font-family:var(--fm);font-size:10.5px;color:var(--tx3);letter-spacing:.04em;flex-shrink:0}
 .ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
 .ov-mk{display:flex;flex-direction:column;gap:7px;background:var(--s0);border:1px solid var(--bd);border-radius:11px;padding:8px;cursor:pointer;text-align:left;font:inherit;color:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}
@@ -2407,6 +2407,11 @@ async function apiSyncSave(store, item) {
         thumbnail: thumb || '',
         client:    item.client || '',
         pageState: _trimPageStateForSync(item.pageState),
+        // Multi-page mockups: pages trimmed like pageState; extraViews (pages
+        // 2+ composites) shrunk like the thumbnail so the approval page can
+        // show every view without a 16MB doc.
+        pages:      Array.isArray(item.pages) ? item.pages.map(_trimPageStateForSync) : null,
+        extraViews: await Promise.all((item.extraViews || []).map(v => _shrinkBase64ForSync(v))),
         savedAt:   item.savedAt || Date.now(),
         remoteId:  item.remoteId,
       }),
@@ -2556,7 +2561,7 @@ async function syncFromBackend() {
         // CONSTRUCTION even when the pushing device's clock runs ahead of ours;
         // otherwise the row wedges — it never accepts another pull, and the
         // badge auto-push re-shrinks and re-uploads it in a loop.
-        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0) };
+        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, pages:ri.pages||null, extraViews:ri.extraViews||[], savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0) };
         // Blanks/logos render from a local `base64` field; the cloud stores the image in `data`, so map it back on hydration.
         if (store === 'blanks' || store === 'logos') local.base64 = local.data || '';
         // Mockups: the cloud copy of pageState has its base64s stripped (see
@@ -3250,12 +3255,13 @@ function addPage() {
   saveFormToState();
   const cur = state.pages[state.currentPage] || {};
   const fresh = defaultPageInfo();
-  // Carry the project link (and client) forward so consecutive mockups made in
-  // one session all attach to the same order and auto-letter A, B, C…. The new
-  // page is otherwise blank — new mockup, new number, new identity.
-  fresh.projectId = cur.projectId || '';
-  fresh.projectNumber = cur.projectNumber || '';
-  fresh.client = cur.client || '';
+  // A page is another VIEW of the SAME mockup (e.g. the sideways garment for
+  // shoulder prints) — one file, one number, shared info. Everything except
+  // the garment/art fields carries over; the whole pages array saves and
+  // reloads as one library item.
+  for (const k of ['projectId','projectNumber','client','title','subtitle','mockupNum','pdfName','notes','template','_savedRemoteId','_savedDbId']) {
+    if (cur[k] !== undefined) fresh[k] = cur[k];
+  }
   state.pages.push(fresh);
   state.currentPage = state.pages.length-1;
   loadPageIntoForm();
@@ -3309,6 +3315,12 @@ function saveFormToState() {
     dims: document.getElementById('f-dims-back').value,
     loc:  document.getElementById('f-loc-back').value,
   };
+  // Shared mockup info lives on EVERY page (pages are views of one mockup) —
+  // switching pages must never hide or fork the identity fields.
+  for (const other of state.pages) {
+    if (other === pg) continue;
+    for (const k of ['title','subtitle','mockupNum','pdfName','notes','client','projectId','projectNumber']) other[k] = pg[k];
+  }
 }
 function loadPageIntoForm() {
   const pg = state.pages[state.currentPage];
@@ -4543,13 +4555,21 @@ async function saveMockupToLibrary() {
     // instead of inserting a duplicate IndexedDB row for the same mockup.
     ...(isExisting && pg._savedDbId != null ? { id: pg._savedDbId } : {}),
     pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})),
+    // MULTI-PAGE: every page (view) of this mockup persists inside the ONE
+    // library item — full fidelity locally; the sync layer trims/offloads.
+    // extraViews = pages 2+'s front composites, so the confirmation/approval
+    // page can show the shoulder view etc. without the full editor state.
+    pages: state.pages.length > 1
+      ? state.pages.map(p => JSON.parse(JSON.stringify({...p,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})))
+      : null,
+    extraViews: state.pages.slice(1).map(p => p.frontCompositeBase64 || p.frontBlankBase64 || null).filter(Boolean),
   };
   try{
     const localId = await dbSave('mockups',snapshot);
     // Remember this page's identity so a re-save updates it instead of minting
     // a new lettered mockup. (dbSave fills snapshot.remoteId if it was new.)
-    pg._savedRemoteId = snapshot.remoteId;
-    pg._savedDbId = localId;
+    // One file identity across every page/view.
+    for (const p of state.pages) { p._savedRemoteId = snapshot.remoteId; p._savedDbId = localId; }
     // Only link via the legacy whole-array PUT when the atomic endpoint wasn't
     // used (it already pushed the number). Skip entirely for existing mockups —
     // they're already linked.
@@ -4769,7 +4789,23 @@ async function loadMockup(id,e) {
   // (same remoteId, same letter) instead of minting a new lettered duplicate.
   ps._savedRemoteId = item.remoteId || '';
   ps._savedDbId = item.id;
-  state.pages[state.currentPage]=ps;
+  // MULTI-PAGE: a mockup saved with extra views restores as ONE file with all
+  // its pages (page 1 = ps, hydrated above). Identity is stamped on every
+  // page so a re-save from any page updates the same item.
+  if (Array.isArray(item.pages) && item.pages.length > 1) {
+    const rest = item.pages.slice(1).map(raw => {
+      const pg2 = raw ? JSON.parse(JSON.stringify(raw)) : {};
+      if (!pg2.printFront) pg2.printFront = { type:'', dims:'', loc:'' };
+      if (!pg2.printBack)  pg2.printBack  = { type:'', dims:'', loc:'' };
+      pg2._savedRemoteId = item.remoteId || '';
+      pg2._savedDbId = item.id;
+      return pg2;
+    });
+    state.pages = [ps, ...rest];
+    state.currentPage = 0;
+  } else {
+    state.pages[state.currentPage]=ps;
+  }
   saveMockupVersion(item.remoteId, item.name, ps, 'open');  // snapshot the as-opened state
   loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
 }

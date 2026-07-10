@@ -515,7 +515,7 @@ export default function ApprovalView() {
   // byNorm — every renderer now resolves the exact same source.
   const mockupByNum = {};
   mockups.forEach(m => {
-    const entry = { front: m.thumbnail, back: m.back };
+    const entry = { front: m.thumbnail, back: m.back, extraViews: m.extraViews || [] };
     const kn = _norm(m.mockupNum);
     if (kn) mockupByNum[kn] = entry;
     const knm = _norm(m.name);
@@ -531,7 +531,9 @@ export default function ApprovalView() {
     const lib = it.mockupNum ? mockupByNum[_norm(it.mockupNum)] : null;
     // Back side only when the admin opted in on the item (showBack) — matches
     // the builder preview and the PDF.
-    return lib ? [lib.front, it.showBack ? lib.back : null].filter(Boolean) : [];
+    // Extra views (pages 2+ of a multi-page mockup — e.g. shoulder prints on
+    // the sideways garment) always show: the client should see every angle.
+    return lib ? [lib.front, it.showBack ? lib.back : null, ...(lib.extraViews || [])].filter(Boolean) : [];
   };
 
   const openLightbox = (src) => setLightbox(src);
@@ -662,8 +664,8 @@ export default function ApprovalView() {
           <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '120ms' }}>
             <Typography sx={{ ...eyebrow, mb: 1.5 }}>Your mockups</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {mockups.map((m, i) => (
-                <ZoomImg key={i} src={m.thumbnail} alt={m.name} onZoom={openLightbox}
+              {mockups.flatMap((m, i) => [m.thumbnail, ...(m.extraViews || [])].filter(Boolean).map((src, j) => ({ m, src, key: `${i}-${j}` }))).map(({ m, src, key }) => (
+                <ZoomImg key={key} src={src} alt={m.name} onZoom={openLightbox}
                   sx={{ aspectRatio: '4/3', bgcolor: T.inset, borderRadius: 2, border: `1px solid ${T.line}`,
                     objectFit: 'cover', transition: 'box-shadow 200ms ease, border-color 200ms ease',
                     '&:hover': { boxShadow: `0 10px 30px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
