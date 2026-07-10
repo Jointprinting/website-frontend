@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
+import ReplyOutlinedIcon from '@mui/icons-material/ReplyOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
@@ -75,7 +76,7 @@ function EnrollmentAccounting({ stats }) {
   );
 }
 
-function WarmRow({ row, onOpenCompany, onMarkReplied, onStop }) {
+function WarmRow({ row, onOpenCompany, onMarkReplied, onStop, onNotAReply }) {
   const meta = enrollmentStatusMeta(row.status);
   const replied = row.status === 'replied';
   const when = row.repliedAt || row.lastOpenedAt;
@@ -104,6 +105,15 @@ function WarmRow({ row, onOpenCompany, onMarkReplied, onStop }) {
           </Typography>
         </Box>
         <Stack direction="row" spacing={0.5} alignItems="center" flexShrink={0} onClick={(e) => e.stopPropagation()}>
+          {replied && (
+            <Tooltip title="Not a real reply — it was an auto-responder. Un-warm and resume the sequence">
+              <IconButton onClick={() => onNotAReply(row.enrollmentId)} size="small"
+                sx={{ color: D.muted, border: `1px solid ${D.line}`,
+                  '&:hover': { color: '#f87171', borderColor: '#f87171' } }}>
+                <ReplyOutlinedIcon sx={{ fontSize: 18, transform: 'scaleX(-1)' }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {!replied && (
             <Tooltip title="They replied — stop the sequence, tag warm, call today">
               <IconButton onClick={() => onMarkReplied(row.enrollmentId)} size="small"
@@ -442,7 +452,7 @@ function SetupWizard({ overview, onGoCampaigns, onGoImport, onTestSend }) {
 }
 
 export default function OverviewView({
-  overview, loading, onOpenCompany, onMarkReplied, onStop, onGoCampaigns, onGoImport, onGoReplies, onTestSend, onRecheckAuth,
+  overview, loading, onOpenCompany, onMarkReplied, onStop, onNotAReply, onGoCampaigns, onGoImport, onGoReplies, onTestSend, onRecheckAuth,
 }) {
   if (loading && !overview) {
     return (
@@ -585,7 +595,8 @@ export default function OverviewView({
           <Stack spacing={1.25}>
             {warm.map((row) => (
               <WarmRow key={String(row.enrollmentId)} row={row}
-                onOpenCompany={onOpenCompany} onMarkReplied={onMarkReplied} onStop={onStop} />
+                onOpenCompany={onOpenCompany} onMarkReplied={onMarkReplied} onStop={onStop}
+                onNotAReply={onNotAReply} />
             ))}
           </Stack>
         )}

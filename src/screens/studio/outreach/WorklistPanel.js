@@ -122,9 +122,9 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
   const setDraftEdit = (id, text) => setDraftEdits((prev) => ({ ...prev, [id]: text }));
   const closeMenu = () => setMenu(null);
 
-  const pickStatus = async (row, next) => {
+  const pickStatus = async (row, next, extra) => {
     closeMenu();
-    try { await onSetStatus(row._id, next); } catch (e) { onError?.(e.response?.data?.message || 'Could not update the reply'); }
+    try { await onSetStatus(row._id, next, extra); } catch (e) { onError?.(e.response?.data?.message || 'Could not update the reply'); }
   };
 
   if (loading) {
@@ -259,6 +259,13 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
             {a.label}
           </MenuItem>
         ))}
+        <Divider sx={{ borderColor: D.line }} />
+        {/* The classifier missed one: reclassifies as an auto-responder AND
+            undoes the warm it caused (drip resumes, warm tag off). */}
+        <MenuItem onClick={() => pickStatus(menu.row, 'ignored', { notARealReply: true })}
+          sx={{ fontSize: 13, color: D.muted }}>
+          Not a real reply (auto-responder)
+        </MenuItem>
       </Menu>
     </Stack>
   );
