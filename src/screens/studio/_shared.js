@@ -265,12 +265,21 @@ export function confRevenue(conf) {
   return roundCents(rev);   // snap to cents (H4), matching the backend grand total
 }
 
+// Estimated COGS from the CONFIRMATION's items — Σ (item qty × unitCost), the
+// internal cost/unit each item carried over from its accepted quote line
+// (never the client-facing unitPrice). Once a confirmation exists it IS the
+// real order, so this supersedes quoteCogs — which still sums every standalone
+// pitch line whether or not the client took it. Returns 0 when no item carries
+// a unitCost (confirmations built before the field existed): callers fall back
+// to the quote-derived figure then. Mirrors backend models/Order.js
+// computeConfirmationCogs byte-for-byte — the save hooks maintain Order.cogs
+// with the same math, so this live view and the stored scalar always agree.
 export function confCogs(conf) {
   if (!conf || !Array.isArray(conf.items)) return 0;
-  return conf.items.reduce((s, it) => {
-    const qty = (it.sizes || []).reduce((q, sz) => q + (Number(sz.qty) || 0), 0);
-    return s + qty * (Number(it.unitCost) || 0);
-  }, 0);
+  return roundCents(conf.items.reduce((s, it) => {
+    const qty = ((it && it.sizes) || []).reduce((q, sz) => q + (Number(sz.qty) || 0), 0);
+    return s + qty * (Number(it && it.unitCost) || 0);
+  }, 0));
 }
 
 // Estimated COGS straight from the QUOTER's cost side — blank + print + setup +

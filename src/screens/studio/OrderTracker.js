@@ -41,7 +41,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1686,14 +1686,19 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   if (!project || !local) return null;
 
   const meta = STATUS_META[local.status] || STATUS_META.quoted;
-  // Est COGS is derived LIVE from the quoter's cost side (blank + print +
-  // setup/ship for the selected lines) — never from the confirmation, which is
-  // the client-facing doc with the markup baked in. Fall back to the stored
-  // Order.cogs scalar (also quote-derived on the backend) for import-only /
-  // legacy orders that carry no quote lines. This one value feeds the header
-  // margin strip, the Est COGS field, and the actual-vs-estimate strip so they
-  // can never disagree. Actuals come from linked receipts (PO = print only).
-  const estCogs = quoteCogs(local.quoteLines, local.setupCost, local.shippingCost) || (Number(local.cogs) || 0);
+  // Est COGS, one source of truth per stage (mirrors how the backend maintains
+  // Order.cogs): once a confirmation exists its items ARE the real order, so
+  // COGS = Σ qty × unitCost — the internal cost carried from each accepted
+  // quote line, never the client price — and a pitch full of standalone
+  // alternatives stops inflating the estimate. Before that, the quoter's cost
+  // side for the selected lines. The stored Order.cogs scalar is the last
+  // fallback (import-only / legacy orders with neither). This one value feeds
+  // the header margin strip, the Est COGS field, and the actual-vs-estimate
+  // strip so they can never disagree. Actuals come from linked receipts
+  // (PO = print only).
+  const estCogs = confCogs(local.confirmation)
+    || quoteCogs(local.quoteLines, local.setupCost, local.shippingCost)
+    || (Number(local.cogs) || 0);
   const _normKey = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
 
   // Stage a change against the CURRENT project. If something for another project
@@ -2428,13 +2433,29 @@ function DocAction({ icon, label, hint, ready, onClick }) {
   );
 }
 
-// Multi-vendor strip: every DISTINCT supplier on a project, since a mixed
-// promos + apparel job runs across several. Sources, merged + de-duped
-// case-insensitively (first-seen casing wins):
-//   • each confirmation item's printerName (the per-item supplier)
+// One vendor name, folded to its identity: lowercase, punctuation → space,
+// corporate + trade-descriptor suffixes dropped, whitespace removed. This is
+// what lets "Heritage" and "Heritage Screen Printing" (the same shop, spelled
+// differently by two fields) collapse to ONE chip, and "S&S Activewear" match
+// "SS Activewear". Same philosophy as the CRM's matchKey. A name that folds to
+// nothing (e.g. literally "Printing LLC") falls back to its plain lowercase.
+const foldVendorName = (name) => {
+  const s = String(name || '').toLowerCase().trim();
+  const folded = s
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(llc|inc|co|corp|corporation|company|ltd|screen\s*print(?:ing|s)?|screenprint(?:ing|s)?|printing|prints?|embroidery)\b/g, ' ')
+    .replace(/\s+/g, '');
+  return folded || s;
+};
+
+// Multi-vendor strip: every DISTINCT vendor on a project — printers and blank
+// suppliers alike, since a mixed promos + apparel job runs across several.
+// Sources, merged + de-duped on the FOLDED name (fullest spelling wins — it's
+// the one most likely to resolve to the vendor card the chip opens):
+//   • each confirmation item's printerName (the per-item vendor)
 //   • the project-level printerName / supplier fields (the legacy single case)
 //   • the generated POs' vendorName (fetched like FlowPipeline does)
-// A single-supplier job renders one chip; none yet → a quiet hint. The PO fetch
+// A single-vendor job renders one chip; none yet → a quiet hint. The PO fetch
 // is best-effort and never blocks the render.
 function SuppliersStrip({ project, authHdr, onNavigate }) {
   const [poVendors, setPoVendors] = useState([]);
@@ -2455,19 +2476,20 @@ function SuppliersStrip({ project, authHdr, onNavigate }) {
     project.supplier,
     ...poVendors,
   ];
-  const seen = new Map();   // lowercased -> display
+  const seen = new Map();   // folded identity -> fullest display spelling
   raw.forEach(name => {
     const s = String(name || '').trim();
     if (!s) return;
-    const k = s.toLowerCase();
-    if (!seen.has(k)) seen.set(k, s);
+    const k = foldVendorName(s);
+    const prev = seen.get(k);
+    if (!prev || s.length > prev.length) seen.set(k, s);
   });
   const suppliers = Array.from(seen.values());
 
   return (
     <Box>
       <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
-        {suppliers.length > 1 ? `Suppliers · ${suppliers.length}` : 'Supplier'}
+        {suppliers.length > 1 ? `Vendors · ${suppliers.length}` : 'Vendor'}
       </Typography>
       {suppliers.length === 0 ? (
         <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic' }}>
