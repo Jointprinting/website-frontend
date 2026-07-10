@@ -383,7 +383,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
               </PF>
               <PF label={
                 <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                  Printer / vendor
+                  To (printer)
                   {(onNavigate && isRealVendor(editing.vendorName)) && (
                     <Box
                       component="span"
@@ -471,20 +471,14 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
               </PF>
             </Box>
 
-            {/* Due date + proof toggle — optional, print only when set */}
-            <Box sx={{ display: 'grid', gap: 1, mb: 1.5, gridTemplateColumns: { xs: '1fr', md: '180px 1fr' }, alignItems: 'end' }}>
+            {/* Due date — optional, prints only when set */}
+            <Box sx={{ display: 'grid', gap: 1, mb: 1.5, gridTemplateColumns: { xs: '1fr', md: '180px' } }}>
               <PF label="Due / in-hands date">
                 <TextField size="small" type="date"
                   value={editing.dueDate ? String(editing.dueDate).slice(0, 10) : ''}
                   onChange={e => update({ dueDate: e.target.value ? new Date(`${e.target.value}T00:00:00Z`).toISOString() : null })}
                   sx={inkInput} />
               </PF>
-              <FormControlLabel sx={{ ml: 0.5, mb: 0.4 }}
-                control={<Switch size="small" checked={!!editing.proofRequired}
-                  onChange={e => update({ proofRequired: e.target.checked })} />}
-                label={<Typography sx={{ color: D.muted, fontSize: 12 }}>
-                  Proof required before production
-                </Typography>} />
             </Box>
 
             {/* Two ship-to blocks. JP supplies the blanks ~99% of the time, so a PO

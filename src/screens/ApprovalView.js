@@ -12,7 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Box, Stack, Typography, Button, TextField, CircularProgress, Dialog,
-  DialogTitle, DialogContent, DialogActions, Modal, IconButton,
+  DialogTitle, DialogContent, DialogActions, Modal, IconButton, Collapse,
   useMediaQuery, useTheme,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
@@ -24,6 +24,8 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
@@ -205,6 +207,7 @@ export default function ApprovalView() {
   const [payMethod, setPayMethod] = useState('');   // '' | 'cc' | 'ach' — client's payment choice
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
   const [lightbox, setLightbox] = useState(null);    // enlarged image src, or null when closed
+  const [detailsOpen, setDetailsOpen] = useState(false); // paid state: the "Order details" disclosure
 
   // Light / dark — the owner found the dark "murky", so the client can flip it.
   // Persisted per browser; first visit follows the OS preference, defaulting to
@@ -234,6 +237,11 @@ export default function ApprovalView() {
   // same locked state for the client every time.
   const p = data?.project || {};
   const approvalStatus = p.approvalStatus || 'pending';   // 'pending' | 'approved' | 'requested_changes'
+  // PAID — the admin ticked the order_paid tracking step. From here the page
+  // leads with the tracking timeline: the "invoice is coming" notice retires,
+  // the order details tuck into a disclosure, and the receipt PDF unlocks.
+  const trackingSteps = (p.tracking && p.tracking.steps) || [];
+  const isPaid = trackingSteps.some((s) => s && s.id === 'order_paid' && !!s.completedAt);
 
   useEffect(() => {
     let cancelled = false;
@@ -546,6 +554,72 @@ export default function ApprovalView() {
     : stage === 'picked'                  ? ['done', 'building', 'todo']
     : /* confirmation / legacy, pending */  ['done', 'current', 'todo'];
 
+  // The order-details body — the confirmation document or the legacy items
+  // table. ONE definition: rendered inline until the order is paid, then
+  // inside the collapsed "Order details" disclosure (paid pages lead with
+  // the tracking timeline, per the owner).
+  const orderDetailsBody = stage === 'confirmation' ? (
+    // The client's order — rendered by the SHARED ConfirmationDocument, the
+    // exact same component the owner's builder preview uses (Nate's WYSIWYG
+    // ask). confItemImages is handed in as the image resolver so the builder
+    // and this page resolve identical sources (H1). Owner-only cost/printer
+    // never appear — the component never reads them and the public payload
+    // already strips them server-side.
+    <Box sx={{ mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+      <ConfirmationDocument
+        conf={conf}
+        project={{
+          companyName: p.companyName, clientName: p.clientName,
+          orderNumber: p.orderNumber, orderDate: p.orderDate,
+          confirmationMessage: p.confirmationMessage, confirmationTerms: p.confirmationTerms,
+        }}
+        logo={logo}
+        resolveItemImages={confItemImages}
+        onZoom={openLightbox}
+        tokens={T}
+      />
+    </Box>
+  ) : (
+    // Legacy / simple table fallback
+    <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
+      <Typography sx={{ ...eyebrow, mb: 1.5 }}>Items</Typography>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Box component="table" sx={{ width: '100%', minWidth: 360, borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr>
+              {['Qty', 'Description', 'Unit $', 'Line $'].map((h, hi) => (
+                <th key={h} style={{ textAlign: hi >= 2 ? 'right' : 'left', fontSize: 10, textTransform: 'uppercase',
+                  letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '6px 8px', borderBottom: `1px solid ${T.line}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {itemRows.length === 0 ? (
+              <tr><td colSpan={4} style={{ padding: '14px 8px', color: T.faint, fontStyle: 'italic' }}>No line items</td></tr>
+            ) : itemRows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.qty || ''}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, color: T.text }}>{r.description || ''}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: `2px solid ${T.green}`, fontSize: 16 }}>Total</td>
+              <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 900, borderTop: `2px solid ${T.green}`, fontSize: 18, color: T.green, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</td>
+            </tr>
+          </tbody>
+        </Box>
+      </Box>
+      {p.confirmationTerms && (
+        <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${T.line}` }}>
+          <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.75 }}>Terms</Typography>
+          <Typography sx={{ color: T.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{p.confirmationTerms}</Typography>
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box sx={{
       minHeight: '100vh', bgcolor: T.bg, color: T.text,
@@ -587,8 +661,10 @@ export default function ApprovalView() {
             confirmation stage the shared ConfirmationDocument renders its own
             (identical) header + message, so we suppress this one to avoid a
             double header — the page is then byte-identical to the builder
-            preview. Other stages (picker / building / legacy) keep this header. */}
-        {stage !== 'confirmation' && (
+            preview. Other stages (picker / building / legacy) keep this header.
+            Once PAID the document collapses into the details disclosure, so
+            this header returns — the page always opens with the brand. */}
+        {(stage !== 'confirmation' || isPaid) && (
         <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, position: 'relative', overflow: 'hidden', animation: 'rise 500ms ease both' }}>
           <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3,
             background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
@@ -867,67 +943,33 @@ export default function ApprovalView() {
               </Button>
             </Stack>
           </Box>
-        ) : stage === 'confirmation' ? (
-          // The client's order — rendered by the SHARED ConfirmationDocument, the
-          // exact same component the owner's builder preview uses (Nate's WYSIWYG
-          // ask). confItemImages is handed in as the image resolver so the builder
-          // and this page resolve identical sources (H1). Owner-only cost/printer
-          // never appear — the component never reads them and the public payload
-          // already strips them server-side.
-          <Box sx={{ mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
-            <ConfirmationDocument
-              conf={conf}
-              project={{
-                companyName: p.companyName, clientName: p.clientName,
-                orderNumber: p.orderNumber, orderDate: p.orderDate,
-                confirmationMessage: p.confirmationMessage, confirmationTerms: p.confirmationTerms,
-              }}
-              logo={logo}
-              resolveItemImages={confItemImages}
-              onZoom={openLightbox}
-              tokens={T}
-            />
-          </Box>
-        ) : (
-          // Legacy / simple table fallback
-          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '180ms' }}>
-            <Typography sx={{ ...eyebrow, mb: 1.5 }}>Items</Typography>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Box component="table" sx={{ width: '100%', minWidth: 360, borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    {['Qty', 'Description', 'Unit $', 'Line $'].map((h, hi) => (
-                      <th key={h} style={{ textAlign: hi >= 2 ? 'right' : 'left', fontSize: 10, textTransform: 'uppercase',
-                        letterSpacing: '0.5px', color: 'rgba(255,255,255,0.5)', padding: '6px 8px', borderBottom: `1px solid ${T.line}` }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemRows.length === 0 ? (
-                    <tr><td colSpan={4} style={{ padding: '14px 8px', color: T.faint, fontStyle: 'italic' }}>No line items</td></tr>
-                  ) : itemRows.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.qty || ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, color: T.text }}>{r.description || ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.unitPrice ? money(r.unitPrice) : ''}</td>
-                      <td style={{ padding: 8, borderBottom: `1px solid ${T.line}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.text }}>{r.lineTotal ? money(r.lineTotal) : ''}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td colSpan={3} style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 800, borderTop: `2px solid ${T.green}`, fontSize: 16 }}>Total</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 900, borderTop: `2px solid ${T.green}`, fontSize: 18, color: T.green, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</td>
-                  </tr>
-                </tbody>
-              </Box>
+        ) : isPaid ? (
+          // PAID — the tracking timeline below is the hero now. The exact same
+          // details body tucks behind a quiet, collapsed-by-default disclosure
+          // so it stays one tap away instead of leading the page (owner's ask).
+          <>
+            <Box
+              onClick={() => setDetailsOpen((o) => !o)}
+              role="button" tabIndex={0} aria-expanded={detailsOpen}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailsOpen((o) => !o); } }}
+              sx={{ ...card, mt: 2.5, px: { xs: 2, md: 2.5 }, py: 1.6, display: 'flex', alignItems: 'center', gap: 1.25,
+                cursor: 'pointer', animation: 'rise 500ms ease both', animationDelay: '180ms',
+                transition: 'background 150ms ease, border-color 150ms ease',
+                '&:hover': { bgcolor: T.panelHi, borderColor: T.lineHi },
+                '&:focus-visible': { outline: `2px solid ${T.green}`, outlineOffset: 2 } }}>
+              <Typography sx={eyebrow}>Order details</Typography>
+              <Typography sx={{ color: T.faint, fontSize: 12, display: { xs: 'none', sm: 'block' } }}>
+                {p.orderNumber ? `Invoice #${p.orderNumber} · ` : ''}items, totals &amp; terms
+              </Typography>
+              <Box sx={{ flex: 1 }} />
+              <ExpandMoreIcon sx={{ color: T.faint, fontSize: 20, transition: 'transform 200ms ease',
+                transform: detailsOpen ? 'rotate(180deg)' : 'none' }} />
             </Box>
-            {p.confirmationTerms && (
-              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${T.line}` }}>
-                <Typography sx={{ ...eyebrow, color: T.faint, mb: 0.75 }}>Terms</Typography>
-                <Typography sx={{ color: T.muted, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{p.confirmationTerms}</Typography>
-              </Box>
-            )}
-          </Box>
-        )}
+            <Collapse in={detailsOpen} timeout={300} unmountOnExit>
+              {orderDetailsBody}
+            </Collapse>
+          </>
+        ) : orderDetailsBody}
 
         {/* Action panel — locked once the client has decided. Hidden during the
             pick stage (the picker has its own actions). */}
@@ -962,21 +1004,44 @@ export default function ApprovalView() {
                   </Typography>
                 </Box>
                 {/* Payment is invoiced (QuickBooks) — tell the client an invoice email
-                    is coming; the chosen method just sets how they'll pay it. */}
-                <Box sx={{ textAlign: 'center', mb: 3, px: 2, py: 1.5, borderRadius: 2, border: `1px solid ${T.line}`, bgcolor: 'rgba(255,255,255,0.02)' }}>
-                  <Typography sx={{ color: T.text, fontSize: 13.5, fontWeight: 800 }}>
-                    You&apos;ll receive an email with your invoice shortly.
-                  </Typography>
-                  <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.5, lineHeight: 1.55 }}>
-                    {payMethod === 'cc' ? 'You can pay by card right from the invoice.'
-                      : payMethod === 'ach' ? 'You can pay by bank transfer (ACH) right from the invoice.'
-                      : "It'll have everything you need to complete payment."}
-                  </Typography>
-                </Box>
-                {showPayPicker && payMethod && (
+                    is coming; the chosen method just sets how they'll pay it. Both
+                    this notice and the locked fee preview RETIRE once the order is
+                    PAID — no stale "invoice is coming" after the money's in. */}
+                {!isPaid && (
+                  <Box sx={{ textAlign: 'center', mb: 3, px: 2, py: 1.5, borderRadius: 2, border: `1px solid ${T.line}`, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                    <Typography sx={{ color: T.text, fontSize: 13.5, fontWeight: 800 }}>
+                      You&apos;ll receive an email with your invoice shortly.
+                    </Typography>
+                    <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.5, lineHeight: 1.55 }}>
+                      {payMethod === 'cc' ? 'You can pay by card right from the invoice.'
+                        : payMethod === 'ach' ? 'You can pay by bank transfer (ACH) right from the invoice.'
+                        : "It'll have everything you need to complete payment."}
+                    </Typography>
+                  </Box>
+                )}
+                {showPayPicker && payMethod && !isPaid && (
                   <PaymentChoice value={payMethod} onChange={() => {}} baseTotal={payableTotal} locked T={T} />
                 )}
-                <TrackingTimeline steps={p.tracking?.steps || []} T={T} />
+                <TrackingTimeline steps={trackingSteps} T={T} />
+                {/* Paper trail — the branded invoice exists from approval on; the
+                    receipt joins it once the order is paid. Plain anchors → new tab
+                    (the same token-gated public API this page already talks to). */}
+                <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} justifyContent="center" sx={{ mt: 2 }}>
+                  <Button component="a" target="_blank" rel="noopener noreferrer"
+                    href={`${config.backendUrl}/api/public/projects/${projectId}/invoice.pdf?${q}`}
+                    startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 17 }} />}
+                    sx={{ ...ghostBtn, py: 0.9, px: 2.25, fontSize: 12.5 }}>
+                    Download invoice (PDF)
+                  </Button>
+                  {isPaid && (
+                    <Button component="a" target="_blank" rel="noopener noreferrer"
+                      href={`${config.backendUrl}/api/public/projects/${projectId}/receipt.pdf?${q}`}
+                      startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 17 }} />}
+                      sx={{ ...ghostBtn, py: 0.9, px: 2.25, fontSize: 12.5 }}>
+                      Download receipt (PDF)
+                    </Button>
+                  )}
+                </Stack>
               </Box>
             ) : (
               <>
