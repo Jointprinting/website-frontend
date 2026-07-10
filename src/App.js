@@ -28,6 +28,9 @@ const Dispensaries  = lazy(() => import('./screens/Dispensaries'));
 const Studio        = lazy(() => import('./screens/Studio'));
 const Catalogs      = lazy(() => import('./screens/Catalogs'));
 const ApprovalView  = lazy(() => import('./screens/ApprovalView'));
+// Public lookbook gallery (/lookbook/:id?token=…) — the client-facing view of
+// a Studio-built lookbook. Bare chrome, same pattern as the approval view.
+const LookbookView  = lazy(() => import('./screens/LookbookView'));
 // JP Webworks client-site preview (/webworks/p/:slug) — a full-page render of
 // a client's site, sent to prospects before they pay. Bare chrome (see
 // isClientSite below). The static /webworks marketing + demo pages live in
@@ -38,9 +41,9 @@ const ClientSite = lazy(() => import('./screens/ClientSite'));
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
-// marketing site chrome doesn't belong on it. Approval view is a clean
-// client-facing surface, also bare.
-const STUDIO_ROUTES = ['/studio', '/admin', '/approve'];
+// marketing site chrome doesn't belong on it. Approval and lookbook views are
+// clean client-facing surfaces, also bare.
+const STUDIO_ROUTES = ['/studio', '/admin', '/approve', '/lookbook'];
 
 // Per-route titles + meta descriptions. Every page used to share the single
 // static title from index.html, which hurts SEO and makes tabs/history
@@ -64,6 +67,9 @@ function useRouteMeta(pathname) {
   React.useEffect(() => {
     const meta = ROUTE_META[pathname]
       || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null)
+      // Lookbooks retitle themselves to the lookbook's title once it loads
+      // (LookbookView) — this is just the pre-fetch placeholder.
+      || (pathname.startsWith('/lookbook') ? { title: 'Lookbook | Joint Printing' } : null)
       // Client-site previews retitle themselves to the business name once the
       // site loads (WebworksPreview) — this is just the pre-fetch placeholder.
       || (pathname.startsWith('/webworks/p/') ? { title: 'Site preview' } : null);
@@ -134,6 +140,8 @@ function AppShell() {
           <Route exact path="/terms" element={<Terms />} />
           <Route exact path="/privacy" element={<Privacy />} />
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
+          {/* Public lookbook gallery — token-gated by the backend (404/410). */}
+          <Route exact path="/lookbook/:id" element={<LookbookView />} />
           {/* JP Webworks client-site preview — public, no auth; the backend
               404s drafts so only published previews/live sites render. */}
           <Route exact path="/webworks/p/:slug" element={<WebworksPreview />} />

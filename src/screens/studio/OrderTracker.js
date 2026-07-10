@@ -3034,7 +3034,17 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
                   sx={{ color: B.green, fontSize: 12, textTransform: 'none', fontWeight: 700, px: 0.5, mb: 1 }}>
                   Preview as client
                 </Button>
-                {expiresAt && (
+                {/* Post-approval the link IS the client's tracking page — the
+                    server keeps it alive until a week after delivery, so the
+                    7-day TTL copy would be a lie (and scare the owner into
+                    rotating a link the client is actively tracking on). */}
+                {kind === 'approved' ? (
+                  <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
+                    Approved — this link is now the client's live tracking page. It stays
+                    working until a week after you mark the order delivered; the day limit
+                    no longer applies.
+                  </Typography>
+                ) : expiresAt && (
                   <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
                     Works until {new Date(expiresAt).toLocaleString()}.
                   </Typography>
@@ -3055,13 +3065,17 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
                 sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
                 Send
               </Button>
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <Typography sx={{ color: B.muted, fontSize: 12 }}>Live for</Typography>
-                <TextField type="number" size="small" value={ttl} onChange={e => setTtl(e.target.value)}
-                  inputProps={{ min: 1, max: 365 }}
-                  sx={{ width: 64, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.5, textAlign: 'right' } }} />
-                <Typography sx={{ color: B.muted, fontSize: 12 }}>days</Typography>
-              </Stack>
+              {/* TTL only matters pre-approval; after approval the tracking
+                  grace governs and a day-count here would mislead. */}
+              {kind !== 'approved' && (
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  <Typography sx={{ color: B.muted, fontSize: 12 }}>Live for</Typography>
+                  <TextField type="number" size="small" value={ttl} onChange={e => setTtl(e.target.value)}
+                    inputProps={{ min: 1, max: 365 }}
+                    sx={{ width: 64, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.5, textAlign: 'right' } }} />
+                  <Typography sx={{ color: B.muted, fontSize: 12 }}>days</Typography>
+                </Stack>
+              )}
             </Stack>
 
             {notice && <Typography sx={{ color: B.green, fontSize: 12, mt: 1.5 }}>{notice}</Typography>}

@@ -381,6 +381,26 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
 
   const toggleIgnored = () => setShowIgnored((v) => !v);
 
+  // ── AI drafting (AI drafts, owner sends — neither call sends any mail) ────
+  // Reply drafts persist on the TriageReply (aiDraft), so a repeat click reads
+  // the stored draft for free; { regenerate: true } forces a fresh one.
+  const draftReply = async (id, regenerate = false) => {
+    const { data } = await axios.post(
+      `${base}/replies/${id}/draft`,
+      regenerate ? { regenerate: true } : {},
+      authHdr,
+    );
+    loadWorklist(true); // fold the persisted aiDraft into the rows silently
+    return data.draft;
+  };
+
+  // Sequence drafts are never persisted — the campaign editor takes the steps
+  // for review and the owner still saves/launches by hand.
+  const draftSequence = async (payload) => {
+    const { data } = await axios.post(`${base}/campaigns/draft-sequence`, payload, authHdr);
+    return data.steps || [];
+  };
+
   const openCompany = (companyKey) => onNavigate && onNavigate({ view: 'crm', companyKey });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -434,6 +454,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onAutoEnroll={setAutoEnroll}
             onTestSend={sendTest}
             onRecoverSends={recoverSends}
+            onDraftSequence={draftSequence}
             fetchCandidates={fetchCandidates}
             onEnroll={enroll}
             onError={(m) => flash(m, 'error')}
@@ -451,6 +472,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             onAddReply={addReply}
             onSync={syncGmail}
             onOpenCompany={openCompany}
+            onDraftReply={draftReply}
             onError={(m) => flash(m, 'error')}
           />
         );

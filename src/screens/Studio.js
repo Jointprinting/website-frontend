@@ -67,6 +67,7 @@ import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0 } from './studio/_shared';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
@@ -80,6 +81,7 @@ import OutreachTab from './studio/outreach/OutreachTab';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
+import LookbooksTab from './studio/LookbooksTab';
 import VendorsTab from './studio/VendorsTab';
 import AgentsAdminTab from './studio/AgentsAdminTab';
 import AgentHome from './studio/agent/AgentHome';
@@ -1594,7 +1596,7 @@ function ColdCallTab({ token }) {
 // into three tiers and the hub renders each at a different volume:
 //   • primary   — the daily core, big bold cards: the CRM (clients, leads, and
 //                 today's calls — ONE tile) and the Order Tracker (the pipeline).
-//   • secondary — used often but not first: Finances, Mockups, Field Map,
+//   • secondary — used often but not first: Finances, Mockups, Lookbooks,
 //                 Inquiries, Catalogs. Normal-size cards.
 //   • tucked    — reach-for-occasionally, small & quiet: Printers · Vendors
 //                 (now a lightweight directory, no longer a heavy headline tab)
@@ -1634,6 +1636,9 @@ const HUB_GROUPS = [
         tools: [
           { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
           { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
+          // Lookbooks sit right beside the Mockup Studio: the library feeds
+          // the pages, the share link feeds the client, feedback feeds Signals.
+          { id: 'lookbooks',   label: 'Lookbooks',    desc: 'Shareable client galleries',    Icon: AutoStoriesOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
         ],
@@ -1966,9 +1971,10 @@ const TIER_COLS = {
   primary:   { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
   // Marketing pair — a clean 2-up, same rhythm as primary/tucked.
   growth:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
-  // Four operational tools — one even row at desktop (no orphan wrap). Single
-  // column on the smallest phones so the tile descriptions don't cramp to 3–4 lines.
-  secondary: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
+  // Five operational tools — 3+2 at tablet, one even row at desktop (no single
+  // orphan wrap). Single column on the smallest phones so the tile descriptions
+  // don't cramp to 3–4 lines.
+  secondary: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
   tucked:    { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
   // JP Webworks pair (Websites + Inquiries) — same clean 2-up as growth/tucked.
   jpw:       { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' },
@@ -2039,6 +2045,7 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage })
   const itemNav = (kind, it) => {
     if (kind === 'order') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
     else if (kind === 'crm') onNavigate && onNavigate({ view: 'crm', companyKey: it.companyKey || null });
+    else if (kind === 'lookbook') onNavigate && onNavigate({ view: 'lookbooks', companyKey: it.companyKey || null });
   };
 
   // Flatten the server groups into rows (critical → warning → info). Order/CRM
@@ -2048,7 +2055,7 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage })
     for (const g of (groups[sev] || [])) {
       if (!g || !g.count) continue;
       const items = Array.isArray(g.items) ? g.items : [];
-      const expandable = (g.kind === 'order' || g.kind === 'crm') && items.length > 0;
+      const expandable = (g.kind === 'order' || g.kind === 'crm' || g.kind === 'lookbook') && items.length > 0;
       rows.push({
         key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, items, expandable,
         onClick: expandable ? null
@@ -2377,10 +2384,12 @@ function StudioBody({ token, onLogout }) {
   // Cross-tab deep-link targets for the other tools (mirrors crmEntry). Each is
   // seeded by `navigate()` below and consumed by its tab's `initial*` prop, which
   // opens the named record at mount/nonce. null target = no specific record.
-  //   ordersEntry  → open one project in OrderTracker (by project/order number)
-  //   vendorsEntry → open one vendor card in VendorsTab (by id, or resolve a name)
+  //   ordersEntry   → open one project in OrderTracker (by project/order number)
+  //   vendorsEntry  → open one vendor card in VendorsTab (by id, or resolve a name)
+  //   lookbookEntry → open the Lookbooks builder prefiltered to one company
   const [ordersEntry, setOrdersEntry]   = React.useState({ orderNumber: null, projectNumber: null, openPos: false, nonce: 0 });
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
+  const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
   // Role gates the owner-only surfaces (the Team/Admin tile + its view). Read from
@@ -2514,6 +2523,7 @@ function StudioBody({ token, onLogout }) {
     // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
     if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
+    if (id === 'lookbooks') setLookbookEntry((p) => ({ companyKey: null, nonce: p.nonce + 1 }));
     if (id === 'outreach') setOutreachView(innerView || null);
     setView(id);
   };
@@ -2526,6 +2536,7 @@ function StudioBody({ token, onLogout }) {
   //   { view:'crm',     companyKey }                         → open that CRM card
   //   { view:'clients', orderNumber?|projectNumber?, openPos?} → open that order
   //   { view:'vendors', vendorId?|vendorName }               → open that vendor
+  //   { view:'lookbooks', companyKey? }                      → that company's lookbooks
   // A target with no usable id still switches to the tool (never a dead-end); the
   // tab degrades gracefully (lands on its list) when the record can't be found.
   const navigate = React.useCallback((target) => {
@@ -2550,6 +2561,12 @@ function StudioBody({ token, onLogout }) {
         nonce: p.nonce + 1,
       }));
       setView('vendors');
+    } else if (v === 'lookbooks') {
+      setLookbookEntry((p) => ({
+        companyKey: target.companyKey ? String(target.companyKey) : null,
+        nonce: p.nonce + 1,
+      }));
+      setView('lookbooks');
     } else {
       setView(v);
     }
@@ -2656,6 +2673,20 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
+  }
+
+  if (view === 'lookbooks') {
+    // Keyed by nonce so re-entering (hub tile or a deep link) remounts fresh;
+    // initialCompanyKey prefilters the list to one company's lookbooks.
+    return (
+      <LookbooksTab
+        key={lookbookEntry.nonce}
+        token={token}
+        onBack={() => setView('hub')}
+        onNavigate={navigate}
+        initialCompanyKey={lookbookEntry.companyKey}
+      />
+    );
   }
 
   if (view === 'vendors') {
