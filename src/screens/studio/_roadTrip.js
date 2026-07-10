@@ -5,19 +5,25 @@
 // multi-stop handoff (with its real waypoint caps), CRM key derivation
 // (mirrors the backend), distance math, and the rec-state registry mirror.
 
-// ── Rec-state registry (MIRRORS services/dispensaryStates.js on the backend —
-// keep in sync). Codes only; counts/rosters live server-side. ────────────────
-export const REC_STATE_CODES = [
-  'AK', 'AZ', 'CA', 'CO', 'CT', 'DE', 'IL', 'MA', 'MD', 'ME', 'MI', 'MN',
-  'MO', 'MT', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OR', 'RI', 'VT', 'WA',
-];
-export const MEDICAL_ONLY_CODES = ['AL', 'AR', 'FL', 'HI', 'KY', 'LA', 'MS', 'NH', 'ND', 'OK', 'PA', 'SD', 'UT', 'WV'];
-
 // ── CRM key derivation (MIRRORS utils/fieldTrackerImport.js deriveCompanyKey
 // on the backend — keep byte-for-byte in sync) ───────────────────────────────
 export function deriveCompanyKey(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
+
+// ── Market segments (MIRRORS services/dispensaryStates.js SEGMENTS /
+// deriveSegment on the backend — keep ids in sync). The map's clickers:
+//   rec  — licensed adult-use dispensaries
+//   med  — licensed medical-only dispensaries
+//   hemp — hemp-derived-THC retail ("bodega THC": delta-8/THCA smoke, vape
+//          and CBD shops in states with no legal marijuana retail)
+// The server derives a pin's segment from its state + source; '' (unknown)
+// pins always render regardless of which clickers are on. ───────────────────
+export const SEGMENTS = [
+  { id: 'rec',  label: 'REC',      color: '#4ade80' },
+  { id: 'med',  label: 'MED',      color: '#60a5fa' },
+  { id: 'hemp', label: 'HEMP THC', color: '#c084fc' },
+];
 
 // ── Quick to-do chips — each writes a CRM next-action log entry + follow-up
 // date so it lands in the CRM Today queue. ───────────────────────────────────
@@ -34,6 +40,9 @@ export const OUTCOME_CHIPS = [
   { id: 'no_buyer', label: 'NO BUYER',  color: '#fbbf24' },
   { id: 'dead',     label: 'NOT A FIT', color: '#6b7280' },
 ];
+
+// 🔥 interest scale for the on-road contact capture (1–5).
+export const INTEREST_LABELS = ['', 'not into it', 'lukewarm', 'curious', 'hot', 'ON FIRE'];
 
 // ── Distance ─────────────────────────────────────────────────────────────────
 export function haversineMi(a, b) {
@@ -116,18 +125,6 @@ export const PIN_STATUS = {
   customer:   { color: '#2dd4bf', label: 'Customer' },          // CRM won/customer
   dead:       { color: '#6b7280', label: 'Lost / dormant' },
   visited:    { color: '#fbbf24', label: 'Visited' },           // field-visited, no CRM record yet
-};
-
-// Rough view centers for the jump-to-state control: [lng, lat, zoom].
-export const STATE_CENTERS = {
-  AK: [-149.5, 61.2, 6],   AZ: [-111.9, 33.5, 7],   CA: [-119.5, 36.5, 5.6],
-  CO: [-105.0, 39.7, 6.5], CT: [-72.7, 41.6, 8],    DE: [-75.5, 39.15, 8],
-  IL: [-88.0, 41.6, 6.5],  MA: [-71.5, 42.2, 7.5],  MD: [-76.7, 39.2, 7.5],
-  ME: [-69.5, 44.5, 6.5],  MI: [-84.5, 43.0, 6.3],  MN: [-93.5, 45.5, 6.3],
-  MO: [-92.5, 38.5, 6.3],  MT: [-110.0, 46.8, 6],   NJ: [-74.5, 40.2, 7.5],
-  NM: [-106.0, 34.5, 6.3], NV: [-116.5, 38.5, 6],   NY: [-75.5, 42.7, 6.5],
-  OH: [-82.8, 40.2, 6.7],  OR: [-120.5, 44.0, 6.3], RI: [-71.5, 41.7, 9],
-  VT: [-72.7, 44.0, 7.3],  WA: [-120.5, 47.4, 6.5],
 };
 
 export function pinStatusOf(d) {

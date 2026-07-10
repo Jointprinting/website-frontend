@@ -10,10 +10,13 @@
 //     API: no Google Places, no per-store enrichment, no manual state loading.
 //   - Rendering is a clustered GeoJSON source (native circles), not HTML
 //     markers — thousands of pins stay smooth. Pin color = status (fresh /
-//     in-CRM / customer / visited / dead), amber stroke = chain.
-//   - TODAY'S RUN replaces the day tracker: tap pins → ADD TO RUN →
-//     OPTIMIZE (orders stops from your location) → GO opens Google Maps.
-//     Runs over 10 stops split into chained legs (Google's hard cap).
+//     in-CRM / customer / visited / dead). Chains never render (owner
+//     decision — too hard to pitch; excluded server-side). AUDIENCE clickers
+//     pick the markets: rec / med / hemp-THC (mirrors dispensaryStates).
+//   - TODAY'S RUN is the day plan: search the city → ADD ALL IN VIEW (or tap
+//     pins one at a time) → reorder with ▲▼ or OPTIMIZE (from your location)
+//     → GO opens Google Maps. Runs over 10 stops split into consecutive legs
+//     (Google's hard cap).
 //   - CRM capture happens through the run: marking a stop "pitched" upserts
 //     the real CRM company (leadSource "Field Visit", visit logged); the run
 //     tray's + TO-DO writes a next-action so it lands in the CRM Today queue.
@@ -35,7 +38,7 @@ import config from '../../config.json';
 import { lsGet, lsSet } from '../../common/jpStorage';
 import { queuedRequest } from '../../common/offlineSync';
 import {
-  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS,
+  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS, SEGMENTS, INTEREST_LABELS,
   haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf,
 } from './_roadTrip';
 
@@ -221,7 +224,8 @@ function buildDispPopup({ d, inRun, onAddToRun, onHide, onOpenCrm }) {
   `;
 
   const badges = [];
-  if (d.chainName) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${TERM.amber};color:${TERM.amber};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;">CHAIN · ${escapeHtml(d.chainName)}</span>`);
+  const seg = SEGMENTS.find((s) => s.id === d.segment);
+  if (seg) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${seg.color};color:${seg.color};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;">${seg.label}</span>`);
   if (d.crm) badges.push(`<span data-jp="crm" style="display:inline-block;padding:2px 6px;border:1px solid ${statusMeta.color};color:${statusMeta.color};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;cursor:pointer;">CRM · ${escapeHtml(String(d.crm.stage).toUpperCase())} ↗</span>`);
   if (!d.verified) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${TERM.faint};color:${TERM.muted};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;">UNVERIFIED</span>`);
   if (d.verified && d.licenseNumber) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${TERM.borderDim};color:${TERM.muted};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;" title="${escapeAttr(d.licenseNumber)}">LICENSED</span>`);
@@ -353,13 +357,31 @@ export default function RoadTripTab({ token, onNavigate }) {
 
   // Dispensaries currently loaded for the viewport
   const [disps, setDisps] = React.useState([]);
-  const [chainCounts, setChainCounts] = React.useState({});
   const [loadingArea, setLoadingArea] = React.useState(false);
   const [zoomedOut, setZoomedOut] = React.useState(false);
   const byIdRef = React.useRef(new Map());    // _id -> dispensary
 
-  // Filters
-  const [chainFilter, setChainFilter] = React.useState('');
+  // Filters. Segment clickers (REC / MED / HEMP-THC) persist across sessions —
+  // the owner works one market at a time for days (SEGMENTS mirrors the server
+  // vocabulary in services/dispensaryStates.js — keep in sync).
+  const [segmentsOn, setSegmentsOn] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('jpfm-segments') || 'null');
+      // Validate BEFORE the emptiness check — a saved array of stale ids must
+      // fall through to all-on, not initialize zero clickers against a server
+      // that treats the empty param as "no filter".
+      const valid = Array.isArray(saved) ? saved.filter((s) => SEGMENTS.some((x) => x.id === s)) : [];
+      if (valid.length) return valid;
+    } catch { /* fall through */ }
+    return SEGMENTS.map((s) => s.id);
+  });
+  const toggleSegment = (id) => setSegmentsOn((prev) => {
+    // Never allow zero segments — an empty map reads as broken, not filtered.
+    const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+    if (!next.length) return prev;
+    try { localStorage.setItem('jpfm-segments', JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
   const [verifiedOnly, setVerifiedOnly] = React.useState(false);
   const [hideVisited, setHideVisited] = React.useState(false);
   const [hideCustomers, setHideCustomers] = React.useState(false);
@@ -378,15 +400,17 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [showAddCustomPin, setShowAddCustomPin] = React.useState(false);
   const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', notes: '', customType: 'friend' });
 
-  // TODAY cockpit — where you sleep tonight (primary/backup sleep slots on the
-  // road-trip leads) + how many CRM follow-ups are due today. Both are read-only
-  // glances on the Today tab; the follow-up count deep-links into the CRM queue.
-  const [sleepSlots, setSleepSlots] = React.useState({ primary: null, backup: null });
+  // TODAY cockpit — how many CRM follow-ups are due today; a read-only glance
+  // that deep-links into the CRM queue.
   const [followUps, setFollowUps] = React.useState({ count: 0, loaded: false });
 
   // TO-DO modal
   const [todoTarget, setTodoTarget] = React.useState(null);
   const [todoForm, setTodoForm] = React.useState({ chipId: 'mockups', note: '', date: tomorrowISO() });
+
+  // CONTACT capture modal — who did I talk to at the counter
+  const [contactTarget, setContactTarget] = React.useState(null);
+  const [contactForm, setContactForm] = React.useState({ name: '', role: '', phone: '', email: '', interest: 0 });
 
   // Location
   const [myLoc, setMyLoc] = React.useState(null);
@@ -490,8 +514,8 @@ export default function RoadTripTab({ token, onNavigate }) {
             11, ['case', ['get', 'inRun'], 10, 7],
             15, ['case', ['get', 'inRun'], 13, 9],
           ],
-          'circle-stroke-color': ['case', ['get', 'isChain'], TERM.amber, '#05080a'],
-          'circle-stroke-width': ['case', ['get', 'isChain'], 2, 1.5],
+          'circle-stroke-color': '#05080a',
+          'circle-stroke-width': 1.5,
         },
       });
       map.on('click', LAYER_CLUSTERS, (e) => {
@@ -521,14 +545,16 @@ export default function RoadTripTab({ token, onNavigate }) {
   const visibleDisps = React.useMemo(() => {
     return disps.filter((d) => {
       if (d.lat == null || d.lng == null || !isFinite(d.lat) || !isFinite(d.lng)) return false;
-      if (chainFilter && d.chainName !== chainFilter) return false;
       if (verifiedOnly && !d.verified) return false;
       const st = pinStatusOf(d);
       if (hideVisited && (st === 'visited' || d.lastVisitedAt)) return false;
       if (hideCustomers && (st === 'customer' || st === 'dead')) return false;
       return true;
     });
-  }, [disps, chainFilter, verifiedOnly, hideVisited, hideCustomers]);
+  }, [disps, verifiedOnly, hideVisited, hideCustomers]);
+
+  const visibleDispsRef = React.useRef([]);
+  React.useEffect(() => { visibleDispsRef.current = visibleDisps; }, [visibleDisps]);
 
   const syncMapData = React.useCallback(() => {
     const map = mapRef.current;
@@ -540,7 +566,6 @@ export default function RoadTripTab({ token, onNavigate }) {
       properties: {
         id: String(d._id),
         color: PIN_STATUS[pinStatusOf(d)].color,
-        isChain: !!d.isChain,
         inRun: runIds.has(String(d._id)),
       },
     }));
@@ -615,16 +640,16 @@ export default function RoadTripTab({ token, onNavigate }) {
       const params = new URLSearchParams({
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
+        segments: segmentsOn.join(','),
       });
       const r = await axios.get(`${api}/api/roadtrip/dispensaries?${params}`, authHdr);
       setDisps(r.data?.results || []);
-      setChainCounts(r.data?.chains || {});
     } catch (err) {
       showToast(err?.response?.data?.message || 'Area load failed.', 'error');
     } finally {
       setLoadingArea(false);
     }
-  }, [api, token, authHdr, showToast]);
+  }, [api, token, authHdr, showToast, segmentsOn]);
 
   const loadAreaRef = React.useRef(loadArea);
   React.useEffect(() => { loadAreaRef.current = loadArea; }, [loadArea]);
@@ -679,6 +704,11 @@ export default function RoadTripTab({ token, onNavigate }) {
     scanOsmAreaRef.current();  // initial free OSM fill
     return () => { map.off('moveend', onMoveEnd); if (t) clearTimeout(t); };
   }, [mapReady]);
+
+  // Toggling a segment clicker re-queries the viewport with the new mix.
+  React.useEffect(() => {
+    if (mapReady) loadAreaRef.current();
+  }, [mapReady, segmentsOn]);
 
   // ── CRM actions ────────────────────────────────────────────────────────────
   const companyKeyFor = (d) => d.companyKey || deriveCompanyKey(d.name);
@@ -778,6 +808,47 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, todoTarget, todoForm, showToast, openInCrm]);
 
+  // Save the on-road contact capture: the person lands on the company card's
+  // contacts (server merges, never replaces — addContact), the meeting + 🔥
+  // interest land in the visit log, and the stage gets the same promote-only
+  // 'contacted' suggestion a pitch does. Offline-safe like every field write.
+  const saveContact = React.useCallback(async () => {
+    const d = contactTarget;
+    if (!d || !contactForm.name.trim()) return;
+    const key = d?.crm?.companyKey || companyKeyFor(d);
+    const who = contactForm.name.trim();
+    const role = contactForm.role.trim();
+    const fire = contactForm.interest > 0 ? ` · interest ${'🔥'.repeat(contactForm.interest)} (${INTEREST_LABELS[contactForm.interest]})` : '';
+    const reach = [contactForm.phone.trim(), contactForm.email.trim()].filter(Boolean).join(' · ');
+    const body = {
+      companyName: d.name,
+      address: d.address || '',
+      phone: d.phone || '',
+      source: 'field-map',
+      leadSource: 'Field Visit',
+      addContact: { name: who, role, phone: contactForm.phone.trim(), email: contactForm.email.trim() },
+      logText: `Met ${who}${role ? ` (${role})` : ''} at ${d.name}${fire}${reach ? ` · ${reach}` : ''}`,
+      kind: 'visit',
+      stageSuggest: 'contacted',
+    };
+    try {
+      const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `Contact · ${d.name}` });
+      const realKey = (!res.queued && res.data?.client?.companyKey) || key;
+      const stage = (!res.queued && res.data?.client?.stage) || d?.crm?.stage || 'contacted';
+      if (d._id) {
+        setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: realKey, stage } } : x)));
+      }
+      setContactTarget(null);
+      if (res.queued) {
+        showToast(`${who} saved offline — will sync when you're back on signal.`, 'info');
+      } else {
+        showToast(`${who} → ${d.name}'s card.`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
+      }
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Contact save failed.', 'error');
+    }
+  }, [api, contactTarget, contactForm, showToast, openInCrm]);
+
   const hideDispensary = React.useCallback(async (d) => {
     try {
       const res = await queuedRequest({ method: 'post', url: `${api}/api/roadtrip/dispensaries/${d._id}/hide`, body: {}, label: `Hide · ${d.name}` });
@@ -803,15 +874,6 @@ export default function RoadTripTab({ token, onNavigate }) {
       .then((r) => {
         const leads = r.data || [];
         setCustomPins(leads.filter((l) => l.source === 'manual'));
-        // Tonight's sleep: the ACTIVE slots the owner set (isActiveSleep), one
-        // primary + one backup. Falls back to any role-tagged slot so a plan
-        // made without the "tonight" toggle still surfaces.
-        const active = leads.filter((l) => l.isActiveSleep && l.sleepRole);
-        const pool = active.length ? active : leads.filter((l) => l.sleepRole);
-        setSleepSlots({
-          primary: pool.find((l) => l.sleepRole === 'primary') || null,
-          backup:  pool.find((l) => l.sleepRole === 'backup')  || null,
-        });
       })
       .catch(() => {});
     // CRM follow-ups needing action now — overdue + due today (the nightly
@@ -949,43 +1011,59 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr, run, getLocation, showToast]);
 
-  // "Suggest a run near me" — ask the server for the best nearby prospects to
-  // visit (fresh, callable, not already customers), add them to today's run via
-  // the same add-stop path, then optimize the route from the current location.
-  const [suggesting, setSuggesting] = React.useState(false);
-  const suggestRun = React.useCallback(async () => {
-    setSuggesting(true);
+  // "Add all in view" — the day-planning flow: search the city being visited,
+  // let the viewport fill with stores, add every visible one to the day in a
+  // single tap (server-side bulk with dedupe), then reorder / optimize / hand
+  // off to Google Maps.
+  const [bulkAdding, setBulkAdding] = React.useState(false);
+  const addAllInView = React.useCallback(async () => {
+    const targets = (visibleDispsRef.current || []).filter((d) => d._id);
+    if (!targets.length) { showToast('No stores in view — search a city or zoom out a touch.', 'info'); return; }
+    setBulkAdding(true);
     try {
-      const loc = myLocRef.current || await getLocation();
-      const r = await axios.get(`${api}/api/roadtrip/suggest`, {
-        ...authHdr, params: { lat: loc.lat, lng: loc.lng, radius: 25, limit: 8 },
-      });
-      const picks = r.data?.suggestions || [];
-      if (!picks.length) { showToast('No fresh prospects nearby — try a different area or zoom out.', 'info'); return; }
-      let added = 0, lastRun = null;
-      for (const p of picks) {
-        try {
-          const rr = await axios.post(`${api}/api/roadtrip/run/stops`, { dispensaryId: p._id }, authHdr);
-          lastRun = rr.data?.run || lastRun;
-          if (!rr.data?.duplicate) added += 1;
-        } catch { /* skip a failed add, keep going */ }
-      }
-      if (lastRun) setRun(lastRun);
+      const r = await axios.post(`${api}/api/roadtrip/run/stops`, {
+        dispensaryIds: targets.map((d) => String(d._id)),
+      }, authHdr);
+      if (r.data?.run) setRun(r.data.run);
       setRunMiles(null);
-      try {
-        const opt = await axios.post(`${api}/api/roadtrip/run/optimize`, loc, authHdr);
-        setRun(opt.data?.run || lastRun);
-        setRunMiles(opt.data?.miles ?? null);
-        showToast(`Planned a run of ${added} nearby prospect${added === 1 ? '' : 's'} — ~${opt.data?.miles}mi.`, 'success');
-      } catch {
-        showToast(`Added ${added} nearby prospect${added === 1 ? '' : 's'} to today's run.`, 'success');
-      }
+      const added = r.data?.added || 0;
+      showToast(
+        added
+          ? `Added ${added} store${added === 1 ? '' : 's'} to the day${r.data?.capped ? ' (capped — zoom in for the rest)' : ''}.`
+          : 'Everything in view is already on the day.',
+        added ? 'success' : 'info',
+      );
     } catch (err) {
-      showToast(err?.message || 'Could not suggest a run.', 'error');
+      showToast(err?.response?.data?.message || 'Bulk add failed.', 'error');
     } finally {
-      setSuggesting(false);
+      setBulkAdding(false);
     }
-  }, [api, authHdr, getLocation, showToast]);
+  }, [api, authHdr, showToast]);
+
+  // Manual reorder — move a stop up/down the day list. Optimistic local swap,
+  // then persist the full order via PATCH /run {stopOrder} (already supported
+  // server-side; visited stops keep their place at the head). Rapid taps fire
+  // overlapping PATCHes — only the LATEST request's response may touch state,
+  // or a slow earlier response visibly reverts the newer optimistic order.
+  const moveSeqRef = React.useRef(0);
+  const moveStop = React.useCallback(async (stop, dir) => {
+    const stops = [...(run?.stops || [])].sort((a, b) => a.order - b.order);
+    const i = stops.findIndex((s) => String(s._id) === String(stop._id));
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= stops.length) return;
+    [stops[i], stops[j]] = [stops[j], stops[i]];
+    setRun((prev) => (prev ? { ...prev, stops: stops.map((s, k) => ({ ...s, order: k })) } : prev));
+    setRunMiles(null);
+    const seq = ++moveSeqRef.current;
+    try {
+      const r = await axios.patch(`${api}/api/roadtrip/run`, { stopOrder: stops.map((s) => String(s._id)) }, authHdr);
+      if (seq === moveSeqRef.current && r.data?.run) setRun(r.data.run);
+    } catch {
+      if (seq !== moveSeqRef.current) return; // a newer reorder owns the tray
+      showToast('Reorder failed — refreshing.', 'error');
+      refreshRun();
+    }
+  }, [api, authHdr, run, refreshRun, showToast]);
 
   const completeRun = React.useCallback(async () => {
     try {
@@ -1190,10 +1268,6 @@ export default function RoadTripTab({ token, onNavigate }) {
 
   // ── Derived UI bits ────────────────────────────────────────────────────────
   const visitedCount = (run?.stops || []).filter((s) => s.status === 'visited').length;
-  const chainList = React.useMemo(
-    () => Object.entries(chainCounts).sort((a, b) => b[1] - a[1]),
-    [chainCounts]
-  );
 
   const flyToStop = (s) => {
     if (!mapRef.current || !isFinite(s.lat)) return;
@@ -1287,11 +1361,9 @@ export default function RoadTripTab({ token, onNavigate }) {
   );
 
   // ── TODAY cockpit surface — the whole day at a glance: the durable route
-  //    (your saved run + reopenable Google Maps legs), where you sleep tonight,
-  //    and how many follow-ups are due. Composes existing data + handlers only.
+  //    (your saved day + reopenable Google Maps legs) and how many follow-ups
+  //    are due. Composes existing data + handlers only.
   const nextStop = (run?.stops || []).find((s) => s.status !== 'visited') || null;
-  const sleepNav = (l) => (l && isFinite(l.lat) && isFinite(l.lng)
-    ? `https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}` : null);
   const todayHdr = (label, right) => (
     <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 0.9, mt: 0.5 }}>
       <Typography sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.6, color: TERM.muted }}>{label}</Typography>
@@ -1345,44 +1417,17 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       ) : (
         <Box sx={{ mb: 2 }}>
-          <Box role="button" tabIndex={0} onClick={suggestRun}
+          <Box role="button" tabIndex={0} onClick={addAllInView}
             sx={{
               fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
               py: 0.9, mb: 0.75, cursor: 'pointer', borderRadius: 0.5,
-              color: suggesting ? TERM.amber : TERM.greenDk, bgcolor: suggesting ? 'transparent' : TERM.green,
-              border: `1.5px solid ${suggesting ? TERM.amber : TERM.green}`, '&:hover': { opacity: 0.9 },
-            }}>{suggesting ? 'PLANNING…' : '⚡ SUGGEST A RUN NEAR ME'}</Box>
+              color: bulkAdding ? TERM.amber : TERM.greenDk, bgcolor: bulkAdding ? 'transparent' : TERM.green,
+              border: `1.5px solid ${bulkAdding ? TERM.amber : TERM.green}`, '&:hover': { opacity: 0.9 },
+            }}>{bulkAdding ? 'ADDING…' : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}</Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
-            Or tap any pin on the map → ＋ ADD TO RUN. Your route is saved here — even 20 stops chunk into Google Maps legs you reopen anytime.
+            Search the city you're visiting, then add every store in view — or tap pins one at a time. Your day is saved here; even 20 stops chunk into Google Maps legs you reopen anytime.
           </Typography>
         </Box>
-      )}
-
-      {/* Sleep tonight — primary + backup */}
-      {todayHdr("SLEEP TONIGHT")}
-      {(sleepSlots.primary || sleepSlots.backup) ? (
-        <Stack direction="row" spacing={0.75} sx={{ mb: 2 }}>
-          {[{ slot: sleepSlots.primary, role: 'PRIMARY', color: TERM.cyan }, { slot: sleepSlots.backup, role: 'BACKUP', color: TERM.muted }]
-            .filter((x) => x.slot).map(({ slot, role, color }) => (
-              <Box key={role} sx={{ flex: 1, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, p: 1 }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: 8, fontWeight: 800, letterSpacing: 1, color }}>{role}</Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: TERM.text, mt: 0.3, lineHeight: 1.25 }}>{slot.name}</Typography>
-                {slot.sleepKind && <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, mt: 0.2 }}>{String(slot.sleepKind).replace(/_/g, ' ')}</Typography>}
-                {sleepNav(slot) && (
-                  <Box role="button" tabIndex={0} onClick={() => window.open(sleepNav(slot), '_blank', 'noopener')}
-                    sx={{
-                      mt: 0.7, fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.8, textAlign: 'center',
-                      py: 0.5, cursor: 'pointer', borderRadius: 0.25, color, border: `1px solid ${color}`,
-                      '&:hover': { bgcolor: `${color}18` },
-                    }}>NAVIGATE</Box>
-                )}
-              </Box>
-            ))}
-        </Stack>
-      ) : (
-        <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', mb: 2, lineHeight: 1.5 }}>
-          No sleep spot set. Tag a campground/lot pin as tonight's primary or backup and it shows here.
-        </Typography>
       )}
 
       {/* Follow-ups due — opens the CRM Today queue */}
@@ -1411,20 +1456,20 @@ export default function RoadTripTab({ token, onNavigate }) {
       {(!run || !run.stops?.length) ? (
         <>
           <Box role="button" tabIndex={0}
-            onClick={suggestRun}
-            onKeyDown={(e) => { if (e.key === 'Enter') suggestRun(); }}
+            onClick={addAllInView}
+            onKeyDown={(e) => { if (e.key === 'Enter') addAllInView(); }}
             sx={{
               fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
               py: 0.9, mb: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
-              color: suggesting ? TERM.amber : TERM.greenDk,
-              bgcolor: suggesting ? 'transparent' : TERM.green,
-              border: `1.5px solid ${suggesting ? TERM.amber : TERM.green}`,
+              color: bulkAdding ? TERM.amber : TERM.greenDk,
+              bgcolor: bulkAdding ? 'transparent' : TERM.green,
+              border: `1.5px solid ${bulkAdding ? TERM.amber : TERM.green}`,
               '&:hover': { opacity: 0.9 },
             }}>
-            {suggesting ? 'PLANNING…' : '⚡ SUGGEST A RUN NEAR ME'}
+            {bulkAdding ? 'ADDING…' : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}
           </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 0.5, fontStyle: 'italic' }}>
-            Best fresh prospects near you, routed automatically. Or tap any pin → ＋ ADD TO RUN.
+            Search the city you're visiting, then save every store in view to the day. Or tap any pin → ＋ ADD TO RUN.
           </Typography>
         </>
       ) : (
@@ -1441,6 +1486,17 @@ export default function RoadTripTab({ token, onNavigate }) {
                 '&:hover': { opacity: 0.9 },
               }}>
               {optimizing ? 'OPTIMIZING…' : '⚡ OPTIMIZE'}
+            </Box>
+            <Box role="button" tabIndex={0}
+              onClick={addAllInView}
+              title="Add every store in the current view to the day"
+              sx={{
+                fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                py: 0.8, px: 1.25, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
+                color: bulkAdding ? TERM.amber : TERM.cyan, border: `1px solid ${bulkAdding ? TERM.amber : TERM.cyan}`,
+                '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+              }}>
+              {bulkAdding ? '…' : '＋ VIEW'}
             </Box>
             <Box role="button" tabIndex={0}
               onClick={completeRun}
@@ -1511,12 +1567,21 @@ export default function RoadTripTab({ token, onNavigate }) {
                     textDecoration: done ? 'line-through' : 'none',
                   }}>
                     {s.name}
-                    {s.chainName && <Box component="span" sx={{ color: TERM.amber, fontSize: 9, ml: 0.5 }}>⛓</Box>}
                   </Typography>
                   {dist != null && !done && (
                     <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, flexShrink: 0 }}>{fmtMi(dist)}</Typography>
                   )}
                   <Box className="jp-stop-actions" sx={{ opacity: { xs: 1, md: 0 }, display: 'flex', gap: { xs: 1, md: 0.25 }, flexShrink: 0, transition: 'opacity 0.15s' }}>
+                    {!done && (
+                      <>
+                        <Box role="button"
+                          onClick={(e) => { e.stopPropagation(); moveStop(s, -1); }}
+                          sx={actionBtnSx(TERM.muted, TERM.cyan)} title="Move up">▲</Box>
+                        <Box role="button"
+                          onClick={(e) => { e.stopPropagation(); moveStop(s, 1); }}
+                          sx={actionBtnSx(TERM.muted, TERM.cyan)} title="Move down">▼</Box>
+                      </>
+                    )}
                     {!done && (
                       <Box role="button"
                         onClick={(e) => { e.stopPropagation(); markVisited(s); }}
@@ -1550,6 +1615,19 @@ export default function RoadTripTab({ token, onNavigate }) {
                           '&:hover': { bgcolor: `${o.color}22` },
                         }}>{o.label}</Box>
                     ))}
+                    <Box role="button"
+                      onClick={() => {
+                        const d = s.dispensaryId ? byIdRef.current.get(String(s.dispensaryId)) : null;
+                        setContactTarget(d || stopAsCrmTarget(s));
+                        setContactForm({ name: '', role: '', phone: '', email: '', interest: 0 });
+                        setOutcomeStopId(null);
+                      }}
+                      sx={{
+                        fontFamily: MONO, fontSize: { xs: 11, md: 8.5 }, fontWeight: 900, letterSpacing: 0.5,
+                        px: { xs: 1.4, md: 0.9 }, py: { xs: 0.8, md: 0.4 }, borderRadius: 0.25, cursor: 'pointer',
+                        color: TERM.cyan, border: `1px dashed ${TERM.cyan}`,
+                        '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+                      }}>+ CONTACT</Box>
                     <Box role="button"
                       onClick={() => {
                         const d = s.dispensaryId ? byIdRef.current.get(String(s.dispensaryId)) : null;
@@ -1601,54 +1679,37 @@ export default function RoadTripTab({ token, onNavigate }) {
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>{v.label}</Typography>
           </Box>
         ))}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.4 }}>
-          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'transparent', border: `2px solid ${TERM.amber}`, flexShrink: 0 }} />
-          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>Amber ring = chain</Typography>
-        </Box>
       </Box>
     </PanelSection>
   );
 
-  const chainsPanel = (
-    <PanelSection title={`CHAINS IN VIEW · ${chainList.length}`} persistKey="jpfm-chains" defaultOpen={false}>
-      {chainList.length === 0 ? (
-        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, fontStyle: 'italic' }}>
-          No chains in the current view.
-        </Typography>
-      ) : (
-        <>
-          {chainFilter && (
-            <Box role="button" onClick={() => setChainFilter('')}
+  // The audience clickers — which markets render: licensed rec, licensed
+  // medical, and hemp-derived THC retail ("bodega THC"). Chains never render
+  // at all (server-side exclusion — too hard to pitch).
+  const segmentsPanel = (
+    <PanelSection title="AUDIENCE" persistKey="jpfm-segments-panel">
+      <Box sx={{ display: 'flex', gap: 0.5 }}>
+        {SEGMENTS.map((seg) => {
+          const on = segmentsOn.includes(seg.id);
+          return (
+            <Box key={seg.id} role="button" tabIndex={0}
+              onClick={() => toggleSegment(seg.id)}
               sx={{
-                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1, mb: 0.75,
-                px: 1, py: 0.5, cursor: 'pointer', borderRadius: 0.25, textAlign: 'center',
-                color: TERM.red, border: `1px solid ${TERM.red}`,
-                '&:hover': { bgcolor: 'rgba(248,113,113,0.1)' },
-              }}>✕ CLEAR CHAIN FILTER</Box>
-          )}
-          {chainList.map(([name, n]) => {
-            const active = chainFilter === name;
-            return (
-              <Box key={name} role="button" tabIndex={0}
-                onClick={() => setChainFilter(active ? '' : name)}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 1,
-                  px: 0.75, py: 0.5, mb: 0.25, cursor: 'pointer', borderRadius: 0.25,
-                  border: `1px solid ${active ? TERM.amber : 'transparent'}`,
-                  bgcolor: active ? 'rgba(251,191,36,0.1)' : 'transparent',
-                  '&:hover': { bgcolor: 'rgba(251,191,36,0.08)' },
-                }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', border: `2px solid ${TERM.amber}`, flexShrink: 0 }} />
-                <Typography sx={{
-                  flexGrow: 1, fontFamily: MONO, fontSize: 10.5, fontWeight: 700, color: active ? TERM.amber : TERM.text,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{name}</Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted }}>{n}</Typography>
-              </Box>
-            );
-          })}
-        </>
-      )}
+                flex: 1, textAlign: 'center', fontFamily: MONO, fontSize: 9.5, fontWeight: 900,
+                letterSpacing: 0.8, px: 0.5, py: 0.7, cursor: 'pointer', borderRadius: 0.25,
+                color: on ? seg.color : TERM.muted,
+                border: `1.5px solid ${on ? seg.color : TERM.borderDim}`,
+                bgcolor: on ? `${seg.color}14` : 'transparent',
+                '&:hover': { borderColor: seg.color },
+              }}>
+              {on ? '☑' : '☐'} {seg.label}
+            </Box>
+          );
+        })}
+      </Box>
+      <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.faint, mt: 0.75, lineHeight: 1.4 }}>
+        HEMP THC = delta-8 / THCA shops in no-rec states (TX, the South). Chains never show.
+      </Typography>
     </PanelSection>
   );
 
@@ -1710,8 +1771,8 @@ export default function RoadTripTab({ token, onNavigate }) {
           <Box sx={{ p: 2 }}>
             {todayPanel}
             {navigatePanel}
+            {segmentsPanel}
             {runPanel}
-            {chainsPanel}
             {filtersPanel}
           </Box>
         </Box>
@@ -1822,7 +1883,7 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       )}
 
-      {/* ── Mobile LEADS overlay (search pins + chains + filters) ──────── */}
+      {/* ── Mobile LEADS overlay (search pins + audience + filters) ────── */}
       {mobileTab === 'leads' && (
         <Box sx={{
           display: { xs: 'flex', md: 'none' },
@@ -1833,7 +1894,7 @@ export default function RoadTripTab({ token, onNavigate }) {
         }}>
           <Box sx={{ p: 2 }}>
             {navigatePanel}
-            {chainsPanel}
+            {segmentsPanel}
             {filtersPanel}
           </Box>
         </Box>
@@ -1913,6 +1974,74 @@ export default function RoadTripTab({ token, onNavigate }) {
                   bgcolor: TERM.amber, color: '#000', '&:hover': { opacity: 0.9 },
                 }}>SAVE TO-DO</Box>
               <Box role="button" onClick={() => setTodoTarget(null)}
+                sx={{
+                  px: 2, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  border: `1px solid ${TERM.borderDim}`, color: TERM.muted,
+                  '&:hover': { color: TERM.text },
+                }}>CANCEL</Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── CONTACT capture modal — who did I talk to ─────────────────── */}
+      {contactTarget && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          bgcolor: 'rgba(5,8,10,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setContactTarget(null)}>
+          <Box sx={{
+            bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
+            borderRadius: 1, p: 3, width: 340, maxWidth: 'calc(100vw - 32px)', fontFamily: MONO,
+          }} onClick={(e) => e.stopPropagation()}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.cyan, letterSpacing: 1, mb: 0.5 }}>
+              + CONTACT
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, mb: 2 }}>
+              {contactTarget.name} — lands on the company card + visit log.
+            </Typography>
+            <input value={contactForm.name} autoFocus
+              onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Name — who you talked to"
+              style={{ ...inputStyle, marginBottom: 8 }} />
+            <input value={contactForm.role}
+              onChange={(e) => setContactForm((f) => ({ ...f, role: e.target.value }))}
+              placeholder="Position — buyer / manager / owner…"
+              style={{ ...inputStyle, marginBottom: 8 }} />
+            <input value={contactForm.phone} type="tel"
+              onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="Phone (optional)"
+              style={{ ...inputStyle, marginBottom: 8 }} />
+            <input value={contactForm.email} type="email"
+              onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
+              placeholder="Email (optional)"
+              style={{ ...inputStyle, marginBottom: 14 }} />
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>
+              HOW INTERESTED?{contactForm.interest ? ` — ${INTEREST_LABELS[contactForm.interest]}` : ''}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 2.25 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Box key={n} role="button"
+                  onClick={() => setContactForm((f) => ({ ...f, interest: f.interest === n ? 0 : n }))}
+                  sx={{
+                    flex: 1, textAlign: 'center', fontSize: 18, py: 0.5, cursor: 'pointer',
+                    borderRadius: 0.5, border: `1px solid ${contactForm.interest >= n ? TERM.amber : TERM.borderDim}`,
+                    bgcolor: contactForm.interest >= n ? 'rgba(251,191,36,0.12)' : 'transparent',
+                    filter: contactForm.interest >= n ? 'none' : 'grayscale(1) opacity(0.45)',
+                    '&:hover': { borderColor: TERM.amber },
+                  }}>🔥</Box>
+              ))}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box role="button" onClick={saveContact}
+                sx={{
+                  flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: 1,
+                  py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
+                  bgcolor: contactForm.name.trim() ? TERM.cyan : TERM.borderDim,
+                  color: '#000', '&:hover': { opacity: 0.9 },
+                }}>SAVE CONTACT</Box>
+              <Box role="button" onClick={() => setContactTarget(null)}
                 sx={{
                   px: 2, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
                   py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
