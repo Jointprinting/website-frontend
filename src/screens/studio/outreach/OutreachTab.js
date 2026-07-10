@@ -291,6 +291,16 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   };
 
   // ── Enrollment actions ────────────────────────────────────────────────────
+  // The false-warm correction: "that was an auto-responder, not a reply."
+  // Un-warms the company, resumes the drip, clears the reply out of the
+  // worklist — one tap, from the exact row where the false warm shows.
+  const notAReply = async (enrollmentId) => {
+    await axios.post(`${base}/enrollments/${enrollmentId}/not-a-reply`, {}, authHdr);
+    flash('Corrected — un-warmed, and the sequence resumes.');
+    await loadOverview();
+    refreshTriage?.();
+  };
+
   const markReplied = async (enrollmentId) => {
     await axios.post(`${base}/enrollments/${enrollmentId}/replied`, {}, authHdr);
     flash('Marked replied — they’re tagged warm and on today’s call list.');
@@ -357,8 +367,8 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   // ── Reply triage actions ──────────────────────────────────────────────────
   const refreshTriage = () => Promise.all([loadReplies(), loadWorklist()]);
 
-  const setReplyStatus = async (id, status) => {
-    const { data } = await axios.patch(`${triageBase}/replies/${id}`, { status }, authHdr);
+  const setReplyStatus = async (id, status, extra) => {
+    const { data } = await axios.patch(`${triageBase}/replies/${id}`, { status, ...(extra || {}) }, authHdr);
     flash('Reply updated.');
     if (data.sideEffectWarning) flash(`Updated, but the linked-company change hit a snag: ${data.sideEffectWarning}`, 'warning');
     await refreshTriage();
@@ -414,6 +424,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               onOpenCompany={openCompany}
               onMarkReplied={markReplied}
               onStop={stopEnrollment}
+              onNotAReply={notAReply}
               onGoCampaigns={() => setView('campaigns')}
               onGoImport={scrollToLeadEngine}
               onGoReplies={() => setView('replies')}
