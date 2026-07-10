@@ -3,20 +3,105 @@
 // tab. It turns triaged replies into a "what needs doing now" list grouped into
 // buckets (needs a response / quote requested / mockup requested / follow up),
 // plus a bridge bucket of leads you marked replied but haven't triaged yet. Each
-// card jumps to the CRM company and offers the same one-click triage actions.
+// card jumps to the CRM company, offers the same one-click triage actions, and
+// can AI-draft a suggested reply (AI drafts, owner sends — the draft is only
+// text the owner edits, copies, or opens in his mail client himself).
 // Presentational — OutreachTab owns data + transport.
 
 import * as React from 'react';
 import {
-  Box, Stack, Button, IconButton, Menu, MenuItem, Divider, Typography, CircularProgress, Chip,
+  Box, Stack, Button, IconButton, Menu, MenuItem, Divider, Typography, CircularProgress, Chip, TextField,
 } from '@mui/material';
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
-import { D, mono, fmtDate } from '../_shared';
+import { D, mono, fmtDate, dropInput, dropGhostBtn } from '../_shared';
 import { StatusChip, StatPill, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTIONS } from './_outreach';
 
-export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCompany, onError }) {
+// One row's AI-draft workspace. The button asks the API for a suggested reply
+// (persisted server-side as aiDraft, so it shows immediately on later loads);
+// the textarea is the owner's editing surface; sending stays a human act —
+// copy the text, or open it pre-filled in the mail client via mailto:.
+function DraftReplyBox({ row, onDraftReply, onError }) {
+  // The stored draft seeds the box; local edits then win (the 60s background
+  // refresh replaces `row`, but this state survives — keyed by the row's _id).
+  const [text, setText] = React.useState(row.aiDraft?.body ?? null);
+  const [busy, setBusy] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const generate = async (regenerate) => {
+    setBusy(true);
+    try {
+      const draft = await onDraftReply(row._id, regenerate);
+      setText(draft?.body || '');
+    } catch (e) {
+      onError?.(e.response?.data?.message || 'Could not draft a reply');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (text == null) {
+    return (
+      <Button
+        size="small" disabled={busy} onClick={() => generate(false)}
+        sx={{ ...dropGhostBtn, mt: 0.75, px: 1.25, py: 0.3, fontSize: 11, color: '#c084fc' }}
+      >
+        {busy ? 'Drafting…' : '✨ Draft reply'}
+      </Button>
+    );
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      onError?.('Could not copy — select the text and copy it manually.');
+    }
+  };
+
+  // mailto: straight to the sender, threading as "Re: <original>" (never "Re: Re:"),
+  // body = whatever the owner has edited the draft into.
+  const mailto = row.fromEmail
+    ? `mailto:${encodeURIComponent(row.fromEmail)}?${[
+      row.subject ? `subject=${encodeURIComponent(`Re: ${String(row.subject).replace(/^(?:\s*re:\s*)+/i, '')}`)}` : '',
+      `body=${encodeURIComponent(text)}`,
+    ].filter(Boolean).join('&')}`
+    : '';
+
+  return (
+    <Box sx={{ mt: 1, p: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+      <Typography sx={{ ...mono, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, color: '#c084fc', textTransform: 'uppercase', mb: 0.75 }}>
+        ✨ AI draft — edit it, then send it yourself
+      </Typography>
+      <TextField
+        value={text} onChange={(e) => setText(e.target.value)}
+        multiline minRows={4} fullWidth size="small" sx={dropInput}
+        inputProps={{ style: { fontSize: 12.5, lineHeight: 1.5 } }}
+      />
+      <Stack direction="row" spacing={0.75} sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
+        <Button size="small" onClick={copy}
+          sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11, color: copied ? D.green : D.text }}>
+          {copied ? 'Copied ✓' : 'Copy'}
+        </Button>
+        {mailto && (
+          <Button size="small" component="a" href={mailto}
+            sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11 }}>
+            Open in email
+          </Button>
+        )}
+        <Button size="small" disabled={busy} onClick={() => generate(true)}
+          sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11, color: D.muted }}>
+          {busy ? 'Drafting…' : 'Regenerate'}
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCompany, onDraftReply, onError }) {
   const [menu, setMenu] = React.useState(null); // { anchor, row }
   const closeMenu = () => setMenu(null);
 
@@ -104,6 +189,9 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
                           )}
                           {r.suggestedAction && (
                             <Typography sx={{ fontSize: 11, color: b.tone, mt: 0.3, fontWeight: 700 }}>→ {r.suggestedAction}</Typography>
+                          )}
+                          {onDraftReply && (
+                            <DraftReplyBox row={r} onDraftReply={onDraftReply} onError={onError} />
                           )}
                         </>
                       )}

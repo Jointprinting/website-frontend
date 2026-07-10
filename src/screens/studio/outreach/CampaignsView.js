@@ -26,8 +26,74 @@ import {
   DEFAULT_SEQUENCE, LEAD_VERTICALS, DEFAULT_VERTICAL_ID, verticalMeta,
 } from './_outreach';
 
+// ── AI sequence-draft dialog ──────────────────────────────────────────────────
+// Small prompt for the AI draft: who it targets (plain text, defaulting from the
+// campaign's vertical) and optional owner notes. The result only FILLS THE STEP
+// EDITORS for review — AI drafts, owner sends: nothing is saved or launched here.
+function DraftSequenceDialog({ open, onClose, vertical, verticalList, stepsHaveContent, onDraftSequence, onApply, onError }) {
+  const fullScreen = useMobileFullScreen();
+  const [who, setWho] = React.useState('cannabis dispensaries');
+  const [notes, setNotes] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const meta = (verticalList || []).find((v) => v.id === vertical);
+    setWho(vertical === DEFAULT_VERTICAL_ID ? 'cannabis dispensaries' : (meta?.short || meta?.label || 'cannabis dispensaries'));
+    setNotes('');
+    setBusy(false);
+  }, [open, vertical, verticalList]);
+
+  const go = async () => {
+    // Never overwrite hand-written steps without a confirm — and ask BEFORE the
+    // AI call so cancelling costs nothing.
+    if (stepsHaveContent) {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm('Replace the steps currently in the editor with the AI draft?\n\nOnly this editor changes — nothing is saved until you hit Save, and nothing sends until you Launch.')) return;
+    }
+    setBusy(true);
+    try {
+      const steps = await onDraftSequence({ vertical: who.trim() || 'cannabis dispensaries', touches: 4, notes: notes.trim() || undefined });
+      if (!steps.length) { onError?.('The AI returned no steps — try again.'); return; }
+      onApply(steps);
+      onClose();
+    } catch (e) {
+      onError?.(e.response?.data?.message || 'Could not draft the sequence');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, backgroundImage: 'none' } }}>
+      <DialogTitle sx={{ color: D.text, fontWeight: 800 }}>✨ Draft a 4-touch sequence</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ color: D.muted, fontSize: 12.5, lineHeight: 1.55, mb: 1.5 }}>
+          The AI writes intro → proof → nudge → breakup with the merge fields wired in, in your voice.
+          It only fills the editors — you review, edit, and save/launch yourself.
+        </Typography>
+        <Stack spacing={1.5}>
+          <TextField label="Who is it for?" value={who} onChange={(e) => setWho(e.target.value)}
+            size="small" fullWidth sx={dropInput} />
+          <TextField label="Notes for the AI (optional)"
+            placeholder="e.g. lead with staff apparel; keep the free-mockup hook"
+            value={notes} onChange={(e) => setNotes(e.target.value)}
+            size="small" fullWidth multiline minRows={2} sx={dropInput} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} sx={{ ...dropGhostBtn, px: 2 }}>Cancel</Button>
+        <Button onClick={go} disabled={busy || !who.trim()} sx={{ ...dropPrimaryBtn, px: 2.5 }}>
+          {busy ? 'Drafting…' : 'Draft it'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Sequence editor dialog ────────────────────────────────────────────────────
-function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
+function CampaignEditor({ open, campaign, onClose, onSave, verticals, onDraftSequence, onError }) {
   const fullScreen = useMobileFullScreen();
   const isNew = !campaign?._id;
   const [name, setName] = React.useState('');
@@ -36,6 +102,7 @@ function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
   const [steps, setSteps] = React.useState([]);
   const [previewIdx, setPreviewIdx] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
+  const [aiOpen, setAiOpen] = React.useState(false);
   // Live list from the API when present, else the client mirror.
   const verticalList = (Array.isArray(verticals) && verticals.length) ? verticals : LEAD_VERTICALS;
 
@@ -54,6 +121,13 @@ function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
     setPreviewIdx((p) => Math.max(0, Math.min(p, steps.length - 2)));
   };
   const addStep = () => setSteps((prev) => [...prev, { offsetDays: 4, subject: '', body: '' }]);
+
+  // Drop the AI-drafted steps into the editors (overwrite already confirmed in
+  // the dialog). Still just editor state — Save/Launch stay manual.
+  const applyDraftedSteps = (drafted) => {
+    setSteps(drafted.map((s) => ({ offsetDays: s.offsetDays, subject: s.subject, body: s.body })));
+    setPreviewIdx(0);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -116,6 +190,13 @@ function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="stretch">
             {/* Steps */}
             <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+              {/* AI draft — fills these editors for review; Save/Launch stay manual. */}
+              {onDraftSequence && (
+                <Button onClick={() => setAiOpen(true)}
+                  sx={{ ...dropGhostBtn, alignSelf: 'flex-start', px: 1.75, py: 0.5, fontSize: 12.5, color: '#c084fc' }}>
+                  ✨ Draft 4-touch sequence
+                </Button>
+              )}
               {steps.map((s, i) => (
                 <Box key={i} onClick={() => setPreviewIdx(i)}
                   sx={{ p: 1.5, borderRadius: 2, bgcolor: D.panel, cursor: 'pointer',
@@ -247,6 +328,13 @@ function CampaignEditor({ open, campaign, onClose, onSave, verticals }) {
           {saving ? 'Saving…' : (isNew ? 'Create campaign' : 'Save changes')}
         </Button>
       </DialogActions>
+
+      <DraftSequenceDialog
+        open={aiOpen} onClose={() => setAiOpen(false)}
+        vertical={vertical} verticalList={verticalList}
+        stepsHaveContent={steps.some((s) => String(s.subject || '').trim() || String(s.body || '').trim())}
+        onDraftSequence={onDraftSequence} onApply={applyDraftedSteps} onError={onError}
+      />
     </Dialog>
   );
 }
@@ -443,7 +531,7 @@ function LaunchDialog({ open, campaign, onClose, onLaunch, onTestSend, onError }
 // Health-signal color (mirrors backend campaignHealth levels).
 const HEALTH_TONE = { ok: D.green, warn: D.amber, action: '#f87171' };
 
-export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, autoEnrollOn = true, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, onRecoverSends, fetchCandidates, onEnroll, onError }) {
+export default function CampaignsView({ overview, loading, autoEnrollCampaignId = null, autoEnrollOn = true, onCreate, onUpdate, onLaunch, onUnenrollAll, onReset, onDelete, onAutoEnroll, onTestSend, onRecoverSends, onDraftSequence, fetchCandidates, onEnroll, onError }) {
   const [editor, setEditor] = React.useState(null);      // null | { campaign|null }
   const [enrollFor, setEnrollFor] = React.useState(null); // campaign | null
   const [launchFor, setLaunchFor] = React.useState(null); // campaign | null (confirm + test gate)
@@ -616,7 +704,7 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
       )}
 
       <CampaignEditor open={!!editor} campaign={editor?.campaign} onClose={() => setEditor(null)} onSave={save}
-        verticals={overview?.verticals} />
+        verticals={overview?.verticals} onDraftSequence={onDraftSequence} onError={onError} />
       <EnrollDialog open={!!enrollFor} campaign={enrollFor} onClose={() => setEnrollFor(null)}
         fetchCandidates={fetchCandidates} onEnroll={onEnroll} onError={onError} />
       <LaunchDialog open={!!launchFor} campaign={launchFor} onClose={() => setLaunchFor(null)}

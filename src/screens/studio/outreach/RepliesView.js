@@ -2,10 +2,11 @@
 // Gmail Reply Triage — the detection-only inbox for buyer replies to cold outreach.
 // Presentational (OutreachTab owns data + transport): a clean table of detected /
 // imported replies, each auto-classified + matched to its CRM company, with a
-// per-row action menu to triage it. No auto-send, no AI. Replies flow in three
-// ways — paste/import, the "Sync Gmail" button, and (once GMAIL_* is configured)
-// an automatic read-only pull every 10 min — and a matched human reply auto-stops
-// the drip + warms the CRM.
+// per-row action menu to triage it. No auto-send — the worklist can AI-draft a
+// suggested reply, but the owner edits and sends every word himself. Replies flow
+// in three ways — paste/import, the "Sync Gmail" button, and (once GMAIL_* is
+// configured) an automatic read-only pull every 10 min — and a matched human
+// reply auto-stops the drip + warms the CRM.
 
 import * as React from 'react';
 import {
@@ -34,7 +35,7 @@ const headSx = { color: D.faint, borderColor: D.line, fontSize: 10.5, fontWeight
 export default function RepliesView({
   replies = [], loading, showIgnored, onToggleIgnored,
   worklist, worklistLoading,
-  onSetStatus, onAddReply, onSync, onOpenCompany, onError,
+  onSetStatus, onAddReply, onSync, onOpenCompany, onDraftReply, onError,
 }) {
   const fullScreen = useMobileFullScreen();
   const [mode, setMode] = React.useState('worklist'); // 'worklist' = command center, 'all' = full inbox
@@ -104,7 +105,8 @@ export default function RepliesView({
       {mode === 'worklist' && (
         <WorklistPanel
           worklist={worklist} loading={worklistLoading}
-          onSetStatus={onSetStatus} onOpenCompany={onOpenCompany} onError={onError}
+          onSetStatus={onSetStatus} onOpenCompany={onOpenCompany}
+          onDraftReply={onDraftReply} onError={onError}
         />
       )}
 
