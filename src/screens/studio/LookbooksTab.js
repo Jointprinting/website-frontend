@@ -424,7 +424,10 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
     });
     inFlightRef.current = run;
     return run.then((ok) => {
-      if (inFlightRef.current === run) setSaveState(ok ? 'saved' : 'error');
+      // Only the LATEST save drives the indicator — and keystrokes still
+      // sitting in the debounce window (editSeq ahead of this run) keep it on
+      // Editing…/Saving… instead of flashing a false "Saved" under new edits.
+      if (inFlightRef.current === run && editSeq.current === seq) setSaveState(ok ? 'saved' : 'error');
       return ok;
     });
   }, [authHdr, openId]);
@@ -500,7 +503,6 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
         name: m.name || '',
         mockupNum: m.pageState?.mockupNum ? String(m.pageState.mockupNum) : '',
         front: m.thumbnail || '',
-        back: typeof m.data === 'string' ? m.data : '',
       },
     }));
     setPages([...draftRef.current.pages, { remoteId: m.remoteId, caption: '' }]);
@@ -564,7 +566,8 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
       `Archive "${draft?.title || 'this lookbook'}"? The client link stops working and it leaves the list — nothing is deleted.`)) return;
     setArchiveBusy(true);
     try {
-      await flushSave();
+      const flushed = await flushSave();
+      if (!flushed) { flash('Save failed — check the connection and try again.', 'error'); return; }
       const { data } = await axios.patch(`${API}/${openId}`, { status: restoring ? 'draft' : 'archived' }, authHdr);
       if (restoring) {
         setLb((p) => ({ ...(p || {}), ...(data.lookbook || {}) }));

@@ -22,10 +22,11 @@ import { StatusChip, StatPill, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTI
 // (persisted server-side as aiDraft, so it shows immediately on later loads);
 // the textarea is the owner's editing surface; sending stays a human act —
 // copy the text, or open it pre-filled in the mail client via mailto:.
-function DraftReplyBox({ row, onDraftReply, onError }) {
-  // The stored draft seeds the box; local edits then win (the 60s background
-  // refresh replaces `row`, but this state survives — keyed by the row's _id).
-  const [text, setText] = React.useState(row.aiDraft?.body ?? null);
+// CONTROLLED for `text`: the edited draft lives in WorklistPanel keyed by the
+// reply's _id, because triaging a row re-buckets it (new parent → this box
+// remounts) — component-local state would silently revert the owner's edits
+// back to the stored aiDraft.
+function DraftReplyBox({ row, text, onChangeText, onDraftReply, onError }) {
   const [busy, setBusy] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -33,7 +34,7 @@ function DraftReplyBox({ row, onDraftReply, onError }) {
     setBusy(true);
     try {
       const draft = await onDraftReply(row._id, regenerate);
-      setText(draft?.body || '');
+      onChangeText(draft?.body || '');
     } catch (e) {
       onError?.(e.response?.data?.message || 'Could not draft a reply');
     } finally {
@@ -62,13 +63,18 @@ function DraftReplyBox({ row, onDraftReply, onError }) {
     }
   };
 
-  // mailto: straight to the sender, threading as "Re: <original>" (never "Re: Re:"),
-  // body = whatever the owner has edited the draft into.
+  // mailto: straight to the sender, threading as "Re: <original>" (never
+  // "Re: Re:"), body = whatever the owner has edited the draft into. OS mailto
+  // handlers silently truncate or drop URLs past ~2k chars, so a long body is
+  // left OUT of the link (subject-only + a hint) — Copy carries the full text.
+  const encodedBody = encodeURIComponent(text);
+  const bodyFits = encodedBody.length <= 1800;
+  const mailtoParams = [
+    row.subject ? `subject=${encodeURIComponent(`Re: ${String(row.subject).replace(/^(?:\s*re:\s*)+/i, '')}`)}` : '',
+    bodyFits ? `body=${encodedBody}` : '',
+  ].filter(Boolean);
   const mailto = row.fromEmail
-    ? `mailto:${encodeURIComponent(row.fromEmail)}?${[
-      row.subject ? `subject=${encodeURIComponent(`Re: ${String(row.subject).replace(/^(?:\s*re:\s*)+/i, '')}`)}` : '',
-      `body=${encodeURIComponent(text)}`,
-    ].filter(Boolean).join('&')}`
+    ? `mailto:${encodeURIComponent(row.fromEmail)}${mailtoParams.length ? `?${mailtoParams.join('&')}` : ''}`
     : '';
 
   return (
@@ -77,11 +83,11 @@ function DraftReplyBox({ row, onDraftReply, onError }) {
         ✨ AI draft — edit it, then send it yourself
       </Typography>
       <TextField
-        value={text} onChange={(e) => setText(e.target.value)}
+        value={text} onChange={(e) => onChangeText(e.target.value)}
         multiline minRows={4} fullWidth size="small" sx={dropInput}
         inputProps={{ style: { fontSize: 12.5, lineHeight: 1.5 } }}
       />
-      <Stack direction="row" spacing={0.75} sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
         <Button size="small" onClick={copy}
           sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11, color: copied ? D.green : D.text }}>
           {copied ? 'Copied ✓' : 'Copy'}
@@ -91,6 +97,11 @@ function DraftReplyBox({ row, onDraftReply, onError }) {
             sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11 }}>
             Open in email
           </Button>
+        )}
+        {mailto && !bodyFits && (
+          <Typography sx={{ fontSize: 10.5, color: D.faint }}>
+            long draft — opens without the body, use Copy
+          </Typography>
         )}
         <Button size="small" disabled={busy} onClick={() => generate(true)}
           sx={{ ...dropGhostBtn, px: 1.25, py: 0.3, fontSize: 11, color: D.muted }}>
@@ -103,6 +114,12 @@ function DraftReplyBox({ row, onDraftReply, onError }) {
 
 export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCompany, onDraftReply, onError }) {
   const [menu, setMenu] = React.useState(null); // { anchor, row }
+  // The owner's in-progress draft edits, keyed by reply _id. Lives HERE (not in
+  // DraftReplyBox) so an edit survives the row re-bucketing when its status
+  // changes and the silent worklist refreshes — session-only, by design: the
+  // persisted text is the server-side aiDraft.
+  const [draftEdits, setDraftEdits] = React.useState({});
+  const setDraftEdit = (id, text) => setDraftEdits((prev) => ({ ...prev, [id]: text }));
   const closeMenu = () => setMenu(null);
 
   const pickStatus = async (row, next) => {
@@ -191,7 +208,12 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
                             <Typography sx={{ fontSize: 11, color: b.tone, mt: 0.3, fontWeight: 700 }}>→ {r.suggestedAction}</Typography>
                           )}
                           {onDraftReply && (
-                            <DraftReplyBox row={r} onDraftReply={onDraftReply} onError={onError} />
+                            <DraftReplyBox
+                              row={r}
+                              text={draftEdits[r._id] !== undefined ? draftEdits[r._id] : (r.aiDraft?.body ?? null)}
+                              onChangeText={(t) => setDraftEdit(r._id, t)}
+                              onDraftReply={onDraftReply} onError={onError}
+                            />
                           )}
                         </>
                       )}

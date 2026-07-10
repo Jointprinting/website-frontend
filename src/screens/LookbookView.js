@@ -203,10 +203,17 @@ export default function LookbookView() {
     const key = mockupRemoteId || 'overall';
     setBusyKey(key);
     try {
-      await axios.post(`${config.backendUrl}/api/public/lookbooks/${id}/feedback?${q}`,
+      const r = await axios.post(`${config.backendUrl}/api/public/lookbooks/${id}/feedback?${q}`,
         { mockupRemoteId, reaction, comment: comment.trim(), by: name.trim() });
       if (comment) setDrafts((d) => ({ ...d, [mockupRemoteId]: '' }));
-      await refresh();
+      // The POST echoes the updated feedback array — patch it in place instead
+      // of re-downloading the whole payload (legacy lookbooks carry inline
+      // base64 images, so a full refetch is a multi-MB stall per tap).
+      if (Array.isArray(r.data?.feedback)) {
+        setData((prev) => (prev ? { ...prev, feedback: r.data.feedback } : prev));
+      } else {
+        await refresh();   // older backend without the echo — fall back
+      }
     } catch (e) {
       alert(e.response?.data?.message || "That didn't send — please try again in a moment.");
     } finally {
