@@ -69,7 +69,7 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
-import { D, accentBar, eyebrow, mono, BRAND, money0 } from './studio/_shared';
+import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
@@ -2224,6 +2224,167 @@ function PulseBar({ pulse }) {
   );
 }
 
+// A warm, time-aware greeting that opens the hub — makes it feel like YOUR
+// desk, not a dashboard. Owner first name from the JWT (best-effort), the day,
+// and a rotating one-liner keyed to the date so it feels alive without a
+// server call.
+function HubGreeting({ pulse }) {
+  const now = new Date();
+  const h = now.getHours();
+  const part = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const day = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  // A gentle, business-aware nudge — celebratory when the day's clean, focused
+  // when there's work. No fetch: derived from the pulse we already have.
+  const openFollow = pulse ? (Number(pulse.followUpsToday) || 0) : 0;
+  const replies = pulse ? (Number(pulse.repliesWaiting) || 0) : 0;
+  const line = replies > 0
+    ? `${replies} repl${replies === 1 ? 'y is' : 'ies are'} waiting — warm leads first ☕`
+    : openFollow > 0
+      ? `${openFollow} follow-up${openFollow === 1 ? '' : 's'} on deck for today — let's close some.`
+      : "You're all caught up — a good day to reach someone new. 🚀";
+  return (
+    <Box sx={{ mb: 0.5 }}>
+      <MuiTypography sx={{ color: D.text, fontSize: { xs: 22, md: 28 }, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.1 }}>
+        {part}.
+      </MuiTypography>
+      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mt: 0.4 }}>
+        <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>{day}</MuiTypography>
+        <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
+        <MuiTypography sx={{ color: D.muted, fontSize: 12.5 }}>{line}</MuiTypography>
+      </Stack>
+    </Box>
+  );
+}
+
+// Quick-jump rail — the handful of surfaces used every day, one tap away at the
+// very top so the "lead thing and others" are always reachable without
+// scrolling. Horizontally scrollable on a phone; wraps on desktop.
+function QuickNav({ onPick, onNavigate, pulse }) {
+  const replies = pulse ? (Number(pulse.repliesWaiting) || 0) : 0;
+  const follow = pulse ? (Number(pulse.followUpsToday) || 0) : 0;
+  const items = [
+    { label: "Today's calls", Icon: PhoneInTalkIcon, badge: follow, onClick: () => onNavigate({ view: 'crm', innerView: 'today' }) },
+    { label: 'Outreach', Icon: ForwardToInboxOutlinedIcon, badge: replies, onClick: () => onPick('outreach') },
+    { label: 'Field Map', Icon: ExploreOutlinedIcon, onClick: () => onPick('roadtrip') },
+    { label: 'New quote', Icon: PaidOutlinedIcon, onClick: () => onPick('clients') },
+    { label: 'Mockup', Icon: DesignServicesIcon, onClick: () => onPick('mockup') },
+    { label: 'Content', Icon: CampaignOutlinedIcon, onClick: () => onPick('content') },
+  ];
+  return (
+    <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.5, flexWrap: { md: 'wrap' },
+      '&::-webkit-scrollbar': { height: 4 },
+      '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.10)', borderRadius: 3 },
+      mx: { xs: -0.5, md: 0 }, px: { xs: 0.5, md: 0 } }}>
+      {items.map((it) => (
+        <Box key={it.label} onClick={it.onClick} role="button" tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); it.onClick(); } }}
+          sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 0.85, cursor: 'pointer',
+            px: 1.6, py: 0.9, borderRadius: 999, bgcolor: D.panel, border: `1px solid ${D.line}`,
+            position: 'relative', transition: 'border-color 0.16s ease, background-color 0.16s ease, transform 0.14s ease',
+            '&:hover': { borderColor: D.green, bgcolor: D.panelHi, transform: 'translateY(-1px)' },
+            '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 } }}>
+          <it.Icon sx={{ fontSize: 17, color: D.green }} />
+          <MuiTypography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{it.label}</MuiTypography>
+          {it.badge > 0 && (
+            <Box sx={{ minWidth: 17, height: 17, px: '4px', borderRadius: '9px', bgcolor: D.green, color: D.ink,
+              fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', ...mono }}>
+              {it.badge > 99 ? '99+' : it.badge}
+            </Box>
+          )}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// NJ sales-tax (ST-50) reminder — appears on the hub for ~2 weeks before each
+// quarterly due date (Jan/Apr/Jul/Oct 20). Pulls the quarter's NJ-taxed orders
+// from the backend so the numbers to file are right there to double-check, then
+// expands to the per-order breakdown. Silent + absent the rest of the year.
+function NjTaxReminder({ token, onNavigate }) {
+  const [data, setData] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+    axios.get(`${config.backendUrl}/api/finances/nj-sales-tax`, { headers: { Authorization: `Bearer ${token}` }, timeout: 12000 })
+      .then((r) => { if (!cancelled) setData(r.data || null); })
+      .catch(() => { if (!cancelled) setData(null); });
+    return () => { cancelled = true; };
+  }, [token]);
+  if (!data || !data.active) return null;   // only shows inside the reminder window
+  const soon = data.daysUntilDue <= 3;
+  return (
+    <Box sx={{ borderRadius: 3, overflow: 'hidden', border: `1px solid ${soon ? '#f0b429' : 'rgba(240,180,41,0.4)'}`,
+      bgcolor: 'rgba(240,180,41,0.06)' }}>
+      <Box onClick={() => setOpen((o) => !o)} role="button" tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, py: 1.75, cursor: 'pointer',
+          '&:hover': { bgcolor: 'rgba(240,180,41,0.10)' } }}>
+        <Box sx={{ fontSize: 22, flexShrink: 0 }}>🧾</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <MuiTypography sx={{ color: '#f0b429', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+            NJ sales tax due {fmtDate(data.dueDate)} · {data.daysUntilDue <= 0 ? 'due now' : `in ${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}
+          </MuiTypography>
+          <MuiTypography sx={{ color: D.text, fontSize: 14.5, fontWeight: 800, mt: 0.2 }}>
+            File your {data.period} ST-50 — {money(data.totalTax)} collected across {data.orderCount} order{data.orderCount === 1 ? '' : 's'}
+          </MuiTypography>
+          <MuiTypography sx={{ color: D.muted, fontSize: 12, mt: 0.15 }}>
+            {money(data.totalTaxable)} of NJ-taxable sales · tap to review the orders and double-check.
+          </MuiTypography>
+        </Box>
+        <ExpandMoreIcon sx={{ color: '#f0b429', fontSize: 22, flexShrink: 0, transition: 'transform 0.2s ease',
+          transform: open ? 'rotate(180deg)' : 'none' }} />
+      </Box>
+      <Collapse in={open} timeout={260} unmountOnExit>
+        <Box sx={{ px: { xs: 1.5, md: 2.5 }, pb: 2 }}>
+          {data.orders.length === 0 ? (
+            <MuiTypography sx={{ color: D.muted, fontSize: 12.5, py: 1 }}>
+              No NJ-taxed orders booked this quarter — file a $0 return.
+            </MuiTypography>
+          ) : (
+            <Box sx={{ borderRadius: 2, border: `1px solid ${D.line}`, overflow: 'hidden', bgcolor: D.inset }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 1fr', gap: 1, px: 1.5, py: 0.75,
+                borderBottom: `1px solid ${D.line}`, bgcolor: D.panel }}>
+                {['Order', 'Date', 'NJ taxable', 'NJ tax'].map((h, i) => (
+                  <MuiTypography key={h} sx={{ color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+                    textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</MuiTypography>
+                ))}
+              </Box>
+              {data.orders.map((o, i) => (
+                <Box key={i} onClick={() => o.projectNumber && onNavigate && onNavigate({ view: 'clients', projectNumber: o.projectNumber })}
+                  sx={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 1fr', gap: 1, px: 1.5, py: 0.85,
+                    borderTop: i === 0 ? 'none' : `1px solid ${D.line}`, cursor: o.projectNumber ? 'pointer' : 'default',
+                    '&:hover': o.projectNumber ? { bgcolor: D.panelHi } : {} }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <MuiTypography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {o.company || '—'}
+                    </MuiTypography>
+                    <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 10.5 }}>#{o.orderNumber || o.projectNumber}</MuiTypography>
+                  </Box>
+                  <MuiTypography sx={{ ...mono, color: D.muted, fontSize: 11.5, alignSelf: 'center' }}>{fmtDate(o.date)}</MuiTypography>
+                  <MuiTypography sx={{ ...mono, color: D.muted, fontSize: 12, alignSelf: 'center', textAlign: 'right' }}>{money(o.taxable)}</MuiTypography>
+                  <MuiTypography sx={{ ...mono, color: '#f0b429', fontSize: 12.5, fontWeight: 800, alignSelf: 'center', textAlign: 'right' }}>{money(o.tax)}</MuiTypography>
+                </Box>
+              ))}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr 1fr', gap: 1, px: 1.5, py: 0.9,
+                borderTop: `2px solid ${D.line}`, bgcolor: D.panel }}>
+                <MuiTypography sx={{ color: D.text, fontSize: 12, fontWeight: 800, gridColumn: '1 / 3' }}>Total to remit</MuiTypography>
+                <MuiTypography sx={{ ...mono, color: D.muted, fontSize: 12, fontWeight: 800, textAlign: 'right' }}>{money(data.totalTaxable)}</MuiTypography>
+                <MuiTypography sx={{ ...mono, color: '#f0b429', fontSize: 13, fontWeight: 900, textAlign: 'right' }}>{money(data.totalTax)}</MuiTypography>
+              </Box>
+            </Box>
+          )}
+          <MuiTypography sx={{ color: D.faint, fontSize: 11, mt: 1, lineHeight: 1.5 }}>
+            File at nj.gov (Sales &amp; Use Tax, ST-50). These are the orders that charged NJ tax with a
+            confirmation in {data.period} — double-check against your QuickBooks before you submit.
+          </MuiTypography>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
 function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, aiUsage, isOwner, token }) {
   // "On hold" sub-lists (a group's dismissed tools) collapse by default —
   // present but out of the way. State keyed by brand so each remembers its own
@@ -2251,8 +2412,17 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
   return (
     <Stack spacing={3.5}>
+      {/* A warm, personal open — greeting + the day + a business-aware nudge. */}
+      <HubGreeting pulse={pulse} />
+
+      {/* Quick-jump rail — the everyday surfaces one tap away, top of the page. */}
+      <QuickNav onPick={onPick} onNavigate={onNavigate} pulse={pulse} />
+
       {/* Today, at a glance — date + the business's live vitals in one line. */}
       <PulseBar pulse={pulse} />
+
+      {/* NJ sales-tax (ST-50) reminder — only inside its ~2-week filing window. */}
+      <NjTaxReminder token={token} onNavigate={onNavigate} />
 
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
@@ -2547,7 +2717,7 @@ function StudioBody({ token, onLogout }) {
     const v = target.view;
     if (v === 'crm') {
       const key = target.companyKey ? String(target.companyKey) : null;
-      setCrmEntry((p) => ({ view: 'companies', companyKey: key, nonce: p.nonce + 1 }));
+      setCrmEntry((p) => ({ view: target.innerView || 'companies', companyKey: key, nonce: p.nonce + 1 }));
       setView('crm');
     } else if (v === 'clients') {
       setOrdersEntry((p) => ({
