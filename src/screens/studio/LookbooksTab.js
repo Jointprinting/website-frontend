@@ -72,6 +72,16 @@ const LAYOUTS = [
   { value: 'grid',      label: 'Grid — dense contact sheet' },
 ];
 
+// Theme = the DEFAULT palette the client first sees on the share link (they can
+// still flip it live in the viewer — mirrors LookbookView.js THEMES). A swatch
+// gradient previews each: page color → accent.
+const THEME_SWATCHES = [
+  { value: 'paper',  label: 'Paper',    bg: '#faf9f6', accent: '#15803d' },
+  { value: 'ink',    label: 'Charcoal', bg: '#14171a', accent: '#34d17f' },
+  { value: 'forest', label: 'Forest',   bg: '#0e1a13', accent: '#7fcf9e' },
+  { value: 'sand',   label: 'Sand',     bg: '#efe9dd', accent: '#9a5726' },
+];
+
 // Same slug matching the mockup pickers use, so "Bleu Leaf Dispensary" still
 // finds a library item named "BleuLeafDispensary_Merch".
 const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -362,6 +372,8 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
     layout: doc.layout || 'auto',
     showBack: doc.showBack !== false,
     showLabels: doc.showLabels !== false,
+    theme: doc.theme || 'paper',
+    knockout: !!doc.knockout,
     pages: (doc.mockups || []).map((m) => ({ remoteId: m.remoteId, caption: m.caption || '' })),
   });
   const foldTiles = (map, tiles) => {
@@ -409,6 +421,7 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
     const body = {
       title: d.title, subtitle: d.subtitle, projectNumber: d.projectNumber,
       layout: d.layout, showBack: d.showBack, showLabels: d.showLabels,
+      theme: d.theme, knockout: d.knockout,
       mockups: d.pages.map((p) => ({ remoteId: p.remoteId, caption: p.caption })),
     };
     const run = inFlightRef.current.then(async () => {
@@ -546,6 +559,7 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
         clientName: lb?.companyName || '',
         projectNumber: d.projectNumber,
         layout: d.layout, showBack: d.showBack, showLabels: d.showLabels,
+        knockout: d.knockout,
       }, { ...authHdr, responseType: 'blob' });
       const url = URL.createObjectURL(r.data);
       const a = document.createElement('a');
@@ -692,6 +706,33 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                       <TogglePill label="Back sides" on={draft.showBack} onClick={() => set('showBack')(!draft.showBack)} />
                       <TogglePill label="Labels" on={draft.showLabels} onClick={() => set('showLabels')(!draft.showLabels)} />
                     </Stack>
+                  </Stack>
+
+                  {/* Client-facing defaults — the palette + clean-background the
+                      viewer first sees on the share link (they can still flip it
+                      live). Theme also tints the PDF's cover accents. */}
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-end' }}>
+                    <Box>
+                      <Typography sx={{ ...eyebrow, mb: 0.9, display: 'block' }}>Client theme</Typography>
+                      <Stack direction="row" spacing={1.25}>
+                        {THEME_SWATCHES.map((t) => {
+                          const on = draft.theme === t.value;
+                          return (
+                            <Box key={t.value} onClick={() => set('theme')(t.value)} title={t.label}
+                              sx={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                              <Box sx={{ width: 28, height: 28, borderRadius: '50%',
+                                background: `linear-gradient(135deg, ${t.bg} 0 55%, ${t.accent} 55% 100%)`,
+                                border: `2px solid ${on ? D.green : D.line}`,
+                                boxShadow: on ? `0 0 0 2px ${D.panel}, 0 0 0 3px ${D.green}` : 'none',
+                                transition: 'transform 140ms ease', '&:hover': { transform: 'scale(1.1)' } }} />
+                              <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: on ? D.text : D.faint }}>{t.label}</Typography>
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    </Box>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <TogglePill label="Clean background" on={draft.knockout} onClick={() => set('knockout')(!draft.knockout)} />
                   </Stack>
                 </Stack>
               </Box>
