@@ -1,42 +1,37 @@
 // src/screens/LookbookView.js
-// Public, token-gated lookbook gallery — the link a client opens when the owner
-// shares a curated set of mockups from the Studio's Lookbooks builder (backend:
+// Public, token-gated lookbook — the link a client opens when the owner shares a
+// curated set of mockups from the Studio's Lookbooks builder (backend:
 // /api/public/lookbooks). Reactions, comments and "request pricing" land back on
-// the lookbook record and surface in the builder's feedback panel.
+// the record and surface in the builder's feedback panel.
 //
-// This is a real, client-shareable MARKETING piece — not a dashboard. The
-// viewer gets a lot of control over how it looks, so they can show it around
-// their own team / use it for their own marketing:
-//   • Theme        — paper / charcoal / forest / sand palettes (persisted).
-//   • Layout       — showcase (one big per row) / grid / story (alternating).
-//   • Clean bg     — knock the white studio backdrop out so garments float on
-//                    the theme (canvas transparency where CORS allows, else a
-//                    `multiply` blend on a light stage — always looks clean).
-//   • Download PDF — the same polished deck, token-gated, in whatever cut they
-//                    picked (backend reuses the Studio's PDF generator).
-// Owner-set defaults (theme/knockout/layout) ride in on the payload; the
-// viewer's live overrides are theirs alone (localStorage), never written back.
+// This is a MARKETING piece, built to WOW on open with barely any scroll:
+//   • Collage  — the default. Products are knocked out of their white backdrop
+//                and layered over each other into one composition — the hero.
+//                Tap any piece to bring it forward and react / request it.
+//   • Showcase — one big piece per row, for a considered scroll-through.
+//   • Grid     — a tight contact sheet.
+// Plus: live theme switching (paper / charcoal / forest / sand), and a
+// token-gated PDF download of the same deck. Owner-set defaults ride in on the
+// payload; the viewer's live choices are theirs alone (localStorage).
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Box, Stack, Typography, Button, TextField, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, IconButton, Tooltip } from '@mui/material';
+  Dialog, DialogContent, DialogTitle, DialogActions, Checkbox, IconButton, Tooltip } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
+import AutoAwesomeMotionOutlinedIcon from '@mui/icons-material/AutoAwesomeMotionOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
-import ViewCarouselOutlinedIcon from '@mui/icons-material/ViewCarouselOutlined';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
 
 // ── Theme registry — each palette is self-contained. `stage` is ALWAYS light so
-// the `multiply` knockout fallback stays clean even on the dark themes (the
-// garment sits on a gallery-mat tile). `accent` drives actions + the up-vote. ──
+// a `multiply` knockout fallback stays clean even on the dark themes. ──
 const THEMES = {
   paper: {
     id: 'paper', name: 'Paper', isDark: false,
@@ -44,7 +39,7 @@ const THEMES = {
     text: '#111a14', muted: 'rgba(17,26,20,0.62)', faint: 'rgba(17,26,20,0.42)',
     accent: '#15803d', accentText: '#ffffff', accentSoft: 'rgba(21,128,61,0.09)',
     amber: '#b45309', amberSoft: 'rgba(180,83,9,0.09)',
-    shadow: '0 10px 34px rgba(15,26,19,0.07)',
+    glow: 'rgba(21,128,61,0.16)', shadow: '0 10px 34px rgba(15,26,19,0.07)',
   },
   ink: {
     id: 'ink', name: 'Charcoal', isDark: true,
@@ -52,7 +47,7 @@ const THEMES = {
     text: '#eef2ee', muted: 'rgba(238,242,238,0.66)', faint: 'rgba(238,242,238,0.40)',
     accent: '#34d17f', accentText: '#052012', accentSoft: 'rgba(52,209,127,0.14)',
     amber: '#f0b429', amberSoft: 'rgba(240,180,41,0.14)',
-    shadow: '0 16px 44px rgba(0,0,0,0.46)',
+    glow: 'rgba(52,209,127,0.22)', shadow: '0 16px 44px rgba(0,0,0,0.46)',
   },
   forest: {
     id: 'forest', name: 'Forest', isDark: true,
@@ -60,7 +55,7 @@ const THEMES = {
     text: '#eaf2ec', muted: 'rgba(206,214,208,0.82)', faint: 'rgba(150,162,153,0.85)',
     accent: '#7fcf9e', accentText: '#05130b', accentSoft: 'rgba(127,207,158,0.15)',
     amber: '#e9b872', amberSoft: 'rgba(233,184,114,0.15)',
-    shadow: '0 16px 44px rgba(0,0,0,0.5)',
+    glow: 'rgba(127,207,158,0.22)', shadow: '0 16px 44px rgba(0,0,0,0.5)',
   },
   sand: {
     id: 'sand', name: 'Sand', isDark: false,
@@ -68,32 +63,31 @@ const THEMES = {
     text: '#2b2416', muted: 'rgba(43,36,22,0.62)', faint: 'rgba(43,36,22,0.42)',
     accent: '#9a5726', accentText: '#ffffff', accentSoft: 'rgba(154,87,38,0.10)',
     amber: '#9a5726', amberSoft: 'rgba(154,87,38,0.10)',
-    shadow: '0 10px 30px rgba(60,45,25,0.12)',
+    glow: 'rgba(154,87,38,0.18)', shadow: '0 10px 30px rgba(60,45,25,0.12)',
   },
 };
 const THEME_ORDER = ['paper', 'ink', 'forest', 'sand'];
 
-// Map the owner's stored PDF layout vocabulary → the viewer's initial layout.
-const LAYOUT_FROM_STORED = { auto: 'stack', editorial: 'stack', grid: 'grid' };
-// … and back, for the client's own PDF download (story reads best as editorial).
-const STORED_FROM_LAYOUT = { stack: 'editorial', grid: 'grid', story: 'editorial' };
-const LAYOUTS = [
-  { id: 'stack', label: 'Showcase', Icon: ViewAgendaOutlinedIcon },
-  { id: 'grid',  label: 'Grid',     Icon: GridViewOutlinedIcon },
-  { id: 'story', label: 'Story',    Icon: ViewCarouselOutlinedIcon },
+// Map the owner's stored PDF layout → the viewer's initial view.
+const VIEW_FROM_STORED = { auto: 'collage', editorial: 'showcase', grid: 'grid' };
+// … and back, for the client's own PDF (collage has no PDF twin → editorial).
+const STORED_FROM_VIEW = { collage: 'editorial', showcase: 'editorial', grid: 'grid' };
+const VIEWS = [
+  { id: 'collage',  label: 'Collage',  Icon: AutoAwesomeMotionOutlinedIcon },
+  { id: 'showcase', label: 'Showcase', Icon: ViewAgendaOutlinedIcon },
+  { id: 'grid',     label: 'Grid',     Icon: GridViewOutlinedIcon },
 ];
 
+const COLLAGE_MAX = 7;   // beyond this the collage curates the first N (rest via Grid)
 const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
 const NAME_KEY = 'jp-lb-name';
 const THEME_KEY = 'jp-lb-theme';
-const CLEAN_KEY = 'jp-lb-clean';
 const LSAFE = (fn) => { try { return fn(); } catch (_) { return undefined; } };
 
-// Knock the white studio backdrop out of a mockup in the browser: near-white
-// pixels → transparent, so the garment floats on any theme. Needs a readable
-// (un-tainted) canvas — base64 payloads are same-origin, R2 URLs work when the
-// bucket sends CORS. On a taint / load error it resolves null and the caller
-// falls back to a `multiply` blend on a light stage. Never throws.
+// Knock the white backdrop out of a mockup in the browser: near-white pixels →
+// transparent, so the piece floats and can layer. Needs a readable canvas
+// (base64 is same-origin; R2 works when the bucket sends CORS). On taint/error
+// resolves null and the caller keeps the mockup as-is. Never throws.
 function knockoutWhite(src) {
   return new Promise((resolve) => {
     if (!src) { resolve(null); return; }
@@ -107,7 +101,7 @@ function knockoutWhite(src) {
         c.width = w; c.height = h;
         const ctx = c.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const id = ctx.getImageData(0, 0, w, h);   // throws if the canvas is tainted
+        const id = ctx.getImageData(0, 0, w, h);   // throws if tainted
         const d = id.data;
         for (let i = 0; i < d.length; i += 4) {
           if (d[i] >= 240 && d[i + 1] >= 240 && d[i + 2] >= 240) d[i + 3] = 0;
@@ -121,65 +115,15 @@ function knockoutWhite(src) {
   });
 }
 
-// One mockup face (front or back). `clean` on → try transparency, else multiply
-// on a light stage. `clean` off → framed on the theme card (the classic look).
-function ProductImage({ src, alt, clean, theme, radius = 3 }) {
+function useKnockout(src, on) {
   const [ko, setKo] = useState(null);
   useEffect(() => {
-    let alive = true;
-    setKo(null);
-    if (!clean || !src) return undefined;
-    knockoutWhite(src).then((url) => { if (alive) setKo(url); });
+    let alive = true; setKo(null);
+    if (!on || !src) return undefined;
+    knockoutWhite(src).then((u) => { if (alive) setKo(u); });
     return () => { alive = false; };
-  }, [src, clean]);
-
-  if (!src) return null;
-
-  if (!clean) {
-    return (
-      <Box sx={{ bgcolor: theme.panel, border: `1px solid ${theme.line}`, borderRadius: radius,
-        boxShadow: theme.shadow, overflow: 'hidden' }}>
-        <Box component="img" src={src} alt={alt} loading="lazy"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          sx={{ width: '100%', display: 'block' }} />
-      </Box>
-    );
-  }
-  const usingKO = !!ko;
-  // While the knockout is resolving (tried=false) show the raw image on the
-  // light stage with multiply — it already looks clean, no flash of framed art.
-  return (
-    <Box sx={{ bgcolor: usingKO ? 'transparent' : theme.stage, borderRadius: radius,
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      p: usingKO ? { xs: 1, sm: 2 } : { xs: 2, sm: 3.5 }, transition: 'background-color 200ms ease' }}>
-      <Box component="img" src={ko || src} alt={alt} loading="lazy"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        sx={{ width: '100%', display: 'block',
-          mixBlendMode: usingKO ? 'normal' : 'multiply',
-          filter: usingKO ? 'drop-shadow(0 18px 30px rgba(0,0,0,0.20))' : 'none' }} />
-    </Box>
-  );
-}
-
-// Front (+ optional back) for one mockup. `dense` shrinks the back to a small
-// secondary (grid/story); otherwise front & back share a row (showcase).
-function MockupFaces({ m, clean, theme, showBack, dense }) {
-  const back = showBack && !!m.back;
-  if (!back) return <ProductImage src={m.front} alt={m.name || 'Mockup'} clean={clean} theme={theme} />;
-  if (dense) {
-    return (
-      <Box sx={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: 1, alignItems: 'center' }}>
-        <ProductImage src={m.front} alt={m.name || 'Mockup'} clean={clean} theme={theme} />
-        <ProductImage src={m.back} alt={`${m.name || 'Mockup'} — back`} clean={clean} theme={theme} radius={2} />
-      </Box>
-    );
-  }
-  return (
-    <Box sx={{ display: 'grid', gap: { xs: 1.5, sm: 2 }, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-      <ProductImage src={m.front} alt={m.name || 'Mockup'} clean={clean} theme={theme} />
-      <ProductImage src={m.back} alt={`${m.name || 'Mockup'} — back`} clean={clean} theme={theme} />
-    </Box>
-  );
+  }, [src, on]);
+  return ko;
 }
 
 function ago(d) {
@@ -194,31 +138,57 @@ function ago(d) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function ReactBtn({ up, active, count, disabled, onClick, theme }) {
-  const Icon = up ? ThumbUpAltOutlinedIcon : ThumbDownAltOutlinedIcon;
-  const tone = up ? theme.accent : theme.amber;
-  const soft = up ? theme.accentSoft : theme.amberSoft;
+// Deterministic overlapping slots for the collage — a hero piece centered/front,
+// the rest fanned around it. Percent coords (center-anchored), width %, rotation,
+// z. Stable per index (no randomness) so a re-render never reshuffles the pile.
+const HERO_SLOT = { left: 50, top: 53, w: 46, rot: -2, z: 60 };
+const RING_SLOTS = [
+  { left: 20, top: 36, w: 30, rot: -9, z: 40 },
+  { left: 80, top: 40, w: 32, rot: 8,  z: 52 },
+  { left: 31, top: 76, w: 27, rot: 6,  z: 45 },
+  { left: 73, top: 74, w: 29, rot: -7, z: 48 },
+  { left: 50, top: 23, w: 25, rot: 3,  z: 38 },
+  { left: 12, top: 62, w: 22, rot: -12, z: 34 },
+];
+function collageSlots(n) {
+  const out = [HERO_SLOT];
+  for (let i = 0; i < n - 1; i++) out.push(RING_SLOTS[i % RING_SLOTS.length]);
+  return out.slice(0, n);
+}
+
+function ReactRow({ rid, latestByPerson, me, busyKey, post, theme, size = 'md' }) {
+  const reactions = latestByPerson(rid);
+  let up = 0, down = 0;
+  reactions.forEach((f) => { if (f.reaction === 'up') up += 1; else if (f.reaction === 'down') down += 1; });
+  const mine = (me && reactions.get(me)?.reaction) || '';
+  const busy = busyKey === (rid || 'overall');
+  const pill = (up_, active, count, onClick) => {
+    const Icon = up_ ? ThumbUpAltOutlinedIcon : ThumbDownAltOutlinedIcon;
+    const tone = up_ ? theme.accent : theme.amber;
+    const soft = up_ ? theme.accentSoft : theme.amberSoft;
+    return (
+      <Button onClick={onClick} disabled={busy} aria-pressed={active}
+        sx={{ minWidth: 0, px: size === 'sm' ? 1.5 : 2, py: size === 'sm' ? 0.5 : 0.8, borderRadius: 999, textTransform: 'none',
+          display: 'inline-flex', gap: 0.6, fontWeight: 700, fontSize: size === 'sm' ? 12 : 13,
+          color: active ? tone : theme.muted, border: `1.5px solid ${active ? tone : theme.line}`,
+          bgcolor: active ? soft : theme.panel, transition: 'all 160ms ease',
+          '&:hover': { borderColor: tone, color: tone, bgcolor: soft } }}>
+        <Icon sx={{ fontSize: size === 'sm' ? 16 : 18 }} />
+        {up_ ? 'Love it' : 'Not this one'}
+        {count > 0 && <Box component="span" sx={{ ...mono, fontSize: 12, color: active ? tone : theme.faint }}>{count}</Box>}
+      </Button>
+    );
+  };
   return (
-    <Button onClick={onClick} disabled={disabled} aria-pressed={active}
-      sx={{
-        minWidth: 0, px: 2, py: 0.8, borderRadius: 999, textTransform: 'none',
-        display: 'inline-flex', gap: 0.75, fontWeight: 700, fontSize: 13,
-        color: active ? tone : theme.muted,
-        border: `1.5px solid ${active ? tone : theme.line}`,
-        bgcolor: active ? soft : theme.panel,
-        transition: 'all 160ms ease',
-        '&:hover': { borderColor: tone, color: tone, bgcolor: soft },
-      }}>
-      <Icon sx={{ fontSize: 18 }} />
-      {up ? 'Love it' : 'Not this one'}
-      {count > 0 && <Box component="span" sx={{ ...mono, fontSize: 12, color: active ? tone : theme.faint }}>{count}</Box>}
-    </Button>
+    <Stack direction="row" justifyContent="center" gap={1.25} flexWrap="wrap">
+      {pill(true, mine === 'up', up, () => { if (mine !== 'up') post(rid, { reaction: 'up' }); })}
+      {pill(false, mine === 'down', down, () => { if (mine !== 'down') post(rid, { reaction: 'down' }); })}
+    </Stack>
   );
 }
 
-function CommentBlock({ comments, draft, onDraft, onSend, busy, placeholder, theme }) {
-  const canSend = !!draft.trim() && !busy;
-  const field = {
+function themedField(theme) {
+  return {
     '& .MuiOutlinedInput-root': {
       bgcolor: theme.panel, color: theme.text, borderRadius: 2.5, fontSize: 14,
       '& fieldset': { borderColor: theme.line },
@@ -227,39 +197,87 @@ function CommentBlock({ comments, draft, onDraft, onSend, busy, placeholder, the
     },
     '& .MuiInputBase-input::placeholder': { color: theme.faint, opacity: 1 },
   };
+}
+
+function CommentBlock({ comments, draft, onDraft, onSend, busy, placeholder, theme }) {
+  const canSend = !!draft.trim() && !busy;
+  const field = themedField(theme);
   return (
-    <Box sx={{ maxWidth: 560, mx: 'auto' }}>
+    <Box sx={{ maxWidth: 560, mx: 'auto', width: '100%' }}>
       {comments.length > 0 && (
-        <Stack spacing={1} sx={{ mt: 2.5, textAlign: 'left' }}>
+        <Stack spacing={1} sx={{ mb: 1.5, textAlign: 'left' }}>
           {comments.map((f, i) => (
             <Box key={i} sx={{ bgcolor: theme.panel, border: `1px solid ${theme.line}`, borderRadius: 2.5, px: 1.75, py: 1.25 }}>
               <Stack direction="row" alignItems="baseline" gap={1}>
                 <Typography sx={{ fontWeight: 800, fontSize: 12.5, color: theme.text }}>{f.by || 'Someone'}</Typography>
                 <Typography sx={{ color: theme.faint, fontSize: 11 }}>{ago(f.at)}</Typography>
               </Stack>
-              <Typography sx={{ color: theme.muted, fontSize: 13.5, mt: 0.4, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                {f.comment}
-              </Typography>
+              <Typography sx={{ color: theme.muted, fontSize: 13.5, mt: 0.4, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{f.comment}</Typography>
             </Box>
           ))}
         </Stack>
       )}
-      <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mt: 2 }}>
-        <TextField
-          value={draft} onChange={(e) => onDraft(e.target.value)}
-          placeholder={placeholder} size="small" fullWidth multiline maxRows={4} sx={field}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && canSend) { e.preventDefault(); onSend(); } }}
-        />
+      <Stack direction="row" gap={1} alignItems="flex-start">
+        <TextField value={draft} onChange={(e) => onDraft(e.target.value)} placeholder={placeholder}
+          size="small" fullWidth multiline maxRows={4} sx={field}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && canSend) { e.preventDefault(); onSend(); } }} />
         <Button onClick={onSend} disabled={!canSend}
-          sx={{
-            px: 2.25, py: 0.9, borderRadius: 999, textTransform: 'none', flexShrink: 0,
-            fontWeight: 800, fontSize: 13, bgcolor: theme.accent, color: theme.accentText,
-            '&:hover': { bgcolor: theme.accent, filter: 'brightness(0.94)' },
-            '&.Mui-disabled': { bgcolor: theme.accentSoft, color: theme.faint },
-          }}>
+          sx={{ px: 2.25, py: 0.9, borderRadius: 999, textTransform: 'none', flexShrink: 0, fontWeight: 800, fontSize: 13,
+            bgcolor: theme.accent, color: theme.accentText, '&:hover': { filter: 'brightness(0.94)' },
+            '&.Mui-disabled': { bgcolor: theme.accentSoft, color: theme.faint } }}>
           {busy ? <CircularProgress size={16} sx={{ color: theme.accentText }} /> : 'Send'}
         </Button>
       </Stack>
+    </Box>
+  );
+}
+
+// One framed / clean face used by Showcase + Grid + the focus lightbox.
+function ProductImage({ src, alt, clean, theme, radius = 3 }) {
+  const ko = useKnockout(src, clean);
+  if (!src) return null;
+  if (!clean) {
+    return (
+      <Box sx={{ bgcolor: theme.panel, border: `1px solid ${theme.line}`, borderRadius: radius, boxShadow: theme.shadow, overflow: 'hidden' }}>
+        <Box component="img" src={src} alt={alt} loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }} sx={{ width: '100%', display: 'block' }} />
+      </Box>
+    );
+  }
+  const usingKO = !!ko;
+  return (
+    <Box sx={{ bgcolor: usingKO ? 'transparent' : theme.stage, borderRadius: radius, display: 'flex', justifyContent: 'center',
+      alignItems: 'center', p: usingKO ? { xs: 1, sm: 2 } : { xs: 2, sm: 3.5 }, transition: 'background-color 200ms ease' }}>
+      <Box component="img" src={ko || src} alt={alt} loading="lazy"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        sx={{ width: '100%', display: 'block', mixBlendMode: usingKO ? 'normal' : 'multiply',
+          filter: usingKO ? 'drop-shadow(0 18px 30px rgba(0,0,0,0.20))' : 'none' }} />
+    </Box>
+  );
+}
+
+// One knocked-out piece placed in the collage. Transparent PNG where possible
+// (floats on the theme), else the raw mockup on a small rounded card (still
+// reads as a layered photo). Tapping focuses it.
+function CollageProduct({ m, slot, theme, onOpen, focused }) {
+  const ko = useKnockout(m.front, true);
+  const usingKO = !!ko;
+  return (
+    <Box onClick={onOpen} role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      sx={{ position: 'absolute', left: `${slot.left}%`, top: `${slot.top}%`, width: `${slot.w}%`,
+        zIndex: focused ? 80 : slot.z, transform: `translate(-50%, -50%) rotate(${slot.rot}deg) scale(${focused ? 1.06 : 1})`,
+        transformOrigin: 'center', cursor: 'pointer', transition: 'transform 260ms cubic-bezier(0.2,0.8,0.2,1), filter 200ms ease',
+        filter: usingKO ? 'drop-shadow(0 22px 34px rgba(0,0,0,0.30))' : 'none',
+        '&:hover': { transform: `translate(-50%, -50%) rotate(0deg) scale(1.08)`, zIndex: 90 },
+        '&:focus-visible': { outline: `2px solid ${theme.accent}`, outlineOffset: 4 } }}>
+      {usingKO ? (
+        <Box component="img" src={ko} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
+      ) : (
+        <Box sx={{ bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', boxShadow: '0 18px 34px rgba(0,0,0,0.32)', border: '4px solid #fff' }}>
+          <Box component="img" src={m.front} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -272,34 +290,26 @@ export default function LookbookView() {
 
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
-  const [errKind, setErrKind] = useState('');   // '' | 'invalid' | 'expired'
+  const [errKind, setErrKind] = useState('');
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState(() => LSAFE(() => window.localStorage.getItem(NAME_KEY)) || '');
   const [needName, setNeedName] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [busyKey, setBusyKey] = useState('');
-  const [expanded, setExpanded] = useState({});   // grid-mode per-mockup "notes" disclosure
+  const [focusRid, setFocusRid] = useState(null);   // collage lightbox target
 
-  // Presentation controls — seeded from the owner's defaults on load, then the
-  // viewer owns them (URL ?theme= wins first paint; localStorage persists).
   const [themeId, setThemeId] = useState(() =>
     (params.get('theme') && THEMES[params.get('theme')] ? params.get('theme') : null)
     || (LSAFE(() => window.localStorage.getItem(THEME_KEY)) || null));
-  const [clean, setClean] = useState(() => {
-    const v = LSAFE(() => window.localStorage.getItem(CLEAN_KEY));
-    return v === null || v === undefined ? null : v === '1';
-  });
-  const [layout, setLayout] = useState('stack');
+  const [view, setView] = useState('collage');
   const [pdfBusy, setPdfBusy] = useState(false);
 
-  // Request-pricing state.
   const [rpOpen, setRpOpen] = useState(false);
   const [rpSel, setRpSel] = useState({});
   const [rpMeta, setRpMeta] = useState({ email: '', phone: '', shipTo: '', note: '' });
   const [rpBusy, setRpBusy] = useState(false);
   const [rpDone, setRpDone] = useState(false);
   const [rpErr, setRpErr] = useState('');
-  const nameBoxRef = useRef(null);
   const nameInputRef = useRef(null);
 
   useEffect(() => {
@@ -310,10 +320,8 @@ export default function LookbookView() {
         const r = await axios.get(`${config.backendUrl}/api/public/lookbooks/${id}?${q}`);
         if (cancelled) return;
         setData(r.data);
-        // Adopt owner defaults only where the viewer hasn't chosen for themselves.
         setThemeId((cur) => cur || (THEMES[r.data.theme] ? r.data.theme : 'paper'));
-        setClean((cur) => (cur === null ? !!r.data.knockout : cur));
-        setLayout(LAYOUT_FROM_STORED[r.data.layout] || 'stack');
+        setView(VIEW_FROM_STORED[r.data.layout] || 'collage');
       } catch (e) {
         if (cancelled) return;
         setErr(e.response?.data?.message || '');
@@ -329,36 +337,18 @@ export default function LookbookView() {
   useEffect(() => { if (data?.title) document.title = `${data.title} | Joint Printing`; }, [data]);
 
   const theme = THEMES[themeId] || THEMES.paper;
-  const isClean = !!clean;
-  // Shared text-field styling for the pricing dialog, themed.
-  const rpField = {
-    '& .MuiOutlinedInput-root': {
-      bgcolor: theme.panel, color: theme.text, borderRadius: 2.5, fontSize: 14,
-      '& fieldset': { borderColor: theme.line },
-      '&:hover fieldset': { borderColor: theme.faint },
-      '&.Mui-focused fieldset': { borderColor: theme.accent },
-    },
-    '& .MuiInputBase-input::placeholder': { color: theme.faint, opacity: 1 },
-  };
-
+  const rpField = themedField(theme);
   const pickTheme = (t) => { setThemeId(t); LSAFE(() => window.localStorage.setItem(THEME_KEY, t)); };
-  const toggleClean = () => setClean((c) => { const nv = !c; LSAFE(() => window.localStorage.setItem(CLEAN_KEY, nv ? '1' : '0')); return nv; });
 
   const refresh = async () => {
     try { const r = await axios.get(`${config.backendUrl}/api/public/lookbooks/${id}?${q}`); setData(r.data); }
     catch (_) { /* keep what's on screen */ }
   };
-
-  const saveName = (v) => {
-    setName(v);
-    if (v.trim()) setNeedName(false);
-    LSAFE(() => window.localStorage.setItem(NAME_KEY, v));
-  };
+  const saveName = (v) => { setName(v); if (v.trim()) setNeedName(false); LSAFE(() => window.localStorage.setItem(NAME_KEY, v)); };
   const requireName = () => {
     if (name.trim()) return true;
     setNeedName(true);
-    LSAFE(() => nameBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-    setTimeout(() => LSAFE(() => nameInputRef.current?.focus()), 350);
+    setTimeout(() => LSAFE(() => nameInputRef.current?.focus()), 120);
     return false;
   };
 
@@ -381,10 +371,8 @@ export default function LookbookView() {
     if (!token) return;
     setPdfBusy(true);
     const url = `${config.backendUrl}/api/public/lookbooks/${id}/pdf?${q}`
-      + `&layout=${encodeURIComponent(STORED_FROM_LAYOUT[layout] || 'editorial')}`
-      + `&knockout=${isClean ? 'true' : 'false'}`;
-    // Attachment disposition → the browser saves it; a hidden anchor keeps the
-    // gallery in place (window.location would navigate away from the link).
+      + `&layout=${encodeURIComponent(STORED_FROM_VIEW[view] || 'editorial')}`
+      + `&knockout=${view === 'collage' ? 'true' : 'false'}`;
     const a = document.createElement('a');
     a.href = url; a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
@@ -407,8 +395,7 @@ export default function LookbookView() {
             {expired ? 'This link has expired' : "This lookbook link isn't valid"}
           </Typography>
           <Typography sx={{ color: theme.muted, fontSize: 13.5, lineHeight: 1.6 }}>
-            {expired
-              ? 'Ask Joint Printing for a fresh one — we’ll send it right over.'
+            {expired ? 'Ask Joint Printing for a fresh one — we’ll send it right over.'
               : (err || 'Double-check the link, or ask Joint Printing to send it again.')}
           </Typography>
         </Box>
@@ -435,10 +422,11 @@ export default function LookbookView() {
     .filter((f) => (f.mockupRemoteId || '') === rid && f.comment)
     .sort((a, b) => new Date(a.at) - new Date(b.at));
 
-  const openPricing = () => {
-    if (!me) { setNeedName(true); nameBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); nameInputRef.current?.focus(); return; }
+  const openPricing = (seedRid) => {
+    if (!me) { requireName(); return; }
     setRpDone(false);
     setRpSel((prev) => {
+      if (seedRid) return { ...prev, [seedRid]: prev[seedRid] || '50' };
       if (Object.keys(prev).length) return prev;
       const next = {};
       mockups.forEach((m) => {
@@ -466,53 +454,65 @@ export default function LookbookView() {
     } finally { setRpBusy(false); }
   };
 
-  // One mockup's label row (number · name · #mockupNum).
-  const LabelRow = ({ m, i, align = 'center' }) => showLabels ? (
-    <Stack direction="row" alignItems="baseline" justifyContent={align === 'center' ? 'center' : 'flex-start'} gap={1} sx={{ mb: 1.75 }}>
-      <Typography sx={{ ...mono, color: theme.faint, fontSize: 12 }}>{String(i + 1).padStart(2, '0')}</Typography>
-      <Typography sx={{ fontWeight: 800, fontSize: { xs: 16, sm: 18 }, color: theme.text }}>{m.name || 'Untitled'}</Typography>
-      {m.mockupNum && <Typography sx={{ ...mono, color: theme.faint, fontSize: 12 }}>#{m.mockupNum}</Typography>}
+  const focusM = focusRid != null ? mockups.find((m) => (m.remoteId || '') === focusRid) : null;
+
+  // ── Label helpers ───────────────────────────────────────────────────────────
+  const Labels = ({ m, i, size = 'md' }) => showLabels ? (
+    <Stack direction="row" alignItems="baseline" justifyContent="center" gap={0.9} sx={{ mb: size === 'md' ? 1.75 : 1 }}>
+      <Typography sx={{ ...mono, color: theme.faint, fontSize: size === 'md' ? 12 : 11 }}>{String(i + 1).padStart(2, '0')}</Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: size === 'md' ? { xs: 16, sm: 18 } : 15, color: theme.text }}>{m.name || 'Untitled'}</Typography>
+      {m.mockupNum && <Typography sx={{ ...mono, color: theme.faint, fontSize: size === 'md' ? 12 : 11 }}>#{m.mockupNum}</Typography>}
     </Stack>
   ) : null;
 
-  // The reaction pills for one mockup.
-  const Reactions = ({ rid }) => {
-    const reactions = latestByPerson(rid);
-    let up = 0, down = 0;
-    reactions.forEach((f) => { if (f.reaction === 'up') up += 1; else if (f.reaction === 'down') down += 1; });
-    const mine = (me && reactions.get(me)?.reaction) || '';
-    const busy = busyKey === (rid || 'overall');
+  const nameField = (
+    <TextField value={name} onChange={(e) => saveName(e.target.value)} inputRef={nameInputRef}
+      placeholder="Your name — so we know who's reacting" size="small" fullWidth error={needName}
+      helperText={needName ? 'Add your name first, then tap or comment.' : ' '}
+      sx={{ ...rpField, '& .MuiFormHelperText-root': { mx: 0, color: needName ? theme.amber : theme.faint } }} />
+  );
+
+  // ── Views ───────────────────────────────────────────────────────────────────
+  const renderCollage = () => {
+    const shown = mockups.slice(0, COLLAGE_MAX);
+    const slots = collageSlots(shown.length);
+    const extra = mockups.length - shown.length;
     return (
-      <Stack direction="row" justifyContent="center" gap={1.25} sx={{ mt: 2.5, flexWrap: 'wrap' }}>
-        <ReactBtn up active={mine === 'up'} count={up} disabled={busy} theme={theme}
-          onClick={() => { if (mine !== 'up') post(rid, { reaction: 'up' }); }} />
-        <ReactBtn up={false} active={mine === 'down'} count={down} disabled={busy} theme={theme}
-          onClick={() => { if (mine !== 'down') post(rid, { reaction: 'down' }); }} />
-      </Stack>
+      <Box sx={{ mt: { xs: 2, sm: 3 } }}>
+        <Box sx={{ position: 'relative', width: '100%', mx: 'auto', maxWidth: 860,
+          height: { xs: '58vh', sm: '62vh' }, minHeight: { xs: 340, sm: 420 } }}>
+          {shown.map((m, i) => (
+            <CollageProduct key={m.remoteId || i} m={m} slot={slots[i]} theme={theme}
+              focused={(m.remoteId || '') === focusRid} onOpen={() => setFocusRid(m.remoteId || '')} />
+          ))}
+        </Box>
+        <Typography sx={{ textAlign: 'center', color: theme.faint, fontSize: 12.5, mt: 1.5 }}>
+          Tap any piece to see it up close, love it, or ask for pricing
+          {extra > 0 && <> · <Box component="span" onClick={() => setView('grid')} sx={{ color: theme.accent, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>see all {mockups.length} designs</Box></>}
+        </Typography>
+      </Box>
     );
   };
 
-  const Notes = ({ rid, placeholder }) => (
-    <CommentBlock
-      comments={commentsFor(rid)} draft={drafts[rid] || ''} theme={theme}
-      onDraft={(v) => setDrafts((d) => ({ ...d, [rid]: v }))}
-      onSend={() => post(rid, { comment: drafts[rid] || '' })}
-      busy={busyKey === (rid || 'overall')} placeholder={placeholder}
-    />
-  );
-
-  // ── Per-layout mockup renderers ─────────────────────────────────────────────
-  const renderStack = () => (
-    <Stack spacing={{ xs: 6, sm: 9 }} sx={{ mt: { xs: 5, sm: 8 } }}>
+  const renderShowcase = () => (
+    <Stack spacing={{ xs: 6, sm: 9 }} sx={{ mt: { xs: 4, sm: 6 } }}>
       {mockups.map((m, i) => {
         const rid = m.remoteId || '';
+        const back = showBack && !!m.back;
         return (
           <Box key={rid || i} component="section" sx={{ textAlign: 'center' }}>
-            <LabelRow m={m} i={i} />
-            <MockupFaces m={m} clean={isClean} theme={theme} showBack={showBack} />
+            <Labels m={m} i={i} />
+            <Box sx={{ display: 'grid', gap: { xs: 1.5, sm: 2 }, gridTemplateColumns: { xs: '1fr', sm: back ? '1fr 1fr' : '1fr' } }}>
+              <ProductImage src={m.front} alt={m.name} clean={false} theme={theme} />
+              {back && <ProductImage src={m.back} alt={`${m.name} back`} clean={false} theme={theme} />}
+            </Box>
             {m.caption && <Typography sx={{ color: theme.muted, fontSize: 14.5, lineHeight: 1.6, mt: 2, maxWidth: 560, mx: 'auto' }}>{m.caption}</Typography>}
-            <Reactions rid={rid} />
-            <Notes rid={rid} placeholder="Leave a note about this one…" />
+            <Box sx={{ mt: 2.5 }}><ReactRow rid={rid} latestByPerson={latestByPerson} me={me} busyKey={busyKey} post={post} theme={theme} /></Box>
+            <Box sx={{ mt: 2 }}>
+              <CommentBlock comments={commentsFor(rid)} draft={drafts[rid] || ''} theme={theme}
+                onDraft={(v) => setDrafts((d) => ({ ...d, [rid]: v }))} onSend={() => post(rid, { comment: drafts[rid] || '' })}
+                busy={busyKey === (rid || 'overall')} placeholder="Leave a note about this one…" />
+            </Box>
           </Box>
         );
       })}
@@ -520,61 +520,22 @@ export default function LookbookView() {
   );
 
   const renderGrid = () => (
-    <Box sx={{ mt: { xs: 5, sm: 8 }, display: 'grid', gap: { xs: 3, sm: 4 }, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+    <Box sx={{ mt: { xs: 4, sm: 6 }, display: 'grid', gap: { xs: 3, sm: 4 }, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' } }}>
       {mockups.map((m, i) => {
         const rid = m.remoteId || '';
-        const open = !!expanded[rid];
-        const nComments = commentsFor(rid).length;
         return (
-          <Box key={rid || i} component="section" sx={{ textAlign: 'center',
-            bgcolor: isClean ? 'transparent' : 'transparent', borderRadius: 3 }}>
-            <MockupFaces m={m} clean={isClean} theme={theme} showBack={showBack} dense />
+          <Box key={rid || i} component="section" sx={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setFocusRid(rid)}>
+            <ProductImage src={m.front} alt={m.name} clean={false} theme={theme} />
             {showLabels && (
-              <Stack direction="row" alignItems="baseline" justifyContent="center" gap={0.75} sx={{ mt: 1.5 }}>
+              <Stack direction="row" alignItems="baseline" justifyContent="center" gap={0.6} sx={{ mt: 1.25 }}>
                 <Typography sx={{ ...mono, color: theme.faint, fontSize: 11 }}>{String(i + 1).padStart(2, '0')}</Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: 15, color: theme.text }}>{m.name || 'Untitled'}</Typography>
-                {m.mockupNum && <Typography sx={{ ...mono, color: theme.faint, fontSize: 11 }}>#{m.mockupNum}</Typography>}
+                <Typography sx={{ fontWeight: 800, fontSize: 14, color: theme.text }}>{m.name || 'Untitled'}</Typography>
               </Stack>
             )}
-            {m.caption && <Typography sx={{ color: theme.muted, fontSize: 13, lineHeight: 1.55, mt: 0.75, maxWidth: 420, mx: 'auto' }}>{m.caption}</Typography>}
-            <Reactions rid={rid} />
-            <Button onClick={() => setExpanded((e) => ({ ...e, [rid]: !e[rid] }))}
-              sx={{ mt: 1, textTransform: 'none', color: theme.muted, fontSize: 12.5, fontWeight: 700, '&:hover': { color: theme.accent } }}>
-              {open ? 'Hide notes' : (nComments > 0 ? `Notes (${nComments})` : 'Add a note')}
-            </Button>
-            {open && <Notes rid={rid} placeholder="Leave a note about this one…" />}
           </Box>
         );
       })}
     </Box>
-  );
-
-  const renderStory = () => (
-    <Stack spacing={{ xs: 6, sm: 10 }} sx={{ mt: { xs: 5, sm: 8 } }}>
-      {mockups.map((m, i) => {
-        const rid = m.remoteId || '';
-        const flip = i % 2 === 1;   // alternate image / text sides
-        return (
-          <Box key={rid || i} component="section" sx={{ display: 'grid', gap: { xs: 2.5, sm: 4 }, alignItems: 'center',
-            gridTemplateColumns: { xs: '1fr', md: '1.25fr 1fr' } }}>
-            <Box sx={{ order: { xs: 0, md: flip ? 1 : 0 } }}>
-              <MockupFaces m={m} clean={isClean} theme={theme} showBack={showBack} dense />
-            </Box>
-            <Box sx={{ order: { xs: 1, md: flip ? 0 : 1 }, textAlign: { xs: 'center', md: flip ? 'right' : 'left' } }}>
-              {showLabels && (
-                <>
-                  <Typography sx={{ ...mono, color: theme.faint, fontSize: 12 }}>{String(i + 1).padStart(2, '0')}{m.mockupNum ? ` · #${m.mockupNum}` : ''}</Typography>
-                  <Typography sx={{ fontWeight: 900, fontSize: { xs: 22, sm: 26 }, color: theme.text, letterSpacing: -0.4, mt: 0.5 }}>{m.name || 'Untitled'}</Typography>
-                </>
-              )}
-              {m.caption && <Typography sx={{ color: theme.muted, fontSize: 15, lineHeight: 1.65, mt: 1.5 }}>{m.caption}</Typography>}
-              <Box sx={{ mt: 1 }}><Reactions rid={rid} /></Box>
-              <Box sx={{ mt: 1 }}><Notes rid={rid} placeholder="Leave a note about this one…" /></Box>
-            </Box>
-          </Box>
-        );
-      })}
-    </Stack>
   );
 
   const swatchDot = (t) => {
@@ -583,12 +544,11 @@ export default function LookbookView() {
     return (
       <Tooltip title={th.name} key={t} arrow>
         <Box role="button" aria-label={`${th.name} theme`} onClick={() => pickTheme(t)}
-          sx={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
+          sx={{ width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
             background: `linear-gradient(135deg, ${th.bg} 0 55%, ${th.accent} 55% 100%)`,
             border: `2px solid ${on ? theme.accent : theme.line}`,
-            boxShadow: on ? `0 0 0 2px ${theme.accentSoft}` : 'none',
-            transition: 'transform 140ms ease, border-color 140ms ease',
-            '&:hover': { transform: 'scale(1.12)' } }} />
+            outline: on ? `2px solid ${theme.accentSoft}` : 'none', outlineOffset: 1,
+            transition: 'transform 140ms ease', '&:hover': { transform: 'scale(1.14)' } }} />
       </Tooltip>
     );
   };
@@ -597,59 +557,38 @@ export default function LookbookView() {
     <Box sx={{ minHeight: '100vh', bgcolor: theme.bg, color: theme.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', transition: 'background-color 240ms ease' }}>
 
-      {/* ── Control bar — the viewer's studio: theme, layout, clean bg, PDF ─── */}
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 20,
-        borderBottom: `1px solid ${theme.line}`,
+      {/* ── Control bar — never crops: wraps instead of clipping, roomy py ──── */}
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 30, borderBottom: `1px solid ${theme.line}`,
         bgcolor: theme.isDark ? 'rgba(20,23,26,0.72)' : 'rgba(255,255,255,0.72)',
         backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-        <Box sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 1.5, sm: 3 }, py: 1,
-          display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 },
-          overflowX: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
-          <Typography sx={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: theme.faint, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
+        <Box sx={{ maxWidth: 1120, mx: 'auto', px: { xs: 1.5, sm: 3 }, py: 1.25,
+          display: 'flex', alignItems: 'center', gap: { xs: 1.25, sm: 2 }, flexWrap: 'wrap', rowGap: 1 }}>
+          <Typography sx={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: theme.faint, flexShrink: 0 }}>
             Joint Printing
           </Typography>
-          <Box sx={{ flex: 1 }} />
-
-          {/* theme swatches */}
+          <Box sx={{ flex: 1, minWidth: 8 }} />
           <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }}>{THEME_ORDER.map(swatchDot)}</Stack>
-          <Box sx={{ width: '1px', height: 22, bgcolor: theme.line, flexShrink: 0, mx: 0.25 }} />
-
-          {/* layout segmented control */}
+          <Box sx={{ width: '1px', height: 20, bgcolor: theme.line, flexShrink: 0 }} />
           <Stack direction="row" gap={0.25} sx={{ flexShrink: 0, bgcolor: theme.accentSoft, borderRadius: 999, p: 0.35 }}>
-            {LAYOUTS.map((l) => {
-              const on = layout === l.id;
+            {VIEWS.map((v) => {
+              const on = view === v.id;
               return (
-                <Tooltip title={l.label} arrow key={l.id}>
-                  <IconButton size="small" onClick={() => setLayout(l.id)} aria-label={l.label}
+                <Tooltip title={v.label} arrow key={v.id}>
+                  <IconButton size="small" onClick={() => setView(v.id)} aria-label={v.label}
                     sx={{ width: 30, height: 30, borderRadius: 999, color: on ? theme.accentText : theme.muted,
                       bgcolor: on ? theme.accent : 'transparent', '&:hover': { bgcolor: on ? theme.accent : theme.line } }}>
-                    <l.Icon sx={{ fontSize: 17 }} />
+                    <v.Icon sx={{ fontSize: 17 }} />
                   </IconButton>
                 </Tooltip>
               );
             })}
           </Stack>
-          <Box sx={{ width: '1px', height: 22, bgcolor: theme.line, flexShrink: 0, mx: 0.25 }} />
-
-          {/* clean-bg toggle */}
-          <Tooltip title="Drop the white background — let the products float" arrow>
-            <Button onClick={toggleClean} startIcon={<AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />}
-              sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 800, fontSize: 12.5, borderRadius: 999, px: 1.5, py: 0.6,
-                color: isClean ? theme.accentText : theme.muted, bgcolor: isClean ? theme.accent : 'transparent',
-                border: `1.5px solid ${isClean ? theme.accent : theme.line}`,
-                '&:hover': { bgcolor: isClean ? theme.accent : theme.accentSoft, filter: isClean ? 'brightness(0.95)' : 'none' } }}>
-              Clean bg
-            </Button>
-          </Tooltip>
-
-          {/* PDF download */}
           <Tooltip title="Download this lookbook as a PDF" arrow>
             <span style={{ flexShrink: 0 }}>
               <Button onClick={downloadPdf} disabled={pdfBusy || mockups.length === 0}
                 startIcon={pdfBusy ? <CircularProgress size={14} sx={{ color: theme.accent }} /> : <FileDownloadOutlinedIcon sx={{ fontSize: 17 }} />}
-                sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12.5, borderRadius: 999, px: 1.75, py: 0.6,
-                  color: theme.text, border: `1.5px solid ${theme.line}`,
-                  '&:hover': { borderColor: theme.accent, color: theme.accent } }}>
+                sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12.5, borderRadius: 999, px: 1.75, py: 0.5,
+                  color: theme.text, border: `1.5px solid ${theme.line}`, '&:hover': { borderColor: theme.accent, color: theme.accent } }}>
                 PDF
               </Button>
             </span>
@@ -657,101 +596,112 @@ export default function LookbookView() {
         </Box>
       </Box>
 
-      <Box sx={{ maxWidth: layout === 'stack' ? 880 : 1080, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 4, sm: 6 } }}>
-        {/* ── Header — brand whisper, client logo, big title ─────────────── */}
-        <Stack alignItems="center" textAlign="center" spacing={1.25}>
-          <Stack direction="row" alignItems="center" gap={0.9} sx={{ mb: 1 }}>
+      <Box sx={{ maxWidth: view === 'showcase' ? 880 : 1120, mx: 'auto', px: { xs: 2, sm: 3 }, pt: { xs: 3, sm: 4 }, pb: { xs: 12, sm: 14 } }}>
+        {/* ── Compact hero — logo, company, big title. Kept tight so the work
+            fills the first screen. ─────────────────────────────────────────── */}
+        <Stack alignItems="center" textAlign="center" spacing={1}>
+          <Stack direction="row" alignItems="center" gap={0.9}>
             <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt=""
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              sx={{ width: 20, height: 20, objectFit: 'contain', filter: theme.isDark ? 'brightness(1.6)' : 'none' }} />
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: theme.faint }}>
+              sx={{ width: 18, height: 18, objectFit: 'contain', filter: theme.isDark ? 'brightness(1.6)' : 'none' }} />
+            <Typography sx={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: theme.faint }}>
               Joint Printing · Lookbook
             </Typography>
           </Stack>
           {data.logo && (
-            <Box sx={{ bgcolor: '#ffffff', border: `1px solid ${theme.line}`, borderRadius: 2.5, boxShadow: theme.shadow,
-              p: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: 200 }}>
+            <Box sx={{ bgcolor: '#fff', border: `1px solid ${theme.line}`, borderRadius: 2.5, boxShadow: theme.shadow, p: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: 168 }}>
               <Box component="img" src={data.logo} alt={data.companyName || ''} loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                sx={{ maxWidth: '100%', maxHeight: 72, objectFit: 'contain', display: 'block' }} />
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} sx={{ maxWidth: '100%', maxHeight: 56, objectFit: 'contain', display: 'block' }} />
             </Box>
           )}
           {data.companyName && (
-            <Typography sx={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: theme.accent }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: theme.accent }}>
               {data.companyName}
             </Typography>
           )}
-          <Typography component="h1" sx={{ fontSize: { xs: 30, sm: 44 }, fontWeight: 900, letterSpacing: -1, lineHeight: 1.08 }}>
+          <Typography component="h1" sx={{ fontSize: { xs: 28, sm: 40 }, fontWeight: 900, letterSpacing: -1, lineHeight: 1.05 }}>
             {data.title || 'Lookbook'}
           </Typography>
           {data.subtitle && (
-            <Typography sx={{ color: theme.muted, fontSize: { xs: 14.5, sm: 16 }, lineHeight: 1.6, maxWidth: 560 }}>
-              {data.subtitle}
-            </Typography>
+            <Typography sx={{ color: theme.muted, fontSize: { xs: 14, sm: 15.5 }, lineHeight: 1.55, maxWidth: 560 }}>{data.subtitle}</Typography>
           )}
         </Stack>
 
-        {/* ── Who's looking — one name unlocks reactions + notes ─────────── */}
-        <Box ref={nameBoxRef} sx={{ mt: { xs: 4, sm: 6 }, mx: 'auto', maxWidth: 440,
-          bgcolor: theme.panel, border: `1px solid ${needName ? theme.amber : theme.line}`, borderRadius: 3,
-          boxShadow: theme.shadow, p: 2.25, transition: 'border-color 200ms ease' }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: theme.faint, mb: 1 }}>
-            Your name
-          </Typography>
-          <TextField
-            value={name} onChange={(e) => saveName(e.target.value)} inputRef={nameInputRef}
-            placeholder="So we know who the feedback is from" size="small" fullWidth error={needName}
-            helperText={needName ? 'Add your name first — then tap or comment away.' : ' '}
-            sx={{
-              '& .MuiOutlinedInput-root': { bgcolor: theme.panel, color: theme.text, borderRadius: 2.5, fontSize: 14,
-                '& fieldset': { borderColor: theme.line }, '&:hover fieldset': { borderColor: theme.faint }, '&.Mui-focused fieldset': { borderColor: theme.accent } },
-              '& .MuiInputBase-input::placeholder': { color: theme.faint, opacity: 1 },
-              '& .MuiFormHelperText-root': { mx: 0, color: needName ? theme.amber : theme.faint },
-            }}
-          />
-          <Typography sx={{ color: theme.faint, fontSize: 12, lineHeight: 1.5, mt: -0.5 }}>
-            Tap a thumb or leave a note under any design — we see it instantly.
-          </Typography>
-        </Box>
-
         {/* ── The gallery ─────────────────────────────────────────────────── */}
         {mockups.length === 0 ? (
-          <Typography sx={{ textAlign: 'center', color: theme.muted, fontSize: 14, mt: 6 }}>
-            Nothing here yet — check back soon.
-          </Typography>
-        ) : layout === 'grid' ? renderGrid() : layout === 'story' ? renderStory() : renderStack()}
+          <Typography sx={{ textAlign: 'center', color: theme.muted, fontSize: 14, mt: 6 }}>Nothing here yet — check back soon.</Typography>
+        ) : view === 'grid' ? renderGrid() : view === 'showcase' ? renderShowcase() : renderCollage()}
 
-        {/* ── One note about the whole set ────────────────────────────────── */}
+        {/* ── Overall note ────────────────────────────────────────────────── */}
         {mockups.length > 0 && (
           <Box sx={{ mt: { xs: 7, sm: 10 }, mx: 'auto', maxWidth: 560, textAlign: 'center' }}>
+            {!me && <Box sx={{ mb: 2, maxWidth: 400, mx: 'auto' }}>{nameField}</Box>}
             <Typography sx={{ fontWeight: 800, fontSize: 17 }}>Anything overall?</Typography>
-            <Typography sx={{ color: theme.muted, fontSize: 13, mt: 0.5, lineHeight: 1.6 }}>
+            <Typography sx={{ color: theme.muted, fontSize: 13, mt: 0.5, mb: 1.5, lineHeight: 1.6 }}>
               A note about the whole set — direction, colors, what to try next.
             </Typography>
-            <Notes rid="" placeholder="Tell us what you're thinking…" />
+            <CommentBlock comments={commentsFor('')} draft={drafts[''] || ''} theme={theme}
+              onDraft={(v) => setDrafts((d) => ({ ...d, '': v }))} onSend={() => post('', { comment: drafts[''] || '' })}
+              busy={busyKey === 'overall'} placeholder="Tell us what you're thinking…" />
           </Box>
         )}
 
-        <Typography sx={{ textAlign: 'center', color: theme.faint, fontSize: 11.5, mt: { xs: 7, sm: 10 }, pb: 9 }}>
+        <Typography sx={{ textAlign: 'center', color: theme.faint, fontSize: 11.5, mt: { xs: 7, sm: 10 } }}>
           Designed &amp; printed by Joint Printing · jointprinting.com
         </Typography>
       </Box>
 
       {/* ── Sticky "Request pricing" bar ────────────────────────────────────── */}
       {mockups.length > 0 && (
-        <Box sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 15,
+        <Box sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 25,
           display: 'flex', justifyContent: 'center', pointerEvents: 'none', pb: { xs: 2, sm: 3 }, pt: 4,
           background: `linear-gradient(to top, ${theme.bg} 12%, ${theme.isDark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)'})` }}>
-          <Button onClick={openPricing} startIcon={<RequestQuoteOutlinedIcon />}
+          <Button onClick={() => openPricing()} startIcon={<RequestQuoteOutlinedIcon />}
             sx={{ pointerEvents: 'auto', bgcolor: theme.accent, color: theme.accentText, textTransform: 'none',
               fontWeight: 800, fontSize: 15, px: 3.5, py: 1.25, borderRadius: 999,
-              boxShadow: `0 12px 34px ${theme.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(21,128,61,0.32)'}`,
-              '&:hover': { bgcolor: theme.accent, filter: 'brightness(0.94)' } }}>
+              boxShadow: `0 12px 34px ${theme.glow}`, '&:hover': { filter: 'brightness(0.94)' } }}>
             Request pricing
           </Button>
         </Box>
       )}
 
+      {/* ── Focus lightbox (collage / grid tap) ─────────────────────────────── */}
+      <Dialog open={!!focusM} onClose={() => setFocusRid(null)} fullWidth maxWidth="sm"
+        PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: 3, border: `1px solid ${theme.line}` } }}>
+        {focusM && (
+          <>
+            <IconButton size="small" onClick={() => setFocusRid(null)} sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, color: theme.faint, bgcolor: theme.panel, '&:hover': { color: theme.text } }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+            <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <ProductImage src={focusM.front} alt={focusM.name} clean theme={theme} radius={3} />
+              {showBack && focusM.back && <Box sx={{ mt: 1.5 }}><ProductImage src={focusM.back} alt={`${focusM.name} back`} clean theme={theme} radius={3} /></Box>}
+              <Box sx={{ textAlign: 'center', mt: 2 }}>
+                {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{focusM.name || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>#{focusM.mockupNum}</Box>}</Typography>}
+                {focusM.caption && <Typography sx={{ color: theme.muted, fontSize: 14, mt: 0.75, lineHeight: 1.6, maxWidth: 440, mx: 'auto' }}>{focusM.caption}</Typography>}
+              </Box>
+              {!me && <Box sx={{ mt: 2, maxWidth: 360, mx: 'auto' }}>{nameField}</Box>}
+              <Box sx={{ mt: 2 }}><ReactRow rid={focusM.remoteId || ''} latestByPerson={latestByPerson} me={me} busyKey={busyKey} post={post} theme={theme} /></Box>
+              <Box sx={{ mt: 2 }}>
+                <CommentBlock comments={commentsFor(focusM.remoteId || '')} draft={drafts[focusM.remoteId || ''] || ''} theme={theme}
+                  onDraft={(v) => setDrafts((d) => ({ ...d, [focusM.remoteId || '']: v }))}
+                  onSend={() => post(focusM.remoteId || '', { comment: drafts[focusM.remoteId || ''] || '' })}
+                  busy={busyKey === (focusM.remoteId || 'overall')} placeholder="Leave a note about this one…" />
+              </Box>
+            </DialogContent>
+            <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: 2.5, justifyContent: 'center' }}>
+              <Button onClick={() => { const rid = focusM.remoteId || ''; setFocusRid(null); openPricing(rid); }}
+                startIcon={<RequestQuoteOutlinedIcon />}
+                sx={{ bgcolor: theme.accent, color: theme.accentText, textTransform: 'none', fontWeight: 800, px: 3, borderRadius: 999, '&:hover': { filter: 'brightness(0.94)' } }}>
+                Request pricing for this
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      {/* ── Request-pricing dialog ──────────────────────────────────────────── */}
       <Dialog open={rpOpen} onClose={() => !rpBusy && setRpOpen(false)} fullWidth maxWidth="sm"
         PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: 3, border: `1px solid ${theme.line}` } }}>
         {rpDone ? (
@@ -772,13 +722,9 @@ export default function LookbookView() {
               <RequestQuoteOutlinedIcon sx={{ color: theme.accent }} />
               <Box sx={{ flex: 1 }}>
                 <Typography sx={{ fontWeight: 900, fontSize: 18, lineHeight: 1.2 }}>Request pricing</Typography>
-                <Typography sx={{ color: theme.muted, fontSize: 12.5 }}>
-                  Tick the designs you want, set quantities — we'll send a full quote.
-                </Typography>
+                <Typography sx={{ color: theme.muted, fontSize: 12.5 }}>Tick the designs you want, set quantities — we'll send a full quote.</Typography>
               </Box>
-              <IconButton size="small" onClick={() => !rpBusy && setRpOpen(false)} sx={{ color: theme.faint }}>
-                <CloseIcon fontSize="small" />
-              </IconButton>
+              <IconButton size="small" onClick={() => !rpBusy && setRpOpen(false)} sx={{ color: theme.faint }}><CloseIcon fontSize="small" /></IconButton>
             </DialogTitle>
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Stack sx={{ border: `1px solid ${theme.line}`, borderRadius: 2.5, overflow: 'hidden', mt: 1 }}>
@@ -790,8 +736,7 @@ export default function LookbookView() {
                       sx={{ px: 1.25, py: 0.75, cursor: 'pointer', bgcolor: on ? theme.accentSoft : 'transparent',
                         borderBottom: `1px solid ${theme.line}`, '&:last-of-type': { borderBottom: 'none' }, transition: 'background 150ms ease' }}>
                       <Checkbox size="small" checked={on} sx={{ color: theme.faint, '&.Mui-checked': { color: theme.accent }, p: 0.5 }} />
-                      {m.front && <Box component="img" src={m.front} alt="" loading="lazy"
-                        sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${theme.line}` }} />}
+                      {m.front && <Box component="img" src={m.front} alt="" loading="lazy" sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${theme.line}` }} />}
                       <Typography sx={{ flex: 1, fontSize: 13.5, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {m.name || m.caption || 'Design'}
                       </Typography>
