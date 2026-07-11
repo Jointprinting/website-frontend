@@ -1128,6 +1128,11 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             });
           } : undefined}
           onOpenVendor={onNavigate ? (vendorName) => onNavigate({ view: 'vendors', vendorName }) : undefined}
+          // This company's lookbooks — the Lookbooks tab prefiltered by companyKey
+          // (the same deep link Signals uses), so CRM ⇄ Lookbooks closes the loop.
+          onOpenLookbooks={onNavigate && detail?.client?.companyKey
+            ? () => onNavigate({ view: 'lookbooks', companyKey: detail.client.companyKey })
+            : undefined}
           // Deals on the business profile — the owner's "deal cards attached to
           // one profile". New/edit reuse the shared dialog with this company fixed.
           onNewDeal={() => detail?.client && setDealDlg({

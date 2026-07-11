@@ -487,15 +487,28 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             </Box>
             )}
 
-            <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' },
+            {/* Two margin lenses, labeled — one ambiguous "Margin" used to sit
+                here and read like an order margin while actually being NET
+                (every expense incl. monthly overhead). GROSS = revenue vs the
+                order-linked COGS categories only (the same cost set the
+                per-order tables use); NET = after overhead too. */}
+            <Box sx={{ display: 'grid', gap: 1.25,
+              gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(3,1fr)', lg: 'repeat(5,1fr)' },
               '& > *': { animation: 'jpRise 460ms ease both' },
               '& > *:nth-of-type(2)': { animationDelay: '70ms' },
               '& > *:nth-of-type(3)': { animationDelay: '140ms' },
-              '& > *:nth-of-type(4)': { animationDelay: '210ms' } }}>
+              '& > *:nth-of-type(4)': { animationDelay: '210ms' },
+              '& > *:nth-of-type(5)': { animationDelay: '280ms' } }}>
               <Stat label="Revenue" value={money(summary.income)} color={B.white} sub="Recorded income · cash collected" />
-              <Stat label="Expenses" value={money(summary.expense)} color="#f87171" />
+              <Stat label="Expenses" value={money(summary.expense)} color="#f87171"
+                sub={`${money(summary.cogs || 0)} order costs · ${money(summary.overhead || 0)} overhead`} />
               <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
-              <Stat label="Margin" value={`${pct(summary.margin)}%`} color={pct(summary.margin) >= 0 ? B.green : '#f87171'} />
+              <Stat label="Gross margin" value={`${pct(summary.grossMargin ?? summary.margin)}%`}
+                color={pct(summary.grossMargin ?? summary.margin) >= 0 ? B.green : '#f87171'}
+                sub="on the merch — revenue vs order costs" />
+              <Stat label="Net margin" value={`${pct(summary.margin)}%`}
+                color={pct(summary.margin) >= 0 ? B.green : '#f87171'}
+                sub="after monthly overhead too" />
             </Box>
             {/* Owner cash lens — profit (earned), take-home (draws), and any owner
                 contribution. Profit stays draw-excluded (correct for taxes). Numbers

@@ -26,6 +26,8 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
@@ -534,7 +536,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal }) {
   // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -914,6 +916,29 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                   {orders.map((o) => <OrderRow key={o._id || o.projectNumber || o.orderNumber} o={o} onOpen={onOpenOrder} />)}
                 </Box>
               )}
+            </Box>
+          )}
+
+          {/* Lookbooks — this company's curated, shareable mockup galleries
+              (the Lookbooks tab, prefiltered to this companyKey). Deliberately
+              shown for LEADS too: sending a lookbook is a pitch move, not a
+              customer-only feature. */}
+          {onOpenLookbooks && (
+            <Box onClick={onOpenLookbooks} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLookbooks(); } }}
+              sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2,
+                display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer',
+                transition: 'border-color 0.18s ease, background-color 0.18s ease',
+                '&:hover': { borderColor: D.green, bgcolor: D.panelHi },
+                '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 } }}>
+              <AutoStoriesOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Eyebrow>Lookbooks</Eyebrow>
+                <Typography sx={{ color: D.muted, fontSize: 12, mt: 0.25 }}>
+                  Curated mockup galleries for this client — open theirs or build one
+                </Typography>
+              </Box>
+              <ChevronRightIcon sx={{ color: D.faint, fontSize: 18 }} />
             </Box>
           )}
 
