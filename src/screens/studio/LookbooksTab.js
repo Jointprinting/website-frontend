@@ -44,7 +44,7 @@ import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
 import config from '../../config.json';
 import {
   D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
-  fmtRelative, useMobileFullScreen,
+  fmtRelative, useMobileFullScreen, ARCHIVE_TTL_DAYS, purgeDaysLeft,
 } from './_shared';
 import JpLoader from '../../common/JpLoader';
 
@@ -828,11 +828,55 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                   </Stack>
                 )}
                 <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 1.5, lineHeight: 1.5 }}>
-                  Sharing copies the client link — anyone with it can react and comment, no login.
+                  Sharing copies the client link — anyone with it can react, comment, and request
+                  pricing, no login.
                   {lb.sharedAt ? ` First shared ${fmtRelative(lb.sharedAt)}.` : ''}
                   {lb.lastViewedAt ? ` Last viewed ${fmtRelative(lb.lastViewedAt)}.` : ''}
+                  {(lb.viewCount || 0) > 0 ? ` ${lb.viewCount} visit${lb.viewCount === 1 ? '' : 's'} so far.` : ''}
                 </Typography>
               </Box>
+
+              {/* Pricing requests — the gallery's "Request pricing" submissions.
+                  Each one already seeded a quote-stage project; the button jumps
+                  straight to it in the Order Tracker. */}
+              {(lb.pricingRequests || []).length > 0 && (
+                <Box sx={{ ...panelSx, p: { xs: 2, md: 2.5 } }}>
+                  <Typography sx={{ ...eyebrow, mb: 1.5, display: 'block' }}>
+                    Pricing requests · {(lb.pricingRequests || []).length}
+                  </Typography>
+                  <Box sx={{ borderRadius: 2, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
+                    {[...(lb.pricingRequests || [])].reverse().map((r, i) => (
+                      <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, px: 1.75, py: 1.25,
+                        borderTop: i === 0 ? 'none' : `1px solid ${D.line}` }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Stack direction="row" alignItems="center" gap={0.9} flexWrap="wrap">
+                            <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 800 }}>
+                              {r.by || 'The client'}
+                            </Typography>
+                            <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5 }}>{fmtRelative(r.at)}</Typography>
+                          </Stack>
+                          <Typography sx={{ color: D.muted, fontSize: 12, mt: 0.4, lineHeight: 1.55 }}>
+                            {(r.picks || []).map((pk) => `${pk.name || 'design'} × ${pk.qty}`).join(' · ')}
+                          </Typography>
+                          {(r.shipTo || r.email || r.phone || r.note) && (
+                            <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.3, lineHeight: 1.5 }}>
+                              {[r.shipTo && `Ship to: ${r.shipTo}`, r.email, r.phone, r.note].filter(Boolean).join(' · ')}
+                            </Typography>
+                          )}
+                        </Box>
+                        {r.projectNumber && onNavigate && (
+                          <Button size="small" onClick={() => onNavigate({ view: 'clients', projectNumber: r.projectNumber })}
+                            sx={{ ...mono, fontSize: 10.5, fontWeight: 700, color: D.green, textTransform: 'none',
+                              minWidth: 0, px: 1.25, borderRadius: 999, border: `1px solid rgba(74,222,128,0.35)`,
+                              flexShrink: 0, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                            #{r.projectNumber} →
+                          </Button>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
 
               {/* Client feedback */}
               {feedbackSorted.length > 0 && (
@@ -988,8 +1032,17 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                       {r.companyName || r.companyKey}
                       {r.projectNumber ? <Box component="span" sx={{ ...mono }}> · #{r.projectNumber}</Box> : null}
                       {' · '}{r.pageCount} page{r.pageCount === 1 ? '' : 's'}
-                      {r.lastViewedAt ? ` · viewed ${fmtRelative(r.lastViewedAt)}` : ''}
+                      {(r.viewCount || 0) > 0 ? ` · ${r.viewCount} visit${r.viewCount === 1 ? '' : 's'}` : (r.lastViewedAt ? ` · viewed ${fmtRelative(r.lastViewedAt)}` : '')}
+                      {(r.pricingRequests || 0) > 0 ? ` · ${r.pricingRequests} pricing request${r.pricingRequests === 1 ? '' : 's'}` : ''}
                     </Typography>
+                    {r.status === 'archived' && (() => {
+                      const left = purgeDaysLeft(r.archivedAt, r.updatedAt);
+                      return (
+                        <Typography sx={{ color: '#f87171', fontSize: 10.5, fontWeight: 700, mt: 0.2 }}>
+                          auto-deletes in {left} day{left === 1 ? '' : 's'} — restore to keep it
+                        </Typography>
+                      );
+                    })()}
                   </Box>
                   <Typography sx={{ ...mono, color: D.faint, fontSize: 11, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
                     {fmtRelative(r.updatedAt)}
@@ -1005,7 +1058,7 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
               <Typography component="button" onClick={toggleArchived}
                 sx={{ background: 'none', border: 'none', cursor: 'pointer', color: D.faint,
                   fontSize: 11.5, fontWeight: 600, '&:hover': { color: D.green } }}>
-                {showArchived ? '← Back to active lookbooks' : 'Show archived'}
+                {showArchived ? '← Back to active lookbooks' : `Show archived (auto-delete after ${ARCHIVE_TTL_DAYS} days)`}
               </Typography>
             </Box>
           )}

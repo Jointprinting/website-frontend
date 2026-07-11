@@ -43,7 +43,7 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import config from '../../config.json';
 import {
   D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
-  fmtRelative, useMobileFullScreen, scrollbar,
+  fmtRelative, useMobileFullScreen, scrollbar, ARCHIVE_TTL_DAYS, purgeDaysLeft,
 } from './_shared';
 import JpLoader from '../../common/JpLoader';
 import {
@@ -53,6 +53,7 @@ import {
 
 const API = `${config.backendUrl}/api/social/posts`;
 const PACE_API = `${config.backendUrl}/api/site-settings/socialPace`;
+const ACCOUNT_API = `${config.backendUrl}/api/social/account`;
 
 const statusMeta = (key) => POST_STATUSES.find((s) => s.key === key) || POST_STATUSES[0];
 const platMeta   = (key) => PLATFORMS.find((p) => p.key === key) || null;
@@ -164,6 +165,12 @@ function StatLogger({ post, onLog, busy }) {
         {(post.stats || []).length > 0 && (
           <Typography sx={{ color: D.muted, fontSize: 12, ...mono }}>
             👁 {last.views || 0} · ❤️ {last.likes || 0} · 💬 {last.comments || 0} · ↗ {last.shares || 0}
+            {Number(last.views) > 0 && (
+              <Box component="span" sx={{ color: D.green, fontWeight: 800, ml: 0.75 }}
+                title="Engagement — likes + comments per view">
+                {(((Number(last.likes) || 0) + (Number(last.comments) || 0)) / Number(last.views) * 100).toFixed(1)}% eng
+              </Box>
+            )}
           </Typography>
         )}
         <Sparkline stats={post.stats} />
@@ -267,11 +274,19 @@ function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
           <EditOutlinedIcon sx={{ fontSize: 16 }} />
         </IconButton>
         <IconButton size="small" onClick={() => onArchive(post)}
-          title={post.archived ? 'Restore to the pipeline' : 'Archive (tucked away, never deleted)'}
+          title={post.archived ? 'Restore to the pipeline' : `Archive (auto-deletes after ${ARCHIVE_TTL_DAYS} days)`}
           sx={{ color: D.muted, '&:hover': { color: post.archived ? D.green : '#f87171' } }}>
           {post.archived ? <UnarchiveOutlinedIcon sx={{ fontSize: 16 }} /> : <ArchiveOutlinedIcon sx={{ fontSize: 16 }} />}
         </IconButton>
       </Stack>
+      {post.archived && (() => {
+        const left = purgeDaysLeft(post.archivedAt, post.updatedAt);
+        return (
+          <Typography sx={{ color: '#f87171', fontSize: 10.5, fontWeight: 700 }}>
+            auto-deletes in {left} day{left === 1 ? '' : 's'} — restore to keep it
+          </Typography>
+        );
+      })()}
 
       {(post.body || post.refImage) && (
         <Stack direction="row" gap={1.25} alignItems="flex-start">
@@ -322,6 +337,94 @@ function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
   );
 }
 
+// The connected-Instagram card: live followers (with 30-day delta off the
+// sync's daily history), media count, last-sync state, Sync now — or, before
+// connecting, the pitch + token dialog trigger. LinkedIn has no comparable
+// personal-analytics API, so it stays manual by design.
+function AccountCard({ account, onConnect, onSync, onDisconnect, syncBusy }) {
+  if (!account) {
+    return (
+      <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.panel, p: 2, mb: 2,
+        display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <PlatformBadge platform="instagram" size={34} />
+        <Box sx={{ flex: 1, minWidth: 220 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 13.5 }}>
+            Connect Instagram — live numbers, zero pasting
+          </Typography>
+          <Typography sx={{ color: D.muted, fontSize: 11.5, lineHeight: 1.5 }}>
+            Followers on this board, views/likes/comments auto-filled on every posted card,
+            and your recent posts imported. Needs an IG Business/Creator account + a Meta token.
+          </Typography>
+        </Box>
+        <Button onClick={onConnect} sx={{ ...dropPrimaryBtn, py: 0.6, px: 2, fontSize: 12 }}>
+          Connect Instagram
+        </Button>
+      </Box>
+    );
+  }
+  const hist = account.followerHistory || [];
+  const monthAgo = Date.now() - 30 * 86400000;
+  const base = hist.find((h) => new Date(h.at).getTime() >= monthAgo) || hist[0];
+  const delta = base ? (account.followers - base.followers) : 0;
+  const expSoon = account.tokenExpiresAt && (new Date(account.tokenExpiresAt) - Date.now()) < 10 * 86400000;
+  return (
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 3, bgcolor: D.panel, p: 2, mb: 2 }}>
+      <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+        {account.profilePicUrl
+          ? <Box component="img" src={account.profilePicUrl} alt=""
+              sx={{ width: 40, height: 40, borderRadius: '50%', border: `2px solid ${platMeta('instagram').color}` }} />
+          : <PlatformBadge platform="instagram" size={36} />}
+        <Box sx={{ minWidth: 130 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14 }}>@{account.username || 'instagram'}</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+            {account.lastSyncAt ? `synced ${fmtRelative(account.lastSyncAt)}` : 'not synced yet'}
+          </Typography>
+        </Box>
+        <Box sx={{ textAlign: 'center', px: 1 }}>
+          <Typography sx={{ color: D.text, fontSize: 22, fontWeight: 900, ...mono, lineHeight: 1.1 }}>
+            {Number(account.followers || 0).toLocaleString('en-US')}
+          </Typography>
+          <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            followers
+            {delta !== 0 && (
+              <Box component="span" sx={{ ml: 0.5, color: delta > 0 ? D.green : '#f87171', ...mono }}>
+                {delta > 0 ? '+' : ''}{delta}/30d
+              </Box>
+            )}
+          </Typography>
+        </Box>
+        <Box sx={{ textAlign: 'center', px: 1 }}>
+          <Typography sx={{ color: D.text, fontSize: 22, fontWeight: 900, ...mono, lineHeight: 1.1 }}>
+            {Number(account.mediaCount || 0).toLocaleString('en-US')}
+          </Typography>
+          <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            posts
+          </Typography>
+        </Box>
+        <Box sx={{ flex: 1 }} />
+        <Stack direction="row" gap={0.75} alignItems="center">
+          <Button onClick={onSync} disabled={syncBusy}
+            sx={{ ...dropGhostBtn, py: 0.5, px: 1.5, fontSize: 11.5 }}>
+            {syncBusy ? <CircularProgress size={14} sx={{ color: D.green }} /> : 'Sync now'}
+          </Button>
+          <Button onClick={onDisconnect}
+            sx={{ color: D.faint, textTransform: 'none', fontSize: 10.5, minWidth: 0,
+              '&:hover': { color: '#f87171' } }}>
+            disconnect
+          </Button>
+        </Stack>
+      </Stack>
+      {(account.lastSyncError || expSoon) && (
+        <Typography sx={{ color: '#f87171', fontSize: 11, mt: 1 }}>
+          {account.lastSyncError
+            ? `Last sync failed: ${account.lastSyncError}`
+            : `Token expires ${fmtRelative(account.tokenExpiresAt)} — reconnect with a fresh one soon.`}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 // ── The tab ──────────────────────────────────────────────────────────────────
 
 export default function ContentTab({ token, onBack }) {
@@ -330,6 +433,12 @@ export default function ContentTab({ token, onBack }) {
 
   const [posts, setPosts] = React.useState(null);          // null = loading
   const [pace, setPace] = React.useState({ linkedin: 1, instagram: 1 });
+  const [account, setAccount] = React.useState(null);      // connected IG (or null)
+  const [connOpen, setConnOpen] = React.useState(false);
+  const [conn, setConn] = React.useState({ accessToken: '', igUserId: '' });
+  const [connBusy, setConnBusy] = React.useState(false);
+  const [connErr, setConnErr] = React.useState('');
+  const [syncBusy, setSyncBusy] = React.useState(false);
   const [filter, setFilter] = React.useState('active');    // active | idea | drafted | scheduled | posted | archived
   const [quick, setQuick] = React.useState('');
   const [quickPlat, setQuickPlat] = React.useState('');
@@ -342,12 +451,14 @@ export default function ContentTab({ token, onBack }) {
 
   const load = React.useCallback(async () => {
     try {
-      const [{ data }, paceRes] = await Promise.all([
+      const [{ data }, paceRes, acctRes] = await Promise.all([
         axios.get(`${API}?archived=1`, authHdr),
         axios.get(PACE_API, authHdr).catch(() => null),
+        axios.get(ACCOUNT_API, authHdr).catch(() => null),
       ]);
       setPosts(data.posts || []);
       if (paceRes && paceRes.data && paceRes.data.value) setPace(paceRes.data.value);
+      if (acctRes && acctRes.data) setAccount(acctRes.data.account || null);
     } catch (e) {
       setPosts([]);
       toast(e.response?.data?.message || 'Could not load posts', 'error');
@@ -376,7 +487,7 @@ export default function ContentTab({ token, onBack }) {
       const { data } = await axios.post(API, { title, platform: quickPlat }, authHdr);
       upsertLocal(data.post);
       setQuick('');
-      toast('Idea saved — it lives here forever now ✌️');
+      toast('Idea saved ✌️');
     } catch (e) {
       toast(e.response?.data?.message || 'Could not save the idea', 'error');
     } finally { setBusy(false); }
@@ -407,6 +518,36 @@ export default function ContentTab({ token, onBack }) {
     } catch (e) {
       toast(e.response?.data?.message || 'Could not log stats', 'error');
     } finally { setBusy(false); }
+  };
+
+  const connectIg = async () => {
+    setConnBusy(true); setConnErr('');
+    try {
+      const { data } = await axios.post(ACCOUNT_API, conn, authHdr);
+      setAccount(data.account || null);
+      setConnOpen(false);
+      setConn({ accessToken: '', igUserId: '' });
+      toast(`Connected @${data.account?.username || 'instagram'} — first sync is running, numbers land in a minute 📡`);
+      setTimeout(load, 20000);   // the background first sync imports posted cards; refresh once it's had a moment
+    } catch (e) {
+      setConnErr(e.response?.data?.message || 'Could not connect — check the token.');
+    } finally { setConnBusy(false); }
+  };
+  const syncIg = async () => {
+    setSyncBusy(true);
+    try {
+      const { data } = await axios.post(`${ACCOUNT_API}/sync`, {}, authHdr);
+      if (data.account) setAccount(data.account);
+      if (data.error) toast(`Sync failed: ${data.error}`, 'error');
+      else { toast(`Synced — ${data.updated || 0} updated, ${data.imported || 0} imported 📡`); load(); }
+    } catch (e) {
+      toast(e.response?.data?.message || 'Sync failed', 'error');
+    } finally { setSyncBusy(false); }
+  };
+  const disconnectIg = async () => {
+    if (!window.confirm('Disconnect Instagram? Posts and their stats stay — only the live sync stops.')) return;
+    try { await axios.delete(ACCOUNT_API, authHdr); setAccount(null); toast('Disconnected'); }
+    catch (e) { toast('Could not disconnect', 'error'); }
   };
 
   // Editor open: `bumpTo` pre-advances the status ("Write the draft" lands in
@@ -515,12 +656,17 @@ export default function ContentTab({ token, onBack }) {
             </Stack>
           </Box>
 
+          {/* ── Connected account — live IG numbers ─────────────────────── */}
+          <AccountCard account={account} syncBusy={syncBusy}
+            onConnect={() => { setConnErr(''); setConnOpen(true); }}
+            onSync={syncIg} onDisconnect={disconnectIg} />
+
           {/* ── Quick capture ──────────────────────────────────────────── */}
           <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.inset,
             p: 1.5, mb: 2 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'center' }}>
               <TextField size="small" fullWidth value={quick}
-                placeholder="Drop an idea… (⏎ saves it — ideas never get deleted here)"
+                placeholder={`Drop an idea… (⏎ saves it — nothing deletes unless YOU archive it, then ${ARCHIVE_TTL_DAYS} days later)`}
                 onChange={(e) => setQuick(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') createQuick(); }}
                 sx={inkInput} />
@@ -581,6 +727,42 @@ export default function ContentTab({ token, onBack }) {
           )}
         </>
       )}
+
+      {/* ── Connect-Instagram dialog ─────────────────────────────────────── */}
+      <Dialog open={connOpen} onClose={() => !connBusy && setConnOpen(false)} fullWidth maxWidth="xs"
+        PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3 } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PlatformBadge platform="instagram" size={26} />
+          <Typography sx={{ fontWeight: 800, fontSize: 15, flex: 1 }}>Connect Instagram</Typography>
+          <IconButton size="small" onClick={() => setConnOpen(false)} sx={{ color: D.muted }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ color: D.muted, fontSize: 12, lineHeight: 1.6 }}>
+            Paste a Meta <b>access token</b> for the Facebook account that owns your IG
+            Business/Creator profile. Getting one takes ~5 minutes the first time —
+            the step-by-step is in the session brief (developers.facebook.com →
+            Graph API Explorer). The IG user id is auto-discovered; only paste it if
+            the auto-detect complains.
+          </Typography>
+          <TextField size="small" fullWidth multiline minRows={2} label="Access token"
+            value={conn.accessToken}
+            onChange={(e) => setConn((v) => ({ ...v, accessToken: e.target.value }))}
+            sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <TextField size="small" fullWidth label="IG user id (optional — auto-detected)"
+            value={conn.igUserId}
+            onChange={(e) => setConn((v) => ({ ...v, igUserId: e.target.value }))}
+            sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          {connErr && <Typography sx={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>{connErr}</Typography>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConnOpen(false)} disabled={connBusy} sx={{ ...dropGhostBtn }}>Cancel</Button>
+          <Button onClick={connectIg} disabled={connBusy || !conn.accessToken.trim()} sx={{ ...dropPrimaryBtn }}>
+            {connBusy ? <CircularProgress size={16} sx={{ color: D.ink }} /> : 'Connect'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Editor dialog ────────────────────────────────────────────────── */}
       <Dialog open={!!editing} onClose={() => setEditing(null)} fullWidth maxWidth="sm" fullScreen={fullScreen}

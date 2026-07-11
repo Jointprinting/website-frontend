@@ -326,6 +326,19 @@ export function clientApproved(project) {
   );
 }
 
+// Archive purge window — MIRROR of backend services/archivePurge.js
+// ARCHIVE_TTL_DAYS. Archived lookbooks + content posts hard-delete this many
+// days after archiving (the owner's rule; money records never purge).
+export const ARCHIVE_TTL_DAYS = 60;
+// Days left before an archived doc purges: archivedAt is the clock; docs
+// archived before the stamp existed fall back to updatedAt (the backend
+// backfills their real stamp on deploy, so this is a display-only fallback).
+export function purgeDaysLeft(archivedAt, updatedAt) {
+  const clock = archivedAt || updatedAt;
+  if (!clock) return ARCHIVE_TTL_DAYS;
+  return Math.max(0, ARCHIVE_TTL_DAYS - Math.floor((Date.now() - new Date(clock).getTime()) / 86400000));
+}
+
 export const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 

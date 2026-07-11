@@ -11,7 +11,10 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Box, Stack, Typography, Button, TextField, CircularProgress } from '@mui/material';
+import { Box, Stack, Typography, Button, TextField, CircularProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, IconButton } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
 import axios from 'axios';
@@ -149,6 +152,14 @@ export default function LookbookView() {
   const [needName, setNeedName] = useState(false);
   const [drafts, setDrafts] = useState({});     // remoteId ('' = overall) -> comment draft
   const [busyKey, setBusyKey] = useState('');   // remoteId (or 'overall') mid-POST
+  // "Request pricing" — the gallery's path from browsing to a real quote.
+  // sel: remoteId -> qty string for the designs the client wants priced.
+  const [rpOpen, setRpOpen] = useState(false);
+  const [rpSel, setRpSel] = useState({});
+  const [rpMeta, setRpMeta] = useState({ email: '', phone: '', shipTo: '', note: '' });
+  const [rpBusy, setRpBusy] = useState(false);
+  const [rpDone, setRpDone] = useState(false);
+  const [rpErr, setRpErr] = useState('');
   const nameBoxRef = useRef(null);
   const nameInputRef = useRef(null);
 
@@ -264,6 +275,46 @@ export default function LookbookView() {
   const commentsFor = (rid) => feedback
     .filter((f) => (f.mockupRemoteId || '') === rid && f.comment)
     .sort((a, b) => new Date(a.at) - new Date(b.at));
+
+  // Open the pricing sheet pre-checked with everything this viewer thumbed up
+  // (their browsing already told us what they like) — 50 units is the seed
+  // quantity, editable per design.
+  const openPricing = () => {
+    if (!me) { setNeedName(true); nameBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); nameInputRef.current?.focus(); return; }
+    setRpDone(false);   // a second request in the same visit starts at the picker, not the old 🎉 screen
+    setRpSel((prev) => {
+      if (Object.keys(prev).length) return prev;   // reopening keeps their edits
+      const next = {};
+      mockups.forEach((m) => {
+        const mine = latestByPerson(m.remoteId || '').get(me);
+        if (mine && mine.reaction === 'up') next[m.remoteId] = '50';
+      });
+      return next;
+    });
+    setRpErr('');
+    setRpOpen(true);
+  };
+  const toggleRp = (rid) => setRpSel((prev) => {
+    const next = { ...prev };
+    if (next[rid] !== undefined) delete next[rid]; else next[rid] = '50';
+    return next;
+  });
+  const submitPricing = async () => {
+    const picks = Object.entries(rpSel).map(([remoteId, qty]) => ({ remoteId, qty: Number(qty) || 1 }));
+    if (!picks.length) { setRpErr('Tick at least one design.'); return; }
+    setRpBusy(true); setRpErr('');
+    try {
+      await axios.post(`${config.backendUrl}/api/public/lookbooks/${id}/request-pricing?token=${encodeURIComponent(token)}`, {
+        picks, by: me, ...rpMeta,
+      });
+      setRpDone(true);
+      setRpSel({});   // next open re-derives from their 👍s instead of re-sending these
+    } catch (e) {
+      setRpErr(e.response?.data?.message || 'Could not send — try again in a minute.');
+    } finally {
+      setRpBusy(false);
+    }
+  };
 
   return (
     <Box sx={{
@@ -433,10 +484,118 @@ export default function LookbookView() {
           </Box>
         )}
 
-        <Typography sx={{ textAlign: 'center', color: L.faint, fontSize: 11.5, mt: { xs: 7, sm: 10 } }}>
+        <Typography sx={{ textAlign: 'center', color: L.faint, fontSize: 11.5, mt: { xs: 7, sm: 10 }, pb: 9 }}>
           Designed & printed by Joint Printing · jointprinting.com
         </Typography>
       </Box>
+
+      {/* ── Sticky "Request pricing" bar — browsing becomes a quote in one
+          tap. Always reachable; the dialog pre-checks what they 👍'd. ───── */}
+      {mockups.length > 0 && (
+        <Box sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 5,
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+          pb: { xs: 2, sm: 3 }, pt: 4,
+          background: 'linear-gradient(to top, rgba(250,250,248,0.96), rgba(250,250,248,0))' }}>
+          <Button onClick={openPricing} startIcon={<RequestQuoteOutlinedIcon />}
+            sx={{ pointerEvents: 'auto', bgcolor: L.green, color: '#fff', textTransform: 'none',
+              fontWeight: 800, fontSize: 15, px: 3.5, py: 1.25, borderRadius: 999,
+              boxShadow: '0 12px 34px rgba(21,128,61,0.35)',
+              '&:hover': { bgcolor: '#116932' } }}>
+            Request pricing
+          </Button>
+        </Box>
+      )}
+
+      <Dialog open={rpOpen} onClose={() => !rpBusy && setRpOpen(false)} fullWidth maxWidth="sm"
+        PaperProps={{ sx: { bgcolor: L.bg, color: L.text, borderRadius: 3 } }}>
+        {rpDone ? (
+          <DialogContent sx={{ textAlign: 'center', py: 6 }}>
+            <Typography sx={{ fontSize: 40, mb: 1 }}>🎉</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: 20 }}>Request sent!</Typography>
+            <Typography sx={{ color: L.muted, fontSize: 14, mt: 1, lineHeight: 1.6, maxWidth: 380, mx: 'auto' }}>
+              We're pricing your picks now — your quote will land in your inbox shortly.
+            </Typography>
+            <Button onClick={() => setRpOpen(false)}
+              sx={{ mt: 3, bgcolor: L.green, color: '#fff', textTransform: 'none', fontWeight: 800,
+                px: 3, borderRadius: 999, '&:hover': { bgcolor: '#116932' } }}>
+              Done
+            </Button>
+          </DialogContent>
+        ) : (
+          <>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 0.5 }}>
+              <RequestQuoteOutlinedIcon sx={{ color: L.green }} />
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 900, fontSize: 18, lineHeight: 1.2 }}>Request pricing</Typography>
+                <Typography sx={{ color: L.muted, fontSize: 12.5 }}>
+                  Tick the designs you want, set quantities — we'll send a full quote.
+                </Typography>
+              </Box>
+              <IconButton size="small" onClick={() => !rpBusy && setRpOpen(false)} sx={{ color: L.faint }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Stack sx={{ border: `1px solid ${L.line}`, borderRadius: 2.5, overflow: 'hidden', mt: 1 }}>
+                {mockups.map((m) => {
+                  const rid = m.remoteId || '';
+                  const on = rpSel[rid] !== undefined;
+                  return (
+                    <Stack key={rid} direction="row" alignItems="center" gap={1}
+                      onClick={() => toggleRp(rid)}
+                      sx={{ px: 1.25, py: 0.75, cursor: 'pointer', bgcolor: on ? L.greenSoft : 'transparent',
+                        borderBottom: `1px solid ${L.line}`, '&:last-of-type': { borderBottom: 'none' },
+                        transition: 'background 150ms ease' }}>
+                      <Checkbox size="small" checked={on} sx={{ color: L.faint, '&.Mui-checked': { color: L.green }, p: 0.5 }} />
+                      {m.front && (
+                        <Box component="img" src={m.front} alt="" loading="lazy"
+                          sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${L.line}` }} />
+                      )}
+                      <Typography sx={{ flex: 1, fontSize: 13.5, fontWeight: 700, minWidth: 0,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.name || m.caption || 'Design'}
+                      </Typography>
+                      {on && (
+                        <TextField size="small" type="number" value={rpSel[rid]}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setRpSel((prev) => ({ ...prev, [rid]: e.target.value }))}
+                          InputProps={{ endAdornment: <Typography sx={{ color: L.faint, fontSize: 11, ml: 0.5 }}>units</Typography> }}
+                          sx={{ ...lightField, width: 118, '& .MuiInputBase-input': { py: 0.6, fontSize: 13, ...mono } }} />
+                      )}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} sx={{ mt: 0.5 }}>
+                <TextField size="small" fullWidth placeholder="Email for the quote" value={rpMeta.email}
+                  onChange={(e) => setRpMeta((v) => ({ ...v, email: e.target.value }))} sx={lightField} />
+                <TextField size="small" fullWidth placeholder="Phone (optional)" value={rpMeta.phone}
+                  onChange={(e) => setRpMeta((v) => ({ ...v, phone: e.target.value }))} sx={lightField} />
+              </Stack>
+              <TextField size="small" fullWidth placeholder="Ship to — address or city, state (e.g. Trenton, NJ)"
+                value={rpMeta.shipTo}
+                onChange={(e) => setRpMeta((v) => ({ ...v, shipTo: e.target.value }))} sx={lightField} />
+              <TextField size="small" fullWidth multiline minRows={2}
+                placeholder="Anything else — sizes, colors, deadline…"
+                value={rpMeta.note}
+                onChange={(e) => setRpMeta((v) => ({ ...v, note: e.target.value }))} sx={lightField} />
+              {rpErr && <Typography sx={{ color: L.amber, fontSize: 12.5, fontWeight: 700 }}>{rpErr}</Typography>}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2.5 }}>
+              <Button onClick={() => setRpOpen(false)} disabled={rpBusy}
+                sx={{ color: L.muted, textTransform: 'none', fontWeight: 700 }}>
+                Cancel
+              </Button>
+              <Button onClick={submitPricing} disabled={rpBusy}
+                sx={{ bgcolor: L.green, color: '#fff', textTransform: 'none', fontWeight: 800, px: 3,
+                  borderRadius: 999, '&:hover': { bgcolor: '#116932' },
+                  '&.Mui-disabled': { bgcolor: L.greenSoft, color: L.faint } }}>
+                {rpBusy ? <CircularProgress size={18} sx={{ color: L.green }} /> : 'Send request'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 }

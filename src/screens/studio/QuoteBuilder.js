@@ -43,6 +43,7 @@ import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
 import LinkIcon                from '@mui/icons-material/Link';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
+import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
@@ -103,36 +104,23 @@ function emptyLine() {
 
 // ── Design grids: detection over the flat lines array ────────────────────────
 
-// Identity of a brand row inside a design grid: same style + product name.
-// blankCost is deliberately NOT part of the identity — a brand keeps one row
-// even when its cells carry different case-break blank pricing.
-const brandKeyOf = (l) =>
-  `${String(l.styleCode || '').trim().toLowerCase()}|${String(l.description || '').trim().toLowerCase()}`;
-
-// Does one group's set of lines form a complete brands × quantities matrix
-// (every distinct brand quoted at every distinct quantity, exactly once, with
-// ≥2 quantity columns)? If yes, return the grid shape; if not, null — the
-// group renders as classic cards and nothing about it changes. `entries` is
-// [{ line, idx }] in array order; brand-row order follows first appearance.
+// Row identity + matrix detection live in src/common/quoteGrid.js — ONE
+// definition shared with the client approval page, so a design the builder
+// shows as a grid always renders as the matrix picker on the client link.
+// This wrapper just re-attaches the builder's line indexes (for broadcast
+// edits) on top of the shared core. `entries` is [{ line, idx }] in array
+// order; row order follows first appearance.
 function detectGrid(group, entries) {
   if (!Array.isArray(entries) || entries.length < 2) return null;
-  const qtys = [...new Set(entries.map(e => num(e.line.qty)))].sort((a, b) => a - b);
-  if (qtys.length < 2 || qtys.some(q => q <= 0)) return null;
-  const brandKeys = [...new Set(entries.map(e => brandKeyOf(e.line)))];
-  if (brandKeys.some(k => k === '|')) return null;              // unnamed brand rows can't key a matrix
-  if (brandKeys.length * qtys.length !== entries.length) return null;
-  const cells = new Map();                                       // "brandKey@qty" -> {line, idx}
-  for (const e of entries) {
-    const k = `${brandKeyOf(e.line)}@${num(e.line.qty)}`;
-    if (cells.has(k)) return null;                               // duplicate combo → not a matrix
-    cells.set(k, e);
-  }
-  const brands = brandKeys.map(bk => {
-    const rows = entries.filter(e => brandKeyOf(e.line) === bk);
+  const core = detectGridRows(entries.map(e => e.line));
+  if (!core) return null;
+  const cells = new Map(entries.map(e => [`${quoteRowKey(e.line)}@${num(e.line.qty)}`, e]));
+  const brands = core.keys.map(bk => {
+    const rows = entries.filter(e => quoteRowKey(e.line) === bk);
     return { key: bk, idxs: rows.map(e => e.idx), first: rows[0].line };
   });
   return {
-    group, brands, qtys,
+    group, brands, qtys: core.qtys,
     allIdxs: entries.map(e => e.idx),
     cellAt: (bk, q) => cells.get(`${bk}@${q}`) || null,
   };
@@ -276,7 +264,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
     let n = 1; while (used.has(`design ${n}`)) n += 1;
     const g = `Design ${n}`;
-    const base = { ...emptyLine(), group: g, description: 'Brand 1' };
+    const base = { ...emptyLine(), group: g, description: 'Option 1' };
     setLines(prev => [...prev, { ...base, qty: 50 }, { ...base, qty: 100 }]);
     setDirty(true);
   };
@@ -436,10 +424,11 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
               ))}
           </Stack>
           <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
-            A design grid pitches one design across brands × quantities (3 brands at 50 and 100 = one grid, not
-            six lines) — the client still picks exactly ONE option per design. Groups and single lines work like
-            always: group alternatives so the client picks one; ungrouped lines are always included. Nothing
-            counts toward the project total until they pick.
+            A design grid pitches one design across options × quantities — options can be brands (3 tees at 50
+            and 100 = one grid, not six lines) or print variants (a 6-print vs 7-print front, each row carrying
+            its own print + setup cost via the row's ⌄ drawer). The client still picks exactly ONE option per
+            design. Groups and single lines work like always: group alternatives so the client picks one;
+            ungrouped lines are always included. Nothing counts toward the project total until they pick.
           </Typography>
         </Box>
 
@@ -637,17 +626,24 @@ function SupplierLink({ line, onPatch, tf, sx }) {
   );
 }
 
-// ── The design grid card: one design, brand rows × quantity columns ──────────
+// ── The design grid card: one design, option rows × quantity columns ─────────
 //
-// Everything here edits REAL lines through broadcasts:
+// A ROW is any option the client compares — a brand (Gildan vs Bella) OR a
+// print-spec variant of the same garment ("6-print front" vs "7-print front",
+// each with its own print + setup cost). Everything edits REAL lines through
+// broadcasts:
 //   • design-level fields (print type/details, setup, shipping, turnaround,
 //     design attach, the group name itself) → every cell in the grid
-//   • brand-row fields (product, style, blank $, product link) → that brand's cells
-//   • column fields (quantity, print $/unit) → that column's cells
+//   • row fields (product, style, blank $ — and, in the row's cost drawer,
+//     per-option print $/unit, setup $, print details, product link) → that
+//     row's cells
+//   • column fields (quantity, print $/unit) → that column's cells (the
+//     50-vs-100 run-size discount lane)
 //   • a cell's unit price → that one line
-//   • the tier strip → per-cell price at each cell's OWN cost (so 50s and
-//     100s get different correct prices from one click)
+//   • the tier strip → per-cell price at each cell's OWN cost (so every
+//     option/quantity prices correctly from one click)
 function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
+  const [openRows, setOpenRows] = useState(() => new Set());   // row cost-drawers (by row POSITION — stable across renames)
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -656,11 +652,11 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
   const inputRoot = dropInput['& .MuiOutlinedInput-root'];
   const tf = {
     ...dropInput, ...noSpinner,
-    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.8 },
   };
   const cellTf = {
     ...dropInput, ...noSpinner,
-    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.7, px: 1, textAlign: 'right', ...mono },
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13.5, fontWeight: 700, py: 0.75, px: 1, textAlign: 'right', ...mono },
   };
   const groupChip = {
     ...dropInput,
@@ -674,19 +670,24 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
 
   const all = grid.allIdxs;
   const firstLine = lines[all[0]] || {};
-  // A design-level field's display value: the shared value when every cell
-  // agrees, '' (placeholder "mixed") when they don't. Typing broadcasts.
-  const sharedVal = (key) => {
-    const vals = [...new Set(all.map(i => String(lines[i]?.[key] ?? '')))];
+  // A field's display value over a set of line indexes: the shared value when
+  // they all agree, '' (placeholder "mixed") when they don't. Typing broadcasts.
+  const valOver = (idxs, key) => {
+    const vals = [...new Set(idxs.map(i => String(lines[i]?.[key] ?? '')))];
     return vals.length === 1 ? vals[0] : '';
   };
-  const sharedMixed = (key) => [...new Set(all.map(i => String(lines[i]?.[key] ?? '')))].length > 1;
+  const mixedOver = (idxs, key) => [...new Set(idxs.map(i => String(lines[i]?.[key] ?? '')))].length > 1;
+  // Money/qty fields compare NUMERICALLY: legacy lines mix '' / 0 / '4.5' /
+  // 4.5 for the same value, and a string comparison would show "varies" on a
+  // column that's actually uniform.
+  const numValOver = (idxs, key) => {
+    const vals = [...new Set(idxs.map(i => num(lines[i]?.[key])))];
+    return vals.length === 1 ? String(vals[0]) : '';
+  };
+  const numMixedOver = (idxs, key) => [...new Set(idxs.map(i => num(lines[i]?.[key])))].length > 1;
+  const sharedVal   = (key) => valOver(all, key);
+  const sharedMixed = (key) => mixedOver(all, key);
 
-  // Column print $/unit: shared across the column when uniform.
-  const colPrint = (q) => {
-    const vals = [...new Set(grid.brands.map(b => String(num((grid.cellAt(b.key, q) || {}).line?.printCost))))];
-    return vals.length === 1 ? vals[0] : '';
-  };
   const colIdxs = (q) => grid.brands.map(b => (grid.cellAt(b.key, q) || {}).idx).filter(i => i !== undefined);
 
   // The tier strip highlights a tier only when EVERY cell is committed at it.
@@ -724,17 +725,17 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
     });
     onAppendLines(adds);
   };
-  const addBrand = () => {
+  const addRow = () => {
     const n = grid.brands.length + 1;
     const src = grid.brands[0];
     const adds = grid.qtys.map(q => {
       const mate = (grid.cellAt(src.key, q) || {}).line || firstLine;
-      return { ...mate, description: `Brand ${n}`, styleCode: '', blankCost: 0, supplierUrl: '',
+      return { ...mate, description: `Option ${n}`, styleCode: '', blankCost: 0, supplierUrl: '',
         unitPrice: 0, accepted: false };
     });
     onAppendLines(adds);
   };
-  const removeBrand = (b) => {
+  const removeRow = (b) => {
     if (grid.brands.length === 1) { removeGrid(); return; }
     onRemoveIdxs(b.idxs);
   };
@@ -747,14 +748,23 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
       onRemoveIdxs(all);
     }
   };
-  // Swap two brands' rows by swapping their lines' array POSITIONS (each brand
-  // owns exactly one line per column, so the position sets are the same size).
-  const moveBrand = (bIdx, dir) => {
+  // Swap two rows by swapping their lines' array POSITIONS (each row owns
+  // exactly one line per column, so the position sets are the same size).
+  const moveRow = (bIdx, dir) => {
     const j = bIdx + dir;
     if (j < 0 || j >= grid.brands.length) return;
     const a = grid.brands[bIdx].idxs, b = grid.brands[j].idxs;
     onSwapLines(a.map((ai, k) => [ai, b[k]]));
   };
+  const toggleRow = (pos) => setOpenRows(prev => {
+    const next = new Set(prev);
+    if (next.has(pos)) next.delete(pos); else next.add(pos);
+    return next;
+  });
+
+  const nCols = grid.qtys.length;
+  const tableCols = `minmax(280px, 1.3fr) repeat(${nCols}, minmax(122px, 1fr)) 40px`;
+  const headCellSx = { color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase' };
 
   return (
     <Box sx={{
@@ -767,16 +777,16 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         boxShadow: '0 10px 28px rgba(0,0,0,0.34)' },
     }}>
       {/* Design header: name + shared design fields (broadcast to every cell) */}
-      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.75,
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 1,
         display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
-        <QF label="Design (client picks 1 option)" sx={{ width: { xs: '100%', sm: 200 } }}>
+        <QF label="Design (client picks 1 option)" sx={{ width: { xs: '100%', sm: 190 } }}>
           <BufferedTF fullWidth value={grid.group} placeholder="Front-hit tee"
             onCommit={renameGroup} sx={groupChip} />
         </QF>
         <DesignAttach line={{ mockupNum: sharedVal('mockupNum'), image: sharedVal('image') || firstLine.image || '' }}
           onPatch={(patch) => onPatchIdxs(all, patch)} tf={tf}
-          sx={{ width: { xs: '100%', sm: 220 } }} />
-        <QF label="Print type" sx={{ width: { xs: '48%', sm: 140 } }}>
+          sx={{ width: { xs: '100%', sm: 210 } }} />
+        <QF label="Print type" sx={{ width: { xs: '48%', sm: 132 } }}>
           <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
             <Select value={sharedVal('printType')} displayEmpty
               onChange={e => onPatchIdxs(all, { printType: e.target.value })}
@@ -786,10 +796,31 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
             </Select>
           </FormControl>
         </QF>
-        <QF label="Print details" sx={{ flex: '1 1 160px', minWidth: 140 }}>
+        <QF label="Print details (all options)" sx={{ flex: '1 1 150px', minWidth: 130 }}>
+          {/* Locked while options carry DIFFERENT print details: broadcasting
+              one value would merge variant rows' identities and dissolve the
+              grid mid-keystroke. Per-option edits live in each row's drawer. */}
           <TextField size="small" fullWidth value={sharedVal('printDetails')}
-            placeholder={sharedMixed('printDetails') ? 'mixed' : '1c front + 2c back'}
+            disabled={sharedMixed('printDetails')}
+            title={sharedMixed('printDetails') ? 'Varies per option — edit in each row\u2019s \u2304 drawer' : undefined}
+            placeholder={sharedMixed('printDetails') ? 'varies per option' : '1c front + 2c back'}
             onChange={e => onPatchIdxs(all, { printDetails: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Setup $ (all)" sx={{ width: { xs: '31%', sm: 96 } }}>
+          <TextField size="small" fullWidth type="number" value={numValOver(all, 'setupCost')}
+            placeholder={numMixedOver(all, 'setupCost') ? 'varies' : '0'}
+            onChange={e => onPatchIdxs(all, { setupCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Ship $ (all)" sx={{ width: { xs: '31%', sm: 96 } }}>
+          <TextField size="small" fullWidth type="number" value={numValOver(all, 'shippingCost')}
+            placeholder={numMixedOver(all, 'shippingCost') ? 'varies' : '0'}
+            onChange={e => onPatchIdxs(all, { shippingCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Turnaround" sx={{ width: { xs: '31%', sm: 90 } }}>
+          <TextField size="small" fullWidth type="number"
+            value={numValOver(all, 'turnaroundWeeks') === '0' ? '' : numValOver(all, 'turnaroundWeeks')}
+            placeholder={numMixedOver(all, 'turnaroundWeeks') ? 'varies' : 'wks'}
+            onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
         </QF>
         <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
           <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
@@ -816,45 +847,27 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         </Stack>
       </Box>
 
-      {/* Shared one-time costs — the same setup/ship rides on EVERY option of
-          this design (each cell spreads it across its own quantity). */}
-      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, display: 'grid', gap: 1.25,
-        gridTemplateColumns: { xs: 'repeat(3, minmax(0,1fr))', sm: '110px 110px 110px' } }}>
-        <QF label="Setup $ (total)">
-          <TextField size="small" fullWidth type="number" value={sharedVal('setupCost')}
-            placeholder={sharedMixed('setupCost') ? 'mixed' : '0'}
-            onChange={e => onPatchIdxs(all, { setupCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Ship $ (total)">
-          <TextField size="small" fullWidth type="number" value={sharedVal('shippingCost')}
-            placeholder={sharedMixed('shippingCost') ? 'mixed' : '0'}
-            onChange={e => onPatchIdxs(all, { shippingCost: e.target.value })} sx={tf} />
-        </QF>
-        <QF label="Turnaround (wks)">
-          <TextField size="small" fullWidth type="number" value={sharedVal('turnaroundWeeks') || ''}
-            placeholder={sharedMixed('turnaroundWeeks') ? 'mixed' : '—'}
-            onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
-        </QF>
-      </Box>
-
-      {/* The matrix: brand rows × quantity columns. Every cell is a real quote
-          line the client can pick. Horizontal scroll on narrow screens. */}
+      {/* The matrix: option rows × quantity columns. Every cell is a real
+          quote line the client can pick. Horizontal scroll on narrow screens. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
-        <Box sx={{ minWidth: 420 + grid.qtys.length * 128, display: 'grid', gap: 0.75,
-          gridTemplateColumns: `minmax(300px, 1.4fr) repeat(${grid.qtys.length}, minmax(118px, 1fr)) 84px` }}>
-          {/* Header row */}
-          <Box sx={{ alignSelf: 'end', pb: 0.4 }}>
-            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-              Brand · blank $ · product link
+        <Box sx={{ minWidth: 400 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
+          gridTemplateColumns: tableCols }}>
+
+          {/* Header row: option column title, then one header per quantity */}
+          <Box sx={{ alignSelf: 'end', pb: 0.5 }}>
+            <Typography sx={headCellSx}>Options — brand or print variant</Typography>
+            <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2 }}>
+              product · style · blank $ — open ⌄ for per-option print/setup costs + link
             </Typography>
           </Box>
           {grid.qtys.map(q => (
-            <Box key={`h-${q}`} sx={{ textAlign: 'center' }}>
+            <Box key={`h-${q}`} sx={{ alignSelf: 'end', textAlign: 'center', pb: 0.25 }}>
               <Stack direction="row" alignItems="center" justifyContent="center" gap={0.25}>
                 <BufferedTF value={String(q)} type="number"
                   onCommit={(v) => setColQty(q, v)}
-                  sx={{ ...cellTf, width: 76,
+                  sx={{ ...cellTf, width: 72,
                     '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], textAlign: 'center', fontWeight: 800 } }} />
+                <Typography sx={{ ...headCellSx, fontSize: 8.5 }}>units</Typography>
                 {grid.qtys.length > 2 && (
                   <IconButton size="small" onClick={() => removeColumn(q)} title={`Remove the ${q}-unit column`}
                     sx={{ color: D.faint, p: 0.2, '&:hover': { color: '#f87171' } }}>
@@ -862,17 +875,16 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   </IconButton>
                 )}
               </Stack>
-              <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mt: 0.2 }}>
-                units
-              </Typography>
-              <TextField size="small" type="number" value={colPrint(q)}
-                placeholder={colPrint(q) === '' ? 'mixed' : ''}
+              <TextField size="small" type="number" value={numValOver(colIdxs(q), 'printCost')}
+                placeholder={numMixedOver(colIdxs(q), 'printCost') ? 'varies' : '0'}
+                title="Print $/unit at this run size — applies to every option in this column"
                 onChange={e => onPatchIdxs(colIdxs(q), { printCost: e.target.value })}
-                InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 10, mr: 0.4 }}>print $</Typography> }}
-                sx={{ ...cellTf, width: '100%', mt: 0.4 }} />
+                InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.4, whiteSpace: 'nowrap' }}>print $/u</Typography> }}
+                sx={{ ...cellTf, width: '100%', mt: 0.5,
+                  '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 500, fontSize: 12 } }} />
             </Box>
           ))}
-          <Box sx={{ alignSelf: 'end', pb: 0.4, textAlign: 'center' }}>
+          <Box sx={{ alignSelf: 'end', pb: 0.5, textAlign: 'center' }}>
             <IconButton size="small" onClick={addColumn} title="Add a quantity column"
               sx={{ color: D.muted, border: `1px dashed ${D.line}`, borderRadius: 1.5,
                 '&:hover': { color: D.green, borderColor: D.green } }}>
@@ -880,64 +892,53 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
             </IconButton>
           </Box>
 
-          {/* Brand rows */}
+          {/* Option rows */}
           {grid.brands.map((b, bIdx) => {
             const bLine = b.first;
+            const open = openRows.has(bIdx);
+            const url = (bLine.supplierUrl || '').trim();
+            const suggestion = url ? '' : suggestSupplierUrl(bLine);
             return (
-              <React.Fragment key={b.key}>
-                <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap',
-                  p: 1, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
-                  <Stack sx={{ mr: -0.25 }}>
-                    <IconButton size="small" onClick={() => moveBrand(bIdx, -1)} disabled={bIdx === 0}
+              // Position key on purpose: a row's identity key CHANGES when its
+              // name/style/print details are edited — keying by it would
+              // remount the row (focus loss) and orphan its open drawer.
+              <React.Fragment key={`row-${bIdx}`}>
+                {/* Identity cell: reorder · product · style · blank $ · drawer toggle */}
+                <Box sx={{ display: 'grid', gap: 0.6, alignItems: 'center', p: 0.9, borderRadius: 2,
+                  bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
+                  gridTemplateColumns: '16px minmax(110px, 1fr) 72px 78px 30px' }}>
+                  <Stack>
+                    <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
-                      <KeyboardArrowUpIcon sx={{ fontSize: 15 }} />
+                      <KeyboardArrowUpIcon sx={{ fontSize: 14 }} />
                     </IconButton>
-                    <IconButton size="small" onClick={() => moveBrand(bIdx, +1)} disabled={bIdx === grid.brands.length - 1}
+                    <IconButton size="small" onClick={() => moveRow(bIdx, +1)} disabled={bIdx === grid.brands.length - 1}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
-                      <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
+                      <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Stack>
                   <BufferedTF value={bLine.description || ''} placeholder="Gildan 5000 · black"
-                    onCommit={(v) => onPatchIdxs(b.idxs, { description: v })}
-                    sx={{ ...tf, flex: '1 1 120px', minWidth: 110 }} />
+                    onCommit={(v) => onPatchIdxs(b.idxs, { description: v })} sx={tf} />
                   <BufferedTF value={bLine.styleCode || ''} placeholder="Style"
-                    onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })}
-                    sx={{ ...tf, width: 84 }} />
-                  <TextField size="small" type="number"
-                    value={[...new Set(b.idxs.map(i => String(num(lines[i]?.blankCost))))].length === 1
-                      ? String(num(bLine.blankCost)) : ''}
-                    placeholder="blank $"
+                    onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
+                  <TextField size="small" type="number" value={numValOver(b.idxs, 'blankCost')}
+                    placeholder={numMixedOver(b.idxs, 'blankCost') ? 'varies' : 'blank $'}
+                    title="Blank cost/unit for this option"
                     onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
-                    sx={{ ...cellTf, width: 84 }} />
-                  {(() => {
-                    const url = (bLine.supplierUrl || '').trim();
-                    const suggestion = url ? '' : suggestSupplierUrl(bLine);
-                    return (
-                      <Stack direction="row" gap={0.25} alignItems="center">
-                        {url ? (
-                          <IconButton size="small" title={`Open product page · ${url}`}
-                            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-                            sx={{ color: D.green, p: 0.4, '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
-                            <OpenInNewIcon sx={{ fontSize: 15 }} />
-                          </IconButton>
-                        ) : suggestion ? (
-                          <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
-                            onClick={() => onPatchIdxs(b.idxs, { supplierUrl: suggestion })}
-                            sx={{ color: D.muted, p: 0.4, '&:hover': { color: D.green } }}>
-                            <LinkIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        ) : null}
-                        <BufferedTF value={bLine.supplierUrl || ''} placeholder="product URL (client sees)"
-                          onCommit={(v) => onPatchIdxs(b.idxs, { supplierUrl: v })}
-                          sx={{ ...tf, width: 150,
-                            '& .MuiInputBase-input': { color: D.muted, fontSize: 11, py: 0.7 } }} />
-                      </Stack>
-                    );
-                  })()}
+                    sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 500, fontSize: 12.5 } }} />
+                  <IconButton size="small" onClick={() => toggleRow(bIdx)}
+                    title="Per-option costs: print $/u, setup $, print details, product link"
+                    sx={{ color: open ? D.green : D.muted, p: 0.3,
+                      transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease',
+                      '&:hover': { color: D.green } }}>
+                    <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
                 </Box>
+
+                {/* Price cells */}
                 {grid.qtys.map(q => {
                   const cell = grid.cellAt(b.key, q);
-                  if (!cell) return <Box key={`c-${b.key}-${q}`} />;
+                  if (!cell) return <Box key={`c-${bIdx}-${q}`} />;
                   const l = cell.line;
                   const committed = lineCommitted(l);
                   const eff = lineEffectivePrice(l);
@@ -945,7 +946,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   const profit = eff - cogs;
                   const pct = eff > 0 ? (profit / eff) * 100 : 0;
                   return (
-                    <Box key={`c-${b.key}-${q}`} sx={{ p: 1, borderRadius: 2, bgcolor: D.inset,
+                    <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
                       border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
                       <TextField size="small" type="number" value={l.unitPrice ?? ''}
@@ -968,24 +969,73 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   );
                 })}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <IconButton size="small" onClick={() => removeBrand(b)} title="Remove this brand row"
+                  <IconButton size="small" onClick={() => removeRow(b)} title="Remove this option row"
                     sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
                     <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </Box>
+
+                {/* Row cost drawer — the variant lane: per-OPTION print $/u,
+                    setup $, print details, and the product link. This is how a
+                    "7-print front" row carries the extra screen's setup + print
+                    cost while its "6-print" sibling stays cheaper. */}
+                {open && (
+                  <Box sx={{ gridColumn: '1 / -1', mt: -0.25, mb: 0.25, p: 1.25, borderRadius: 2,
+                    bgcolor: 'rgba(255,255,255,0.02)', border: `1px dashed ${D.line}`,
+                    display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <QF label="Print $/u (this option)" sx={{ width: 130 }}>
+                      <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'printCost')}
+                        placeholder={numMixedOver(b.idxs, 'printCost') ? 'varies by qty' : '0'}
+                        title="Overrides the column print $ for every quantity of THIS option"
+                        onChange={e => onPatchIdxs(b.idxs, { printCost: e.target.value })} sx={tf} />
+                    </QF>
+                    <QF label="Setup $ (this option)" sx={{ width: 130 }}>
+                      <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'setupCost')}
+                        placeholder={numMixedOver(b.idxs, 'setupCost') ? 'varies' : '0'}
+                        title="Full one-time setup for THIS option — an extra color's extra screen goes here"
+                        onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
+                    </QF>
+                    <QF label="Print details (this option)" sx={{ flex: '1 1 170px', minWidth: 150 }}>
+                      <BufferedTF fullWidth value={bLine.printDetails || ''} placeholder="7c front"
+                        onCommit={(v) => onPatchIdxs(b.idxs, { printDetails: v })} sx={tf} />
+                    </QF>
+                    <QF label="Product link (client sees)" sx={{ flex: '1 1 200px', minWidth: 180 }}>
+                      <Stack direction="row" gap={0.5} alignItems="center">
+                        <BufferedTF fullWidth value={bLine.supplierUrl || ''} placeholder="https:// supplier product page"
+                          onCommit={(v) => onPatchIdxs(b.idxs, { supplierUrl: v })}
+                          sx={{ ...tf, '& .MuiInputBase-input': { color: D.muted, fontSize: 11.5, py: 0.8 } }} />
+                        {url ? (
+                          <IconButton size="small" title={`Open product page · ${url}`}
+                            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                            sx={{ color: D.green, border: `1px solid ${D.line}`, borderRadius: 1.5,
+                              '&:hover': { borderColor: D.green } }}>
+                            <OpenInNewIcon sx={{ fontSize: 15 }} />
+                          </IconButton>
+                        ) : suggestion ? (
+                          <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
+                            onClick={() => onPatchIdxs(b.idxs, { supplierUrl: suggestion })}
+                            sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
+                              '&:hover': { color: D.green, borderColor: D.green } }}>
+                            <LinkIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        ) : null}
+                      </Stack>
+                    </QF>
+                  </Box>
+                )}
               </React.Fragment>
             );
           })}
         </Box>
-        <Button onClick={addBrand} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
+        <Button onClick={addRow} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
           sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5, mt: 0.75,
             borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
-          Add brand
+          Add option
         </Button>
       </Box>
 
       {/* One tier strip for the whole design: each cell gets the tier applied
-          over its OWN unit cost, so every brand/quantity prices correctly from
+          over its OWN unit cost, so every option/quantity prices correctly from
           a single click. Typing in a cell overrides just that cell. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
