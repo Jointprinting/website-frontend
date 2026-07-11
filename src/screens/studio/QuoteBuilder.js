@@ -1,15 +1,30 @@
 // src/screens/studio/QuoteBuilder.js
 //
-// Full-screen quote builder. Each line: qty, style, description, blank cost,
-// print type/details, print cost, and its OWN one-time setup + shipping. Setup
-// and shipping are per-line because lines are usually alternative options (3
-// brands of tee, the client picks one) — each option must carry its full
-// setup/shipping, spread across only its own quantity. Markup tier strip
-// (5%–70%) per line; manual unit-price override. Sticky footer shows
-// units · COGS · profit · margin (red→green) · client total.
+// Full-screen quote builder. Two ways to author the same `quoteLines`:
 //
-// Persists `quoteLines` (incl. per-line setupCost/shippingCost), `shipToState`,
-// and `printerName` on the project via onSave().
+//   • CLASSIC CARDS — one card per line: qty, style, description, blank cost,
+//     print type/details, print cost, its OWN one-time setup + shipping,
+//     markup tier strip, manual unit-price override. The shape every quote
+//     (including a plain one-item quote) can always fall back to.
+//
+//   • DESIGN GRIDS — one compact card per DESIGN: brand rows × quantity
+//     columns (3 brands × 50/100 = 6 options in one grid instead of 6 cards).
+//     A grid is a VIEW over real quote lines, never a separate format: every
+//     cell IS one line in `quoteLines`, so the client picker, totals math, and
+//     confirmation seeding are untouched, and an in-flight quote can never be
+//     corrupted by the grid — a group whose lines don't form a clean
+//     brands × quantities matrix simply renders as classic cards. Brand-row /
+//     column / design-level edits broadcast to their cells' lines.
+//
+// Pricing is coherent by construction: a line's unit price is either
+// COMMITTED (typed, or locked from a tier click) or AUTO (cost × markup —
+// exactly what the server bills a picked line at, see backend
+// computeQuoteTotals / the public sanitize). The builder shows which state a
+// price is in instead of displaying "0" next to a positive margin; typing 0
+// or clearing the field returns the line to AUTO on blur.
+//
+// Persists `quoteLines` (incl. per-line setupCost/shippingCost/supplierUrl),
+// `shipToState`, and `printerName` on the project via onSave().
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -22,6 +37,10 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
 import KeyboardArrowUpIcon     from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon   from '@mui/icons-material/KeyboardArrowDown';
+import GridViewOutlinedIcon    from '@mui/icons-material/GridViewOutlined';
+import ViewAgendaOutlinedIcon  from '@mui/icons-material/ViewAgendaOutlined';
+import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
+import LinkIcon                from '@mui/icons-material/Link';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 
@@ -61,14 +80,84 @@ function lineCogsPerUnit(l) {
   return num(l.blankCost) + num(l.printCost) + (q > 0 ? setupShip / q : 0);
 }
 
+// The price a line actually goes out at: the committed unit price, else
+// cost × markup — the SAME fallback (markup default 1.4, never sell-at-cost)
+// the backend books with and the public quote page shows, so the builder can
+// never display a different number than the client sees.
+function lineCommitted(l) { return num(l.unitPrice) > 0; }
+function lineEffectivePrice(l) {
+  return lineCommitted(l)
+    ? num(l.unitPrice)
+    : lineCogsPerUnit(l) * (num(l.markup) || 1.4);
+}
+
 function emptyLine() {
   return {
     qty: 1, styleCode: '', description: '',
-    blankCost: 0,
+    blankCost: 0, supplierUrl: '',
     printType: '', printDetails: '', printCost: 0,
     setupCost: 0, shippingCost: 0,
     markup: 1.4, unitPrice: 0,
   };
+}
+
+// ── Design grids: detection over the flat lines array ────────────────────────
+
+// Identity of a brand row inside a design grid: same style + product name.
+// blankCost is deliberately NOT part of the identity — a brand keeps one row
+// even when its cells carry different case-break blank pricing.
+const brandKeyOf = (l) =>
+  `${String(l.styleCode || '').trim().toLowerCase()}|${String(l.description || '').trim().toLowerCase()}`;
+
+// Does one group's set of lines form a complete brands × quantities matrix
+// (every distinct brand quoted at every distinct quantity, exactly once, with
+// ≥2 quantity columns)? If yes, return the grid shape; if not, null — the
+// group renders as classic cards and nothing about it changes. `entries` is
+// [{ line, idx }] in array order; brand-row order follows first appearance.
+function detectGrid(group, entries) {
+  if (!Array.isArray(entries) || entries.length < 2) return null;
+  const qtys = [...new Set(entries.map(e => num(e.line.qty)))].sort((a, b) => a - b);
+  if (qtys.length < 2 || qtys.some(q => q <= 0)) return null;
+  const brandKeys = [...new Set(entries.map(e => brandKeyOf(e.line)))];
+  if (brandKeys.some(k => k === '|')) return null;              // unnamed brand rows can't key a matrix
+  if (brandKeys.length * qtys.length !== entries.length) return null;
+  const cells = new Map();                                       // "brandKey@qty" -> {line, idx}
+  for (const e of entries) {
+    const k = `${brandKeyOf(e.line)}@${num(e.line.qty)}`;
+    if (cells.has(k)) return null;                               // duplicate combo → not a matrix
+    cells.set(k, e);
+  }
+  const brands = brandKeys.map(bk => {
+    const rows = entries.filter(e => brandKeyOf(e.line) === bk);
+    return { key: bk, idxs: rows.map(e => e.idx), first: rows[0].line };
+  });
+  return {
+    group, brands, qtys,
+    allIdxs: entries.map(e => e.idx),
+    cellAt: (bk, q) => cells.get(`${bk}@${q}`) || null,
+  };
+}
+
+// Best-effort S&S Activewear product URL from what's already typed on the
+// line ("Gildan 5000" + style "G5000" → /p/gildan/5000). Suggestion only —
+// the owner can always paste any supplier URL by hand.
+const SS_BRANDS = [
+  ['bella', 'bella_canvas'], ['gildan', 'gildan'], ['next level', 'next_level'],
+  ['comfort colors', 'comfort_colors'], ['champion', 'champion'], ['hanes', 'hanes'],
+  ['jerzees', 'jerzees'], ['fruit of the loom', 'fruit_of_the_loom'], ['tultex', 'tultex'],
+  ['independent', 'independent_trading_co'], ['district', 'district'],
+  ['port & company', 'port_company'], ['port and company', 'port_company'],
+  ['american apparel', 'american_apparel'], ['los angeles apparel', 'los_angeles_apparel'],
+  ['adidas', 'adidas'], ['richardson', 'richardson'], ['yupoong', 'yupoong'],
+  ['flexfit', 'flexfit'], ['sport-tek', 'sport_tek'], ['sport tek', 'sport_tek'],
+];
+function suggestSupplierUrl(line) {
+  const d = String(line.description || '').toLowerCase();
+  const hit = SS_BRANDS.find(([name]) => d.includes(name));
+  // "G5000" / "SS4500" → the numeric style S&S keys on; "3001C" passes through.
+  const style = String(line.styleCode || '').trim().replace(/^[a-z]{1,3}(?=\d)/i, '').toLowerCase();
+  if (!hit || !style) return '';
+  return `https://www.ssactivewear.com/p/${hit[1]}/${style}`;
 }
 
 export default function QuoteBuilder({ open, project, onClose, onSave }) {
@@ -78,6 +167,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const [printerName,  setPrinterName]  = useState('');
   const [saving,       setSaving]       = useState(false);
   const [dirty,        setDirty]        = useState(false);
+  // Groups the owner explicitly opened up as individual cards (per-line
+  // control for one odd option). UI-only escape hatch — nothing is stored.
+  const [cardView,     setCardView]     = useState(() => new Set());
 
   // Seed from the freshest source: a local draft (which survives a tab close
   // or crash mid-quote) wins over the server copy. Keyed on project id so an
@@ -101,6 +193,7 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     setLines(Array.isArray(seed.lines) ? seed.lines.map(l => ({ ...l })) : []);
     setShipToState(seed.shipToState || '');
     setPrinterName(seed.printerName || '');
+    setCardView(new Set());
     setDirty(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project?._id]);
@@ -139,6 +232,14 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     setLines(prev => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
     setDirty(true);
   };
+  // Broadcast edits — the grid's bread and butter. `idxs` is which lines
+  // (a brand's cells, a column, or the whole grid); `patch` an object, or a
+  // per-line function for math that depends on each cell's own costs.
+  const patchIdxs = (idxs, patch) => {
+    const set = new Set(idxs);
+    setLines(prev => prev.map((l, i) => (set.has(i) ? { ...l, ...(typeof patch === 'function' ? patch(l) : patch) } : l)));
+    setDirty(true);
+  };
   const selectTier = (i, pct) => {
     const c = lineCogsPerUnit(lines[i]);   // markup applies over this line's true unit cost
     setLine(i, {
@@ -148,17 +249,35 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   };
   const addLine    = () => { setLines(prev => [...prev, emptyLine()]); setDirty(true); };
   const removeLine = (i) => { setLines(prev => prev.filter((_, idx) => idx !== i)); setDirty(true); };
-  // Reorder a line up/down. Order is what the client sees on the approval
-  // page — the array order IS the sort order (Mongo preserves it), so this is
-  // all it takes to let Nate arrange the pitch the way he wants to present it.
-  const moveLine = (i, dir) => {
+  const removeIdxs = (idxs) => {
+    const set = new Set(idxs);
+    setLines(prev => prev.filter((_, idx) => !set.has(idx)));
+    setDirty(true);
+  };
+  // Grid structural ops: append new cell lines (add brand / add quantity
+  // column) and swap two disjoint position sets (reorder brand rows).
+  const appendLines = (newLines) => {
+    setLines(prev => [...prev, ...newLines.map(l => ({ ...l }))]);
+    setDirty(true);
+  };
+  const swapLines = (pairs) => {
     setLines(prev => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
       const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
+      pairs.forEach(([a, b]) => { [next[a], next[b]] = [next[b], next[a]]; });
       return next;
     });
+    setDirty(true);
+  };
+
+  // A fresh design grid: one brand row × two quantity columns to start —
+  // exactly the "3 brands, 50 and 100 of each" pitch after two Add-brand
+  // clicks. Named uniquely so it never collides with an existing group.
+  const addGrid = () => {
+    const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
+    let n = 1; while (used.has(`design ${n}`)) n += 1;
+    const g = `Design ${n}`;
+    const base = { ...emptyLine(), group: g, description: 'Brand 1' };
+    setLines(prev => [...prev, { ...base, qty: 50 }, { ...base, qty: 100 }]);
     setDirty(true);
   };
 
@@ -206,6 +325,48 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     if (!name) return null;
     if (lines.filter(l => (l.group || '').trim() === name).length < 2) return null;
     return GROUP_HUES[groupNames.indexOf(name) % GROUP_HUES.length];
+  };
+
+  // ── Render blocks: grids where a group forms a matrix, cards for the rest ──
+  const byGroup = new Map();
+  lines.forEach((l, idx) => {
+    const g = (l.group || '').trim();
+    if (!g) return;
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push({ line: l, idx });
+  });
+  const grids = new Map();
+  for (const [g, entries] of byGroup) {
+    if (cardView.has(g)) continue;                       // owner opened it up as cards
+    const grid = detectGrid(g, entries);
+    if (grid) grids.set(g, grid);
+  }
+  // Blocks in render order. A grid occupies ONE block at its first line's
+  // position; every other line is its own block. Reordering moves whole
+  // blocks, so a card never lands "inside" a grid.
+  const blocks = [];
+  const emittedGrids = new Set();
+  lines.forEach((l, idx) => {
+    const g = (l.group || '').trim();
+    if (g && grids.has(g)) {
+      if (!emittedGrids.has(g)) {
+        emittedGrids.add(g);
+        blocks.push({ type: 'grid', grid: grids.get(g), idxs: grids.get(g).allIdxs });
+      }
+      return;
+    }
+    blocks.push({ type: 'line', line: l, idx, idxs: [idx] });
+  });
+  // Move a whole block up/down: rebuild the array as blocks in the new order
+  // (as a side effect this makes a scattered grid's lines contiguous — the
+  // client page reads groups by first appearance, so presentation order holds).
+  const moveBlock = (bi, dir) => {
+    const bj = bi + dir;
+    if (bj < 0 || bj >= blocks.length) return;
+    const order = blocks.map(b => b.idxs);
+    [order[bi], order[bj]] = [order[bj], order[bi]];
+    setLines(prev => order.flat().map(i => prev[i]));
+    setDirty(true);
   };
 
   return (
@@ -275,12 +436,14 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
               ))}
           </Stack>
           <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
-            Group alternatives (3 brands of tee) so the client picks one. They don't have to take everything —
-            pitch 10, and they can keep just the 5 they want. Nothing counts toward the project total until they pick.
+            A design grid pitches one design across brands × quantities (3 brands at 50 and 100 = one grid, not
+            six lines) — the client still picks exactly ONE option per design. Groups and single lines work like
+            always: group alternatives so the client picks one; ungrouped lines are always included. Nothing
+            counts toward the project total until they pick.
           </Typography>
         </Box>
 
-        {/* Lines */}
+        {/* Lines / grids */}
         {/* Shared datalist so typing a group name autocompletes to ones
             already used on this quote. Lines sharing a group are alternative
             options — the client picks ONE per group on the approval page;
@@ -292,34 +455,66 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
           <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, py: 6,
             textAlign: 'center', color: D.muted, bgcolor: D.inset }}>
             <Typography sx={{ fontSize: 13, mb: 1.5 }}>No quote lines yet.</Typography>
-            <Button onClick={addLine} startIcon={<AddCircleOutlineIcon />}
-              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
-                px: 2, transition: 'background-color 0.18s',
-                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' },
-                '&.Mui-focusVisible': { outline: `2px solid ${D.green}`, outlineOffset: 2 } }}>
-              Add the first line
-            </Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} justifyContent="center" alignItems="center">
+              <Button onClick={addGrid} startIcon={<GridViewOutlinedIcon sx={{ fontSize: 17 }} />}
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                  px: 2, transition: 'background-color 0.18s',
+                  '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' },
+                  '&.Mui-focusVisible': { outline: `2px solid ${D.green}`, outlineOffset: 2 } }}>
+                Add a design grid
+              </Button>
+              <Button onClick={addLine} startIcon={<AddCircleOutlineIcon />}
+                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                  px: 2, transition: 'background-color 0.18s, color 0.18s',
+                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                Add a single line
+              </Button>
+            </Stack>
           </Box>
         ) : (
           <Stack gap={2}>
-            {lines.map((line, i) => (
-              <QuoteLineCard key={i} line={line} accent={accentFor(line.group)} index={i}
-                onPatch={(patch) => setLine(i, patch)}
-                onSelectTier={(pct) => selectTier(i, pct)}
-                onRemove={() => removeLine(i)}
-                onMoveUp={i > 0 ? () => moveLine(i, -1) : null}
-                onMoveDown={i < lines.length - 1 ? () => moveLine(i, +1) : null} />
+            {blocks.map((b, bi) => b.type === 'grid' ? (
+              <DesignGridCard key={`grid-${b.grid.group}`} grid={b.grid} lines={lines}
+                accent={accentFor(b.grid.group)}
+                onPatchIdxs={patchIdxs}
+                onRemoveIdxs={removeIdxs}
+                onSetLine={setLine}
+                onAppendLines={appendLines}
+                onSwapLines={swapLines}
+                onEditAsCards={() => setCardView(prev => new Set(prev).add(b.grid.group))}
+                onMoveUp={bi > 0 ? () => moveBlock(bi, -1) : null}
+                onMoveDown={bi < blocks.length - 1 ? () => moveBlock(bi, +1) : null} />
+            ) : (
+              <QuoteLineCard key={b.idx} line={b.line} accent={accentFor(b.line.group)} index={b.idx}
+                gridable={!!(b.line.group || '').trim() && cardView.has((b.line.group || '').trim())
+                  && !!detectGrid((b.line.group || '').trim(), byGroup.get((b.line.group || '').trim()))}
+                onViewAsGrid={() => setCardView(prev => {
+                  const next = new Set(prev); next.delete((b.line.group || '').trim()); return next;
+                })}
+                onPatch={(patch) => setLine(b.idx, patch)}
+                onSelectTier={(pct) => selectTier(b.idx, pct)}
+                onRemove={() => removeLine(b.idx)}
+                onMoveUp={bi > 0 ? () => moveBlock(bi, -1) : null}
+                onMoveDown={bi < blocks.length - 1 ? () => moveBlock(bi, +1) : null} />
             ))}
           </Stack>
         )}
 
         {lines.length > 0 && (
-          <Button onClick={addLine} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-            sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12, mt: 1.5,
-              borderRadius: 999, px: 1.75, transition: 'background-color 0.18s',
-              '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
-            Add line
-          </Button>
+          <Stack direction="row" gap={1} sx={{ mt: 1.5 }} flexWrap="wrap">
+            <Button onClick={addGrid} startIcon={<GridViewOutlinedIcon sx={{ fontSize: 16 }} />}
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s',
+                '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              Add design grid
+            </Button>
+            <Button onClick={addLine} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
+                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              Add line
+            </Button>
+          </Stack>
         )}
       </DialogContent>
       {/* No totals footer — every line is an alternative brand/option the client
@@ -351,12 +546,27 @@ function readDesignImage(file) {
   });
 }
 
+// A text field that keeps keystrokes local and only commits on blur/Enter.
+// Required for anything that feeds a line's IDENTITY (group name, brand
+// product/style, a column's quantity): committing per keystroke would re-key
+// the grid mid-word and unmount the input under the cursor.
+function BufferedTF({ value, onCommit, sx, ...rest }) {
+  const [v, setV] = useState(value ?? '');
+  useEffect(() => { setV(value ?? ''); }, [value]);
+  return (
+    <TextField size="small" value={v} sx={sx} {...rest}
+      onChange={e => setV(e.target.value)}
+      onBlur={() => { if (v !== (value ?? '')) onCommit(v); }}
+      onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }} />
+  );
+}
+
 // The design the client signs off when picking this line: a studio mockup #
 // and/or an uploaded vendor render (ashtrays etc. have no mockup number).
-function DesignAttach({ line, onPatch, tf }) {
+function DesignAttach({ line, onPatch, tf, label = 'Design (mockup # or image)', sx }) {
   const fileRef = useRef(null);
   return (
-    <QF label="Design (mockup # or image)" sx={{ width: { xs: '100%', sm: 230 } }}>
+    <QF label={label} sx={sx || { width: { xs: '100%', sm: 230 } }}>
       <Stack direction="row" gap={0.75} alignItems="center">
         <TextField size="small" fullWidth value={line.mockupNum || ''} placeholder="#000061A"
           onChange={e => onPatch({ mockupNum: e.target.value })} sx={tf} />
@@ -394,7 +604,428 @@ function DesignAttach({ line, onPatch, tf }) {
   );
 }
 
-function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, onMoveUp, onMoveDown }) {
+// Supplier product-page link for a blank: paste any URL, or take the S&S
+// suggestion built from the product/style already typed. The link is shown to
+// the CLIENT on their option card ("view product") — costs never ride along.
+function SupplierLink({ line, onPatch, tf, sx }) {
+  const url = (line.supplierUrl || '').trim();
+  const suggestion = url ? '' : suggestSupplierUrl(line);
+  return (
+    <QF label="Product link (client sees)" sx={sx}>
+      <Stack direction="row" gap={0.5} alignItems="center">
+        <TextField size="small" fullWidth value={line.supplierUrl || ''} placeholder="https:// supplier page"
+          onChange={e => onPatch({ supplierUrl: e.target.value })} sx={tf} />
+        {suggestion ? (
+          <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
+            onClick={() => onPatch({ supplierUrl: suggestion })}
+            sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
+              '&:hover': { color: D.green, borderColor: D.green } }}>
+            <LinkIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        ) : (
+          <IconButton size="small" title={url ? 'Open product page' : 'Paste a product URL first'}
+            disabled={!url}
+            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+            sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
+              '&:hover': { color: D.green, borderColor: D.green },
+              '&.Mui-disabled': { color: D.faint, borderColor: D.line, opacity: 0.5 } }}>
+            <OpenInNewIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
+      </Stack>
+    </QF>
+  );
+}
+
+// ── The design grid card: one design, brand rows × quantity columns ──────────
+//
+// Everything here edits REAL lines through broadcasts:
+//   • design-level fields (print type/details, setup, shipping, turnaround,
+//     design attach, the group name itself) → every cell in the grid
+//   • brand-row fields (product, style, blank $, product link) → that brand's cells
+//   • column fields (quantity, print $/unit) → that column's cells
+//   • a cell's unit price → that one line
+//   • the tier strip → per-cell price at each cell's OWN cost (so 50s and
+//     100s get different correct prices from one click)
+function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
+  const noSpinner = {
+    '& input[type=number]': { MozAppearance: 'textfield' },
+    '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+    '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  };
+  const inputRoot = dropInput['& .MuiOutlinedInput-root'];
+  const tf = {
+    ...dropInput, ...noSpinner,
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
+  };
+  const cellTf = {
+    ...dropInput, ...noSpinner,
+    '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.7, px: 1, textAlign: 'right', ...mono },
+  };
+  const groupChip = {
+    ...dropInput,
+    '& .MuiOutlinedInput-root': {
+      ...dropInput['& .MuiOutlinedInput-root'],
+      borderRadius: 999,
+      ...(accent ? { '& fieldset': { borderColor: accent, transition: 'border-color 0.18s' } } : {}),
+    },
+    '& .MuiInputBase-input': { color: D.text, fontSize: 12.5, py: 0.85, px: 1.75, fontWeight: 700 },
+  };
+
+  const all = grid.allIdxs;
+  const firstLine = lines[all[0]] || {};
+  // A design-level field's display value: the shared value when every cell
+  // agrees, '' (placeholder "mixed") when they don't. Typing broadcasts.
+  const sharedVal = (key) => {
+    const vals = [...new Set(all.map(i => String(lines[i]?.[key] ?? '')))];
+    return vals.length === 1 ? vals[0] : '';
+  };
+  const sharedMixed = (key) => [...new Set(all.map(i => String(lines[i]?.[key] ?? '')))].length > 1;
+
+  // Column print $/unit: shared across the column when uniform.
+  const colPrint = (q) => {
+    const vals = [...new Set(grid.brands.map(b => String(num((grid.cellAt(b.key, q) || {}).line?.printCost))))];
+    return vals.length === 1 ? vals[0] : '';
+  };
+  const colIdxs = (q) => grid.brands.map(b => (grid.cellAt(b.key, q) || {}).idx).filter(i => i !== undefined);
+
+  // The tier strip highlights a tier only when EVERY cell is committed at it.
+  const uniformPct = (() => {
+    const pcts = all.map(i => {
+      const l = lines[i];
+      const c = lineCogsPerUnit(l);
+      return c > 0 && num(l.unitPrice) > 0 ? Math.round((num(l.unitPrice) / c - 1) * 100) : null;
+    });
+    return pcts.every(p => p !== null && p === pcts[0]) ? pcts[0] : null;
+  })();
+
+  const applyTier = (pct) => onPatchIdxs(all, (l) => ({
+    unitPrice: +(lineCogsPerUnit(l) * (1 + pct / 100)).toFixed(2),
+    markup:    +(1 + pct / 100).toFixed(4),
+  }));
+
+  const renameGroup = (name) => {
+    const v = String(name || '').trim();
+    if (v) onPatchIdxs(all, { group: v });
+  };
+  const setColQty = (oldQ, val) => {
+    const q = num(val);
+    if (q <= 0 || q === oldQ || grid.qtys.includes(q)) return;   // collisions would break the matrix
+    onPatchIdxs(colIdxs(oldQ), { qty: q });
+  };
+  // New cells inherit the design's shared fields from a neighbor cell, but
+  // never its pick or committed price — a fresh option starts un-accepted and
+  // AUTO-priced at its own cost × markup.
+  const addColumn = () => {
+    const newQ = Math.max(...grid.qtys) * 2;                     // 50/100 → 200; edit the header to taste
+    const adds = grid.brands.map(b => {
+      const src = (grid.cellAt(b.key, grid.qtys[grid.qtys.length - 1]) || {}).line || firstLine;
+      return { ...src, qty: newQ, unitPrice: 0, accepted: false };
+    });
+    onAppendLines(adds);
+  };
+  const addBrand = () => {
+    const n = grid.brands.length + 1;
+    const src = grid.brands[0];
+    const adds = grid.qtys.map(q => {
+      const mate = (grid.cellAt(src.key, q) || {}).line || firstLine;
+      return { ...mate, description: `Brand ${n}`, styleCode: '', blankCost: 0, supplierUrl: '',
+        unitPrice: 0, accepted: false };
+    });
+    onAppendLines(adds);
+  };
+  const removeBrand = (b) => {
+    if (grid.brands.length === 1) { removeGrid(); return; }
+    onRemoveIdxs(b.idxs);
+  };
+  const removeColumn = (q) => {
+    if (grid.qtys.length <= 2) return;                            // below 2 columns it stops being a grid
+    onRemoveIdxs(colIdxs(q));
+  };
+  const removeGrid = () => {
+    if (window.confirm(`Remove "${grid.group}" and its ${all.length} option${all.length === 1 ? '' : 's'}?`)) {
+      onRemoveIdxs(all);
+    }
+  };
+  // Swap two brands' rows by swapping their lines' array POSITIONS (each brand
+  // owns exactly one line per column, so the position sets are the same size).
+  const moveBrand = (bIdx, dir) => {
+    const j = bIdx + dir;
+    if (j < 0 || j >= grid.brands.length) return;
+    const a = grid.brands[bIdx].idxs, b = grid.brands[j].idxs;
+    onSwapLines(a.map((ai, k) => [ai, b[k]]));
+  };
+
+  return (
+    <Box sx={{
+      border: `1px solid ${D.line}`,
+      borderLeft: accent ? `3px solid ${accent}` : `1px solid ${D.line}`,
+      borderRadius: 3, overflow: 'hidden', bgcolor: D.panel,
+      transition: 'background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease',
+      '&:hover': { bgcolor: D.panelHi, borderColor: accent || 'rgba(255,255,255,0.14)',
+        ...(accent ? { borderLeftColor: accent } : {}),
+        boxShadow: '0 10px 28px rgba(0,0,0,0.34)' },
+    }}>
+      {/* Design header: name + shared design fields (broadcast to every cell) */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.75,
+        display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
+        <QF label="Design (client picks 1 option)" sx={{ width: { xs: '100%', sm: 200 } }}>
+          <BufferedTF fullWidth value={grid.group} placeholder="Front-hit tee"
+            onCommit={renameGroup} sx={groupChip} />
+        </QF>
+        <DesignAttach line={{ mockupNum: sharedVal('mockupNum'), image: sharedVal('image') || firstLine.image || '' }}
+          onPatch={(patch) => onPatchIdxs(all, patch)} tf={tf}
+          sx={{ width: { xs: '100%', sm: 220 } }} />
+        <QF label="Print type" sx={{ width: { xs: '48%', sm: 140 } }}>
+          <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+            <Select value={sharedVal('printType')} displayEmpty
+              onChange={e => onPatchIdxs(all, { printType: e.target.value })}
+              sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+              <MenuItem value=""><em>{sharedMixed('printType') ? 'mixed' : '—'}</em></MenuItem>
+              {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </QF>
+        <QF label="Print details" sx={{ flex: '1 1 160px', minWidth: 140 }}>
+          <TextField size="small" fullWidth value={sharedVal('printDetails')}
+            placeholder={sharedMixed('printDetails') ? 'mixed' : '1c front + 2c back'}
+            onChange={e => onPatchIdxs(all, { printDetails: e.target.value })} sx={tf} />
+        </QF>
+        <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
+          <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
+            title="Open this design's options as individual line cards (full per-option control)"
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+            Edit as cards
+          </Button>
+          <Stack>
+            <IconButton size="small" onClick={onMoveUp} disabled={!onMoveUp} title="Move design up"
+              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+              <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton size="small" onClick={onMoveDown} disabled={!onMoveDown} title="Move design down"
+              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+              <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Stack>
+          <IconButton size="small" onClick={removeGrid} title="Remove this design (all its options)"
+            sx={{ color: D.muted, transition: 'color 0.18s, background-color 0.18s',
+              '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
+            <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Stack>
+      </Box>
+
+      {/* Shared one-time costs — the same setup/ship rides on EVERY option of
+          this design (each cell spreads it across its own quantity). */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, display: 'grid', gap: 1.25,
+        gridTemplateColumns: { xs: 'repeat(3, minmax(0,1fr))', sm: '110px 110px 110px' } }}>
+        <QF label="Setup $ (total)">
+          <TextField size="small" fullWidth type="number" value={sharedVal('setupCost')}
+            placeholder={sharedMixed('setupCost') ? 'mixed' : '0'}
+            onChange={e => onPatchIdxs(all, { setupCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Ship $ (total)">
+          <TextField size="small" fullWidth type="number" value={sharedVal('shippingCost')}
+            placeholder={sharedMixed('shippingCost') ? 'mixed' : '0'}
+            onChange={e => onPatchIdxs(all, { shippingCost: e.target.value })} sx={tf} />
+        </QF>
+        <QF label="Turnaround (wks)">
+          <TextField size="small" fullWidth type="number" value={sharedVal('turnaroundWeeks') || ''}
+            placeholder={sharedMixed('turnaroundWeeks') ? 'mixed' : '—'}
+            onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
+        </QF>
+      </Box>
+
+      {/* The matrix: brand rows × quantity columns. Every cell is a real quote
+          line the client can pick. Horizontal scroll on narrow screens. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
+        <Box sx={{ minWidth: 420 + grid.qtys.length * 128, display: 'grid', gap: 0.75,
+          gridTemplateColumns: `minmax(300px, 1.4fr) repeat(${grid.qtys.length}, minmax(118px, 1fr)) 84px` }}>
+          {/* Header row */}
+          <Box sx={{ alignSelf: 'end', pb: 0.4 }}>
+            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+              Brand · blank $ · product link
+            </Typography>
+          </Box>
+          {grid.qtys.map(q => (
+            <Box key={`h-${q}`} sx={{ textAlign: 'center' }}>
+              <Stack direction="row" alignItems="center" justifyContent="center" gap={0.25}>
+                <BufferedTF value={String(q)} type="number"
+                  onCommit={(v) => setColQty(q, v)}
+                  sx={{ ...cellTf, width: 76,
+                    '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], textAlign: 'center', fontWeight: 800 } }} />
+                {grid.qtys.length > 2 && (
+                  <IconButton size="small" onClick={() => removeColumn(q)} title={`Remove the ${q}-unit column`}
+                    sx={{ color: D.faint, p: 0.2, '&:hover': { color: '#f87171' } }}>
+                    <CloseIcon sx={{ fontSize: 12 }} />
+                  </IconButton>
+                )}
+              </Stack>
+              <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mt: 0.2 }}>
+                units
+              </Typography>
+              <TextField size="small" type="number" value={colPrint(q)}
+                placeholder={colPrint(q) === '' ? 'mixed' : ''}
+                onChange={e => onPatchIdxs(colIdxs(q), { printCost: e.target.value })}
+                InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 10, mr: 0.4 }}>print $</Typography> }}
+                sx={{ ...cellTf, width: '100%', mt: 0.4 }} />
+            </Box>
+          ))}
+          <Box sx={{ alignSelf: 'end', pb: 0.4, textAlign: 'center' }}>
+            <IconButton size="small" onClick={addColumn} title="Add a quantity column"
+              sx={{ color: D.muted, border: `1px dashed ${D.line}`, borderRadius: 1.5,
+                '&:hover': { color: D.green, borderColor: D.green } }}>
+              <AddCircleOutlineIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
+
+          {/* Brand rows */}
+          {grid.brands.map((b, bIdx) => {
+            const bLine = b.first;
+            return (
+              <React.Fragment key={b.key}>
+                <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap',
+                  p: 1, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+                  <Stack sx={{ mr: -0.25 }}>
+                    <IconButton size="small" onClick={() => moveBrand(bIdx, -1)} disabled={bIdx === 0}
+                      sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
+                      <KeyboardArrowUpIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => moveBrand(bIdx, +1)} disabled={bIdx === grid.brands.length - 1}
+                      sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
+                      <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Stack>
+                  <BufferedTF value={bLine.description || ''} placeholder="Gildan 5000 · black"
+                    onCommit={(v) => onPatchIdxs(b.idxs, { description: v })}
+                    sx={{ ...tf, flex: '1 1 120px', minWidth: 110 }} />
+                  <BufferedTF value={bLine.styleCode || ''} placeholder="Style"
+                    onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })}
+                    sx={{ ...tf, width: 84 }} />
+                  <TextField size="small" type="number"
+                    value={[...new Set(b.idxs.map(i => String(num(lines[i]?.blankCost))))].length === 1
+                      ? String(num(bLine.blankCost)) : ''}
+                    placeholder="blank $"
+                    onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
+                    sx={{ ...cellTf, width: 84 }} />
+                  {(() => {
+                    const url = (bLine.supplierUrl || '').trim();
+                    const suggestion = url ? '' : suggestSupplierUrl(bLine);
+                    return (
+                      <Stack direction="row" gap={0.25} alignItems="center">
+                        {url ? (
+                          <IconButton size="small" title={`Open product page · ${url}`}
+                            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                            sx={{ color: D.green, p: 0.4, '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>
+                            <OpenInNewIcon sx={{ fontSize: 15 }} />
+                          </IconButton>
+                        ) : suggestion ? (
+                          <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
+                            onClick={() => onPatchIdxs(b.idxs, { supplierUrl: suggestion })}
+                            sx={{ color: D.muted, p: 0.4, '&:hover': { color: D.green } }}>
+                            <LinkIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        ) : null}
+                        <BufferedTF value={bLine.supplierUrl || ''} placeholder="product URL (client sees)"
+                          onCommit={(v) => onPatchIdxs(b.idxs, { supplierUrl: v })}
+                          sx={{ ...tf, width: 150,
+                            '& .MuiInputBase-input': { color: D.muted, fontSize: 11, py: 0.7 } }} />
+                      </Stack>
+                    );
+                  })()}
+                </Box>
+                {grid.qtys.map(q => {
+                  const cell = grid.cellAt(b.key, q);
+                  if (!cell) return <Box key={`c-${b.key}-${q}`} />;
+                  const l = cell.line;
+                  const committed = lineCommitted(l);
+                  const eff = lineEffectivePrice(l);
+                  const cogs = lineCogsPerUnit(l);
+                  const profit = eff - cogs;
+                  const pct = eff > 0 ? (profit / eff) * 100 : 0;
+                  return (
+                    <Box key={`c-${b.key}-${q}`} sx={{ p: 1, borderRadius: 2, bgcolor: D.inset,
+                      border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
+                      <TextField size="small" type="number" value={l.unitPrice ?? ''}
+                        placeholder={eff > 0 ? eff.toFixed(2) : '—'}
+                        onChange={e => onSetLine(cell.idx, { unitPrice: e.target.value })}
+                        onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
+                        InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
+                        sx={cellTf} />
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
+                          color: committed ? D.faint : D.amber }}>
+                          {committed ? `${fmt(eff * q)} total` : 'auto'}
+                        </Typography>
+                        <Typography sx={{ fontSize: 10, fontWeight: 800, ...mono, color: marginColor(pct) }}
+                          title={`${fmt(profit)}/unit profit at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
+                          {cogs > 0 ? `${pct.toFixed(0)}%` : '—'}
+                        </Typography>
+                      </Stack>
+                    </Box>
+                  );
+                })}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <IconButton size="small" onClick={() => removeBrand(b)} title="Remove this brand row"
+                    sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
+                    <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+              </React.Fragment>
+            );
+          })}
+        </Box>
+        <Button onClick={addBrand} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
+          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5, mt: 0.75,
+            borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+          Add brand
+        </Button>
+      </Box>
+
+      {/* One tier strip for the whole design: each cell gets the tier applied
+          over its OWN unit cost, so every brand/quantity prices correctly from
+          a single click. Typing in a cell overrides just that cell. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
+        <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
+          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+            Markup tiers · all options
+          </Typography>
+          <Typography sx={{ color: D.muted, fontSize: 10 }}>
+            click a tier to price every cell at cost × tier — amber cells are auto-priced until you click or type
+          </Typography>
+        </Stack>
+        <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
+          borderRadius: 2.5, p: 0.5, display: 'flex',
+          overflowX: 'auto', scrollSnapType: 'x proximity', ...scrollbar }}>
+          {TIERS.map(pct => {
+            const sel = uniformPct === pct;
+            return (
+              <Box key={pct} onClick={() => applyTier(pct)} sx={{
+                cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
+                py: 0.7, px: 0.5, borderRadius: 1.75, scrollSnapAlign: 'start',
+                bgcolor: sel ? D.green : 'transparent',
+                boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
+                transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
+                '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
+              }}>
+                <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700 }}>
+                  +{pct}%
+                </Typography>
+                <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 10.5, fontWeight: 700, ...mono }}>
+                  {(pct / (100 + pct) * 100).toFixed(0)}% margin
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, onSelectTier, onRemove, onMoveUp, onMoveDown }) {
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -421,12 +1052,16 @@ function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, o
   const setupShip     = Math.max(0, num(line.setupCost)) + Math.max(0, num(line.shippingCost));
   const setupShipPerUnit = qty > 0 ? setupShip / qty : 0;
   const cogsPerUnit   = lineCogsPerUnit(line);                            // blank + print + setup/ship spread over this line's qty
-  const unitPrice = num(line.unitPrice) || cogsPerUnit * (num(line.markup) || 1);
+  // COMMITTED (typed / tier-locked) or AUTO (cost × markup — what the server
+  // bills and the client page shows). Never display "$0" as if it were a
+  // price: a cleared or zero unit price is the AUTO state, shown as such.
+  const committed = lineCommitted(line);
+  const unitPrice = lineEffectivePrice(line);
   const lineTotal = qty * unitPrice;
   const profit    = unitPrice - cogsPerUnit;
   const marginPct = unitPrice > 0 ? (profit / unitPrice) * 100 : 0;
   const marginCol = marginColor(marginPct);
-  const selectedPct = cogsPerUnit > 0 && num(line.unitPrice) > 0
+  const selectedPct = cogsPerUnit > 0 && committed
     ? Math.round((num(line.unitPrice) / cogsPerUnit - 1) * 100)
     : null;
 
@@ -464,6 +1099,15 @@ function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, o
             onChange={e => onPatch({ qty: e.target.value })} sx={tf} />
         </QF>
         <DesignAttach line={line} onPatch={onPatch} tf={tf} />
+        <SupplierLink line={line} onPatch={onPatch} tf={tf} sx={{ width: { xs: '100%', sm: 200 } }} />
+        {gridable && (
+          <Button onClick={onViewAsGrid} startIcon={<GridViewOutlinedIcon sx={{ fontSize: 14 }} />}
+            title="Collapse this design's options back into the brands × quantities grid"
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1, mb: 0.3,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+            View as grid
+          </Button>
+        )}
         {/* Reorder — arrange the pitch the way you want the client to see it. */}
         <Stack sx={{ mb: 0.3 }}>
           <IconButton size="small" onClick={onMoveUp} disabled={!onMoveUp} title="Move up"
@@ -587,9 +1231,18 @@ function QuoteLineCard({ line, accent, index, onPatch, onSelectTier, onRemove, o
       <Box sx={{ px: { xs: 1.5, md: 2 }, py: 1.5, borderTop: `1px solid ${D.line}`,
         bgcolor: D.inset,
         display: 'flex', alignItems: 'flex-end', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap' }}>
-        <QF label="Unit price">
+        <QF label={committed ? 'Unit price' : 'Unit price (auto)'}>
           <TextField size="small" type="number" value={line.unitPrice ?? ''}
-            onChange={e => onPatch({ unitPrice: e.target.value })} sx={{ ...tf, width: 130 }} />
+            placeholder={cogsPerUnit > 0 ? unitPrice.toFixed(2) : ''}
+            onChange={e => onPatch({ unitPrice: e.target.value })}
+            onBlur={e => { if (num(e.target.value) <= 0) onPatch({ unitPrice: '' }); }}
+            sx={{ ...tf, width: 130,
+              ...(committed ? {} : { '& .MuiOutlinedInput-root fieldset': { borderColor: 'rgba(251,191,36,0.4)' } }) }} />
+          {!committed && (
+            <Typography sx={{ color: D.amber, fontSize: 9, fontWeight: 700, mt: 0.3 }}>
+              auto: cost × markup — type or click a tier to lock
+            </Typography>
+          )}
         </QF>
         {/* Optional lead time for THIS option. Purely informational — never
             touches pricing. Left blank, it shows nothing to the client; typed,
