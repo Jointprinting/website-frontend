@@ -813,6 +813,17 @@ export default function ApprovalView() {
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 700, fontSize: 15.5, lineHeight: 1.3 }}>{desc || 'Option'}</Typography>
                           {detail && <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.3 }}>{detail}</Typography>}
+                          {/* Owner-set product page for this blank (specs, colors, fit) —
+                              a plain link that must never toggle the pick. */}
+                          {l.productUrl && (
+                            <Typography component="a" href={l.productUrl} target="_blank" rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, mt: 0.5, mr: 1.25,
+                                color: T.green, fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                                '&:hover': { textDecoration: 'underline' } }}>
+                              View product details ↗
+                            </Typography>
+                          )}
                           {weeks > 0 && (
                             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 0.6,
                               px: 0.9, py: 0.3, borderRadius: 999, border: `1px solid ${T.line}`, bgcolor: T.inset,
