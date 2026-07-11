@@ -83,7 +83,9 @@ import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import LookbooksTab from './studio/LookbooksTab';
 import ContentTab from './studio/ContentTab';
+import NewsletterTab from './studio/NewsletterTab';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import VendorsTab from './studio/VendorsTab';
 import AgentsAdminTab from './studio/AgentsAdminTab';
 import AgentHome from './studio/agent/AgentHome';
@@ -1628,9 +1630,13 @@ const HUB_GROUPS = [
         id: 'growth',
         label: 'Marketing · find leads',
         tools: [
-          { id: 'roadtrip', label: 'Field Map', desc: 'Plan in-person sweeps',   Icon: ExploreOutlinedIcon },
-          { id: 'outreach', label: 'Outreach',  desc: 'Cold email → warm leads', Icon: ForwardToInboxOutlinedIcon },
-          { id: 'content',  label: 'Content',   desc: 'Social posts — plan & track', Icon: CampaignOutlinedIcon },
+          { id: 'roadtrip',   label: 'Field Map',  desc: 'Plan in-person sweeps',       Icon: ExploreOutlinedIcon },
+          { id: 'outreach',   label: 'Outreach',   desc: 'Cold email → warm leads',     Icon: ForwardToInboxOutlinedIcon },
+          { id: 'content',    label: 'Content',    desc: 'Social posts — plan & track', Icon: CampaignOutlinedIcon },
+          // Client email blast — monthly updates & catalog drops to existing
+          // clients, sent from the dedicated jointprintingshop domain so a warm
+          // mass-send never dents the main invoice inbox's deliverability.
+          { id: 'newsletter', label: 'Newsletter', desc: 'Email clients — opens & replies', Icon: MarkEmailReadOutlinedIcon },
         ],
       },
       {
@@ -2852,6 +2858,11 @@ function StudioBody({ token, onLogout }) {
     // The social planner is self-contained — no deep links in v1, so no
     // entry-nonce machinery; the hub tile just opens it.
     return <ContentTab token={token} onBack={() => setView('hub')} />;
+  }
+
+  if (view === 'newsletter') {
+    // Client email blast — self-contained like Content; opens from the hub tile.
+    return <NewsletterTab token={token} onBack={() => setView('hub')} />;
   }
 
   if (view === 'lookbooks') {
