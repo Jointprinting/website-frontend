@@ -811,9 +811,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
             placeholder={numMixedOver(all, 'setupCost') ? 'varies' : '0'}
             onChange={e => onPatchIdxs(all, { setupCost: e.target.value })} sx={tf} />
         </QF>
-        <QF label="Ship $ (all)" sx={{ width: { xs: '31%', sm: 96 } }}>
+        <QF label="Ship $ (fill all)" sx={{ width: { xs: '31%', sm: 96 } }}>
           <TextField size="small" fullWidth type="number" value={numValOver(all, 'shippingCost')}
-            placeholder={numMixedOver(all, 'shippingCost') ? 'varies' : '0'}
+            placeholder={numMixedOver(all, 'shippingCost') ? 'per-qty' : '0'}
+            title="Fills shipping on every cell — set it per quantity in each row's ⌄ drawer for run-size shipping"
             onChange={e => onPatchIdxs(all, { shippingCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="Turnaround" sx={{ width: { xs: '31%', sm: 90 } }}>
@@ -854,10 +855,11 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           gridTemplateColumns: tableCols }}>
 
           {/* Header row: option column title, then one header per quantity */}
-          <Box sx={{ alignSelf: 'end', pb: 0.5 }}>
-            <Typography sx={headCellSx}>Options — brand or print variant</Typography>
-            <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2 }}>
-              product · style · blank $ — open ⌄ for per-option print/setup costs + link
+          <Box sx={{ alignSelf: 'end', pb: 0.5, position: 'sticky', left: 0, zIndex: 2, bgcolor: D.panel }}>
+            <Typography sx={headCellSx}>Options the client picks from</Typography>
+            <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2, lineHeight: 1.35 }}>
+              Name the brand or variant, its style #, and the blank $/unit. Open <b>⌄</b> on a row for its
+              print $, setup $ &amp; per-quantity shipping.
             </Typography>
           </Box>
           {grid.qtys.map(q => (
@@ -875,13 +877,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   </IconButton>
                 )}
               </Stack>
-              <TextField size="small" type="number" value={numValOver(colIdxs(q), 'printCost')}
-                placeholder={numMixedOver(colIdxs(q), 'printCost') ? 'varies' : '0'}
-                title="Print $/unit at this run size — applies to every option in this column"
-                onChange={e => onPatchIdxs(colIdxs(q), { printCost: e.target.value })}
-                InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.4, whiteSpace: 'nowrap' }}>print $/u</Typography> }}
-                sx={{ ...cellTf, width: '100%', mt: 0.5,
-                  '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 500, fontSize: 12 } }} />
+              <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4,
+                textTransform: 'uppercase', mt: 0.5, textAlign: 'center' }}>
+                price / unit
+              </Typography>
             </Box>
           ))}
           <Box sx={{ alignSelf: 'end', pb: 0.5, textAlign: 'center' }}>
@@ -903,10 +902,13 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
               // name/style/print details are edited — keying by it would
               // remount the row (focus loss) and orphan its open drawer.
               <React.Fragment key={`row-${bIdx}`}>
-                {/* Identity cell: reorder · product · style · blank $ · drawer toggle */}
+                {/* Identity cell: reorder · product · style · blank $/unit · drawer toggle.
+                    Sticky-left so the row's name stays put while you scroll the
+                    quantity columns sideways. */}
                 <Box sx={{ display: 'grid', gap: 0.6, alignItems: 'center', p: 0.9, borderRadius: 2,
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
-                  gridTemplateColumns: '16px minmax(110px, 1fr) 72px 78px 30px' }}>
+                  position: 'sticky', left: 0, zIndex: 1,
+                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 96px 30px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
@@ -917,17 +919,20 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                       <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Stack>
-                  <BufferedTF value={bLine.description || ''} placeholder="Gildan 5000 · black"
+                  <BufferedTF value={bLine.description || ''} placeholder="Brand / product name"
                     onCommit={(v) => onPatchIdxs(b.idxs, { description: v })} sx={tf} />
-                  <BufferedTF value={bLine.styleCode || ''} placeholder="Style"
+                  <BufferedTF value={bLine.styleCode || ''} placeholder="Style #"
                     onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
+                  {/* The number next to the style # is the BLANK COST — always labeled
+                      so it's never mistaken for anything else. */}
                   <TextField size="small" type="number" value={numValOver(b.idxs, 'blankCost')}
-                    placeholder={numMixedOver(b.idxs, 'blankCost') ? 'varies' : 'blank $'}
-                    title="Blank cost/unit for this option"
+                    placeholder={numMixedOver(b.idxs, 'blankCost') ? 'varies' : '0.00'}
+                    title="Blank cost per unit for this option"
                     onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
-                    sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 500, fontSize: 12.5 } }} />
+                    InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', mr: 0.4, whiteSpace: 'nowrap' }}>blank&nbsp;$</Typography> }}
+                    sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 600, fontSize: 12.5, textAlign: 'left' } }} />
                   <IconButton size="small" onClick={() => toggleRow(bIdx)}
-                    title="Per-option costs: print $/u, setup $, print details, product link"
+                    title="Per-option costs: print $/u, setup $, print details, per-quantity shipping, product link"
                     sx={{ color: open ? D.green : D.muted, p: 0.3,
                       transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease',
                       '&:hover': { color: D.green } }}>
@@ -949,7 +954,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
                       border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
-                      <TextField size="small" type="number" value={l.unitPrice ?? ''}
+                      {/* Show the field EMPTY when the price is auto (0/blank) so the
+                          computed auto price shows through as the placeholder — a stored
+                          0 used to render a literal "0" over the real auto number. */}
+                      <TextField size="small" type="number" value={num(l.unitPrice) > 0 ? l.unitPrice : ''}
                         placeholder={eff > 0 ? eff.toFixed(2) : '—'}
                         onChange={e => onSetLine(cell.idx, { unitPrice: e.target.value })}
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
@@ -958,11 +966,11 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
                           color: committed ? D.faint : D.amber }}>
-                          {committed ? `${fmt(eff * q)} total` : 'auto'}
+                          {eff > 0 ? `${committed ? '' : 'auto · '}${fmt(eff * q)}` : 'set costs'}
                         </Typography>
                         <Typography sx={{ fontSize: 10, fontWeight: 800, ...mono, color: marginColor(pct) }}
                           title={`${fmt(profit)}/unit profit at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
-                          {cogs > 0 ? `${pct.toFixed(0)}%` : '—'}
+                          {cogs > 0 && eff > 0 ? `${pct.toFixed(0)}%` : '—'}
                         </Typography>
                       </Stack>
                     </Box>
@@ -975,52 +983,76 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   </IconButton>
                 </Box>
 
-                {/* Row cost drawer — the variant lane: per-OPTION print $/u,
-                    setup $, print details, and the product link. This is how a
-                    "7-print front" row carries the extra screen's setup + print
-                    cost while its "6-print" sibling stays cheaper. */}
+                {/* Row cost drawer — full cost control for THIS option: print $/u
+                    and setup $ (a "7c front" row carries its extra screen's cost
+                    while its "6c" sibling stays cheaper), print details, the
+                    product link, and — the qty-break lane — shipping set PER
+                    QUANTITY (50 units $25, 100 units $50). Keeps the price cells
+                    clean while giving total control here. */}
                 {open && (
                   <Box sx={{ gridColumn: '1 / -1', mt: -0.25, mb: 0.25, p: 1.25, borderRadius: 2,
-                    bgcolor: 'rgba(255,255,255,0.02)', border: `1px dashed ${D.line}`,
-                    display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <QF label="Print $/u (this option)" sx={{ width: 130 }}>
-                      <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'printCost')}
-                        placeholder={numMixedOver(b.idxs, 'printCost') ? 'varies by qty' : '0'}
-                        title="Overrides the column print $ for every quantity of THIS option"
-                        onChange={e => onPatchIdxs(b.idxs, { printCost: e.target.value })} sx={tf} />
-                    </QF>
-                    <QF label="Setup $ (this option)" sx={{ width: 130 }}>
-                      <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'setupCost')}
-                        placeholder={numMixedOver(b.idxs, 'setupCost') ? 'varies' : '0'}
-                        title="Full one-time setup for THIS option — an extra color's extra screen goes here"
-                        onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
-                    </QF>
-                    <QF label="Print details (this option)" sx={{ flex: '1 1 170px', minWidth: 150 }}>
-                      <BufferedTF fullWidth value={bLine.printDetails || ''} placeholder="7c front"
-                        onCommit={(v) => onPatchIdxs(b.idxs, { printDetails: v })} sx={tf} />
-                    </QF>
-                    <QF label="Product link (client sees)" sx={{ flex: '1 1 200px', minWidth: 180 }}>
-                      <Stack direction="row" gap={0.5} alignItems="center">
-                        <BufferedTF fullWidth value={bLine.supplierUrl || ''} placeholder="https:// supplier product page"
-                          onCommit={(v) => onPatchIdxs(b.idxs, { supplierUrl: v })}
-                          sx={{ ...tf, '& .MuiInputBase-input': { color: D.muted, fontSize: 11.5, py: 0.8 } }} />
-                        {url ? (
-                          <IconButton size="small" title={`Open product page · ${url}`}
-                            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-                            sx={{ color: D.green, border: `1px solid ${D.line}`, borderRadius: 1.5,
-                              '&:hover': { borderColor: D.green } }}>
-                            <OpenInNewIcon sx={{ fontSize: 15 }} />
-                          </IconButton>
-                        ) : suggestion ? (
-                          <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
-                            onClick={() => onPatchIdxs(b.idxs, { supplierUrl: suggestion })}
-                            sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
-                              '&:hover': { color: D.green, borderColor: D.green } }}>
-                            <LinkIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        ) : null}
+                    bgcolor: 'rgba(255,255,255,0.02)', border: `1px dashed ${D.line}` }}>
+                    <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <QF label="Print $/u (this option)" sx={{ width: 130 }}>
+                        <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'printCost')}
+                          placeholder={numMixedOver(b.idxs, 'printCost') ? 'varies' : '0'}
+                          title="Print cost per unit for this option (all quantities)"
+                          onChange={e => onPatchIdxs(b.idxs, { printCost: e.target.value })} sx={tf} />
+                      </QF>
+                      <QF label="Setup $ (this option)" sx={{ width: 130 }}>
+                        <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'setupCost')}
+                          placeholder={numMixedOver(b.idxs, 'setupCost') ? 'varies' : '0'}
+                          title="Full one-time setup for THIS option — an extra color's extra screen goes here"
+                          onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
+                      </QF>
+                      <QF label="Print details (this option)" sx={{ flex: '1 1 150px', minWidth: 140 }}>
+                        <BufferedTF fullWidth value={bLine.printDetails || ''} placeholder="7c front"
+                          onCommit={(v) => onPatchIdxs(b.idxs, { printDetails: v })} sx={tf} />
+                      </QF>
+                      <QF label="Product link (client sees)" sx={{ flex: '1 1 190px', minWidth: 170 }}>
+                        <Stack direction="row" gap={0.5} alignItems="center">
+                          <BufferedTF fullWidth value={bLine.supplierUrl || ''} placeholder="https:// supplier product page"
+                            onCommit={(v) => onPatchIdxs(b.idxs, { supplierUrl: v })}
+                            sx={{ ...tf, '& .MuiInputBase-input': { color: D.muted, fontSize: 11.5, py: 0.8 } }} />
+                          {url ? (
+                            <IconButton size="small" title={`Open product page · ${url}`}
+                              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                              sx={{ color: D.green, border: `1px solid ${D.line}`, borderRadius: 1.5,
+                                '&:hover': { borderColor: D.green } }}>
+                              <OpenInNewIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
+                          ) : suggestion ? (
+                            <IconButton size="small" title={`Auto-link S&S: ${suggestion}`}
+                              onClick={() => onPatchIdxs(b.idxs, { supplierUrl: suggestion })}
+                              sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1.5,
+                                '&:hover': { color: D.green, borderColor: D.green } }}>
+                              <LinkIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          ) : null}
+                        </Stack>
+                      </QF>
+                    </Box>
+                    {/* Shipping PER QUANTITY — one input per column, so 50 units
+                        can ship $25 and 100 units $50 for this exact option. Each
+                        writes shippingCost on that one cell (spread across its qty
+                        into COGS, same as setup). */}
+                    <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${D.line}` }}>
+                      <Typography sx={{ ...headCellSx, mb: 0.6 }}>Shipping $ per quantity (this option)</Typography>
+                      <Stack direction="row" gap={1} flexWrap="wrap">
+                        {grid.qtys.map(q => {
+                          const cell = grid.cellAt(b.key, q);
+                          if (!cell) return null;
+                          return (
+                            <QF key={`ship-${bIdx}-${q}`} label={`${q} units`} sx={{ width: 118 }}>
+                              <TextField size="small" fullWidth type="number" value={num(cell.line.shippingCost) > 0 ? cell.line.shippingCost : ''}
+                                placeholder="0"
+                                title={`Total shipping for ${q} units of this option`}
+                                onChange={e => onSetLine(cell.idx, { shippingCost: e.target.value })} sx={tf} />
+                            </QF>
+                          );
+                        })}
                       </Stack>
-                    </QF>
+                    </Box>
                   </Box>
                 )}
               </React.Fragment>
@@ -1048,13 +1080,13 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         </Stack>
         <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
           borderRadius: 2.5, p: 0.5, display: 'flex',
-          overflowX: 'auto', scrollSnapType: 'x proximity', ...scrollbar }}>
+          overflowX: 'auto', ...scrollbar }}>
           {TIERS.map(pct => {
             const sel = uniformPct === pct;
             return (
               <Box key={pct} onClick={() => applyTier(pct)} sx={{
                 cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
-                py: 0.7, px: 0.5, borderRadius: 1.75, scrollSnapAlign: 'start',
+                py: 0.7, px: 0.5, borderRadius: 1.75,
                 bgcolor: sel ? D.green : 'transparent',
                 boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
                 transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
@@ -1243,7 +1275,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
         ) : (
           <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
             borderRadius: 2.5, p: 0.5, display: 'flex',
-            overflowX: 'auto', scrollSnapType: 'x proximity', ...scrollbar }}>
+            overflowX: 'auto', ...scrollbar }}>
             {TIERS.map(pct => {
               const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
               const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
@@ -1251,7 +1283,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
               return (
                 <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
                   cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
-                  py: 0.7, px: 0.5, borderRadius: 1.75, scrollSnapAlign: 'start',
+                  py: 0.7, px: 0.5, borderRadius: 1.75,
                   bgcolor: sel ? D.green : 'transparent',
                   boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
                   transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
@@ -1282,7 +1314,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
         bgcolor: D.inset,
         display: 'flex', alignItems: 'flex-end', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap' }}>
         <QF label={committed ? 'Unit price' : 'Unit price (auto)'}>
-          <TextField size="small" type="number" value={line.unitPrice ?? ''}
+          <TextField size="small" type="number" value={num(line.unitPrice) > 0 ? line.unitPrice : ''}
             placeholder={cogsPerUnit > 0 ? unitPrice.toFixed(2) : ''}
             onChange={e => onPatch({ unitPrice: e.target.value })}
             onBlur={e => { if (num(e.target.value) <= 0) onPatch({ unitPrice: '' }); }}
