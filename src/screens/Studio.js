@@ -82,6 +82,8 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import LookbooksTab from './studio/LookbooksTab';
+import ContentTab from './studio/ContentTab';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import VendorsTab from './studio/VendorsTab';
 import AgentsAdminTab from './studio/AgentsAdminTab';
 import AgentHome from './studio/agent/AgentHome';
@@ -1628,6 +1630,7 @@ const HUB_GROUPS = [
         tools: [
           { id: 'roadtrip', label: 'Field Map', desc: 'Plan in-person sweeps',   Icon: ExploreOutlinedIcon },
           { id: 'outreach', label: 'Outreach',  desc: 'Cold email → warm leads', Icon: ForwardToInboxOutlinedIcon },
+          { id: 'content',  label: 'Content',   desc: 'Social posts — plan & track', Icon: CampaignOutlinedIcon },
         ],
       },
       {
@@ -2673,6 +2676,12 @@ function StudioBody({ token, onLogout }) {
 
   if (view === 'finances') {
     return <FinancesTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />;
+  }
+
+  if (view === 'content') {
+    // The social planner is self-contained — no deep links in v1, so no
+    // entry-nonce machinery; the hub tile just opens it.
+    return <ContentTab token={token} onBack={() => setView('hub')} />;
   }
 
   if (view === 'lookbooks') {
