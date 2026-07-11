@@ -1,0 +1,693 @@
+// src/screens/studio/ContentTab.js
+// Content — the owner's social planner/tracker (backend: controllers/
+// socialPosts.js at /api/social). Built to make a weekly posting habit feel
+// like a game he's winning, not a chore:
+//
+//   PACE BOARD   — this week's posted count vs the weekly goal per platform
+//                  (rings), a consecutive-weeks streak flame, and a "week
+//                  crushed" moment when every goal is hit. Goals are owner-
+//                  tunable (site-setting `socialPace`; starts 1 + 1).
+//   IDEA VAULT   — a quick-capture bar that saves on ⏎. Ideas NEVER delete:
+//                  archive is the only remove, and the Archive shelf shows
+//                  everything ever captured (house rule, like the rest of
+//                  the Studio).
+//   PIPELINE     — idea → drafted → scheduled → posted, one tap per hop; a
+//                  full editor dialog for the body/caption, notes, tags,
+//                  schedule date, post URL, and an IG reference image
+//                  (downscaled client-side, same idiom as the quoter).
+//   TRACKER      — on posted cards: paste views/likes/comments/shares in
+//                  seconds; snapshots append (never overwrite) so the views
+//                  sparkline shows the growth curve. postUrl links out.
+//                  Built for manual paste today; an official LinkedIn/Meta
+//                  API pull can append through the same endpoint later.
+//
+// Week/streak math lives in _content.js (unit-tested).
+
+import * as React from 'react';
+import axios from 'axios';
+import {
+  Box, Stack, Typography, Button, TextField, MenuItem, IconButton, Chip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
+  CircularProgress,
+} from '@mui/material';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import RemoveIcon from '@mui/icons-material/Remove';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import config from '../../config.json';
+import {
+  D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
+  fmtRelative, useMobileFullScreen, scrollbar,
+} from './_shared';
+import JpLoader from '../../common/JpLoader';
+import {
+  PLATFORMS, POST_STATUSES, weekStart, weekLabel,
+  postedCountsForWeek, weekMet, streakWeeks,
+} from './_content';
+
+const API = `${config.backendUrl}/api/social/posts`;
+const PACE_API = `${config.backendUrl}/api/site-settings/socialPace`;
+
+const statusMeta = (key) => POST_STATUSES.find((s) => s.key === key) || POST_STATUSES[0];
+const platMeta   = (key) => PLATFORMS.find((p) => p.key === key) || null;
+
+const inkInput = {
+  ...dropInput,
+  '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
+};
+
+// ── Small pieces ─────────────────────────────────────────────────────────────
+
+// Platform badge: LinkedIn wears its blue "in" lettermark; Instagram a warm
+// gradient "IG"; an unassigned idea a quiet dash.
+function PlatformBadge({ platform, size = 26 }) {
+  const pm = platMeta(platform);
+  const base = {
+    width: size, height: size, borderRadius: size / 3.2, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: size * 0.42, fontWeight: 900, letterSpacing: 0.2, ...mono,
+  };
+  if (!pm) {
+    return <Box sx={{ ...base, color: D.faint, border: `1px dashed ${D.line}` }}>?</Box>;
+  }
+  if (pm.key === 'instagram') {
+    return (
+      <Box title="Instagram" sx={{ ...base, color: '#fff',
+        background: 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)' }}>
+        {pm.short}
+      </Box>
+    );
+  }
+  return <Box title={pm.label} sx={{ ...base, color: '#fff', bgcolor: pm.color }}>{pm.short}</Box>;
+}
+
+// One platform's weekly pace ring: posted / goal, with a tiny goal stepper.
+function PaceRing({ platform, count, goal, onGoal }) {
+  const pm = platMeta(platform);
+  const R = 26, C = 2 * Math.PI * R;
+  const frac = goal > 0 ? Math.min(1, count / goal) : 0;
+  const done = goal > 0 && count >= goal;
+  return (
+    <Stack direction="row" alignItems="center" gap={1.25}>
+      <Box sx={{ position: 'relative', width: 64, height: 64 }}>
+        <Box component="svg" viewBox="0 0 64 64" sx={{ width: 64, height: 64, transform: 'rotate(-90deg)' }}>
+          <circle cx="32" cy="32" r={R} fill="none" stroke={D.line} strokeWidth="5" />
+          <circle cx="32" cy="32" r={R} fill="none"
+            stroke={done ? D.green : (pm ? pm.color : D.muted)} strokeWidth="5"
+            strokeLinecap="round" strokeDasharray={C}
+            strokeDashoffset={C * (1 - frac)}
+            style={{ transition: 'stroke-dashoffset 500ms ease, stroke 300ms ease' }} />
+        </Box>
+        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <PlatformBadge platform={platform} size={24} />
+        </Box>
+      </Box>
+      <Box>
+        <Typography sx={{ color: done ? D.green : D.text, fontSize: 16, fontWeight: 800, ...mono, lineHeight: 1.1 }}>
+          {count}<Box component="span" sx={{ color: D.faint, fontSize: 12 }}>/{goal}</Box>
+          {done && <Box component="span" sx={{ ml: 0.5 }}>✓</Box>}
+        </Typography>
+        <Stack direction="row" alignItems="center" gap={0.25} sx={{ mt: 0.2 }}>
+          <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            {goal === 0 ? 'paused' : 'per week'}
+          </Typography>
+          <IconButton size="small" onClick={() => onGoal(Math.max(0, goal - 1))} title="Lower the weekly goal"
+            sx={{ color: D.faint, p: 0.1, '&:hover': { color: D.text } }}>
+            <RemoveIcon sx={{ fontSize: 12 }} />
+          </IconButton>
+          <IconButton size="small" onClick={() => onGoal(Math.min(7, goal + 1))} title="Raise the weekly goal"
+            sx={{ color: D.faint, p: 0.1, '&:hover': { color: D.green } }}>
+            <AddIcon sx={{ fontSize: 12 }} />
+          </IconButton>
+        </Stack>
+      </Box>
+    </Stack>
+  );
+}
+
+// The views growth curve across stat snapshots — a quiet inline SVG.
+function Sparkline({ stats }) {
+  const pts = (stats || []).slice(-12).map((s) => Number(s.views) || 0);
+  if (pts.length < 2) return null;
+  const W = 120, H = 26, max = Math.max(...pts, 1);
+  const step = W / (pts.length - 1);
+  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(H - 2 - (v / max) * (H - 4)).toFixed(1)}`).join(' ');
+  return (
+    <Box component="svg" viewBox={`0 0 ${W} ${H}`} sx={{ width: W, height: H, flexShrink: 0 }}
+      title="Views across your check-ins">
+      <path d={path} fill="none" stroke={D.green} strokeWidth="1.6" strokeLinecap="round" />
+    </Box>
+  );
+}
+
+// The 10-second engagement logger on a posted card. Prefills the LAST
+// snapshot so updating is "bump two numbers, save" — each save appends a new
+// point to the curve.
+function StatLogger({ post, onLog, busy }) {
+  const last = (post.stats || [])[post.stats.length - 1] || {};
+  const [open, setOpen] = React.useState(false);
+  const [v, setV] = React.useState({});
+  const fields = [
+    ['views', '👁', 'views'], ['likes', '❤️', 'likes'],
+    ['comments', '💬', 'comments'], ['shares', '↗', 'shares'],
+  ];
+  const openIt = () => { setV({ views: last.views || '', likes: last.likes || '', comments: last.comments || '', shares: last.shares || '' }); setOpen(true); };
+  if (!open) {
+    return (
+      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+        {(post.stats || []).length > 0 && (
+          <Typography sx={{ color: D.muted, fontSize: 12, ...mono }}>
+            👁 {last.views || 0} · ❤️ {last.likes || 0} · 💬 {last.comments || 0} · ↗ {last.shares || 0}
+          </Typography>
+        )}
+        <Sparkline stats={post.stats} />
+        <Button size="small" onClick={openIt}
+          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+            borderRadius: 999, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+          {(post.stats || []).length ? 'Update numbers' : 'Log numbers'}
+        </Button>
+        {(post.stats || []).length > 0 && (
+          <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+            checked {fmtRelative(last.at)}
+          </Typography>
+        )}
+      </Stack>
+    );
+  }
+  return (
+    <Stack direction="row" alignItems="center" gap={0.75} flexWrap="wrap">
+      {fields.map(([key, icon, ph]) => (
+        <TextField key={key} size="small" type="number" value={v[key]} placeholder={ph}
+          onChange={(e) => setV((p) => ({ ...p, [key]: e.target.value }))}
+          InputProps={{ startAdornment: <Typography sx={{ fontSize: 12, mr: 0.4 }}>{icon}</Typography> }}
+          sx={{ ...inkInput, width: 96,
+            '& .MuiInputBase-input': { color: D.text, fontSize: 12.5, py: 0.6, ...mono } }} />
+      ))}
+      <Button size="small" disabled={busy} onClick={async () => { await onLog(v); setOpen(false); }}
+        sx={{ ...dropPrimaryBtn, py: 0.4, px: 1.5, fontSize: 11.5 }}>
+        Save
+      </Button>
+      <IconButton size="small" onClick={() => setOpen(false)} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
+        <CloseIcon sx={{ fontSize: 14 }} />
+      </IconButton>
+    </Stack>
+  );
+}
+
+// Downscale an IG reference image the same way the quoter shrinks design
+// renders — the planner needs a thumbnail, never a full-res original.
+function readRefImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 700;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
+
+// One post card: identity row, body preview, then the contextual next step —
+// the card always tells you the ONE thing to do next.
+function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
+  const sm = statusMeta(post.status);
+  const next =
+    post.status === 'idea'      ? { label: 'Write the draft', go: () => onEdit(post, 'drafted') } :
+    post.status === 'drafted'   ? { label: 'Schedule it',     go: () => onEdit(post, 'scheduled') } :
+    post.status === 'scheduled' ? { label: 'Mark posted 🚀',  go: () => onPatch(post, { status: 'posted' }) } :
+    null;
+  return (
+    <Box sx={{ border: `1px solid ${D.line}`, borderLeft: `3px solid ${sm.color}`,
+      borderRadius: 3, bgcolor: D.panel, p: 1.75, display: 'flex', flexDirection: 'column', gap: 1,
+      opacity: post.archived ? 0.65 : 1,
+      transition: 'background-color 0.18s ease, box-shadow 0.2s ease',
+      '&:hover': { bgcolor: D.panelHi, boxShadow: '0 10px 28px rgba(0,0,0,0.3)' } }}>
+      <Stack direction="row" alignItems="center" gap={1}>
+        <PlatformBadge platform={post.platform} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13.5, lineHeight: 1.25,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {post.title || (post.body || '').slice(0, 60) || 'Untitled idea'}
+          </Typography>
+          <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" sx={{ mt: 0.2 }}>
+            <Typography sx={{ color: sm.color, fontSize: 10, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+              {sm.emoji} {sm.key}
+            </Typography>
+            {post.status === 'scheduled' && post.scheduledFor && (
+              <Typography sx={{ color: D.muted, fontSize: 10.5, ...mono }}>
+                → {new Date(post.scheduledFor).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              </Typography>
+            )}
+            {post.status === 'posted' && post.postedAt && (
+              <Typography sx={{ color: D.muted, fontSize: 10.5, ...mono }}>
+                live {fmtRelative(post.postedAt)}
+              </Typography>
+            )}
+            {(post.tags || []).slice(0, 3).map((t) => (
+              <Typography key={t} sx={{ color: D.faint, fontSize: 10.5 }}>#{t}</Typography>
+            ))}
+          </Stack>
+        </Box>
+        <IconButton size="small" onClick={() => onEdit(post)} title="Open the editor"
+          sx={{ color: D.muted, '&:hover': { color: D.green } }}>
+          <EditOutlinedIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+        <IconButton size="small" onClick={() => onArchive(post)}
+          title={post.archived ? 'Restore to the pipeline' : 'Archive (tucked away, never deleted)'}
+          sx={{ color: D.muted, '&:hover': { color: post.archived ? D.green : '#f87171' } }}>
+          {post.archived ? <UnarchiveOutlinedIcon sx={{ fontSize: 16 }} /> : <ArchiveOutlinedIcon sx={{ fontSize: 16 }} />}
+        </IconButton>
+      </Stack>
+
+      {(post.body || post.refImage) && (
+        <Stack direction="row" gap={1.25} alignItems="flex-start">
+          {post.refImage && (
+            <Box component="img" src={post.refImage} alt=""
+              sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1.5, border: `1px solid ${D.line}`, flexShrink: 0 }} />
+          )}
+          {post.body && (
+            <Typography sx={{ color: D.muted, fontSize: 12.5, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+              display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {post.body}
+            </Typography>
+          )}
+        </Stack>
+      )}
+
+      {post.status === 'posted' && !post.archived && (
+        <Box sx={{ borderTop: `1px solid ${D.line}`, pt: 1 }}>
+          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+            <StatLogger post={post} busy={busy} onLog={(v) => onLogStats(post, v)} />
+            <Box sx={{ flex: 1 }} />
+            {post.postUrl ? (
+              <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                onClick={() => window.open(post.postUrl, '_blank', 'noopener,noreferrer')}
+                sx={{ color: D.muted, textTransform: 'none', fontSize: 11, fontWeight: 700,
+                  '&:hover': { color: D.green } }}>
+                Open post
+              </Button>
+            ) : (
+              <Button size="small" onClick={() => onEdit(post)}
+                sx={{ color: D.faint, textTransform: 'none', fontSize: 11, '&:hover': { color: D.green } }}>
+                + paste post link
+              </Button>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      {next && !post.archived && (
+        <Button onClick={next.go} disabled={busy}
+          sx={{ alignSelf: 'flex-start', color: D.green, textTransform: 'none', fontWeight: 800,
+            fontSize: 12, borderRadius: 999, px: 1.5, py: 0.3, border: `1px solid rgba(74,222,128,0.35)`,
+            '&:hover': { bgcolor: 'rgba(74,222,128,0.10)', borderColor: D.green } }}>
+          {next.label} →
+        </Button>
+      )}
+    </Box>
+  );
+}
+
+// ── The tab ──────────────────────────────────────────────────────────────────
+
+export default function ContentTab({ token, onBack }) {
+  const fullScreen = useMobileFullScreen();
+  const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+
+  const [posts, setPosts] = React.useState(null);          // null = loading
+  const [pace, setPace] = React.useState({ linkedin: 1, instagram: 1 });
+  const [filter, setFilter] = React.useState('active');    // active | idea | drafted | scheduled | posted | archived
+  const [quick, setQuick] = React.useState('');
+  const [quickPlat, setQuickPlat] = React.useState('');
+  const [editing, setEditing] = React.useState(null);      // working copy in the dialog
+  const [busy, setBusy] = React.useState(false);
+  const [snack, setSnack] = React.useState(null);
+  const fileRef = React.useRef(null);
+
+  const toast = (msg, sev = 'success') => setSnack({ msg, sev });
+
+  const load = React.useCallback(async () => {
+    try {
+      const [{ data }, paceRes] = await Promise.all([
+        axios.get(`${API}?archived=1`, authHdr),
+        axios.get(PACE_API, authHdr).catch(() => null),
+      ]);
+      setPosts(data.posts || []);
+      if (paceRes && paceRes.data && paceRes.data.value) setPace(paceRes.data.value);
+    } catch (e) {
+      setPosts([]);
+      toast(e.response?.data?.message || 'Could not load posts', 'error');
+    }
+  }, [authHdr]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const savePace = async (next) => {
+    setPace(next);   // optimistic — a goal tweak should feel instant
+    try { await axios.put(PACE_API, { value: next }, authHdr); }
+    catch (e) { toast('Could not save the pace goal', 'error'); }
+  };
+
+  const upsertLocal = (post) =>
+    setPosts((prev) => {
+      const list = prev || [];
+      const i = list.findIndex((p) => p._id === post._id);
+      return i >= 0 ? list.map((p, j) => (j === i ? post : p)) : [post, ...list];
+    });
+
+  const createQuick = async () => {
+    const title = quick.trim();
+    if (!title) return;
+    setBusy(true);
+    try {
+      const { data } = await axios.post(API, { title, platform: quickPlat }, authHdr);
+      upsertLocal(data.post);
+      setQuick('');
+      toast('Idea saved — it lives here forever now ✌️');
+    } catch (e) {
+      toast(e.response?.data?.message || 'Could not save the idea', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const patchPost = async (post, fields) => {
+    setBusy(true);
+    try {
+      const { data } = await axios.patch(`${API}/${post._id}`, fields, authHdr);
+      upsertLocal(data.post);
+      if (fields.status === 'posted') {
+        const counts = postedCountsForWeek([...(posts || []).filter(p => p._id !== post._id), data.post], weekStart());
+        toast(weekMet(counts, pace) ? 'Posted — week crushed! 🎉🔥' : 'Posted! 🚀');
+      }
+      return data.post;
+    } catch (e) {
+      toast(e.response?.data?.message || 'Could not save', 'error');
+      return null;
+    } finally { setBusy(false); }
+  };
+
+  const logStats = async (post, v) => {
+    setBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/${post._id}/stats`, v, authHdr);
+      upsertLocal(data.post);
+      toast('Numbers logged 📈');
+    } catch (e) {
+      toast(e.response?.data?.message || 'Could not log stats', 'error');
+    } finally { setBusy(false); }
+  };
+
+  // Editor open: `bumpTo` pre-advances the status ("Write the draft" lands in
+  // the editor already as a draft; "Schedule it" opens with the date focused).
+  const openEditor = (post, bumpTo) => {
+    setEditing({
+      ...post,
+      status: bumpTo || post.status,
+      tags: (post.tags || []).join(', '),
+      scheduledFor: post.scheduledFor ? String(post.scheduledFor).slice(0, 10) : '',
+    });
+  };
+  const saveEditor = async () => {
+    const e = editing;
+    const fields = {
+      platform: e.platform, status: e.status,
+      title: e.title || '', body: e.body || '', notes: e.notes || '',
+      tags: String(e.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
+      refImage: e.refImage || '',
+      postUrl: e.postUrl || '',
+      scheduledFor: e.scheduledFor ? new Date(`${e.scheduledFor}T12:00:00`) : null,
+    };
+    const saved = await patchPost({ _id: e._id }, fields);
+    if (saved) setEditing(null);
+  };
+
+  // ── Derived: pace, streak, filters ──────────────────────────────────────────
+  const ws = weekStart();
+  const counts = postedCountsForWeek(posts || [], ws);
+  const crushed = weekMet(counts, pace);
+  const streak = streakWeeks(posts || [], pace);
+  const scheduledThisWeek = (posts || []).filter((p) => !p.archived && p.status === 'scheduled' && p.scheduledFor
+    && new Date(p.scheduledFor) >= ws && new Date(p.scheduledFor) < new Date(ws.getTime() + 7 * 86400000));
+
+  const active = (posts || []).filter((p) => !p.archived);
+  const countFor = (key) =>
+    key === 'active' ? active.length :
+    key === 'archived' ? (posts || []).filter((p) => p.archived).length :
+    active.filter((p) => p.status === key).length;
+  const shown = (posts || []).filter((p) =>
+    filter === 'active' ? !p.archived :
+    filter === 'archived' ? p.archived :
+    (!p.archived && p.status === filter));
+  // Pipeline order inside "everything": working items first, posted last.
+  const ORDER = { idea: 0, drafted: 1, scheduled: 2, posted: 3 };
+  const sorted = [...shown].sort((a, b) =>
+    (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9)
+    || new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+  const FILTERS = [
+    { key: 'active', label: 'Pipeline' },
+    ...POST_STATUSES.map((s) => ({ key: s.key, label: `${s.emoji} ${s.label}` })),
+    { key: 'archived', label: '🗄 Archive' },
+  ];
+
+  return (
+    <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text, p: { xs: 1.5, md: 3 }, ...scrollbar }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
+        <IconButton size="small" onClick={onBack} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
+          <ArrowBackIosNewIcon sx={{ fontSize: 15 }} />
+        </IconButton>
+        <Box sx={accentBar} />
+        <CampaignOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 16, letterSpacing: 0.2, lineHeight: 1.2 }}>
+            Content
+          </Typography>
+          <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
+            LinkedIn + Instagram — plan it, post it, watch the numbers
+          </Typography>
+        </Box>
+      </Stack>
+
+      {posts === null ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><JpLoader size={64} /></Box>
+      ) : (
+        <>
+          {/* ── Pace board ─────────────────────────────────────────────── */}
+          <Box sx={{ border: `1px solid ${crushed ? 'rgba(74,222,128,0.45)' : D.line}`, borderRadius: 3,
+            bgcolor: D.panel, p: { xs: 1.75, md: 2.25 }, mb: 2,
+            ...(crushed ? { boxShadow: `0 0 24px rgba(74,222,128,0.12)` } : {}) }}>
+            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
+              <Typography sx={{ ...eyebrow, color: D.green }}>{weekLabel(ws)}</Typography>
+              {streak > 0 && (
+                <Chip size="small" label={`🔥 ${streak}-week streak`}
+                  sx={{ bgcolor: 'rgba(251,191,36,0.12)', color: '#fbbf24', fontWeight: 800, fontSize: 11 }} />
+              )}
+              {crushed && (
+                <Chip size="small" label="Week crushed 🎉"
+                  sx={{ bgcolor: 'rgba(74,222,128,0.14)', color: D.green, fontWeight: 800, fontSize: 11 }} />
+              )}
+              <Box sx={{ flex: 1 }} />
+              {scheduledThisWeek.length > 0 && (
+                <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
+                  {scheduledThisWeek.length} scheduled this week
+                </Typography>
+              )}
+            </Stack>
+            <Stack direction="row" gap={{ xs: 3, md: 6 }} flexWrap="wrap">
+              {PLATFORMS.map((pl) => (
+                <PaceRing key={pl.key} platform={pl.key}
+                  count={counts[pl.key] || 0} goal={Number(pace[pl.key]) || 0}
+                  onGoal={(g) => savePace({ ...pace, [pl.key]: g })} />
+              ))}
+            </Stack>
+          </Box>
+
+          {/* ── Quick capture ──────────────────────────────────────────── */}
+          <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.inset,
+            p: 1.5, mb: 2 }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'center' }}>
+              <TextField size="small" fullWidth value={quick}
+                placeholder="Drop an idea… (⏎ saves it — ideas never get deleted here)"
+                onChange={(e) => setQuick(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createQuick(); }}
+                sx={inkInput} />
+              <Stack direction="row" gap={0.5} alignItems="center" flexShrink={0}>
+                {['', ...PLATFORMS.map((p) => p.key)].map((k) => (
+                  <Box key={k || 'any'} onClick={() => setQuickPlat(k)}
+                    sx={{ cursor: 'pointer', borderRadius: 999, px: 1, py: 0.35, fontSize: 11, fontWeight: 700,
+                      color: quickPlat === k ? D.ink : D.muted,
+                      bgcolor: quickPlat === k ? D.green : 'transparent',
+                      border: `1px solid ${quickPlat === k ? D.green : D.line}`,
+                      transition: 'all 0.15s ease' }}>
+                    {k === '' ? 'later' : platMeta(k).short}
+                  </Box>
+                ))}
+                <Button onClick={createQuick} disabled={busy || !quick.trim()} startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+                  sx={{ ...dropPrimaryBtn, py: 0.55, px: 1.75, fontSize: 12 }}>
+                  Save idea
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+
+          {/* ── Filters ────────────────────────────────────────────────── */}
+          <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1.5 }}>
+            {FILTERS.map((f) => (
+              <Box key={f.key} onClick={() => setFilter(f.key)}
+                sx={{ cursor: 'pointer', borderRadius: 999, px: 1.5, py: 0.5, fontSize: 12, fontWeight: 700,
+                  color: filter === f.key ? D.ink : D.muted,
+                  bgcolor: filter === f.key ? D.green : D.panel,
+                  border: `1px solid ${filter === f.key ? D.green : D.line}`,
+                  transition: 'all 0.15s ease',
+                  '&:hover': filter === f.key ? {} : { color: D.text, borderColor: D.lineHi } }}>
+                {f.label}
+                <Box component="span" sx={{ ml: 0.6, ...mono, fontSize: 10.5, opacity: 0.75 }}>{countFor(f.key)}</Box>
+              </Box>
+            ))}
+          </Stack>
+
+          {/* ── Cards ──────────────────────────────────────────────────── */}
+          {sorted.length === 0 ? (
+            <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, py: 7, textAlign: 'center',
+              color: D.muted, bgcolor: D.inset }}>
+              <Typography sx={{ fontSize: 20, mb: 0.5 }}>💡</Typography>
+              <Typography sx={{ fontSize: 13 }}>
+                {filter === 'archived' ? 'Nothing archived — the vault is all live.' : 'Nothing here yet — drop an idea above.'}
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+              {sorted.map((p) => (
+                <PostCard key={p._id} post={p} busy={busy}
+                  onEdit={openEditor}
+                  onPatch={patchPost}
+                  onArchive={(post) => patchPost(post, { archived: !post.archived })}
+                  onLogStats={logStats} />
+              ))}
+            </Box>
+          )}
+        </>
+      )}
+
+      {/* ── Editor dialog ────────────────────────────────────────────────── */}
+      <Dialog open={!!editing} onClose={() => setEditing(null)} fullWidth maxWidth="sm" fullScreen={fullScreen}
+        PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`,
+          borderRadius: fullScreen ? 0 : 3 } }}>
+        {editing && (
+          <>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+              <PlatformBadge platform={editing.platform} />
+              <Typography sx={{ fontWeight: 800, fontSize: 15, flex: 1 }}>
+                {editing.title || 'Edit post'}
+              </Typography>
+              <IconButton size="small" onClick={() => setEditing(null)} sx={{ color: D.muted }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important', ...scrollbar }}>
+              <Stack direction="row" gap={1}>
+                <TextField select size="small" label="Platform" value={editing.platform || ''}
+                  onChange={(e) => setEditing((p) => ({ ...p, platform: e.target.value }))}
+                  sx={{ ...inkInput, width: 150 }} InputLabelProps={{ sx: { color: D.muted } }}>
+                  <MenuItem value="">Decide later</MenuItem>
+                  {PLATFORMS.map((pl) => <MenuItem key={pl.key} value={pl.key}>{pl.label}</MenuItem>)}
+                </TextField>
+                <TextField select size="small" label="Status" value={editing.status}
+                  onChange={(e) => setEditing((p) => ({ ...p, status: e.target.value }))}
+                  sx={{ ...inkInput, width: 150 }} InputLabelProps={{ sx: { color: D.muted } }}>
+                  {POST_STATUSES.map((s) => <MenuItem key={s.key} value={s.key}>{s.emoji} {s.label}</MenuItem>)}
+                </TextField>
+                {editing.status === 'scheduled' && (
+                  <TextField size="small" type="date" label="Post on" value={editing.scheduledFor || ''}
+                    onChange={(e) => setEditing((p) => ({ ...p, scheduledFor: e.target.value }))}
+                    InputLabelProps={{ shrink: true, sx: { color: D.muted } }} sx={inkInput} />
+                )}
+              </Stack>
+              <TextField size="small" label="Title (your handle for it)" value={editing.title || ''}
+                onChange={(e) => setEditing((p) => ({ ...p, title: e.target.value }))}
+                sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+              <Box>
+                <TextField size="small" fullWidth multiline minRows={5} maxRows={14}
+                  label={editing.platform === 'instagram' ? 'Caption' : 'Post text'}
+                  value={editing.body || ''}
+                  onChange={(e) => setEditing((p) => ({ ...p, body: e.target.value }))}
+                  sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+                <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.4, textAlign: 'right', ...mono }}>
+                  {(editing.body || '').length}
+                  {editing.platform === 'linkedin' ? ' / 3,000 (LinkedIn cap)' :
+                   editing.platform === 'instagram' ? ' / 2,200 (IG caption cap)' : ' chars'}
+                </Typography>
+              </Box>
+              <TextField size="small" multiline minRows={2} label="Notes (hooks, visual direction, CTA…)"
+                value={editing.notes || ''}
+                onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))}
+                sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+              <Stack direction="row" gap={1}>
+                <TextField size="small" fullWidth label="Tags (comma-separated)" value={editing.tags}
+                  onChange={(e) => setEditing((p) => ({ ...p, tags: e.target.value }))}
+                  sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+                <TextField size="small" fullWidth label="Post URL (once live)" value={editing.postUrl || ''}
+                  placeholder="https://…"
+                  onChange={(e) => setEditing((p) => ({ ...p, postUrl: e.target.value }))}
+                  sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
+              </Stack>
+              {/* IG visual reference — a downscaled thumbnail, never a full-res file. */}
+              <Stack direction="row" gap={1} alignItems="center">
+                <input ref={fileRef} type="file" accept="image/*" hidden
+                  onChange={async (e) => {
+                    const f = e.target.files && e.target.files[0];
+                    e.target.value = '';
+                    if (!f) return;
+                    try { const img = await readRefImage(f); setEditing((p) => ({ ...p, refImage: img })); }
+                    catch (err) { toast(err.message, 'error'); }
+                  }} />
+                {editing.refImage ? (
+                  <>
+                    <Box component="img" src={editing.refImage} alt=""
+                      onClick={() => fileRef.current?.click()}
+                      sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 2, cursor: 'pointer',
+                        border: `1px solid ${D.lineHi}` }} />
+                    <Button size="small" onClick={() => setEditing((p) => ({ ...p, refImage: '' }))}
+                      sx={{ color: D.muted, textTransform: 'none', fontSize: 11, '&:hover': { color: '#f87171' } }}>
+                      Remove image
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="small" startIcon={<ImageOutlinedIcon sx={{ fontSize: 15 }} />}
+                    onClick={() => fileRef.current?.click()}
+                    sx={{ ...dropGhostBtn, fontSize: 11.5, py: 0.5 }}>
+                    Add a visual reference
+                  </Button>
+                )}
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setEditing(null)} sx={{ ...dropGhostBtn }}>Cancel</Button>
+              <Button onClick={saveEditor} disabled={busy} sx={{ ...dropPrimaryBtn }}>
+                {busy ? <CircularProgress size={16} sx={{ color: D.ink }} /> : 'Save'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      <Snackbar open={!!snack} autoHideDuration={3200} onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        {snack ? <Alert severity={snack.sev} variant="filled" onClose={() => setSnack(null)}>{snack.msg}</Alert> : null}
+      </Snackbar>
+    </Box>
+  );
+}
