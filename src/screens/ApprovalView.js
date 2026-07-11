@@ -28,6 +28,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
+import { detectGridRows } from '../common/quoteGrid';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 
@@ -781,8 +782,89 @@ export default function ApprovalView() {
                     Pick one · optional
                   </Box>
                 </Stack>
+                {(() => {
+                  const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
+                  const gridQ = detectGridRows(entries);
+                  if (gridQ) return (
+                    /* Matrix picker: one tidy row per option (brand or print
+                       variant), one tappable price chip per quantity. Tapping a
+                       chip picks that option+quantity for this design (tap the
+                       selected chip again to skip the design) — exactly one
+                       chip can be green at a time. */
+                    <Stack gap={1}>
+                      {gridQ.rows.map((row) => {
+                        const f = row[0];
+                        const rDesc = [f.description, f.styleCode && `(${f.styleCode})`, f.color].filter(Boolean).join(' ');
+                        const rDetail = [f.printType, f.printDetails].filter(Boolean).join(' · ');
+                        const rWeeks = Number(f.turnaroundWeeks) || 0;
+                        const rowSel = row.some(c => pickFor(g) === c.idx);
+                        return (
+                          <Box key={`${f.idx}`} sx={{ p: { xs: 1.5, sm: 1.75 }, borderRadius: 2.5,
+                            border: `1.5px solid ${rowSel ? T.green : T.line}`, bgcolor: rowSel ? T.panelHi : T.inset,
+                            display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, flexWrap: 'wrap',
+                            transition: 'border-color 180ms ease, background 180ms ease' }}>
+                            {f.image && (
+                              <ZoomImg src={f.image} onZoom={openLightbox} badge={false}
+                                sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 2,
+                                  border: `1px solid ${T.line}`, bgcolor: T.inset, flexShrink: 0 }} />
+                            )}
+                            <Box sx={{ flex: '1 1 170px', minWidth: 150 }}>
+                              <Typography sx={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}>{rDesc || 'Option'}</Typography>
+                              {rDetail && <Typography sx={{ color: T.muted, fontSize: 12, mt: 0.2 }}>{rDetail}</Typography>}
+                              <Stack direction="row" gap={1.25} alignItems="center" flexWrap="wrap" sx={{ mt: 0.4 }}>
+                                {f.productUrl && (
+                                  <Typography component="a" href={f.productUrl} target="_blank" rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{ color: T.green, fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                                      '&:hover': { textDecoration: 'underline' } }}>
+                                    View product details ↗
+                                  </Typography>
+                                )}
+                                {rWeeks > 0 && (
+                                  <Typography sx={{ color: T.faint, fontSize: 11.5, ...mono }}>
+                                    ~{rWeeks} wk{rWeeks === 1 ? '' : 's'} turnaround
+                                  </Typography>
+                                )}
+                              </Stack>
+                            </Box>
+                            <Stack direction="row" gap={1} flexWrap="wrap">
+                              {row.map((cell) => {
+                                const sel = pickFor(g) === cell.idx;
+                                const cUnit = Number(cell.unitPrice) || 0;
+                                const cQty = Number(cell.qty) || 0;
+                                return (
+                                  <Box key={cell.idx} onClick={() => togglePick(g, cell.idx)}
+                                    role="button" tabIndex={0} aria-pressed={sel}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePick(g, cell.idx); } }}
+                                    sx={{ minWidth: 116, px: 1.5, py: 1, borderRadius: 2, cursor: 'pointer', textAlign: 'center',
+                                      border: `1.5px solid ${sel ? T.green : T.line}`,
+                                      bgcolor: sel ? T.green : T.panel,
+                                      boxShadow: sel ? `0 0 0 3px ${T.glow}` : 'none',
+                                      transition: 'all 160ms ease',
+                                      '&:hover': sel ? {} : { borderColor: 'rgba(255,255,255,0.28)', transform: 'translateY(-1px)' },
+                                      '&:focus-visible': { outline: `2px solid ${T.green}`, outlineOffset: 2 } }}>
+                                    <Typography sx={{ color: sel ? T.onAccent : T.text, fontSize: 12.5, fontWeight: 800, ...mono, lineHeight: 1.2 }}>
+                                      {sel && <CheckIcon sx={{ fontSize: 13, mr: 0.4, verticalAlign: '-2px' }} />}
+                                      {cQty} units
+                                    </Typography>
+                                    <Typography sx={{ color: sel ? T.onAccent : T.green, fontSize: 15, fontWeight: 900, ...mono, lineHeight: 1.25 }}>
+                                      {money(cUnit)}<Box component="span" sx={{ fontSize: 10, fontWeight: 600, opacity: 0.8 }}>/unit</Box>
+                                    </Typography>
+                                    <Typography sx={{ color: sel ? 'rgba(6,20,12,0.75)' : T.muted, fontSize: 11, fontWeight: 700, ...mono }}>
+                                      {money(cUnit * cQty)} total
+                                    </Typography>
+                                  </Box>
+                                );
+                              })}
+                            </Stack>
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                  );
+                  return (
                 <Stack gap={1.25}>
-                  {quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g).map((l) => {
+                  {entries.map((l) => {
                     const sel = pickFor(g) === l.idx;
                     const unit = Number(l.unitPrice) || 0;
                     const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
@@ -850,6 +932,8 @@ export default function ApprovalView() {
                     );
                   })}
                 </Stack>
+                  );
+                })()}
               </Box>
             ))}
             {standaloneLines.length > 0 && (
