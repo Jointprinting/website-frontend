@@ -70,6 +70,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
+import BrandCube, { BRAND_MARKS } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
@@ -1694,6 +1695,27 @@ const HUB_GROUPS = [
       ],
     },
   },
+  {
+    // Brand-new venture: a premium studio that builds bespoke business operating
+    // systems for other companies — this very Studio is the demo and the
+    // jumping-off skeleton. "JP Nucleus" is a working placeholder (first invoices
+    // still carry JP branding, so it stays in the family for now). No live tools
+    // yet, so instead of empty tiles the group shows a `foundation` panel: what it
+    // is + the concrete roadmap. Real tools (Prospects, Demo, Builds) slot into a
+    // tier here the moment they exist — the switcher + section are already wired.
+    brand: 'JP Nucleus',
+    tagline: 'Bespoke business systems',
+    foundation: {
+      blurb: 'A premium studio that builds custom operating systems for other businesses. Your Studio is the showpiece and the starting skeleton — you fork it, tailor it to a client, and charge a build fee plus a flat monthly. Fewer clients, bigger tickets, all run from here.',
+      steps: [
+        { done: true,  label: 'Name it (placeholder: JP Nucleus)' },
+        { done: false, label: 'Publish the plan, pricing & positioning' },
+        { done: false, label: 'Stand up a click-around demo (example data, no private info)' },
+        { done: false, label: 'Record the walkthrough video for marketing' },
+        { done: false, label: 'Land the first paid build' },
+      ],
+    },
+  },
 ];
 
 // All tools in a group: flattened across its tiers, plus any held ("on hold")
@@ -1874,15 +1896,22 @@ function _fmtCountdown(iso) {
 // the same family, just at different volumes. `right` slots optional trailing
 // content (the Paused chip / collapse affordance).
 function SectionHeader({ brand, tagline, dim, right }) {
+  // Real businesses wear their cube mark; utility headers (e.g. "Signals") and
+  // dimmed sections keep the plain accent bar.
+  const showMark = !dim && !!BRAND_MARKS[brand];
   return (
     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-      <Box sx={{
-        width: 3, alignSelf: 'stretch', minHeight: 28, borderRadius: 2,
-        background: dim
-          ? 'rgba(255,255,255,0.18)'
-          : `linear-gradient(180deg, ${D.green}, ${D.greenDk})`,
-        opacity: dim ? 1 : 0.9, flexShrink: 0,
-      }} />
+      {showMark ? (
+        <BrandCube brand={brand} size={30} />
+      ) : (
+        <Box sx={{
+          width: 3, alignSelf: 'stretch', minHeight: 28, borderRadius: 2,
+          background: dim
+            ? 'rgba(255,255,255,0.18)'
+            : `linear-gradient(180deg, ${D.green}, ${D.greenDk})`,
+          opacity: dim ? 1 : 0.9, flexShrink: 0,
+        }} />
+      )}
       <Box sx={{ minWidth: 0 }}>
         <MuiTypography sx={{
           ...eyebrow,
@@ -1972,6 +2001,90 @@ function TierLabel({ children }) {
     }}>
       {children}
     </MuiTypography>
+  );
+}
+
+// Business switcher — the command-center header. Each business is its own context
+// ('All' shows every section as a roll-up; a single brand focuses just that
+// business's stats + tools). Extensible: it reads the brands straight off
+// HUB_GROUPS, so onboarding a future business is one entry, no switcher edit.
+function BizSwitcher({ value, onChange, brands }) {
+  const opts = [{ key: 'all', label: 'All' }, ...brands.map((b) => ({ key: b, label: b }))];
+  return (
+    <Box role="tablist" aria-label="Business" sx={{
+      display: 'flex', gap: 0.5, p: 0.5,
+      bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5,
+      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+      '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
+    }}>
+      {opts.map((o) => {
+        const active = value === o.key;
+        return (
+          <Box
+            key={o.key}
+            role="tab"
+            aria-selected={active}
+            tabIndex={0}
+            onClick={() => onChange(o.key)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(o.key); } }}
+            sx={{
+              cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
+              px: { xs: 1.5, sm: 1.9 }, py: 0.85, borderRadius: 2,
+              fontSize: 12.5, fontWeight: 700, letterSpacing: 0.2,
+              color: active ? D.ink : D.muted,
+              bgcolor: active ? D.green : 'transparent',
+              transition: 'color .18s ease, background-color .18s ease',
+              '&:hover': active ? {} : { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' },
+              '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+            }}
+          >
+            {o.label}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+// A brand-new business has no live tools yet, so its section shows this instead of
+// empty tiles: a one-line "what it is" + a real roadmap checklist. Honest
+// groundwork — the moment JP Nucleus grows real tools, they render as a tier above
+// this and the panel can retire.
+function FoundationPanel({ data }) {
+  const done = data.steps.filter((s) => s.done).length;
+  return (
+    <Paper elevation={0} sx={{
+      bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3.5,
+      p: { xs: 2.25, sm: 3 },
+      backgroundImage: `linear-gradient(155deg, rgba(74,222,128,0.05) 0%, transparent 60%)`,
+    }}>
+      <MuiTypography sx={{ color: D.muted, fontSize: 13.5, lineHeight: 1.6, mb: 2.25, maxWidth: '62ch' }}>
+        {data.blurb}
+      </MuiTypography>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+        <MuiTypography sx={{ ...eyebrow, color: D.faint, fontSize: 10, letterSpacing: 2 }}>Roadmap</MuiTypography>
+        <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'rgba(255,255,255,0.06)' }} />
+        <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 11 }}>{done}/{data.steps.length}</MuiTypography>
+      </Stack>
+      <Stack spacing={1.1}>
+        {data.steps.map((s, i) => (
+          <Stack key={i} direction="row" alignItems="center" spacing={1.25}>
+            <Box sx={{
+              width: 15, height: 15, borderRadius: '50%', flexShrink: 0,
+              bgcolor: s.done ? D.green : 'transparent',
+              border: `1.5px solid ${s.done ? D.green : 'rgba(255,255,255,0.22)'}`,
+              boxShadow: s.done ? `0 0 0 3px rgba(74,222,128,0.12)` : 'none',
+            }} />
+            <MuiTypography sx={{
+              color: s.done ? D.faint : D.muted, fontSize: 13.5, lineHeight: 1.4,
+              textDecoration: s.done ? 'line-through' : 'none',
+            }}>
+              {s.label}
+            </MuiTypography>
+          </Stack>
+        ))}
+      </Stack>
+    </Paper>
   );
 }
 
@@ -2346,20 +2459,44 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   // Shared props every ToolGrid needs (badges / sweep nudges / live pulse).
   const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse };
 
+  // Which business is in focus. 'all' = the roll-up (every section stacked); a
+  // brand name = just that business's stats + tools. Persisted so the hub reopens
+  // where the owner left it. Brands come straight off HUB_GROUPS, so onboarding a
+  // future business needs no switcher change.
+  const [biz, setBiz] = React.useState(() => {
+    try { return localStorage.getItem('jp_hub_biz') || 'all'; } catch (_) { return 'all'; }
+  });
+  const changeBiz = React.useCallback((b) => {
+    setBiz(b);
+    try { localStorage.setItem('jp_hub_biz', b); } catch (_) {}
+  }, []);
+  const brands = HUB_GROUPS.map((g) => g.brand);
+  const activeBiz = (biz === 'all' || brands.includes(biz)) ? biz : 'all';
+  const visibleGroups = activeBiz === 'all' ? HUB_GROUPS : HUB_GROUPS.filter((g) => g.brand === activeBiz);
+  // Joint Printing's live vitals (pulse, tax window, signals) are JP-specific, so
+  // they show in the roll-up and when JP is focused — and step aside when another
+  // business is focused, keeping each business's view honest to itself.
+  const showJpVitals = activeBiz === 'all' || activeBiz === 'Joint Printing';
+
   return (
     <Stack spacing={3.5}>
+      {/* Command-center header: focus one business, or 'All' for the roll-up. */}
+      <BizSwitcher value={activeBiz} onChange={changeBiz} brands={brands} />
+
       {/* The single date + the business's live vitals — the hub's one opening
-          line (no greeting, no nudge copy, no duplicate date). */}
-      <PulseBar pulse={pulse} />
+          line (no greeting, no nudge copy, no duplicate date). JP-scoped. */}
+      {showJpVitals && <PulseBar pulse={pulse} />}
 
       {/* NJ sales-tax (ST-50) reminder — only inside its ~2-week filing window. */}
-      <NjTaxReminder token={token} onNavigate={onNavigate} />
+      {showJpVitals && <NjTaxReminder token={token} onNavigate={onNavigate} />}
 
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
-      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} aiUsage={aiUsage} />
+      {showJpVitals && (
+        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} aiUsage={aiUsage} />
+      )}
 
-      {HUB_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <Box key={group.brand}>
           <SectionHeader brand={group.brand} tagline={group.tagline} />
           {/* Tiered: the daily core (primary) renders big & bold; secondary and
@@ -2446,6 +2583,10 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
                 </Box>
               );
             })()}
+
+            {/* Brand-new business with no live tools yet → show its foundation /
+                roadmap instead of an empty section (JP Nucleus). */}
+            {group.foundation && <FoundationPanel data={group.foundation} />}
           </Stack>
         </Box>
       ))}
@@ -2454,7 +2595,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
           the full Team tile is hidden until then to keep the hub clean, but this
           keeps the path to onboard the first one alive. Vanishes once an agent
           exists (the Team tile takes over in Maintenance). */}
-      {isOwner && agentCount === 0 && (
+      {isOwner && agentCount === 0 && showJpVitals && (
         <Box sx={{ textAlign: 'center', pt: 0.5 }}>
           <MuiTypography
             component="button"
