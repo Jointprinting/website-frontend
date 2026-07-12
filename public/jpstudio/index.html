@@ -4809,6 +4809,22 @@ async function loadMockup(id,e) {
     ps.backCompositeBase64 = item.data;
     if (!ps.backBlankBase64) ps.backBlankBase64 = item.data;
   }
+  // External / promo mockups (a product photo uploaded from the Order Tracker)
+  // store that image as the front blank. A cloud-pulled copy may carry it as an
+  // R2 URL, which the canvas can't composite — so best-effort fetch it back to
+  // base64 here so promos render like any mockup and stay swappable. Scoped to
+  // external mockups so normal ones are untouched; any failure keeps the URL.
+  if (ps.external) {
+    for (const k of ['frontBlankBase64', 'frontCompositeBase64']) {
+      if (ps[k] && /^https?:\/\//i.test(ps[k])) {
+        try {
+          const r = await fetch(ps[k]);
+          const bl = await r.blob();
+          ps[k] = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(ps[k]); fr.readAsDataURL(bl); });
+        } catch (_) { /* CORS / offline → keep the URL, re-upload fixes it */ }
+      }
+    }
+  }
   // Remember the identity of the mockup we just loaded so a re-save UPDATES it
   // (same remoteId, same letter) instead of minting a new lettered duplicate.
   ps._savedRemoteId = item.remoteId || '';

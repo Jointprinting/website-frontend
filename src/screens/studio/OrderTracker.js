@@ -1573,22 +1573,33 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     setUploadingPromo(true);
     try {
       const dataUrl = await fileToScaledDataUrl(file, 1600);
+      const co = project.companyName || project.clientName || '';
+      // Name the product (e.g. "Plastic Grinder"). Editable later in the Studio's
+      // title field. Cancel aborts; blank falls back to a company default.
+      const typed = window.prompt('Product name for this mockup (e.g. Plastic Grinder):', '');
+      if (typed === null) return;
+      const productName = String(typed).trim() || `${co || 'Promo'} product`;
       const asg = await axios.post(`${base}/orders/${project._id}/mockups/assign`, {}, authHdr);
       const mockupNum = asg.data && asg.data.mockupNum;
       if (!mockupNum) throw new Error('Could not reserve a mockup number.');
-      const co = project.companyName || project.clientName || '';
-      const label = `${mockupNum.replace(/^#/, '')}${co ? ` · ${co}` : ''}`;
       const uid = (window.crypto && window.crypto.randomUUID)
         ? window.crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       await axios.post(`${base}/studio/library/mockups`, {
-        name: label,
+        name: productName,
         thumbnail: dataUrl,
         client: co,
-        // pageState mirrors what the studio writes, so the OrderTracker/PDF/
-        // approval resolvers key on it identically. `external:true` marks it as
-        // an uploaded promo (not editable in the Mockup Studio).
-        pageState: { mockupNum, projectNumber: project.projectNumber || '', client: co, title: label, external: true },
+        // Stored in the SAME shape a Studio mockup uses, with the uploaded image
+        // as the FRONT BLANK — so it renders in the exact mockup format the client
+        // sees and stays editable in the Studio (swap the image, rename). The
+        // base64 lives INLINE in pageState (never R2-offloaded), so the canvas
+        // always has renderable data. template 2 = front only.
+        pageState: {
+          mockupNum, projectNumber: project.projectNumber || '', client: co,
+          title: productName, external: true, template: 2,
+          frontBlankBase64: dataUrl, frontCompositeBase64: dataUrl,
+          printFront: { type: '', dims: '', loc: '' }, printBack: { type: '', dims: '', loc: '' },
+        },
         savedAt: Date.now(),
         remoteId: `promo-${uid}`,
       }, authHdr);
