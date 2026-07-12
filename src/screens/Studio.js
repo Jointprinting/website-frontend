@@ -2007,12 +2007,12 @@ function TierLabel({ children }) {
   );
 }
 
-// Business switcher — the command-center header. Each business is its own context
-// ('All' shows every section as a roll-up; a single brand focuses just that
-// business's stats + tools). Extensible: it reads the brands straight off
-// HUB_GROUPS, so onboarding a future business is one entry, no switcher edit.
+// Business switcher — the command-center header. Each business is its own focused
+// context (its own stats + tools), one at a time — no blended "all" view.
+// Extensible: it reads the brands straight off HUB_GROUPS, so onboarding a future
+// business is one entry, no switcher edit.
 function BizSwitcher({ value, onChange, brands }) {
-  const opts = [{ key: 'all', label: 'All' }, ...brands.map((b) => ({ key: b, label: b }))];
+  const opts = brands.map((b) => ({ key: b, label: b }));
   return (
     <Box role="tablist" aria-label="Business" sx={{
       display: 'flex', gap: 0.5, p: 0.5,
@@ -2462,24 +2462,23 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   // Shared props every ToolGrid needs (badges / sweep nudges / live pulse).
   const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse };
 
-  // Which business is in focus. 'all' = the roll-up (every section stacked); a
-  // brand name = just that business's stats + tools. Persisted so the hub reopens
-  // where the owner left it. Brands come straight off HUB_GROUPS, so onboarding a
-  // future business needs no switcher change.
+  // Which business is in focus — one at a time, each its own clean context (no
+  // blended "all" view). Persisted so the hub reopens where the owner left it.
+  // Brands come straight off HUB_GROUPS, so onboarding a future business needs no
+  // switcher change; the first brand (Joint Printing) is the default.
+  const brands = HUB_GROUPS.map((g) => g.brand);
   const [biz, setBiz] = React.useState(() => {
-    try { return localStorage.getItem('jp_hub_biz') || 'all'; } catch (_) { return 'all'; }
+    try { const v = localStorage.getItem('jp_hub_biz'); return brands.includes(v) ? v : brands[0]; } catch (_) { return brands[0]; }
   });
   const changeBiz = React.useCallback((b) => {
     setBiz(b);
     try { localStorage.setItem('jp_hub_biz', b); } catch (_) {}
   }, []);
-  const brands = HUB_GROUPS.map((g) => g.brand);
-  const activeBiz = (biz === 'all' || brands.includes(biz)) ? biz : 'all';
-  const visibleGroups = activeBiz === 'all' ? HUB_GROUPS : HUB_GROUPS.filter((g) => g.brand === activeBiz);
+  const activeBiz = brands.includes(biz) ? biz : brands[0];
+  const visibleGroups = HUB_GROUPS.filter((g) => g.brand === activeBiz);
   // Joint Printing's live vitals (pulse, tax window, signals) are JP-specific, so
-  // they show in the roll-up and when JP is focused — and step aside when another
-  // business is focused, keeping each business's view honest to itself.
-  const showJpVitals = activeBiz === 'all' || activeBiz === 'Joint Printing';
+  // they show only when Joint Printing is the focused business.
+  const showJpVitals = activeBiz === 'Joint Printing';
 
   return (
     <Stack spacing={3.5}>
