@@ -55,6 +55,35 @@ import JpLoader from '../../common/JpLoader';
 
 const base = `${config.backendUrl}/api`;
 
+// Read an image file and downscale it to a sane max dimension so an external
+// (printer-made) promo mockup — a lighter/grinder/ashtray shot — uploads fast
+// and stays well under the doc size ceiling. Falls back to the raw data URL if
+// the canvas step ever fails. Used by the project drawer's "Upload" mockup.
+function fileToScaledDataUrl(file, maxDim = 1600) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('Could not read that file.'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(fr.result);   // not decodable as image → ship raw
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.max(1, Math.round(img.naturalWidth * scale));
+          const h = Math.max(1, Math.round(img.naturalHeight * scale));
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.9));
+        } catch (_) { resolve(fr.result); }
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
 // True on phone-width screens — drives MUI Dialogs full-screen on xs so the
 // dense order forms get the whole viewport instead of a clipped centered card.
 // Desktop (sm+) is unaffected. Shared by every dialog in this file.
@@ -942,6 +971,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         onRemoveLogo={() => activeProject && removeLogo(activeProject)}
         onClose={() => setActiveProject(null)}
         onSave={handleSave}
+        onReload={loadProjects}
         onDelete={handleDelete}
         onShareApproval={() => activeProject && shareApprovalFor(activeProject._id)}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
@@ -1514,7 +1544,7 @@ function NextActionCard({ project, onRun }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
@@ -1529,6 +1559,47 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     `/jpstudio/?project=${encodeURIComponent(project._id)}`,
     '_blank', 'noopener,noreferrer',
   );
+
+  // Upload an EXTERNAL / promo mockup (a lighter, grinder, ashtray shot the
+  // printer made — not built in the Mockup Studio). Reserves the next mockup
+  // number for THIS project via the same authoritative endpoint the studio uses
+  // (so it lettered-in beside its siblings and links to the order), then saves
+  // it as a library mockup so it resolves into this project's tiles exactly like
+  // a studio-made one. Frontend-only: both endpoints already exist.
+  const promoInputRef = useRef(null);
+  const [uploadingPromo, setUploadingPromo] = useState(false);
+  const uploadPromoMockup = async (file) => {
+    if (!file || !project?._id) return;
+    setUploadingPromo(true);
+    try {
+      const dataUrl = await fileToScaledDataUrl(file, 1600);
+      const asg = await axios.post(`${base}/orders/${project._id}/mockups/assign`, {}, authHdr);
+      const mockupNum = asg.data && asg.data.mockupNum;
+      if (!mockupNum) throw new Error('Could not reserve a mockup number.');
+      const co = project.companyName || project.clientName || '';
+      const label = `${mockupNum.replace(/^#/, '')}${co ? ` · ${co}` : ''}`;
+      const uid = (window.crypto && window.crypto.randomUUID)
+        ? window.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await axios.post(`${base}/studio/library/mockups`, {
+        name: label,
+        thumbnail: dataUrl,
+        client: co,
+        // pageState mirrors what the studio writes, so the OrderTracker/PDF/
+        // approval resolvers key on it identically. `external:true` marks it as
+        // an uploaded promo (not editable in the Mockup Studio).
+        pageState: { mockupNum, projectNumber: project.projectNumber || '', client: co, title: label, external: true },
+        savedAt: Date.now(),
+        remoteId: `promo-${uid}`,
+      }, authHdr);
+      onToast?.(`Promo mockup added · ${mockupNum}`, 'success');
+      await onReload?.();
+    } catch (e) {
+      onToast?.(e.response?.data?.message || e.message || 'Upload failed — try again.', 'error');
+    } finally {
+      setUploadingPromo(false);
+    }
+  };
   // Receipt-derived ACTUAL cost for this order — the real source of truth (the
   // expense receipts linked by order #), as opposed to the quote/confirmation
   // ESTIMATE in local.cogs. { actualCost, receiptCount, hasReceipts }.
@@ -1946,24 +2017,37 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
                     New mockup
                   </Button>
+                  <Button size="small" startIcon={uploadingPromo ? <JpLoader size={13} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => promoInputRef.current?.click()} disabled={uploadingPromo}
+                    title="Upload a promo/product mockup (grinder, lighter, ashtray) your printer made — it gets a mockup # and links here"
+                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    {uploadingPromo ? 'Uploading…' : 'Upload'}
+                  </Button>
                   <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                     onClick={onOpenPicker}
                     sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
                     {tiles.length === 0 ? 'Link' : 'Edit'}
                   </Button>
+                  <input ref={promoInputRef} type="file" accept="image/*" hidden
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadPromoMockup(f); }} />
                 </Stack>
               </Stack>
               {tiles.length === 0 ? (
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
-                  No mockups for this client yet — make one in the Mockup Studio and it'll auto-appear here, linked to this project.
-                  <Box sx={{ mt: 1 }}>
+                  No mockups yet — make one in the Mockup Studio (it auto-links here), or upload a promo/product shot your printer made.
+                  <Stack direction="row" gap={1} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
                     <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                       onClick={goStudio}
                       sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
-                      Open Mockup Studio for this project
+                      Open Mockup Studio
                     </Button>
-                  </Box>
+                    <Button size="small" startIcon={uploadingPromo ? <JpLoader size={13} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => promoInputRef.current?.click()} disabled={uploadingPromo}
+                      sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                      {uploadingPromo ? 'Uploading…' : 'Upload a promo mockup'}
+                    </Button>
+                  </Stack>
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
