@@ -3256,10 +3256,10 @@ function addPage() {
   const cur = state.pages[state.currentPage] || {};
   const fresh = defaultPageInfo();
   // A page is another VIEW of the SAME mockup (e.g. the sideways garment for
-  // shoulder prints) — one file, one number, shared info. Everything except
-  // the garment/art fields carries over; the whole pages array saves and
-  // reloads as one library item.
-  for (const k of ['projectId','projectNumber','client','title','subtitle','mockupNum','pdfName','notes','template','_savedRemoteId','_savedDbId']) {
+  // shoulder prints) — one file, one number, shared IDENTITY. Only identity +
+  // template carry over; title / subtitle / notes are per-page, so a new page
+  // starts with its own blank caption instead of inheriting page 1's.
+  for (const k of ['projectId','projectNumber','client','mockupNum','pdfName','template','_savedRemoteId','_savedDbId']) {
     if (cur[k] !== undefined) fresh[k] = cur[k];
   }
   state.pages.push(fresh);
@@ -3315,11 +3315,17 @@ function saveFormToState() {
     dims: document.getElementById('f-dims-back').value,
     loc:  document.getElementById('f-loc-back').value,
   };
-  // Shared mockup info lives on EVERY page (pages are views of one mockup) —
-  // switching pages must never hide or fork the identity fields.
+  // Shared IDENTITY (number, filename, project, client) lives on every page —
+  // switching pages must never fork it. But title / subtitle / notes are PER
+  // PAGE (they render per page in the PDF), so they are NOT propagated — that
+  // flattening is what made a page-2 caption overwrite page 1's. Only copy a
+  // non-empty value so a blank field on the current page can't wipe identity
+  // that was set from another page.
   for (const other of state.pages) {
     if (other === pg) continue;
-    for (const k of ['title','subtitle','mockupNum','pdfName','notes','client','projectId','projectNumber']) other[k] = pg[k];
+    for (const k of ['mockupNum','pdfName','client','projectId','projectNumber']) {
+      if (pg[k] !== '' && pg[k] != null) other[k] = pg[k];
+    }
   }
 }
 function loadPageIntoForm() {
@@ -4083,7 +4089,19 @@ function togglePrintPreview(){
   scheduleUpdate();
   toast(state.showPrintPreview?'Placeholder borders shown':'Borders hidden (clean output)');
 }
-function resetCurrentPage(){ const t=state.pages[state.currentPage].template; state.pages[state.currentPage]=defaultPageInfo(); state.pages[state.currentPage].template=t; loadPageIntoForm(); scheduleUpdate(); toast('Page reset'); }
+function resetCurrentPage(){
+  // Reset clears the ART/canvas only — it PRESERVES this mockup's shared
+  // identity (number, project, client, filename) and the saved-row link
+  // (_savedRemoteId/_savedDbId). Without that, a reset page saved next would
+  // look brand-new and mint a SECOND lettered mockup / duplicate library row.
+  const cur = state.pages[state.currentPage];
+  const keep = {};
+  for (const k of ['template','projectId','projectNumber','client','mockupNum','pdfName','_savedRemoteId','_savedDbId']) keep[k] = cur[k];
+  const fresh = defaultPageInfo();
+  Object.assign(fresh, keep);
+  state.pages[state.currentPage] = fresh;
+  loadPageIntoForm(); scheduleUpdate(); toast('Page art reset');
+}
 function hexToRgb(hex){ hex=hex.replace(/^#/,''); if(hex.length===3)hex=hex.split('').map(c=>c+c).join(''); return PDFLib.rgb(parseInt(hex.substring(0,2),16)/255,parseInt(hex.substring(2,4),16)/255,parseInt(hex.substring(4,6),16)/255); }
 async function b64ToBytes(b64){ const r=await fetch(b64); return r.arrayBuffer(); }
 async function embedImg(pdfDoc,b64){
@@ -4536,32 +4554,38 @@ async function saveMockupToLibrary() {
     pg.pdfName = `${num}.pdf`;
     document.getElementById('f-pdfname').value = pg.pdfName;
   }
-  const name=pg.title||pg.pdfName||`Mockup ${new Date().toLocaleDateString()}`;
-  // Sync uses these two slots for the front/back composites. `pageState` has
-  // its base64s stripped before being shipped to the server (it'd blow past
-  // Mongo's 16MB doc limit), so without copying the composites into top-level
-  // fields the back side would be lost when the mockup is pulled on another
-  // device — which is exactly the "partial load" bug on mobile.
+  // Shared mockup IDENTITY (number, filename, project, client) belongs to EVERY
+  // page — a page is a view, not its own mockup — so stamp the just-assigned
+  // number onto all pages. Per-page caption fields (title/subtitle/notes) are
+  // deliberately NOT touched here: each page keeps its own.
+  for (const p of state.pages) {
+    p.mockupNum = pg.mockupNum; p.pdfName = pg.pdfName;
+    p.client = pg.client; p.projectId = pg.projectId; p.projectNumber = pg.projectNumber;
+  }
+  // The primary slots (pageState / thumbnail / data / name) ALWAYS represent
+  // PAGE 1, regardless of which page you saved from — load rebuilds page 1 from
+  // these, so sourcing them from the *current* page is exactly what used to wipe
+  // page 1 when you saved while viewing page 2. `pages` carries the full array;
+  // `pageState` has its base64s stripped for the server (Mongo's 16MB limit),
+  // which is why the composites are also copied into thumbnail/data.
+  const p0 = state.pages[0];
+  const stripLayers = (p) => JSON.parse(JSON.stringify({...p,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined}));
+  const name=p0.title||p0.pdfName||pg.mockupNum||`Mockup ${new Date().toLocaleDateString()}`;
   const snapshot={
     name,savedAt:Date.now(),
-    client: pg.client || '',
-    thumbnail: pg.frontCompositeBase64 || pg.frontBlankBase64 || null,
-    data:      pg.backCompositeBase64  || pg.backBlankBase64  || null,
+    client: p0.client || '',
+    thumbnail: p0.frontCompositeBase64 || p0.frontBlankBase64 || null,
+    data:      p0.backCompositeBase64  || p0.backBlankBase64  || null,
     // Reuse the existing remoteId on an edit so the cloud item is UPDATED, not
-    // duplicated. New mockups let dbSave mint a fresh UUID. The internal _saved*
-    // identity fields are local bookkeeping — stripped from the synced state.
-    remoteId: pg._savedRemoteId || undefined,
-    // Carry the existing LOCAL row id on a re-save so dbSave PUTs (updates in place)
-    // instead of inserting a duplicate IndexedDB row for the same mockup.
-    ...(isExisting && pg._savedDbId != null ? { id: pg._savedDbId } : {}),
-    pageState:JSON.parse(JSON.stringify({...pg,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})),
-    // MULTI-PAGE: every page (view) of this mockup persists inside the ONE
-    // library item — full fidelity locally; the sync layer trims/offloads.
-    // extraViews = pages 2+'s front composites, so the confirmation/approval
-    // page can show the shoulder view etc. without the full editor state.
-    pages: state.pages.length > 1
-      ? state.pages.map(p => JSON.parse(JSON.stringify({...p,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined})))
-      : null,
+    // duplicated. New mockups let dbSave mint a fresh UUID.
+    remoteId: p0._savedRemoteId || undefined,
+    ...(isExisting && p0._savedDbId != null ? { id: p0._savedDbId } : {}),
+    pageState: stripLayers(p0),
+    // MULTI-PAGE: every page (view) persists inside the ONE library item — full
+    // fidelity locally; the sync layer trims/offloads. extraViews = pages 2+'s
+    // front composites (index-aligned to pages[1..]) so a cloud-pulled copy can
+    // rehydrate the extra pages and the confirmation/approval can show them.
+    pages: state.pages.length > 1 ? state.pages.map(stripLayers) : null,
     extraViews: state.pages.slice(1).map(p => p.frontCompositeBase64 || p.frontBlankBase64 || null).filter(Boolean),
   };
   try{
@@ -4793,10 +4817,22 @@ async function loadMockup(id,e) {
   // its pages (page 1 = ps, hydrated above). Identity is stamped on every
   // page so a re-save from any page updates the same item.
   if (Array.isArray(item.pages) && item.pages.length > 1) {
-    const rest = item.pages.slice(1).map(raw => {
+    const restRaw = item.pages.slice(1);
+    // A cloud-pulled copy has each page's base64 layers stripped (16MB limit),
+    // but the pages 2+ front composites survive in `extraViews`. When they line
+    // up 1:1 with the extra pages, rehydrate each page's front so it isn't a
+    // blank canvas on another device. The length guard means a mismatch simply
+    // skips (never grafts the wrong image onto a page).
+    const extra = Array.isArray(item.extraViews) ? item.extraViews : [];
+    const aligned = extra.length === restRaw.length;
+    const rest = restRaw.map((raw, i) => {
       const pg2 = raw ? JSON.parse(JSON.stringify(raw)) : {};
       if (!pg2.printFront) pg2.printFront = { type:'', dims:'', loc:'' };
       if (!pg2.printBack)  pg2.printBack  = { type:'', dims:'', loc:'' };
+      if (aligned && !pg2.frontCompositeBase64 && extra[i]) {
+        pg2.frontCompositeBase64 = extra[i];
+        if (!pg2.frontBlankBase64) pg2.frontBlankBase64 = extra[i];
+      }
       pg2._savedRemoteId = item.remoteId || '';
       pg2._savedDbId = item.id;
       return pg2;
