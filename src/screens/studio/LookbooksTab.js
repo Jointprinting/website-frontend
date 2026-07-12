@@ -76,10 +76,12 @@ const LAYOUTS = [
 // still flip it live in the viewer — mirrors LookbookView.js THEMES). A swatch
 // gradient previews each: page color → accent.
 const THEME_SWATCHES = [
-  { value: 'paper',  label: 'Paper',    bg: '#faf9f6', accent: '#15803d' },
-  { value: 'ink',    label: 'Charcoal', bg: '#14171a', accent: '#34d17f' },
-  { value: 'forest', label: 'Forest',   bg: '#0e1a13', accent: '#7fcf9e' },
-  { value: 'sand',   label: 'Sand',     bg: '#efe9dd', accent: '#9a5726' },
+  { value: 'paper',    label: 'Paper',    bg: '#faf9f6', accent: '#15803d' },
+  { value: 'summer',   label: 'Summer',   bg: '#fef5e7', accent: '#e8622a' },
+  { value: 'sand',     label: 'Sand',     bg: '#efe9dd', accent: '#9a5726' },
+  { value: 'charcoal', label: 'Charcoal', bg: '#17191d', accent: '#34d17f' },
+  { value: 'forest',   label: 'Forest',   bg: '#0b1e12', accent: '#5fe39b' },
+  { value: 'winter',   label: 'Winter',   bg: '#0e1a2b', accent: '#5cc7ee' },
 ];
 
 // Same slug matching the mockup pickers use, so "Bleu Leaf Dispensary" still

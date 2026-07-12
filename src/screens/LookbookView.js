@@ -26,12 +26,19 @@ import AutoAwesomeMotionOutlinedIcon from '@mui/icons-material/AutoAwesomeMotion
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import { keyframes } from '@mui/system';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
 
-// ── Theme registry — each palette is self-contained. `stage` is ALWAYS light so
-// a `multiply` knockout fallback stays clean even on the dark themes. ──
+// Gentle ambient bob for the collage — each piece drifts on its own cadence so
+// everything gets its moment, never a static stack. Honors reduced-motion.
+const floatKf = keyframes({ '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-11px)' } });
+
+// ── Theme registry — each palette is self-contained and visibly distinct (three
+// lights, three darks; the darks differ by hue — neutral / green / blue — so no
+// two read the same). `stage` is ALWAYS light so a `multiply` knockout fallback
+// stays clean even on the dark themes. ──
 const THEMES = {
   paper: {
     id: 'paper', name: 'Paper', isDark: false,
@@ -41,21 +48,13 @@ const THEMES = {
     amber: '#b45309', amberSoft: 'rgba(180,83,9,0.09)',
     glow: 'rgba(21,128,61,0.16)', shadow: '0 10px 34px rgba(15,26,19,0.07)',
   },
-  ink: {
-    id: 'ink', name: 'Charcoal', isDark: true,
-    bg: '#14171a', panel: '#1c2126', stage: '#f3f1ea', line: 'rgba(255,255,255,0.11)',
-    text: '#eef2ee', muted: 'rgba(238,242,238,0.66)', faint: 'rgba(238,242,238,0.40)',
-    accent: '#34d17f', accentText: '#052012', accentSoft: 'rgba(52,209,127,0.14)',
-    amber: '#f0b429', amberSoft: 'rgba(240,180,41,0.14)',
-    glow: 'rgba(52,209,127,0.22)', shadow: '0 16px 44px rgba(0,0,0,0.46)',
-  },
-  forest: {
-    id: 'forest', name: 'Forest', isDark: true,
-    bg: '#0e1a13', panel: '#15271c', stage: '#eef1e9', line: 'rgba(180,220,190,0.15)',
-    text: '#eaf2ec', muted: 'rgba(206,214,208,0.82)', faint: 'rgba(150,162,153,0.85)',
-    accent: '#7fcf9e', accentText: '#05130b', accentSoft: 'rgba(127,207,158,0.15)',
-    amber: '#e9b872', amberSoft: 'rgba(233,184,114,0.15)',
-    glow: 'rgba(127,207,158,0.22)', shadow: '0 16px 44px rgba(0,0,0,0.5)',
+  summer: {
+    id: 'summer', name: 'Summer', isDark: false,
+    bg: '#fef5e7', panel: '#fffdf8', stage: '#faedd6', line: 'rgba(120,70,20,0.13)',
+    text: '#3a2411', muted: 'rgba(58,36,17,0.62)', faint: 'rgba(58,36,17,0.42)',
+    accent: '#e8622a', accentText: '#ffffff', accentSoft: 'rgba(232,98,42,0.10)',
+    amber: '#c2410c', amberSoft: 'rgba(194,65,12,0.10)',
+    glow: 'rgba(232,98,42,0.20)', shadow: '0 10px 30px rgba(120,70,20,0.12)',
   },
   sand: {
     id: 'sand', name: 'Sand', isDark: false,
@@ -65,8 +64,34 @@ const THEMES = {
     amber: '#9a5726', amberSoft: 'rgba(154,87,38,0.10)',
     glow: 'rgba(154,87,38,0.18)', shadow: '0 10px 30px rgba(60,45,25,0.12)',
   },
+  charcoal: {
+    id: 'charcoal', name: 'Charcoal', isDark: true,
+    bg: '#17191d', panel: '#212530', stage: '#f3f1ea', line: 'rgba(255,255,255,0.12)',
+    text: '#eef1f5', muted: 'rgba(238,241,245,0.66)', faint: 'rgba(238,241,245,0.40)',
+    accent: '#34d17f', accentText: '#052012', accentSoft: 'rgba(52,209,127,0.14)',
+    amber: '#f0b429', amberSoft: 'rgba(240,180,41,0.14)',
+    glow: 'rgba(52,209,127,0.22)', shadow: '0 16px 44px rgba(0,0,0,0.46)',
+  },
+  forest: {
+    id: 'forest', name: 'Forest', isDark: true,
+    bg: '#0b1e12', panel: '#123020', stage: '#eef1e9', line: 'rgba(140,220,170,0.18)',
+    text: '#e6f4ea', muted: 'rgba(198,224,206,0.80)', faint: 'rgba(140,180,155,0.85)',
+    accent: '#5fe39b', accentText: '#04160c', accentSoft: 'rgba(95,227,155,0.16)',
+    amber: '#e9c072', amberSoft: 'rgba(233,192,114,0.15)',
+    glow: 'rgba(95,227,155,0.26)', shadow: '0 16px 44px rgba(0,0,0,0.5)',
+  },
+  winter: {
+    id: 'winter', name: 'Winter', isDark: true,
+    bg: '#0e1a2b', panel: '#16263d', stage: '#eef3f8', line: 'rgba(150,190,230,0.18)',
+    text: '#e8f0fa', muted: 'rgba(206,222,240,0.80)', faint: 'rgba(150,175,205,0.82)',
+    accent: '#5cc7ee', accentText: '#04121f', accentSoft: 'rgba(92,199,238,0.16)',
+    amber: '#e9c072', amberSoft: 'rgba(233,192,114,0.15)',
+    glow: 'rgba(92,199,238,0.26)', shadow: '0 16px 44px rgba(0,0,0,0.5)',
+  },
 };
-const THEME_ORDER = ['paper', 'ink', 'forest', 'sand'];
+const THEME_ORDER = ['paper', 'summer', 'sand', 'charcoal', 'forest', 'winter'];
+const THEME_ALIAS = { ink: 'charcoal' };   // legacy id from before the rename
+const normTheme = (t) => (THEMES[t] ? t : (THEMES[THEME_ALIAS[t]] ? THEME_ALIAS[t] : null));
 
 // Map the owner's stored PDF layout → the viewer's initial view.
 const VIEW_FROM_STORED = { auto: 'collage', editorial: 'showcase', grid: 'grid' };
@@ -138,22 +163,27 @@ function ago(d) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// Deterministic overlapping slots for the collage — a hero piece centered/front,
-// the rest fanned around it. Percent coords (center-anchored), width %, rotation,
-// z. Stable per index (no randomness) so a re-render never reshuffles the pile.
-const HERO_SLOT = { left: 50, top: 53, w: 46, rot: -2, z: 60 };
-const RING_SLOTS = [
-  { left: 20, top: 36, w: 30, rot: -9, z: 40 },
-  { left: 80, top: 40, w: 32, rot: 8,  z: 52 },
-  { left: 31, top: 76, w: 27, rot: 6,  z: 45 },
-  { left: 73, top: 74, w: 29, rot: -7, z: 48 },
-  { left: 50, top: 23, w: 25, rot: 3,  z: 38 },
-  { left: 12, top: 62, w: 22, rot: -12, z: 34 },
+// Deterministic slots for the collage — pieces are SPREAD across the stage (not
+// piled) so each one gets its own space and moment, with just enough size
+// variation and tilt to feel composed rather than gridded. Percent coords
+// (center-anchored), width %, rotation. Stable per index (no randomness).
+const SMALL_SLOTS = {
+  1: [{ left: 50, top: 50, w: 44, rot: -1 }],
+  2: [{ left: 33, top: 50, w: 35, rot: -4 }, { left: 67, top: 50, w: 35, rot: 4 }],
+  3: [{ left: 26, top: 44, w: 30, rot: -6 }, { left: 52, top: 58, w: 33, rot: 2 }, { left: 76, top: 42, w: 29, rot: 6 }],
+};
+const SPREAD_SLOTS = [
+  { left: 24, top: 30, w: 27, rot: -6 },
+  { left: 72, top: 28, w: 25, rot: 5 },
+  { left: 48, top: 51, w: 30, rot: -2 },
+  { left: 21, top: 68, w: 24, rot: 7 },
+  { left: 78, top: 65, w: 25, rot: -6 },
+  { left: 46, top: 77, w: 22, rot: 3 },
+  { left: 88, top: 46, w: 18, rot: 9 },
 ];
 function collageSlots(n) {
-  const out = [HERO_SLOT];
-  for (let i = 0; i < n - 1; i++) out.push(RING_SLOTS[i % RING_SLOTS.length]);
-  return out.slice(0, n);
+  if (SMALL_SLOTS[n]) return SMALL_SLOTS[n];
+  return SPREAD_SLOTS.slice(0, n);
 }
 
 function ReactRow({ rid, latestByPerson, me, busyKey, post, theme, size = 'md' }) {
@@ -258,26 +288,34 @@ function ProductImage({ src, alt, clean, theme, radius = 3 }) {
 
 // One knocked-out piece placed in the collage. Transparent PNG where possible
 // (floats on the theme), else the raw mockup on a small rounded card (still
-// reads as a layered photo). Tapping focuses it.
-function CollageProduct({ m, slot, theme, onOpen, focused }) {
+// reads as a layered photo). The OUTER box owns position + tilt + hover; the
+// INNER box owns the slow ambient float — kept on separate elements so the two
+// transforms never fight. Tapping focuses it.
+function CollageProduct({ m, slot, i, theme, onOpen, focused }) {
   const ko = useKnockout(m.front, true);
   const usingKO = !!ko;
+  const dur = 5.5 + (i % 4);           // 5.5–8.5s — each piece drifts on its own clock
+  const delay = (i * 0.8) % 4;
   return (
     <Box onClick={onOpen} role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       sx={{ position: 'absolute', left: `${slot.left}%`, top: `${slot.top}%`, width: `${slot.w}%`,
-        zIndex: focused ? 80 : slot.z, transform: `translate(-50%, -50%) rotate(${slot.rot}deg) scale(${focused ? 1.06 : 1})`,
-        transformOrigin: 'center', cursor: 'pointer', transition: 'transform 260ms cubic-bezier(0.2,0.8,0.2,1), filter 200ms ease',
-        filter: usingKO ? 'drop-shadow(0 22px 34px rgba(0,0,0,0.30))' : 'none',
-        '&:hover': { transform: `translate(-50%, -50%) rotate(0deg) scale(1.08)`, zIndex: 90 },
+        zIndex: focused ? 80 : (i + 1) * 5,
+        transform: `translate(-50%, -50%) rotate(${slot.rot}deg) scale(${focused ? 1.05 : 1})`,
+        transformOrigin: 'center', cursor: 'pointer', transition: 'transform 300ms cubic-bezier(0.2,0.8,0.2,1)',
+        '&:hover': { transform: 'translate(-50%, -50%) rotate(0deg) scale(1.07)', zIndex: 90 },
         '&:focus-visible': { outline: `2px solid ${theme.accent}`, outlineOffset: 4 } }}>
-      {usingKO ? (
-        <Box component="img" src={ko} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
-      ) : (
-        <Box sx={{ bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', boxShadow: '0 18px 34px rgba(0,0,0,0.32)', border: '4px solid #fff' }}>
-          <Box component="img" src={m.front} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
-        </Box>
-      )}
+      <Box sx={{ animation: `${floatKf} ${dur}s ease-in-out ${delay}s infinite`,
+        filter: usingKO ? 'drop-shadow(0 22px 30px rgba(0,0,0,0.28))' : 'none',
+        '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
+        {usingKO ? (
+          <Box component="img" src={ko} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
+        ) : (
+          <Box sx={{ bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', boxShadow: '0 18px 34px rgba(0,0,0,0.32)', border: '4px solid #fff' }}>
+            <Box component="img" src={m.front} alt={m.name || 'Design'} loading="lazy" sx={{ width: '100%', display: 'block' }} />
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -299,8 +337,7 @@ export default function LookbookView() {
   const [focusRid, setFocusRid] = useState(null);   // collage lightbox target
 
   const [themeId, setThemeId] = useState(() =>
-    (params.get('theme') && THEMES[params.get('theme')] ? params.get('theme') : null)
-    || (LSAFE(() => window.localStorage.getItem(THEME_KEY)) || null));
+    normTheme(params.get('theme')) || normTheme(LSAFE(() => window.localStorage.getItem(THEME_KEY))) || null);
   const [view, setView] = useState('collage');
   const [pdfBusy, setPdfBusy] = useState(false);
 
@@ -320,7 +357,7 @@ export default function LookbookView() {
         const r = await axios.get(`${config.backendUrl}/api/public/lookbooks/${id}?${q}`);
         if (cancelled) return;
         setData(r.data);
-        setThemeId((cur) => cur || (THEMES[r.data.theme] ? r.data.theme : 'paper'));
+        setThemeId((cur) => cur || normTheme(r.data.theme) || 'paper');
         setView(VIEW_FROM_STORED[r.data.layout] || 'collage');
       } catch (e) {
         if (cancelled) return;
@@ -482,7 +519,7 @@ export default function LookbookView() {
         <Box sx={{ position: 'relative', width: '100%', mx: 'auto', maxWidth: 860,
           height: { xs: '58vh', sm: '62vh' }, minHeight: { xs: 340, sm: 420 } }}>
           {shown.map((m, i) => (
-            <CollageProduct key={m.remoteId || i} m={m} slot={slots[i]} theme={theme}
+            <CollageProduct key={m.remoteId || i} m={m} slot={slots[i]} i={i} theme={theme}
               focused={(m.remoteId || '') === focusRid} onOpen={() => setFocusRid(m.remoteId || '')} />
           ))}
         </Box>
@@ -538,18 +575,20 @@ export default function LookbookView() {
     </Box>
   );
 
-  const swatchDot = (t) => {
+  // A clean labeled chip that previews each theme (its own bg + accent dot +
+  // name), so the picker reads like a real theme selector — not a row of bubbles.
+  const swatchChip = (t) => {
     const th = THEMES[t];
     const on = t === themeId;
     return (
-      <Tooltip title={th.name} key={t} arrow>
-        <Box role="button" aria-label={`${th.name} theme`} onClick={() => pickTheme(t)}
-          sx={{ width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
-            background: `linear-gradient(135deg, ${th.bg} 0 55%, ${th.accent} 55% 100%)`,
-            border: `2px solid ${on ? theme.accent : theme.line}`,
-            outline: on ? `2px solid ${theme.accentSoft}` : 'none', outlineOffset: 1,
-            transition: 'transform 140ms ease', '&:hover': { transform: 'scale(1.14)' } }} />
-      </Tooltip>
+      <Box key={t} role="button" aria-label={`${th.name} theme`} onClick={() => pickTheme(t)}
+        sx={{ display: 'flex', alignItems: 'center', gap: 0.6, px: 0.9, py: 0.5, borderRadius: 2, cursor: 'pointer', flexShrink: 0,
+          bgcolor: th.bg, border: `1.5px solid ${on ? th.accent : theme.line}`,
+          boxShadow: on ? `0 0 0 2px ${theme.accentSoft}` : 'none',
+          transition: 'transform 140ms ease, border-color 140ms ease', '&:hover': { transform: 'translateY(-1px)', borderColor: th.accent } }}>
+        <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: th.accent, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 11, fontWeight: 800, color: th.text, letterSpacing: 0.2 }}>{th.name}</Typography>
+      </Box>
     );
   };
 
@@ -567,7 +606,7 @@ export default function LookbookView() {
             Joint Printing
           </Typography>
           <Box sx={{ flex: 1, minWidth: 8 }} />
-          <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }}>{THEME_ORDER.map(swatchDot)}</Stack>
+          <Stack direction="row" gap={0.6} flexWrap="wrap" sx={{ justifyContent: 'flex-end', rowGap: 0.6 }}>{THEME_ORDER.map(swatchChip)}</Stack>
           <Box sx={{ width: '1px', height: 20, bgcolor: theme.line, flexShrink: 0 }} />
           <Stack direction="row" gap={0.25} sx={{ flexShrink: 0, bgcolor: theme.accentSoft, borderRadius: 999, p: 0.35 }}>
             {VIEWS.map((v) => {
