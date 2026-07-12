@@ -33,6 +33,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import ReplayIcon from '@mui/icons-material/Replay';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -432,6 +433,21 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       flash(`Couldn't create project: ${e.message}`, 'error');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Reorder — clone this project into a fresh QUOTE (new project #, no invoice #,
+  // unpaid, dates cleared), carrying the same line items + mockups so a repeat job
+  // is one click. Reuses the existing POST /orders/:id/duplicate endpoint, then
+  // lands the owner in the new project to tweak and re-send.
+  const handleReorder = async (id) => {
+    try {
+      const r = await axios.post(`${base}/orders/${id}/duplicate`, { carryMockups: true }, authHdr);
+      await loadProjects();
+      setActiveProject(r.data);
+      flash(`Reordered — new quote #${r.data.projectNumber || ''} created from this job.`, 'success');
+    } catch (e) {
+      flash(`Couldn't reorder: ${e.response?.data?.message || e.message}`, 'error');
     }
   };
 
@@ -932,6 +948,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         onReload={loadProjects}
         onDelete={handleDelete}
         onShareApproval={() => activeProject && shareApprovalFor(activeProject._id)}
+        onReorder={() => activeProject && handleReorder(activeProject._id)}
         onOpenPicker={() => setPicker({ open: true, project: activeProject })}
         onOpenConfirmation={() => setConfirmation(activeProject)}
         onOpenQuote={() => setQuote(activeProject)}
@@ -1502,7 +1519,7 @@ function NextActionCard({ project, onRun }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
@@ -2453,6 +2470,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           onClick={() => setPoOpen(true)}
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           POs
+        </Button>
+        {/* Reorder — clone this job into a fresh quote (same items + mockups). For
+            repeat clients who order the same promos again and again. */}
+        <Button startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
+          onClick={() => onReorder && onReorder()}
+          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          Reorder
         </Button>
         {/* "Share for approval" lives on the Approval tab (and in the
             confirmation builder's header) — not in this footer. */}
