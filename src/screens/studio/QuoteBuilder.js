@@ -87,9 +87,13 @@ function lineCogsPerUnit(l) {
 // never display a different number than the client sees.
 function lineCommitted(l) { return num(l.unitPrice) > 0; }
 function lineEffectivePrice(l) {
-  return lineCommitted(l)
-    ? num(l.unitPrice)
-    : lineCogsPerUnit(l) * (num(l.markup) || 1.4);
+  if (lineCommitted(l)) return num(l.unitPrice);
+  // `noMarkup` is the promo case: the vendor catalog price already includes
+  // margin, so an un-priced cell auto-fills at COST (×1), never the ×1.4 default.
+  // COGS is unaffected (lineCogsPerUnit reads the cost fields regardless), so
+  // Finances/margins stay correct.
+  const m = l.noMarkup ? 1 : (num(l.markup) || 1.4);
+  return lineCogsPerUnit(l) * m;
 }
 
 function emptyLine() {
@@ -703,7 +707,19 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
   const applyTier = (pct) => onPatchIdxs(all, (l) => ({
     unitPrice: +(lineCogsPerUnit(l) * (1 + pct / 100)).toFixed(2),
     markup:    +(1 + pct / 100).toFixed(4),
+    noMarkup:  false,   // choosing a tier turns off fixed-price
   }));
+
+  // Promo / fixed-price: the vendor catalog already has margin baked in, so this
+  // design carries no markup — you type each client price and un-typed cells sit
+  // at cost. Toggling ON clears any auto-applied markup prices so they don't look
+  // marked up; COGS is untouched either way.
+  const fixedPrice = all.length > 0 && all.every(i => lines[i] && lines[i].noMarkup);
+  const toggleFixed = () => onPatchIdxs(all, (l) => (
+    fixedPrice
+      ? { noMarkup: false }
+      : { noMarkup: true, ...(lineCommitted(l) ? {} : { unitPrice: 0, markup: 1 }) }
+  ));
 
   const renameGroup = (name) => {
     const v = String(name || '').trim();
@@ -1085,38 +1101,50 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           over its OWN unit cost, so every option/quantity prices correctly from
           a single click. Typing in a cell overrides just that cell. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
-        <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
-          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            Markup tiers · all options
+        <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
+          <Typography sx={{ color: fixedPrice ? D.muted : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+            {fixedPrice ? 'Fixed price · no markup' : 'Markup tiers · all options'}
           </Typography>
-          <Typography sx={{ color: D.muted, fontSize: 10 }}>
-            click a tier to price every cell at cost × tier — amber cells are auto-priced until you click or type
+          <Typography sx={{ color: D.muted, fontSize: 10, flex: 1, minWidth: 120 }}>
+            {fixedPrice
+              ? 'Promo — you type each client price; nothing marked up. COGS still reads your real cost.'
+              : 'click a tier to price every cell at cost × tier (+% markup / resulting margin)'}
           </Typography>
+          {/* Promo toggle — for vendor-catalog items already priced with margin. */}
+          <Box onClick={toggleFixed} title="Promo items whose catalog price already includes your margin — no markup added"
+            sx={{ cursor: 'pointer', flexShrink: 0, px: 1.1, py: 0.5, borderRadius: 999, fontSize: 10, fontWeight: 800,
+              letterSpacing: 0.3, border: `1.5px solid ${fixedPrice ? D.green : D.line}`,
+              color: fixedPrice ? D.ink : D.muted, bgcolor: fixedPrice ? D.green : 'transparent',
+              transition: 'all 0.16s ease', '&:hover': { borderColor: D.green, color: fixedPrice ? D.ink : D.green } }}>
+            {fixedPrice ? '✓ Promo · fixed price' : 'Promo · fixed price'}
+          </Box>
         </Stack>
-        <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
-          borderRadius: 2.5, p: 0.5, display: 'flex',
-          overflowX: 'auto', ...scrollbar }}>
-          {TIERS.map(pct => {
-            const sel = uniformPct === pct;
-            return (
-              <Box key={pct} onClick={() => applyTier(pct)} sx={{
-                cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
-                py: 0.7, px: 0.5, borderRadius: 1.75,
-                bgcolor: sel ? D.green : 'transparent',
-                boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
-                transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
-                '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
-              }}>
-                <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700 }}>
-                  +{pct}%
-                </Typography>
-                <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 10.5, fontWeight: 700, ...mono }}>
-                  {(pct / (100 + pct) * 100).toFixed(0)}% margin
-                </Typography>
-              </Box>
-            );
-          })}
-        </Box>
+        {!fixedPrice && (
+          <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
+            borderRadius: 2.5, p: 0.5, display: 'flex',
+            overflowX: 'auto', ...scrollbar }}>
+            {TIERS.map(pct => {
+              const sel = uniformPct === pct;
+              return (
+                <Box key={pct} onClick={() => applyTier(pct)} sx={{
+                  cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
+                  py: 0.7, px: 0.5, borderRadius: 1.75,
+                  bgcolor: sel ? D.green : 'transparent',
+                  boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
+                  transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
+                  '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
+                }}>
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700 }}>
+                    +{pct}%
+                  </Typography>
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 10.5, fontWeight: 700, ...mono }}>
+                    {(pct / (100 + pct) * 100).toFixed(0)}% margin
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
       </Box>
     </Box>
   );
