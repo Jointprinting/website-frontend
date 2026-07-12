@@ -859,7 +859,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
             <Typography sx={headCellSx}>Options the client picks from</Typography>
             <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2, lineHeight: 1.35 }}>
               Name the brand or variant, its style #, and the blank $/unit. Open <b>⌄</b> on a row for its
-              print $, setup $ &amp; per-quantity shipping.
+              print $, setup $ &amp; shipping — set per quantity when a run size prices differently.
             </Typography>
           </Box>
           {grid.qtys.map(q => (
@@ -932,7 +932,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                     InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', mr: 0.4, whiteSpace: 'nowrap' }}>blank&nbsp;$</Typography> }}
                     sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 600, fontSize: 12.5, textAlign: 'left' } }} />
                   <IconButton size="small" onClick={() => toggleRow(bIdx)}
-                    title="Per-option costs: print $/u, setup $, print details, per-quantity shipping, product link"
+                    title="Per-option costs: print $/u, setup $ & shipping (per quantity), print details, product link"
                     sx={{ color: open ? D.green : D.muted, p: 0.3,
                       transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease',
                       '&:hover': { color: D.green } }}>
@@ -993,16 +993,16 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   <Box sx={{ gridColumn: '1 / -1', mt: -0.25, mb: 0.25, p: 1.25, borderRadius: 2,
                     bgcolor: 'rgba(255,255,255,0.02)', border: `1px dashed ${D.line}` }}>
                     <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                      <QF label="Print $/u (this option)" sx={{ width: 130 }}>
+                      <QF label="Print $/u (fill all)" sx={{ width: 130 }}>
                         <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'printCost')}
-                          placeholder={numMixedOver(b.idxs, 'printCost') ? 'varies' : '0'}
-                          title="Print cost per unit for this option (all quantities)"
+                          placeholder={numMixedOver(b.idxs, 'printCost') ? 'per-qty' : '0'}
+                          title="Fills print $/u on every quantity of this option — override a single run size below when it differs (e.g. grinders cheaper at 480)"
                           onChange={e => onPatchIdxs(b.idxs, { printCost: e.target.value })} sx={tf} />
                       </QF>
-                      <QF label="Setup $ (this option)" sx={{ width: 130 }}>
+                      <QF label="Setup $ (fill all)" sx={{ width: 130 }}>
                         <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'setupCost')}
-                          placeholder={numMixedOver(b.idxs, 'setupCost') ? 'varies' : '0'}
-                          title="Full one-time setup for THIS option — an extra color's extra screen goes here"
+                          placeholder={numMixedOver(b.idxs, 'setupCost') ? 'per-qty' : '0'}
+                          title="Fills one-time setup on every quantity of this option — override per run size below when it differs"
                           onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
                       </QF>
                       <QF label="Print details (this option)" sx={{ flex: '1 1 150px', minWidth: 140 }}>
@@ -1032,23 +1032,38 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                         </Stack>
                       </QF>
                     </Box>
-                    {/* Shipping PER QUANTITY — one input per column, so 50 units
-                        can ship $25 and 100 units $50 for this exact option. Each
-                        writes shippingCost on that one cell (spread across its qty
-                        into COGS, same as setup). */}
+                    {/* Costs PER QUANTITY — each run size can carry its own print
+                        $/u, setup $ and shipping $ for this exact option, so a
+                        grinder that prints cheaper at 480 than 240 (or ships more
+                        in bulk) quotes right. Print $/u is per-unit; setup +
+                        shipping are one-time and spread across that run's qty into
+                        COGS. Each writes onto that one cell's quoteLine. */}
                     <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${D.line}` }}>
-                      <Typography sx={{ ...headCellSx, mb: 0.6 }}>Shipping $ per quantity (this option)</Typography>
-                      <Stack direction="row" gap={1} flexWrap="wrap">
+                      <Typography sx={{ ...headCellSx, mb: 0.6 }}>Costs per quantity (this option) — override any run size</Typography>
+                      <Stack direction="row" gap={1.25} flexWrap="wrap">
                         {grid.qtys.map(q => {
                           const cell = grid.cellAt(b.key, q);
                           if (!cell) return null;
+                          const cl = cell.line;
                           return (
-                            <QF key={`ship-${bIdx}-${q}`} label={`${q} units`} sx={{ width: 118 }}>
-                              <TextField size="small" fullWidth type="number" value={num(cell.line.shippingCost) > 0 ? cell.line.shippingCost : ''}
-                                placeholder="0"
-                                title={`Total shipping for ${q} units of this option`}
-                                onChange={e => onSetLine(cell.idx, { shippingCost: e.target.value })} sx={tf} />
-                            </QF>
+                            <Box key={`pq-${bIdx}-${q}`} sx={{ width: 132, p: 0.9, borderRadius: 1.5,
+                              bgcolor: 'rgba(255,255,255,0.02)', border: `1px solid ${D.line}` }}>
+                              <Typography sx={{ ...headCellSx, mb: 0.6, color: D.text }}>{q} units</Typography>
+                              <Stack gap={0.6}>
+                                <TextField size="small" fullWidth type="number" value={num(cl.printCost) > 0 ? cl.printCost : ''}
+                                  placeholder="print $/u" title={`Print cost per unit at ${q} units`}
+                                  InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>print</Typography> }}
+                                  onChange={e => onSetLine(cell.idx, { printCost: e.target.value })} sx={tf} />
+                                <TextField size="small" fullWidth type="number" value={num(cl.setupCost) > 0 ? cl.setupCost : ''}
+                                  placeholder="setup $" title={`One-time setup at ${q} units`}
+                                  InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>setup</Typography> }}
+                                  onChange={e => onSetLine(cell.idx, { setupCost: e.target.value })} sx={tf} />
+                                <TextField size="small" fullWidth type="number" value={num(cl.shippingCost) > 0 ? cl.shippingCost : ''}
+                                  placeholder="ship $" title={`Total shipping for ${q} units of this option`}
+                                  InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>ship</Typography> }}
+                                  onChange={e => onSetLine(cell.idx, { shippingCost: e.target.value })} sx={tf} />
+                              </Stack>
+                            </Box>
                           );
                         })}
                       </Stack>
