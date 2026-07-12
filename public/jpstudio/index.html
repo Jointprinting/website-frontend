@@ -1532,18 +1532,8 @@ select:focus-visible{
       <button class="ss-tab" id="ss-tab-url" onclick="switchSsTab('url',this)">Paste URLs</button>
     </div>
 
-    <!-- Auto Search pane (API via Worker) -->
+    <!-- Auto Search pane (API via our own S&S integration) -->
     <div class="ss-pane active" id="ss-pane-api">
-      <!-- Worker URL setup — collapses once configured -->
-      <div id="ss-worker-setup" style="background:var(--s1);border:1px solid var(--bd);border-radius:var(--rl);padding:11px;display:flex;flex-direction:column;gap:8px">
-        <div style="font-size:11px;color:var(--tx2)">Enter your <strong style="color:var(--tx)">Cloudflare Worker URL</strong> once to enable auto-search:</div>
-        <div style="display:flex;gap:6px">
-          <input type="text" class="ss-in" id="ss-worker-url" placeholder="https://jp-ss-proxy.yourname.workers.dev" style="flex:1;font-size:11px"/>
-          <button class="btn btn-primary btn-sm" onclick="saveWorkerUrl()">Save</button>
-        </div>
-        <div id="ss-worker-status" style="font-size:10px;font-family:var(--fm);color:var(--tx3);min-height:14px"></div>
-      </div>
-
       <!-- Search -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="field" style="margin:0"><label>Style Code</label><input type="text" class="ss-in" id="ss-style" placeholder="SS4500, 3001C…" oninput="buildSsUrl()"/></div>
@@ -1827,37 +1817,18 @@ if (document.readyState === 'loading') {
 // Mark the initial tab class on body for mobile bottom-bar visibility
 document.body.classList.add('tab-studio');
 
-// ─── S&S API via Cloudflare Worker ────────────────────────────────
-let _ssWorkerUrl = localStorage.getItem('jp_ss_worker') || '';
+// ─── S&S API via our own backend (owner's SS_ACCOUNT/SS_API_KEY) ──────
+// Formerly proxied through a user-supplied Cloudflare Worker; now the Studio
+// backend serves the search directly (GET /api/products/ss/finder), so there's
+// nothing to configure. initWorkerSetup is kept as a harmless no-op because a
+// couple of load hooks still call it.
 let _ssLoadedFrontUrl = null;
 let _ssLoadedBackUrl  = null;
 // ssLoadedFront / ssLoadedBack declared in core block — used here too
 let _manualFront = null;
 let _manualBack  = null;
 
-// Populate worker URL input when modal opens
-function initWorkerSetup() {
-  const input = document.getElementById('ss-worker-url');
-  if (!input) return;
-  if (_ssWorkerUrl) {
-    input.value = _ssWorkerUrl;
-    // Collapse the setup box if already configured
-    const box = document.getElementById('ss-worker-setup');
-    if (box) box.style.opacity = '.7';
-  }
-}
-
-function saveWorkerUrl() {
-  const url = document.getElementById('ss-worker-url').value.trim().replace(/\/$/, '');
-  if (!url) return;
-  _ssWorkerUrl = url;
-  localStorage.setItem('jp_ss_worker', url);
-  const st = document.getElementById('ss-worker-status');
-  if (st) { st.textContent = '✓ Saved'; st.style.color = 'var(--green)'; }
-  const box = document.getElementById('ss-worker-setup');
-  if (box) box.style.opacity = '.7';
-  toast('Worker URL saved ✓', 'success');
-}
+function initWorkerSetup() { /* no-op: worker setup removed */ }
 
 // Progress bar helpers
 function ssSetProgress(pct, label) {
@@ -1897,14 +1868,14 @@ function ssSetSkeleton(on) {
 async function searchSsApi(overrideStyleId) {
   const style  = (document.getElementById('ss-style').value  || '').trim();
   const color  = (document.getElementById('ss-color').value  || '').trim();
-  const worker = _ssWorkerUrl;
   const status = document.getElementById('ss-api-status');
   const picker = document.getElementById('ss-color-picker');
   const stylePicker = document.getElementById('ss-style-picker');
 
   if (!overrideStyleId && !style) { toast('Enter a style code first', 'error'); return; }
-  if (!worker) {
-    status.textContent = '⚠ Enter your Worker URL above first';
+  const token = getStudioToken();
+  if (!token) {
+    status.textContent = '⚠ Sign in to Studio first';
     status.style.color = 'var(--amber)';
     return;
   }
@@ -1916,12 +1887,12 @@ async function searchSsApi(overrideStyleId) {
   resetApiPreviews();
   ssSetSearching(true);
   ssSetSkeleton(true);
-  ssSetProgress(15, 'Contacting worker…');
+  ssSetProgress(15, 'Searching S&S…');
 
   // Fake-progress ticker so the user sees forward motion
   let pct = 15;
   const ticker = setInterval(() => {
-    if (pct < 80) { pct += 5; ssSetProgress(pct, pct < 40 ? 'Contacting worker…' : pct < 65 ? 'Searching S&S catalog…' : 'Processing results…'); }
+    if (pct < 80) { pct += 5; ssSetProgress(pct, pct < 45 ? 'Searching S&S…' : pct < 65 ? 'Searching S&S catalog…' : 'Processing results…'); }
   }, 350);
 
   try {
@@ -1930,7 +1901,9 @@ async function searchSsApi(overrideStyleId) {
     else params.set('style', style);
     if (color) params.set('color', color);
 
-    const res  = await fetch(`${worker}?${params}`);
+    const res  = await fetch(`${BACKEND}/api/products/ss/finder?${params}`, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
     ssSetProgress(85, 'Parsing response…');
     const data = await res.json();
     clearInterval(ticker);
