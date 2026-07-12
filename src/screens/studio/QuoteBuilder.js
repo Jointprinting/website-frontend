@@ -41,9 +41,6 @@ import GridViewOutlinedIcon    from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon  from '@mui/icons-material/ViewAgendaOutlined';
 import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
 import LinkIcon                from '@mui/icons-material/Link';
-import RedeemOutlinedIcon      from '@mui/icons-material/RedeemOutlined';
-import axios                   from 'axios';
-import config                  from '../../config.json';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -63,6 +60,11 @@ const GROUP_HUES = [
   'rgba(196, 181, 253, 0.65)',  // violet
   'rgba(94, 234, 212, 0.60)',   // teal
 ];
+
+// Margin guardrail: warn (⚠) when a priced line's margin drops below this floor,
+// so a cell never gets sent underpriced by accident. Promo/fixed lines with no
+// cost entered read as no-margin-known and are skipped (not flagged).
+const MARGIN_FLOOR = 20;
 
 // Margin colour spectrum: 0% → red, ~40% → green. Capped so 50%+ stays green.
 function marginColor(pct) {
@@ -155,7 +157,7 @@ function suggestSupplierUrl(line) {
   return `https://www.ssactivewear.com/p/${hit[1]}/${style}`;
 }
 
-export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }) {
+export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const fullScreen = useMobileFullScreen();
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
@@ -165,12 +167,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
   // Groups the owner explicitly opened up as individual cards (per-line
   // control for one odd option). UI-only escape hatch — nothing is stored.
   const [cardView,     setCardView]     = useState(() => new Set());
-  // Promo catalog picker state (kept up here with the other hooks — must sit
-  // above the early `if (!project) return null` so hook order stays stable).
-  const [promoOpen,    setPromoOpen]    = useState(false);
-  const [promoItems,   setPromoItems]   = useState([]);
-  const [promoLoading, setPromoLoading] = useState(false);
-  const [promoErr,     setPromoErr]     = useState('');
 
   // Seed from the freshest source: a local draft (which survives a tab close
   // or crash mid-quote) wins over the server copy. Keyed on project id so an
@@ -262,33 +258,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
     setDirty(true);
   };
 
-  // ── Promo catalog picker ────────────────────────────────────────────────────
-  // Pull fixed-price promo products (lighters, grinders, ashtrays…) straight into
-  // the quote as 0%-markup lines — the vendor price already includes margin. The
-  // owner's cost rides along as blankCost so the COGS estimate stays honest.
-  // (State declared up top with the other hooks.)
-  const openPromo = async () => {
-    setPromoOpen(true); setPromoErr('');
-    if (promoItems.length) return;
-    setPromoLoading(true);
-    try {
-      const r = await axios.get(`${config.backendUrl}/api/promo-catalog`, authHdr || {});
-      setPromoItems(Array.isArray(r.data) ? r.data : []);
-    } catch (e) {
-      setPromoErr(e.response?.data?.message || e.message || 'Could not load the promo catalog.');
-    } finally { setPromoLoading(false); }
-  };
-  const addPromo = (it, qty) => appendLines([{
-    ...emptyLine(),
-    qty: Number(qty) || Number(it.minQty) || 1,
-    styleCode: it.sku || '',
-    description: [it.name, it.color, it.description].filter(Boolean).join(' — '),
-    supplier: it.vendor || '',
-    blankCost: Number(it.cost) || 0,
-    markup: 1,
-    noMarkup: true,               // promo = fixed price, already marked up
-    unitPrice: Number(it.price) || 0,
-  }]);
   const swapLines = (pairs) => {
     setLines(prev => {
       const next = [...prev];
@@ -499,12 +468,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
                   '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
                 Add a single line
               </Button>
-              <Button onClick={openPromo} startIcon={<RedeemOutlinedIcon />}
-                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
-                  px: 2, transition: 'background-color 0.18s, color 0.18s',
-                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-                Promo catalog
-              </Button>
             </Stack>
           </Box>
         ) : (
@@ -550,78 +513,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
                 '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add line
             </Button>
-            <Button onClick={openPromo} startIcon={<RedeemOutlinedIcon sx={{ fontSize: 16 }} />}
-              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
-                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
-                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-              Promo catalog
-            </Button>
           </Stack>
         )}
       </DialogContent>
-      {/* Promo catalog picker — fixed-price promos → 0%-markup lines. */}
-      <PromoPickerDialog
-        open={promoOpen} onClose={() => setPromoOpen(false)}
-        items={promoItems} loading={promoLoading} err={promoErr}
-        onAdd={addPromo}
-      />
-    </Dialog>
-  );
-}
-
-// Lists the active promo catalog; each row adds a fixed-price (0%-markup) line to
-// the quote at a chosen quantity. Stays open so several promos can be added in a
-// row (dispensary promo orders are often a few items at once).
-function PromoPickerDialog({ open, onClose, items, loading, err, onAdd }) {
-  const [qty, setQty] = useState({});
-  const [added, setAdded] = useState({});
-  const q = (it) => Number(qty[it._id]) || Number(it.minQty) || 1;
-  const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: D.bg, backgroundImage: 'none', border: `1px solid ${D.line}`, borderRadius: 3 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.75, borderBottom: `1px solid ${D.line}` }}>
-        <RedeemOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
-        <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, flexGrow: 1 }}>Promo catalog</Typography>
-        <IconButton onClick={onClose} size="small" sx={{ color: D.muted }}><CloseIcon fontSize="small" /></IconButton>
-      </Box>
-      <DialogContent sx={{ ...scrollbar, p: 2 }}>
-        {loading ? (
-          <Typography sx={{ color: D.muted, fontSize: 13, textAlign: 'center', py: 3 }}>Loading…</Typography>
-        ) : err ? (
-          <Typography sx={{ color: '#f87171', fontSize: 13, textAlign: 'center', py: 3 }}>{err}</Typography>
-        ) : items.length === 0 ? (
-          <Typography sx={{ color: D.muted, fontSize: 13, textAlign: 'center', py: 3 }}>
-            No promo items yet. Add them in the <b style={{ color: '#fff' }}>Promo Catalog</b> tool (import a vendor quote PDF).
-          </Typography>
-        ) : (
-          <Stack spacing={1}>
-            {items.map((it) => (
-              <Box key={it._id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
-                border: `1px solid ${D.line}`, borderRadius: 2, p: 1.25, bgcolor: D.panel }}>
-                <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-                  <Typography sx={{ color: '#fff', fontSize: 13.5, fontWeight: 700, lineHeight: 1.2 }}>{it.name}</Typography>
-                  <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
-                    {[it.category, it.color, money(it.price) + '/ea', it.minQty ? `min ${it.minQty}` : ''].filter(Boolean).join(' · ')}
-                  </Typography>
-                </Box>
-                <TextField type="number" size="small" value={qty[it._id] ?? (it.minQty || 1)}
-                  onChange={(e) => setQty((m) => ({ ...m, [it._id]: e.target.value }))}
-                  sx={{ ...dropInput, width: 78 }} inputProps={{ min: 1 }} />
-                <Button size="small" variant="outlined"
-                  onClick={() => { onAdd(it, q(it)); setAdded((m) => ({ ...m, [it._id]: (m[it._id] || 0) + 1 })); }}
-                  sx={{ color: D.green, borderColor: D.line, textTransform: 'none', fontWeight: 700, minWidth: 64,
-                    '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-                  {added[it._id] ? `Added${added[it._id] > 1 ? ` ×${added[it._id]}` : ''}` : 'Add'}
-                </Button>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </DialogContent>
-      <Box sx={{ px: 2.5, py: 1.5, borderTop: `1px solid ${D.line}`, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button onClick={onClose} sx={{ color: D.green, textTransform: 'none', fontWeight: 700 }}>Done</Button>
-      </Box>
     </Dialog>
   );
 }
@@ -1075,9 +969,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   const cogs = lineCogsPerUnit(l);
                   const profit = eff - cogs;
                   const pct = eff > 0 ? (profit / eff) * 100 : 0;
+                  const lowMargin = cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
                   return (
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
-                      border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      border: `1px solid ${lowMargin ? 'rgba(248,113,113,0.6)' : committed ? D.line : 'rgba(251,191,36,0.35)'}`,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
                       {/* Show the field EMPTY when the price is auto (0/blank) so the
                           computed auto price shows through as the placeholder — a stored
@@ -1093,9 +988,11 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                           color: committed ? D.faint : D.amber }}>
                           {eff > 0 ? `${committed ? '' : 'auto · '}${fmt(eff * q)}` : 'set costs'}
                         </Typography>
-                        <Typography sx={{ fontSize: 10, fontWeight: 800, ...mono, color: marginColor(pct) }}
-                          title={`${fmt(profit)}/unit profit at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
-                          {cogs > 0 && eff > 0 ? `${pct.toFixed(0)}%` : '—'}
+                        <Typography sx={{ fontSize: 10, fontWeight: 800, ...mono, color: lowMargin ? '#f87171' : marginColor(pct) }}
+                          title={lowMargin
+                            ? `⚠ Low margin — ${pct.toFixed(0)}% is under your ${MARGIN_FLOOR}% floor (${fmt(profit)}/unit at ${fmt(eff)}). Raise the price or check the costs.`
+                            : `${fmt(profit)}/unit profit at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
+                          {cogs > 0 && eff > 0 ? `${lowMargin ? '⚠ ' : ''}${pct.toFixed(0)}%` : '—'}
                         </Typography>
                       </Stack>
                     </Box>

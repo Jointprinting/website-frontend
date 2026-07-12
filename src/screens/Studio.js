@@ -61,7 +61,6 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import RedeemOutlinedIcon from '@mui/icons-material/RedeemOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
@@ -75,7 +74,6 @@ import BrandCube, { BRAND_MARKS } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
-import PromoCatalogTab from './studio/PromoCatalogTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
@@ -1653,7 +1651,6 @@ const HUB_GROUPS = [
           { id: 'lookbooks',   label: 'Lookbooks',    desc: 'Shareable client galleries',    Icon: AutoStoriesOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
-          { id: 'promocatalog', label: 'Promo Catalog', desc: 'Promo products & prices — import PDFs', Icon: RedeemOutlinedIcon },
         ],
       },
       {
@@ -2353,6 +2350,50 @@ function PulseBar({ pulse }) {
 // quarterly due date (Jan/Apr/Jul/Oct 20). Pulls the quarter's NJ-taxed orders
 // from the backend so the numbers to file are right there to double-check, then
 // expands to the per-order breakdown. Silent + absent the rest of the year.
+// Merch-season nudge — the two dispensary dates that actually move merch orders:
+// 4/20 (the big one) and 7/10 (concentrate day). Shows a heads-up in the ~8 weeks
+// before each so the owner pitches BEFORE the rush, not during. Pure client-side
+// date math — no backend, no config.
+const MERCH_SEASONS = [
+  { key: '4/20', month: 3, day: 20, blurb: 'the biggest dispensary merch day of the year' },
+  { key: '7/10', month: 6, day: 10, blurb: 'the 7/10 concentrate holiday' },
+];
+function MerchSeasonReminder({ onPick }) {
+  const now = new Date();
+  const LEAD = 56; // start the nudge ~8 weeks out
+  let hit = null;
+  for (const e of MERCH_SEASONS) {
+    let d = new Date(now.getFullYear(), e.month, e.day);
+    // If this year's date already passed, look to next year's.
+    if (d.getTime() < now.getTime() - 86400000) d = new Date(now.getFullYear() + 1, e.month, e.day);
+    const days = Math.ceil((d.getTime() - now.getTime()) / 86400000);
+    if (days >= 0 && days <= LEAD && (!hit || days < hit.days)) hit = { ...e, days };
+  }
+  if (!hit) return null;
+  const wks = Math.max(1, Math.round(hit.days / 7));
+  return (
+    <Box sx={{ borderRadius: 3, border: '1px solid rgba(74,222,128,0.4)', bgcolor: 'rgba(74,222,128,0.06)',
+      display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, py: 1.75, flexWrap: 'wrap' }}>
+      <Box sx={{ fontSize: 22, flexShrink: 0 }}>🌿</Box>
+      <Box sx={{ flex: 1, minWidth: 180 }}>
+        <MuiTypography sx={{ color: D.green, fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+          {hit.key} is {hit.days <= 0 ? 'today' : `~${wks} week${wks === 1 ? '' : 's'} out`}
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.text, fontSize: 14.5, fontWeight: 800, mt: 0.2 }}>
+          Merch season — pitch your dispensaries before the rush
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.muted, fontSize: 12, mt: 0.15 }}>
+          {hit.key} is {hit.blurb}. Lead time is tight — get quotes &amp; mockups moving now.
+        </MuiTypography>
+      </Box>
+      <Stack direction="row" spacing={1}>
+        <Button size="small" onClick={() => onPick && onPick('outreach')} sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Plan outreach →</Button>
+        <Button size="small" onClick={() => onPick && onPick('content')} sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Plan a post →</Button>
+      </Stack>
+    </Box>
+  );
+}
+
 function NjTaxReminder({ token, onNavigate }) {
   const [data, setData] = React.useState(null);
   const [open, setOpen] = React.useState(false);
@@ -2491,6 +2532,9 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
       {/* NJ sales-tax (ST-50) reminder — only inside its ~2-week filing window. */}
       {showJpVitals && <NjTaxReminder token={token} onNavigate={onNavigate} />}
+
+      {/* Merch-season nudge — 4/20 & 7/10, the two dispensary dates worth prepping for. */}
+      {showJpVitals && <MerchSeasonReminder onPick={onPick} />}
 
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
@@ -3074,7 +3118,6 @@ function StudioBody({ token, onLogout }) {
                   {view === 'submissions'  && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
-                  {view === 'promocatalog' && <PromoCatalogTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
