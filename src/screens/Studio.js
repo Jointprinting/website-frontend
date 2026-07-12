@@ -61,6 +61,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import RedeemOutlinedIcon from '@mui/icons-material/RedeemOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
@@ -74,6 +75,7 @@ import BrandCube, { BRAND_MARKS } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
+import PromoCatalogTab from './studio/PromoCatalogTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
@@ -1651,6 +1653,7 @@ const HUB_GROUPS = [
           { id: 'lookbooks',   label: 'Lookbooks',    desc: 'Shareable client galleries',    Icon: AutoStoriesOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
+          { id: 'promocatalog', label: 'Promo Catalog', desc: 'Promo products & prices — import PDFs', Icon: RedeemOutlinedIcon },
         ],
       },
       {
@@ -3072,6 +3075,7 @@ function StudioBody({ token, onLogout }) {
                   {view === 'submissions'  && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
+                  {view === 'promocatalog' && <PromoCatalogTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
