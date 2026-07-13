@@ -38,7 +38,7 @@ import config from '../../config.json';
 import { lsGet, lsSet } from '../../common/jpStorage';
 import { queuedRequest } from '../../common/offlineSync';
 import {
-  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS, SEGMENTS, INTEREST_LABELS,
+  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS, SEGMENTS, INTEREST_LABELS, BULK_ADD_MAX,
   haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf,
 } from './_roadTrip';
 
@@ -400,17 +400,23 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [showAddCustomPin, setShowAddCustomPin] = React.useState(false);
   const [customPinForm, setCustomPinForm] = React.useState({ name: '', address: '', notes: '', customType: 'friend' });
 
-  // TODAY cockpit — how many CRM follow-ups are due today; a read-only glance
-  // that deep-links into the CRM queue.
-  const [followUps, setFollowUps] = React.useState({ count: 0, loaded: false });
+  // TODAY cockpit — tonight's catalog queue: stops where the visit capture
+  // said "email them the catalog today" and it hasn't gone out yet. (Check-in
+  // calls deliberately do NOT live here — the send books them into CRM Today.)
+  const [catQueue, setCatQueue] = React.useState({ rows: [], loaded: false });
+  const [sendingStopId, setSendingStopId] = React.useState(null);
 
   // TO-DO modal
   const [todoTarget, setTodoTarget] = React.useState(null);
   const [todoForm, setTodoForm] = React.useState({ chipId: 'mockups', note: '', date: tomorrowISO() });
 
-  // CONTACT capture modal — who did I talk to at the counter
+  // LOG VISIT modal — who I talked to at the counter, who's in charge, notes,
+  // and whether to email them the catalog tonight. contactStop remembers which
+  // run stop the capture came from (so the stop gets marked visited + queued),
+  // and carries a per-capture dedupKey so an offline replay can't double-log.
   const [contactTarget, setContactTarget] = React.useState(null);
-  const [contactForm, setContactForm] = React.useState({ name: '', role: '', phone: '', email: '', interest: 0 });
+  const [contactStop, setContactStop] = React.useState(null); // { stopId, dedupKey }
+  const [contactForm, setContactForm] = React.useState({ name: '', role: '', inCharge: '', phone: '', email: '', notes: '', interest: 0, sendCatalog: true });
 
   // Location
   const [myLoc, setMyLoc] = React.useState(null);
@@ -808,46 +814,129 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, todoTarget, todoForm, showToast, openInCrm]);
 
-  // Save the on-road contact capture: the person lands on the company card's
-  // contacts (server merges, never replaces — addContact), the meeting + 🔥
-  // interest land in the visit log, and the stage gets the same promote-only
-  // 'contacted' suggestion a pitch does. Offline-safe like every field write.
+  // Tonight's catalog queue — visited stops still owed their catalog email.
+  const refreshCatQueue = React.useCallback(async () => {
+    try {
+      const r = await axios.get(`${api}/api/roadtrip/catalog-queue`, authHdr);
+      setCatQueue({ rows: r.data?.rows || [], loaded: true });
+    } catch {
+      setCatQueue((prev) => ({ ...prev, loaded: true }));
+    }
+  }, [api, authHdr]);
+
+  // Fire one queued catalog email. Offline-safe: tapping SEND in a dead zone
+  // queues the request and it goes out when signal returns. The server stamps
+  // catalogSentAt (idempotent — a replay is a no-op) and books the ~2-day
+  // "did you look at it?" check-in call into CRM Today.
+  const sendCatalogNow = React.useCallback(async (row) => {
+    setSendingStopId(row.stopId);
+    try {
+      const res = await queuedRequest({
+        method: 'post',
+        url: `${api}/api/roadtrip/catalog-queue/${row.runId}/${row.stopId}/send`,
+        body: {},
+        label: `Catalog · ${row.name}`,
+      });
+      setCatQueue((prev) => ({ ...prev, rows: prev.rows.filter((r) => String(r.stopId) !== String(row.stopId)) }));
+      showToast(
+        res.queued
+          ? `Catalog to ${row.name} queued — sends when you're back on signal.`
+          : `Catalog sent to ${row.email} — check-in call booked ~2 days out (CRM Today).`,
+        res.queued ? 'info' : 'success',
+      );
+    } catch (err) {
+      const status = err?.response?.status;
+      showToast(
+        status === 503
+          ? 'Email isn\'t configured on the server — set the outreach SMTP env vars, then retry.'
+          : (err?.response?.data?.message || 'Catalog send failed.'),
+        'error',
+      );
+    } finally {
+      setSendingStopId(null);
+    }
+  }, [api, showToast]);
+
+  // Save the on-road visit capture: the people land on the company card's
+  // contacts (server merges, never replaces — addContacts), the meeting + 🔥
+  // interest + notes land in the visit log (with the visit date + address),
+  // the card gets the 'road' tag so road-trip leads don't clog the main CRM
+  // view, and the stage gets the same promote-only 'contacted' suggestion a
+  // pitch does. When "email the catalog tonight" is on, the run stop is queued
+  // for tonight's send (which is what books the ~2-day check-in call — so
+  // check-ins live in CRM Today, not on the map). Every write is offline-safe
+  // (queuedRequest), and the per-capture logDedupKey means a flaky-signal
+  // replay can't double-log the visit.
   const saveContact = React.useCallback(async () => {
     const d = contactTarget;
     if (!d || !contactForm.name.trim()) return;
     const key = d?.crm?.companyKey || companyKeyFor(d);
     const who = contactForm.name.trim();
     const role = contactForm.role.trim();
+    const inCharge = contactForm.inCharge.trim();
+    const email = contactForm.email.trim().toLowerCase();
+    const notes = contactForm.notes.trim();
+    const wantCatalog = contactForm.sendCatalog && !!email;
     const fire = contactForm.interest > 0 ? ` · interest ${'🔥'.repeat(contactForm.interest)} (${INTEREST_LABELS[contactForm.interest]})` : '';
-    const reach = [contactForm.phone.trim(), contactForm.email.trim()].filter(Boolean).join(' · ');
+    const reach = [contactForm.phone.trim(), email].filter(Boolean).join(' · ');
+    const contacts = [{ name: who, role, phone: contactForm.phone.trim(), email }];
+    if (inCharge && inCharge.toLowerCase() !== who.toLowerCase()) {
+      contacts.push({ name: inCharge, role: 'in charge', phone: '', email: '' });
+    }
     const body = {
       companyName: d.name,
       address: d.address || '',
       phone: d.phone || '',
       source: 'field-map',
       leadSource: 'Field Visit',
-      addContact: { name: who, role, phone: contactForm.phone.trim(), email: contactForm.email.trim() },
-      logText: `Met ${who}${role ? ` (${role})` : ''} at ${d.name}${fire}${reach ? ` · ${reach}` : ''}`,
+      addContacts: contacts,
+      addTags: ['road'],
+      logText: `Visited ${d.name} — met ${who}${role ? ` (${role})` : ''}`
+        + (contacts.length > 1 ? ` · in charge: ${inCharge}` : '')
+        + fire + (reach ? ` · ${reach}` : '') + (notes ? ` · ${notes}` : '')
+        + (wantCatalog ? ' · catalog queued for tonight' : ''),
       kind: 'visit',
+      ...(contactStop?.dedupKey ? { logDedupKey: contactStop.dedupKey } : {}),
       stageSuggest: 'contacted',
     };
     try {
-      const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `Contact · ${d.name}` });
+      const res = await queuedRequest({ method: 'patch', url: `${api}/api/crm/${encodeURIComponent(key)}`, body, label: `Visit · ${d.name}` });
       const realKey = (!res.queued && res.data?.client?.companyKey) || key;
       const stage = (!res.queued && res.data?.client?.stage) || d?.crm?.stage || 'contacted';
       if (d._id) {
         setDisps((prev) => prev.map((x) => (x._id === d._id ? { ...x, crm: { companyKey: realKey, stage } } : x)));
       }
+      // Mark the run stop visited + queue tonight's catalog send on it. Same
+      // offline machinery — the stop write replays alongside the CRM write.
+      let stopQueued = false;
+      if (contactStop?.stopId) {
+        try {
+          const sr = await queuedRequest({
+            method: 'patch',
+            url: `${api}/api/roadtrip/run/stops/${contactStop.stopId}`,
+            body: { status: 'visited', ...(wantCatalog ? { catalogQueued: true } : {}), ...(email ? { contactEmail: email } : {}) },
+            label: `Visited · ${d.name}`,
+          });
+          stopQueued = !!sr.queued;
+          if (!sr.queued && sr.data?.run) { setRun(sr.data.run); refreshCatQueue(); }
+        } catch { /* stop marking is best-effort — the CRM card already has the visit */ }
+      }
       setContactTarget(null);
-      if (res.queued) {
-        showToast(`${who} saved offline — will sync when you're back on signal.`, 'info');
+      setContactStop(null);
+      if (res.queued || stopQueued) {
+        showToast(`Visit saved offline — will sync when you're back on signal${wantCatalog ? ' (catalog send included)' : ''}.`, 'info');
       } else {
-        showToast(`${who} → ${d.name}'s card.`, 'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) });
+        showToast(
+          wantCatalog
+            ? `Visit logged — ${d.name} is on tonight's catalog list.`
+            : `Visit logged → ${d.name}'s card.`,
+          'success', { label: 'OPEN', fn: () => openInCrm({ crm: { companyKey: realKey } }) },
+        );
       }
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Contact save failed.', 'error');
+      showToast(err?.response?.data?.message || 'Visit save failed.', 'error');
     }
-  }, [api, contactTarget, contactForm, showToast, openInCrm]);
+  }, [api, contactTarget, contactStop, contactForm, showToast, openInCrm, refreshCatQueue]);
 
   const hideDispensary = React.useCallback(async (d) => {
     try {
@@ -876,17 +965,10 @@ export default function RoadTripTab({ token, onNavigate }) {
         setCustomPins(leads.filter((l) => l.source === 'manual'));
       })
       .catch(() => {});
-    // CRM follow-ups needing action now — overdue + due today (the nightly
-    // follow-up discipline). Deep-links into the CRM Today queue. Shape:
-    // { summary: { overdue, dueToday, total }, rows }.
-    axios.get(`${api}/api/crm/today`, authHdr)
-      .then((r) => {
-        const s = (r.data && r.data.summary) || {};
-        const count = (Number(s.overdue) || 0) + (Number(s.dueToday) || 0);
-        setFollowUps({ count, loaded: true });
-      })
-      .catch(() => setFollowUps({ count: 0, loaded: true }));
-  }, [token, api, authHdr, refreshRun]);
+    // Catalogs promised on today's visits and not yet emailed. Check-in calls
+    // don't show here — sending the catalog books them into CRM Today.
+    refreshCatQueue();
+  }, [token, api, authHdr, refreshRun, refreshCatQueue]);
 
   const addDispToRun = React.useCallback(async (d) => {
     try {
@@ -1019,6 +1101,12 @@ export default function RoadTripTab({ token, onNavigate }) {
   const addAllInView = React.useCallback(async () => {
     const targets = (visibleDispsRef.current || []).filter((d) => d._id);
     if (!targets.length) { showToast('No stores in view — search a city or zoom out a touch.', 'info'); return; }
+    // A drivable day is ~a dozen stops — adding 375 pins is never what you
+    // meant. Zoom to the block you're actually working.
+    if (targets.length > BULK_ADD_MAX) {
+      showToast(`${targets.length} stores in view — zoom in to ${BULK_ADD_MAX} or fewer to bulk-add (or tap pins one at a time).`, 'info');
+      return;
+    }
     setBulkAdding(true);
     try {
       const r = await axios.post(`${api}/api/roadtrip/run/stops`, {
@@ -1421,33 +1509,64 @@ export default function RoadTripTab({ token, onNavigate }) {
             sx={{
               fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
               py: 0.9, mb: 0.75, cursor: 'pointer', borderRadius: 0.5,
-              color: bulkAdding ? TERM.amber : TERM.greenDk, bgcolor: bulkAdding ? 'transparent' : TERM.green,
-              border: `1.5px solid ${bulkAdding ? TERM.amber : TERM.green}`, '&:hover': { opacity: 0.9 },
-            }}>{bulkAdding ? 'ADDING…' : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}</Box>
+              color: bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.muted : TERM.greenDk),
+              bgcolor: bulkAdding || visibleDisps.length > BULK_ADD_MAX ? 'transparent' : TERM.green,
+              border: `1.5px solid ${bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.borderDim : TERM.green)}`,
+              '&:hover': { opacity: 0.9 },
+            }}>{bulkAdding ? 'ADDING…'
+              : visibleDisps.length > BULK_ADD_MAX ? `ZOOM IN TO ADD ALL (${visibleDisps.length} · max ${BULK_ADD_MAX})`
+              : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}</Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
             Search the city you're visiting, then add every store in view — or tap pins one at a time. Your day is saved here; even 20 stops chunk into Google Maps legs you reopen anytime.
           </Typography>
         </Box>
       )}
 
-      {/* Follow-ups due — opens the CRM Today queue */}
-      {todayHdr("NIGHTLY FOLLOW-UP")}
-      <Box role="button" tabIndex={0}
-        onClick={() => onNavigate && onNavigate({ view: 'crm' })}
-        sx={{
-          display: 'flex', alignItems: 'center', gap: 1.25, cursor: onNavigate ? 'pointer' : 'default',
-          border: `1px solid ${followUps.count > 0 ? TERM.amber : TERM.borderDim}`, borderRadius: 0.5, p: 1,
-          bgcolor: followUps.count > 0 ? 'rgba(251,191,36,0.06)' : 'transparent',
-          '&:hover': onNavigate ? { borderColor: followUps.count > 0 ? TERM.amber : TERM.green } : {},
-        }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, lineHeight: 1, color: followUps.count > 0 ? TERM.amber : TERM.muted }}>
-          {followUps.loaded ? followUps.count : '·'}
+      {/* Tonight's catalog sends — promises made at the counter today. Each
+          send books its own ~2-day check-in call into CRM Today (check-ins
+          live in the CRM, not here). */}
+      {todayHdr(`CATALOGS TO SEND TONIGHT${catQueue.rows.length ? ` · ${catQueue.rows.length}` : ''}`)}
+      {!catQueue.loaded ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1 }}>loading…</Typography>
+      ) : !catQueue.rows.length ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5 }}>
+          no catalogs owed ✓ — log a visit with an email and it lands here for tonight's send
         </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, lineHeight: 1.4 }}>
-          {followUps.count > 0 ? 'follow-ups due — buyers waiting on a quote or catalog' : (followUps.loaded ? 'all caught up ✓' : 'loading…')}
-        </Typography>
-        {onNavigate && <Box component="span" sx={{ ml: 'auto', fontFamily: MONO, fontSize: 14, color: followUps.count > 0 ? TERM.amber : TERM.muted }}>→</Box>}
-      </Box>
+      ) : (
+        <Stack spacing={0.5}>
+          {catQueue.rows.map((row) => (
+            <Box key={String(row.stopId)} sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              border: `1px solid ${TERM.amber}`, borderRadius: 0.5, p: 1,
+              bgcolor: 'rgba(251,191,36,0.06)',
+            }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography noWrap sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, color: TERM.text }}>{row.name}</Typography>
+                <Typography noWrap sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>
+                  {row.email || 'no email captured'}{row.visitedAt ? ` · visited ${new Date(row.visitedAt).toLocaleDateString()}` : ''}
+                </Typography>
+              </Box>
+              <Box role="button" tabIndex={0}
+                onClick={() => row.email && sendingStopId !== row.stopId && sendCatalogNow(row)}
+                sx={{
+                  ml: 'auto', flexShrink: 0, fontFamily: MONO, fontSize: 9.5, fontWeight: 900, letterSpacing: 1,
+                  px: 1.25, py: 0.6, borderRadius: 0.5, textAlign: 'center',
+                  cursor: row.email ? 'pointer' : 'default',
+                  color: row.email ? TERM.greenDk : TERM.muted,
+                  bgcolor: row.email ? TERM.green : 'transparent',
+                  border: `1px solid ${row.email ? TERM.green : TERM.borderDim}`,
+                  opacity: sendingStopId === row.stopId ? 0.6 : 1,
+                  '&:hover': row.email ? { opacity: 0.9 } : {},
+                }}>
+                {sendingStopId === row.stopId ? 'SENDING…' : '📬 SEND'}
+              </Box>
+            </Box>
+          ))}
+          <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
+            each send auto-books the "did you look at it?" call ~2 days out — it shows in CRM Today, not here
+          </Typography>
+        </Stack>
+      )}
     </Box>
   );
 
@@ -1461,12 +1580,14 @@ export default function RoadTripTab({ token, onNavigate }) {
             sx={{
               fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
               py: 0.9, mb: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
-              color: bulkAdding ? TERM.amber : TERM.greenDk,
-              bgcolor: bulkAdding ? 'transparent' : TERM.green,
-              border: `1.5px solid ${bulkAdding ? TERM.amber : TERM.green}`,
+              color: bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.muted : TERM.greenDk),
+              bgcolor: bulkAdding || visibleDisps.length > BULK_ADD_MAX ? 'transparent' : TERM.green,
+              border: `1.5px solid ${bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.borderDim : TERM.green)}`,
               '&:hover': { opacity: 0.9 },
             }}>
-            {bulkAdding ? 'ADDING…' : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}
+            {bulkAdding ? 'ADDING…'
+              : visibleDisps.length > BULK_ADD_MAX ? `ZOOM IN TO ADD ALL (${visibleDisps.length} · max ${BULK_ADD_MAX})`
+              : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}
           </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 0.5, fontStyle: 'italic' }}>
             Search the city you're visiting, then save every store in view to the day. Or tap any pin → ＋ ADD TO RUN.
@@ -1619,7 +1740,11 @@ export default function RoadTripTab({ token, onNavigate }) {
                       onClick={() => {
                         const d = s.dispensaryId ? byIdRef.current.get(String(s.dispensaryId)) : null;
                         setContactTarget(d || stopAsCrmTarget(s));
-                        setContactForm({ name: '', role: '', phone: '', email: '', interest: 0 });
+                        // One dedupKey per capture session — offline replays of
+                        // this save can't double-log, but a second visit (or a
+                        // corrected re-save) gets a fresh key.
+                        setContactStop({ stopId: String(s._id), dedupKey: `visit:${s._id}:${Date.now()}` });
+                        setContactForm({ name: '', role: '', inCharge: '', phone: '', email: s.contactEmail || '', notes: '', interest: 0, sendCatalog: true });
                         setOutcomeStopId(null);
                       }}
                       sx={{
@@ -1627,7 +1752,7 @@ export default function RoadTripTab({ token, onNavigate }) {
                         px: { xs: 1.4, md: 0.9 }, py: { xs: 0.8, md: 0.4 }, borderRadius: 0.25, cursor: 'pointer',
                         color: TERM.cyan, border: `1px dashed ${TERM.cyan}`,
                         '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
-                      }}>+ CONTACT</Box>
+                      }}>+ LOG VISIT</Box>
                     <Box role="button"
                       onClick={() => {
                         const d = s.dispensaryId ? byIdRef.current.get(String(s.dispensaryId)) : null;
@@ -1985,29 +2110,34 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       )}
 
-      {/* ── CONTACT capture modal — who did I talk to ─────────────────── */}
+      {/* ── LOG VISIT modal — who I met, who runs the place, notes, catalog ── */}
       {contactTarget && (
         <Box sx={{
           position: 'fixed', inset: 0, zIndex: 1000,
           bgcolor: 'rgba(5,8,10,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} onClick={() => setContactTarget(null)}>
+        }} onClick={() => { setContactTarget(null); setContactStop(null); }}>
           <Box sx={{
             bgcolor: TERM.panel, border: `1px solid ${TERM.border}`,
-            borderRadius: 1, p: 3, width: 340, maxWidth: 'calc(100vw - 32px)', fontFamily: MONO,
+            borderRadius: 1, p: 3, width: 340, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 48px)',
+            overflowY: 'auto', fontFamily: MONO,
           }} onClick={(e) => e.stopPropagation()}>
             <Typography sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TERM.cyan, letterSpacing: 1, mb: 0.5 }}>
-              + CONTACT
+              LOG VISIT
             </Typography>
             <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, mb: 2 }}>
-              {contactTarget.name} — lands on the company card + visit log.
+              {contactTarget.name} — saves the visit (date + address) on the company card.
             </Typography>
             <input value={contactForm.name} autoFocus
               onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Name — who you talked to"
+              placeholder="Who you spoke to"
               style={{ ...inputStyle, marginBottom: 8 }} />
             <input value={contactForm.role}
               onChange={(e) => setContactForm((f) => ({ ...f, role: e.target.value }))}
-              placeholder="Position — buyer / manager / owner…"
+              placeholder="Their position — buyer / manager / owner…"
+              style={{ ...inputStyle, marginBottom: 8 }} />
+            <input value={contactForm.inCharge}
+              onChange={(e) => setContactForm((f) => ({ ...f, inCharge: e.target.value }))}
+              placeholder="Person in charge (if someone else)"
               style={{ ...inputStyle, marginBottom: 8 }} />
             <input value={contactForm.phone} type="tel"
               onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
@@ -2015,12 +2145,16 @@ export default function RoadTripTab({ token, onNavigate }) {
               style={{ ...inputStyle, marginBottom: 8 }} />
             <input value={contactForm.email} type="email"
               onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="Email (optional)"
-              style={{ ...inputStyle, marginBottom: 14 }} />
+              placeholder="Email — needed to send the catalog"
+              style={{ ...inputStyle, marginBottom: 8 }} />
+            <textarea value={contactForm.notes} rows={2}
+              onChange={(e) => setContactForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Notes — what they carry, objections, specifics…"
+              style={{ ...inputStyle, marginBottom: 14, resize: 'vertical', minHeight: 44 }} />
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1, mb: 0.75 }}>
               HOW INTERESTED?{contactForm.interest ? ` — ${INTEREST_LABELS[contactForm.interest]}` : ''}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.5, mb: 2.25 }}>
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
               {[1, 2, 3, 4, 5].map((n) => (
                 <Box key={n} role="button"
                   onClick={() => setContactForm((f) => ({ ...f, interest: f.interest === n ? 0 : n }))}
@@ -2033,6 +2167,25 @@ export default function RoadTripTab({ token, onNavigate }) {
                   }}>🔥</Box>
               ))}
             </Box>
+            <Box role="button"
+              onClick={() => setContactForm((f) => ({ ...f, sendCatalog: !f.sendCatalog }))}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, mb: 2.25, p: 1, cursor: 'pointer',
+                borderRadius: 0.5, border: `1px solid ${contactForm.sendCatalog ? TERM.amber : TERM.borderDim}`,
+                bgcolor: contactForm.sendCatalog ? 'rgba(251,191,36,0.08)' : 'transparent',
+              }}>
+              <Box component="span" sx={{ fontSize: 14 }}>{contactForm.sendCatalog ? '📬' : '▢'}</Box>
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, color: contactForm.sendCatalog ? TERM.amber : TERM.muted }}>
+                  EMAIL THE CATALOG TONIGHT
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, lineHeight: 1.4 }}>
+                  {contactForm.email.trim()
+                    ? 'lands on tonight\'s send list — the check-in call books ~2 days after the send'
+                    : 'add their email above to queue the catalog'}
+                </Typography>
+              </Box>
+            </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Box role="button" onClick={saveContact}
                 sx={{
@@ -2040,8 +2193,8 @@ export default function RoadTripTab({ token, onNavigate }) {
                   py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
                   bgcolor: contactForm.name.trim() ? TERM.cyan : TERM.borderDim,
                   color: '#000', '&:hover': { opacity: 0.9 },
-                }}>SAVE CONTACT</Box>
-              <Box role="button" onClick={() => setContactTarget(null)}
+                }}>SAVE VISIT</Box>
+              <Box role="button" onClick={() => { setContactTarget(null); setContactStop(null); }}
                 sx={{
                   px: 2, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
                   py: 1, borderRadius: 0.5, cursor: 'pointer', textAlign: 'center',
