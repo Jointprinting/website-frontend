@@ -44,6 +44,10 @@ export const OUTCOME_CHIPS = [
 // 🔥 interest scale for the on-road contact capture (1–5).
 export const INTEREST_LABELS = ['', 'not into it', 'lukewarm', 'curious', 'hot', 'ON FIRE'];
 
+// "Add all in view" refuses above this — a drivable day is ~a dozen stops, so
+// a 375-pin viewport is a mis-zoom, not a plan.
+export const BULK_ADD_MAX = 30;
+
 // ── Distance ─────────────────────────────────────────────────────────────────
 export function haversineMi(a, b) {
   const toRad = (d) => (d * Math.PI) / 180;
