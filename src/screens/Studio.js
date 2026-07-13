@@ -1698,17 +1698,17 @@ const HUB_GROUPS = [
   {
     // Brand-new venture: a premium studio that builds bespoke business operating
     // systems for other companies — this very Studio is the demo and the
-    // jumping-off skeleton. "JP Nucleus" is a working placeholder (first invoices
-    // still carry JP branding, so it stays in the family for now). No live tools
-    // yet, so instead of empty tiles the group shows a `foundation` panel: what it
-    // is + the concrete roadmap. Real tools (Prospects, Demo, Builds) slot into a
-    // tier here the moment they exist — the switcher + section are already wired.
-    brand: 'JP Nucleus',
+    // jumping-off skeleton. Named "JP Atom" (owner's pick; stays in the JP family
+    // since first invoices carry JP branding). No live tools yet, so instead of
+    // empty tiles the group shows a `foundation` panel: what it is + the concrete
+    // roadmap. Real tools (Prospects, Demo, Builds) slot into a tier here the
+    // moment they exist — the switcher + section are already wired.
+    brand: 'JP Atom',
     tagline: 'Bespoke business systems',
     foundation: {
       blurb: 'A premium studio that builds custom operating systems for other businesses. Your Studio is the showpiece and the starting skeleton — you fork it, tailor it to a client, and charge a build fee plus a flat monthly. Fewer clients, bigger tickets, all run from here.',
       steps: [
-        { done: true,  label: 'Name it (placeholder: JP Nucleus)' },
+        { done: true,  label: 'Name it: JP Atom' },
         { done: false, label: 'Publish the plan, pricing & positioning' },
         { done: false, label: 'Stand up a click-around demo (example data, no private info)' },
         { done: false, label: 'Record the walkthrough video for marketing' },
@@ -2052,7 +2052,7 @@ function BizSwitcher({ value, onChange, brands }) {
 
 // A brand-new business has no live tools yet, so its section shows this instead of
 // empty tiles: a one-line "what it is" + a real roadmap checklist. Honest
-// groundwork — the moment JP Nucleus grows real tools, they render as a tier above
+// groundwork — the moment JP Atom grows real tools, they render as a tier above
 // this and the panel can retire.
 function FoundationPanel({ data }) {
   const done = data.steps.filter((s) => s.done).length;
@@ -2474,10 +2474,21 @@ function NjTaxReminder({ token, onNavigate }) {
               </Box>
             </Box>
           )}
-          <MuiTypography sx={{ color: D.faint, fontSize: 11, mt: 1, lineHeight: 1.5 }}>
-            File at nj.gov (Sales &amp; Use Tax, ST-50). These are the orders that charged NJ tax with a
-            confirmation in {data.period} — double-check against your QuickBooks before you submit.
-          </MuiTypography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.25, flexWrap: 'wrap' }}>
+            {/* Straight to the NJ ST-50 login (taxcode 55) — no hunting through nj.gov. */}
+            <Button component="a" size="small"
+              href="https://www1.state.nj.us/TYTR_BusinessFilings/jsp/common/Login.jsp?taxcode=55"
+              target="_blank" rel="noopener noreferrer"
+              sx={{ bgcolor: '#f0b429', color: '#1a1405', fontWeight: 800, fontSize: 12, px: 1.75, py: 0.5,
+                borderRadius: 999, textTransform: 'none', flexShrink: 0,
+                '&:hover': { bgcolor: '#e0a51f' } }}>
+              File the ST-50 →
+            </Button>
+            <MuiTypography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.5, flex: 1, minWidth: 200 }}>
+              These are the orders that charged NJ tax with a confirmation in {data.period} —
+              double-check against your QuickBooks before you submit.
+            </MuiTypography>
+          </Box>
         </Box>
       </Collapse>
     </Box>
@@ -2637,7 +2648,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
             })()}
 
             {/* Brand-new business with no live tools yet → show its foundation /
-                roadmap instead of an empty section (JP Nucleus). */}
+                roadmap instead of an empty section (JP Atom). */}
             {group.foundation && <FoundationPanel data={group.foundation} />}
           </Stack>
         </Box>
