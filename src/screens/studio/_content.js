@@ -4,8 +4,10 @@
 // Kept out of the component so the streak/pace logic is unit-testable —
 // mirrors the backend vocab in models/SocialPost.js.
 
+// Instagram-only by owner decision — LinkedIn was dropped (never used, and a
+// pace goal demanding LinkedIn made "week crushed" unreachable). Legacy
+// linkedin posts still load; they just aren't a planning target anymore.
 export const PLATFORMS = [
-  { key: 'linkedin',  label: 'LinkedIn',  short: 'in', color: '#0A66C2' },
   { key: 'instagram', label: 'Instagram', short: 'IG', color: '#d6338f' },
 ];
 
@@ -39,7 +41,7 @@ export function weekLabel(ws) {
 export function postedCountsForWeek(posts, ws) {
   const from = new Date(ws).getTime();
   const to = from + 7 * DAY;
-  const counts = { linkedin: 0, instagram: 0 };
+  const counts = { instagram: 0 };
   (posts || []).forEach((p) => {
     if (!p || p.archived || p.status !== 'posted' || !p.postedAt) return;
     const t = new Date(p.postedAt).getTime();

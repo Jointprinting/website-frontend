@@ -18,8 +18,8 @@
 //   TRACKER      — on posted cards: paste views/likes/comments/shares in
 //                  seconds; snapshots append (never overwrite) so the views
 //                  sparkline shows the growth curve. postUrl links out.
-//                  Built for manual paste today; an official LinkedIn/Meta
-//                  API pull can append through the same endpoint later.
+//                  Built for manual paste today; the Meta API pull appends
+//                  through the same endpoint.
 //
 // Week/streak math lives in _content.js (unit-tested).
 
@@ -65,8 +65,8 @@ const inkInput = {
 
 // ── Small pieces ─────────────────────────────────────────────────────────────
 
-// Platform badge: LinkedIn wears its blue "in" lettermark; Instagram a warm
-// gradient "IG"; an unassigned idea a quiet dash.
+// Platform badge: Instagram wears a warm gradient "IG"; an unassigned idea a
+// quiet dash (legacy LinkedIn posts fall back to the dash too).
 function PlatformBadge({ platform, size = 26 }) {
   const pm = platMeta(platform);
   const base = {
@@ -339,8 +339,7 @@ function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
 
 // The connected-Instagram card: live followers (with 30-day delta off the
 // sync's daily history), media count, last-sync state, Sync now — or, before
-// connecting, the pitch + token dialog trigger. LinkedIn has no comparable
-// personal-analytics API, so it stays manual by design.
+// connecting, the pitch + token dialog trigger.
 function AccountCard({ account, onConnect, onSync, onDisconnect, syncBusy }) {
   if (!account) {
     return (
@@ -432,7 +431,7 @@ export default function ContentTab({ token, onBack }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
   const [posts, setPosts] = React.useState(null);          // null = loading
-  const [pace, setPace] = React.useState({ linkedin: 1, instagram: 1 });
+  const [pace, setPace] = React.useState({ instagram: 1 });
   const [account, setAccount] = React.useState(null);      // connected IG (or null)
   const [connOpen, setConnOpen] = React.useState(false);
   const [conn, setConn] = React.useState({ accessToken: '', igUserId: '' });
@@ -617,7 +616,7 @@ export default function ContentTab({ token, onBack }) {
             Content
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
-            LinkedIn + Instagram — plan it, post it, watch the numbers
+            Instagram — plan it, post it, watch the numbers
           </Typography>
         </Box>
       </Stack>
@@ -809,8 +808,7 @@ export default function ContentTab({ token, onBack }) {
                   sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
                 <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.4, textAlign: 'right', ...mono }}>
                   {(editing.body || '').length}
-                  {editing.platform === 'linkedin' ? ' / 3,000 (LinkedIn cap)' :
-                   editing.platform === 'instagram' ? ' / 2,200 (IG caption cap)' : ' chars'}
+                  {editing.platform === 'instagram' ? ' / 2,200 (IG caption cap)' : ' chars'}
                 </Typography>
               </Box>
               <TextField size="small" multiline minRows={2} label="Notes (hooks, visual direction, CTA…)"

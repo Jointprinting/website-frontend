@@ -27,10 +27,13 @@
 // `shipToState`, and `printerName` on the project via onSave().
 
 import React, { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import {
   Box, Stack, Typography, Button, TextField, IconButton,
-  Dialog, DialogContent, FormControl, Select, MenuItem,
+  Dialog, DialogContent, FormControl, Select, MenuItem, Chip, CircularProgress, Checkbox,
 } from '@mui/material';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import config from '../../config.json';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
@@ -157,7 +160,7 @@ function suggestSupplierUrl(line) {
   return `https://www.ssactivewear.com/p/${hit[1]}/${style}`;
 }
 
-export default function QuoteBuilder({ open, project, onClose, onSave }) {
+export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }) {
   const fullScreen = useMobileFullScreen();
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
@@ -167,6 +170,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
   // Groups the owner explicitly opened up as individual cards (per-line
   // control for one odd option). UI-only escape hatch — nothing is stored.
   const [cardView,     setCardView]     = useState(() => new Set());
+  // The promo catalog picker (vendor items with client price + net cost baked in).
+  const [promoOpen,    setPromoOpen]    = useState(false);
 
   // Seed from the freshest source: a local draft (which survives a tab close
   // or crash mid-quote) wins over the server copy. Keyed on project id so an
@@ -286,6 +291,22 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
     const base = { ...emptyLine(), group: g, description: 'Option 1' };
     setLines(prev => [...prev, { ...base, qty: 50 }, { ...base, qty: 100 }]);
     setDirty(true);
+  };
+
+  // Insert a picked promo product as quote lines: one line per chosen quantity,
+  // all in one group (2+ quantities render as a design grid automatically).
+  // The client price arrives COMMITTED at 0% markup — the catalog price already
+  // carries the margin — and the net cost lands in the cost fields, so the
+  // margin chips read true. Group name de-duped against the quote.
+  const addPromoLines = (newLines) => {
+    if (!newLines || !newLines.length) return;
+    const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
+    let g = (newLines[0].group || 'Promo').trim();
+    if (used.has(g.toLowerCase())) {
+      let n = 2; while (used.has(`${g} ${n}`.toLowerCase())) n += 1; g = `${g} ${n}`;
+    }
+    appendLines(newLines.map(l => ({ ...l, group: g })));
+    setPromoOpen(false);
   };
 
   const setMeta = (setter) => (v) => { setter(v); setDirty(true); };
@@ -474,6 +495,12 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
                   '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
                 Add a single line
               </Button>
+              <Button onClick={() => setPromoOpen(true)} startIcon={<LocalOfferOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                  px: 2, transition: 'background-color 0.18s, color 0.18s',
+                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                Add promo item
+              </Button>
             </Stack>
           </Box>
         ) : (
@@ -519,8 +546,17 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
                 '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add line
             </Button>
+            <Button onClick={() => setPromoOpen(true)} startIcon={<LocalOfferOutlinedIcon sx={{ fontSize: 15 }} />}
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
+                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              Add promo item
+            </Button>
           </Stack>
         )}
+
+        <PromoPickerDialog open={promoOpen} onClose={() => setPromoOpen(false)}
+          authHdr={authHdr} onAdd={addPromoLines} />
       </DialogContent>
     </Dialog>
   );
@@ -719,15 +755,16 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
     noMarkup:  false,   // choosing a tier turns off fixed-price
   }));
 
-  // Promo / fixed-price: the vendor catalog already has margin baked in, so this
-  // design carries no markup — you type each client price and un-typed cells sit
-  // at cost. Toggling ON clears any auto-applied markup prices so they don't look
-  // marked up; COGS is untouched either way.
+  // Promo / fixed-price (the 0% chip): the vendor catalog already has margin
+  // baked in, so this design carries no markup. Clicking 0% resets EVERY cell
+  // to its own COGS (auto, 0% margin — "same as cost") exactly like clicking
+  // any other tier reprices every cell; you then type each client price.
+  // Clicking again leaves promo mode and restores the plain ×1.4 auto default.
   const fixedPrice = all.length > 0 && all.every(i => lines[i] && lines[i].noMarkup);
-  const toggleFixed = () => onPatchIdxs(all, (l) => (
+  const toggleFixed = () => onPatchIdxs(all, () => (
     fixedPrice
-      ? { noMarkup: false }
-      : { noMarkup: true, ...(lineCommitted(l) ? {} : { unitPrice: 0, markup: 1 }) }
+      ? { noMarkup: false, unitPrice: 0, markup: 1.4 }
+      : { noMarkup: true, unitPrice: 0, markup: 1 }
   ));
 
   const renameGroup = (name) => {
@@ -982,7 +1019,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   const cogs = lineCogsPerUnit(l);
                   const profit = eff - cogs;
                   const pct = eff > 0 ? (profit / eff) * 100 : 0;
-                  const lowMargin = cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
+                  // 0% promo lane with no typed price yet: sitting AT COST is the
+                  // expected state, not an underpricing accident — no red ⚠.
+                  const promoAuto = !!l.noMarkup && !committed;
+                  const lowMargin = !promoAuto && cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
                   return (
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
                       border: `1px solid ${lowMargin ? 'rgba(248,113,113,0.6)' : committed ? D.line : 'rgba(251,191,36,0.35)'}`,
@@ -1001,15 +1041,30 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                           color: committed ? D.faint : D.amber }}>
                           {eff > 0 ? `${committed ? '' : 'auto · '}${fmt(eff * q)}` : 'set costs'}
                         </Typography>
-                        {/* Profit/unit + margin — the two numbers the owner reads after
-                            clicking a markup, right where the price landed. */}
-                        <Typography sx={{ fontSize: 9.5, fontWeight: 800, ...mono, color: lowMargin ? '#f87171' : marginColor(pct) }}
-                          title={lowMargin
-                            ? `⚠ Low margin — ${pct.toFixed(0)}% is under your ${MARGIN_FLOOR}% floor (${fmt(profit)}/unit at ${fmt(eff)}). Raise the price or check the costs.`
-                            : `${fmt(profit)}/unit profit · ${pct.toFixed(0)}% margin at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
-                          {cogs > 0 && eff > 0 ? `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct.toFixed(0)}%` : '—'}
+                        {/* Profit/unit + margin — one decimal near the floor, so a 19.9%
+                            (red, under the 20% floor) never reads identical to a 20.1%. */}
+                        <Typography sx={{ fontSize: 9.5, fontWeight: 800, ...mono,
+                          color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct) }}
+                          title={promoAuto
+                            ? `0% markup — the price sits at COGS (${fmt(cogs)}/u) until you type the client price`
+                            : lowMargin
+                              ? `⚠ Low margin — ${pct.toFixed(1)}% is under your ${MARGIN_FLOOR}% floor (${fmt(profit)}/unit profit at ${fmt(eff)}, COGS ${fmt(cogs)}/u). Raise the price or check the costs.`
+                              : `${fmt(profit)}/unit profit · ${pct.toFixed(1)}% margin at ${fmt(eff)} (COGS ${fmt(cogs)}/u)${committed ? '' : ' · auto price'}`}>
+                          {cogs > 0 && eff > 0
+                            ? promoAuto
+                              ? 'at cost · 0%'
+                              : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`
+                            : '—'}
                         </Typography>
                       </Stack>
+                      {/* The COGS this cell prices against (blank + print + its own
+                          setup/ship spread over THIS run size) — shown so the margin
+                          math is never a mystery. */}
+                      {cogs > 0 && (
+                        <Typography sx={{ fontSize: 9, ...mono, color: D.faint, mt: 0.15 }}>
+                          COGS {fmt(cogs)}/u
+                        </Typography>
+                      )}
                     </Box>
                   );
                 })}
@@ -1463,5 +1518,238 @@ function QF({ label, children, sx }) {
       </Typography>
       {children}
     </Box>
+  );
+}
+
+// ── Promo catalog picker ──────────────────────────────────────────────────────
+//
+// Vendor promo items (grinders, trays, mylar bags…) with the client price AND
+// the owner's net cost per quantity tier, MOQ, setup, turnaround and print
+// method — scraped from the vendor catalogs into /api/promo-products. Pick a
+// product, tick the run sizes to pitch, and each becomes a quote line with the
+// client price COMMITTED at 0% markup (the catalog price already carries the
+// margin) and the net cost in the cost fields, so the margin chips read true.
+
+// CLIENT MIRRORS of services/promoCatalog.js (backend) — keep in sync.
+// The break a quantity prices at: the largest tier ≤ qty ("at 500+, this price").
+function promoBreakAt(breaks, qty, valKey) {
+  const arr = Array.isArray(breaks) ? breaks : [];
+  if (!arr.length) return { qty: 0, value: 0 };
+  let best = null;
+  for (const b of arr) if (b.qty <= qty && (!best || b.qty > best.qty)) best = b;
+  return best ? { qty: best.qty, value: num(best[valKey]) } : { qty: arr[0].qty, value: num(arr[0][valKey]) };
+}
+// "$50 (G)" → 50; blank/junk → 0.
+function promoMoney(s) {
+  const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+// "3-5 Business Days" → 1, "7-10 business days" → 2, "8-10 weeks" → 10. The
+// max number in the string, converted to whole weeks (5 business days ≈ 1wk).
+function promoWeeks(s) {
+  const str = String(s || '');
+  const nums = (str.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  if (!nums.length) return '';
+  const max = Math.max(...nums);
+  if (/week/i.test(str)) return Math.ceil(max);
+  if (/day/i.test(str)) return Math.max(1, Math.ceil(max / 5));
+  return '';
+}
+
+function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
+  const [products, setProducts] = useState(null);   // null = loading
+  const [error,    setError]    = useState('');
+  const [q,        setQ]        = useState('');
+  const [cat,      setCat]      = useState('');
+  const [picked,   setPicked]   = useState(null);   // the product being configured
+  const [qtys,     setQtys]     = useState(() => new Set());
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    setError('');
+    axios.get(`${config.backendUrl}/api/promo-products`, authHdr)
+      .then((r) => { if (!cancelled) setProducts(r.data.products || []); })
+      .catch((e) => { if (!cancelled) { setProducts([]); setError(e.response?.data?.message || 'Could not load the promo catalog'); } });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => { if (!open) { setPicked(null); setQ(''); setCat(''); } }, [open]);
+
+  const cats = [...new Set((products || []).map((p) => p.category).filter(Boolean))].sort();
+  const needle = q.trim().toLowerCase();
+  const rows = (products || []).filter((p) =>
+    (!cat || p.category === cat) &&
+    (!needle || `${p.name} ${p.sku} ${p.category} ${p.description}`.toLowerCase().includes(needle)));
+
+  const pick = (p) => {
+    setPicked(p);
+    // Pre-tick the first three run sizes — the usual "here are your options" pitch.
+    setQtys(new Set((p.clientPriceBreaks || []).slice(0, 3).map((b) => b.qty)));
+  };
+  const toggleQty = (n) => setQtys((prev) => {
+    const next = new Set(prev);
+    if (next.has(n)) next.delete(n); else next.add(n);
+    return next;
+  });
+
+  const add = () => {
+    if (!picked || !qtys.size) return;
+    const label = picked.variant === 'overseas' ? `${picked.name} (overseas)` : picked.name;
+    const lines = [...qtys].sort((a, b) => a - b).map((qty) => {
+      const price = promoBreakAt(picked.clientPriceBreaks, qty, 'price').value;
+      const cost  = promoBreakAt(picked.netCostBreaks, qty, 'cost').value;
+      return {
+        ...emptyLine(),
+        group: label, description: label, styleCode: picked.sku || '',
+        qty,
+        blankCost: cost, printCost: 0,
+        setupCost: promoMoney(picked.setupCostNet || picked.setupCostClient),
+        printType: 'None', printDetails: picked.printMethod || '',
+        turnaroundWeeks: promoWeeks(picked.turnaround),
+        unitPrice: price, markup: 1, noMarkup: true,
+      };
+    });
+    onAdd(lines);
+  };
+
+  const minQty = picked ? Math.max(picked.moq || 0, (picked.clientPriceBreaks || [])[0]?.qty || 0) : 0;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3, maxHeight: '86vh' } }}>
+      <Box sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={accentBar} />
+        <Typography sx={{ fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Promo catalog
+          <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
+            client price + your cost per run size, from the vendor catalogs
+          </Typography>
+        </Typography>
+        <IconButton size="small" onClick={onClose} sx={{ color: D.muted, '&:hover': { color: D.text } }}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+
+      <DialogContent sx={{ p: 2, ...scrollbar }}>
+        {products === null ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress sx={{ color: D.green }} size={28} /></Box>
+        ) : picked ? (
+          /* ── Configure the picked product: tick the run sizes to pitch ── */
+          <Box>
+            <Button onClick={() => setPicked(null)} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, mb: 1, px: 1 }}>
+              ← All products
+            </Button>
+            <Typography sx={{ fontWeight: 800, fontSize: 16 }}>
+              {picked.name}{picked.variant === 'overseas' ? ' · overseas' : ''}
+            </Typography>
+            <Typography sx={{ color: D.muted, fontSize: 12, mt: 0.25 }}>
+              {[picked.sku, picked.category, picked.turnaround, picked.printMethod].filter(Boolean).join(' · ')}
+            </Typography>
+            {picked.description && (
+              <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.5, maxWidth: 640 }}>{picked.description}</Typography>
+            )}
+            <Stack direction="row" gap={0.75} mt={1} flexWrap="wrap">
+              {minQty > 0 && <Chip size="small" label={`Minimum ${minQty}`} sx={{ bgcolor: 'rgba(251,191,36,0.12)', color: D.amber, fontWeight: 700, fontSize: 11 }} />}
+              {(picked.setupCostClient || picked.setupCostNet) && (
+                <Chip size="small" label={`Setup: client ${picked.setupCostClient || '—'} · you ${picked.setupCostNet || '—'}`}
+                  sx={{ bgcolor: D.inset, color: D.muted, fontWeight: 700, fontSize: 11 }} />
+              )}
+              {(picked.flags || []).map((f) => (
+                <Chip key={f} size="small" label={f} sx={{ bgcolor: D.inset, color: D.faint, fontSize: 10.5 }} />
+              ))}
+            </Stack>
+
+            <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase', mt: 2, mb: 0.75 }}>
+              Run sizes to pitch (each becomes a column the client picks from)
+            </Typography>
+            <Stack gap={0.5}>
+              {(picked.clientPriceBreaks || []).map((b) => {
+                const cost = promoBreakAt(picked.netCostBreaks, b.qty, 'cost').value;
+                const margin = b.price > 0 && cost > 0 ? ((b.price - cost) / b.price) * 100 : null;
+                return (
+                  <Stack key={b.qty} direction="row" alignItems="center" gap={1}
+                    onClick={() => toggleQty(b.qty)}
+                    sx={{ px: 1.25, py: 0.6, borderRadius: 2, cursor: 'pointer', border: `1px solid ${qtys.has(b.qty) ? D.green : D.line}`,
+                      bgcolor: qtys.has(b.qty) ? 'rgba(74,222,128,0.07)' : D.inset,
+                      transition: 'border-color 0.15s, background-color 0.15s' }}>
+                    <Checkbox size="small" checked={qtys.has(b.qty)} sx={{ p: 0.25, color: D.faint, '&.Mui-checked': { color: D.green } }} />
+                    <Typography sx={{ ...mono, fontWeight: 800, fontSize: 13, width: 76 }}>{b.qty.toLocaleString()}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 12.5, color: D.text, width: 110 }}>client {fmt(b.price)}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 12, color: D.muted, width: 100 }}>{cost > 0 ? `you ${fmt(cost)}` : '—'}</Typography>
+                    {margin != null && (
+                      <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 800, color: marginColor(margin) }}>
+                        {margin.toFixed(0)}% margin
+                      </Typography>
+                    )}
+                  </Stack>
+                );
+              })}
+            </Stack>
+
+            <Stack direction="row" gap={1} mt={2} alignItems="center">
+              <Button onClick={add} disabled={!qtys.size}
+                sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, textTransform: 'none', px: 2.5, borderRadius: 999,
+                  '&:hover': { bgcolor: '#3fce72' }, '&.Mui-disabled': { bgcolor: D.inset, color: D.faint } }}>
+                Add to quote · {qtys.size} run size{qtys.size === 1 ? '' : 's'}
+              </Button>
+              <Typography sx={{ color: D.faint, fontSize: 11 }}>
+                Prices land committed at 0% markup — the catalog price already includes your margin.
+              </Typography>
+            </Stack>
+          </Box>
+        ) : (
+          /* ── Browse/search the catalog ── */
+          <Box>
+            <Stack direction="row" gap={1} mb={1.25} flexWrap="wrap" alignItems="center">
+              <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search grinders, trays, mylar…"
+                sx={{ ...dropInput, flex: '1 1 220px', '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 } }} autoFocus />
+              <Stack direction="row" gap={0.5} flexWrap="wrap">
+                <Chip size="small" label="All" onClick={() => setCat('')}
+                  sx={{ fontWeight: 700, fontSize: 11, cursor: 'pointer',
+                    bgcolor: !cat ? D.green : D.inset, color: !cat ? D.ink : D.muted }} />
+                {cats.map((c) => (
+                  <Chip key={c} size="small" label={c} onClick={() => setCat(c === cat ? '' : c)}
+                    sx={{ fontWeight: 700, fontSize: 11, cursor: 'pointer',
+                      bgcolor: cat === c ? D.green : D.inset, color: cat === c ? D.ink : D.muted }} />
+                ))}
+              </Stack>
+            </Stack>
+            {error && <Typography sx={{ color: '#f87171', fontSize: 12, mb: 1 }}>{error}</Typography>}
+            {!rows.length ? (
+              <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, py: 5, textAlign: 'center', color: D.muted, fontSize: 13 }}>
+                {products.length ? 'No products match.' : 'Catalog is empty — it seeds on the next API deploy.'}
+              </Box>
+            ) : (
+              <Stack gap={0.5}>
+                {rows.map((p) => {
+                  const lo = (p.clientPriceBreaks || [])[0];
+                  const hi = (p.clientPriceBreaks || [])[(p.clientPriceBreaks || []).length - 1];
+                  return (
+                    <Stack key={p._id} direction="row" alignItems="center" gap={1.25} onClick={() => pick(p)}
+                      sx={{ px: 1.5, py: 1, borderRadius: 2, cursor: 'pointer', border: `1px solid ${D.line}`, bgcolor: D.panel,
+                        transition: 'border-color 0.15s, background-color 0.15s',
+                        '&:hover': { borderColor: D.green, bgcolor: D.panelHi } }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.name}{p.variant === 'overseas' ? ' · overseas' : ''}
+                        </Typography>
+                        <Typography sx={{ color: D.faint, fontSize: 11 }}>
+                          {[p.sku, p.category, p.turnaround].filter(Boolean).join(' · ')}
+                        </Typography>
+                      </Box>
+                      {lo && (
+                        <Typography sx={{ ...mono, color: D.muted, fontSize: 11.5, flexShrink: 0 }}>
+                          {fmt(hi.price)}–{fmt(lo.price)}/u
+                        </Typography>
+                      )}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            )}
+          </Box>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
