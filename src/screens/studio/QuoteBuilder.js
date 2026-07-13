@@ -434,11 +434,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave }) {
               ))}
           </Stack>
           <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
-            A design grid pitches one design across options × quantities — options can be brands (3 tees at 50
-            and 100 = one grid, not six lines) or print variants (a 6-print vs 7-print front, each row carrying
-            its own print + setup cost via the row's ⌄ drawer). The client still picks exactly ONE option per
-            design. Groups and single lines work like always: group alternatives so the client picks one;
-            ungrouped lines are always included. Nothing counts toward the project total until they pick.
+            A design grid pitches one design across options × quantities (brands or print variants); the client
+            picks ONE per design. Ungrouped single lines are always included. Nothing counts toward the total until they pick.
           </Typography>
         </Box>
 
@@ -877,8 +874,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           <Box sx={{ alignSelf: 'end', pb: 0.5, position: 'sticky', left: 0, zIndex: 2, bgcolor: D.panel }}>
             <Typography sx={headCellSx}>Options the client picks from</Typography>
             <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2, lineHeight: 1.35 }}>
-              Name the brand or variant, its style #, and the blank $/unit. Open <b>⌄</b> on a row for its
-              print $, setup $ &amp; shipping — set per quantity when a run size prices differently.
+              Name each option + its blank $/unit. Open <b>⌄</b> for print, setup &amp; shipping (per run size).
             </Typography>
           </Box>
           {grid.qtys.map(q => (
@@ -1114,7 +1110,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           <Typography sx={{ color: D.muted, fontSize: 10, flex: 1, minWidth: 120 }}>
             {fixedPrice
               ? 'Promo — you type each client price; nothing marked up. COGS still reads your real cost.'
-              : 'click a tier to price every cell at cost × tier (+% markup / resulting margin)'}
+              : 'click a margin — every option fills in its own price at that margin'}
           </Typography>
           {/* Promo toggle — for vendor-catalog items already priced with margin. */}
           <Box onClick={toggleFixed} title="Promo items whose catalog price already includes your margin — no markup added"
@@ -1140,11 +1136,13 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
                   '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
                 }}>
-                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700 }}>
-                    +{pct}%
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13.5, fontWeight: 800, ...mono }}
+                    title={`+${pct}% markup over each option's own cost`}>
+                    {(pct / (100 + pct) * 100).toFixed(0)}%
                   </Typography>
-                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 10.5, fontWeight: 700, ...mono }}>
-                    {(pct / (100 + pct) * 100).toFixed(0)}% margin
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 8, fontWeight: 800,
+                    letterSpacing: 0.5, textTransform: 'uppercase', mt: 0.1 }}>
+                    margin
                   </Typography>
                 </Box>
               );
@@ -1328,6 +1326,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
             {TIERS.map(pct => {
               const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
               const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
+              const tierMargin = price > 0 ? (tierProfit / price) * 100 : 0;
               const sel = selectedPct === pct;
               return (
                 <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
@@ -1338,18 +1337,14 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
                   transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
                   '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
                 }}>
-                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700,
-                    transition: 'color 0.18s' }}>
-                    +{pct}%
-                  </Typography>
-                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12, fontWeight: 800,
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13, fontWeight: 800,
                     ...mono, transition: 'color 0.18s' }}>
                     {fmt(price)}
                   </Typography>
-                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9, fontWeight: 600,
-                    ...mono, mt: 0.1, transition: 'color 0.18s' }}
-                    title="Profit per unit at this margin">
-                    {fmt(tierProfit)}/u
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9.5, fontWeight: 700,
+                    mt: 0.1, transition: 'color 0.18s' }}
+                    title={`+${pct}% markup · ${fmt(tierProfit)}/unit profit`}>
+                    {tierMargin.toFixed(0)}% margin
                   </Typography>
                 </Box>
               );

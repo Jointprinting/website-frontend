@@ -20,6 +20,15 @@ export const BRAND_MARKS = {
   'JP Nucleus':     markJpn,
 };
 
+// Each business's accent — matches its cube color, so the hub takes on that
+// business's "vibe" when it's the one in focus (green / blue / violet).
+export const BRAND_ACCENT = {
+  'Joint Printing': '#4ade80', // green
+  'JP Webworks':    '#54a6ff', // blue
+  'JP Nucleus':     '#9e82ff', // violet
+};
+export const brandAccent = (brand) => BRAND_ACCENT[brand] || BRAND_ACCENT['Joint Printing'];
+
 export default function BrandCube({ brand, size = 28, style }) {
   const src = BRAND_MARKS[brand];
   if (!src) return null;

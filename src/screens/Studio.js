@@ -70,7 +70,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
-import BrandCube, { BRAND_MARKS } from '../common/BrandCube';
+import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
@@ -1897,8 +1897,11 @@ function _fmtCountdown(iso) {
 // content (the Paused chip / collapse affordance).
 function SectionHeader({ brand, tagline, dim, right }) {
   // Real businesses wear their cube mark; utility headers (e.g. "Signals") and
-  // dimmed sections keep the plain accent bar.
-  const showMark = !dim && !!BRAND_MARKS[brand];
+  // dimmed sections keep the plain accent bar. The label + bar take the business's
+  // own accent color so each section reads in that business's vibe.
+  const isBrand = !!BRAND_MARKS[brand];
+  const showMark = !dim && isBrand;
+  const accent = isBrand ? brandAccent(brand) : D.green;
   return (
     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
       {showMark ? (
@@ -1906,16 +1909,14 @@ function SectionHeader({ brand, tagline, dim, right }) {
       ) : (
         <Box sx={{
           width: 3, alignSelf: 'stretch', minHeight: 28, borderRadius: 2,
-          background: dim
-            ? 'rgba(255,255,255,0.18)'
-            : `linear-gradient(180deg, ${D.green}, ${D.greenDk})`,
+          background: dim ? 'rgba(255,255,255,0.18)' : accent,
           opacity: dim ? 1 : 0.9, flexShrink: 0,
         }} />
       )}
       <Box sx={{ minWidth: 0 }}>
         <MuiTypography sx={{
           ...eyebrow,
-          color: dim ? D.faint : D.green,
+          color: dim ? D.faint : accent,
           fontSize: 11, letterSpacing: 2.4, lineHeight: 1.1,
         }}>
           {brand}
@@ -2004,41 +2005,44 @@ function TierLabel({ children }) {
   );
 }
 
-// Business switcher — the command-center header. Each business is its own focused
-// context (its own stats + tools), one at a time — no blended "all" view.
-// Extensible: it reads the brands straight off HUB_GROUPS, so onboarding a future
-// business is one entry, no switcher edit.
+// Business switcher — a row of the businesses' own cube marks, so the owner picks
+// by logo (and always sees "what's from what"). The active one lights up in its
+// own accent color (green / blue / violet), giving the hub that business's vibe.
+// Reads brands straight off HUB_GROUPS, so a new business needs no switcher edit.
 function BizSwitcher({ value, onChange, brands }) {
-  const opts = brands.map((b) => ({ key: b, label: b }));
   return (
     <Box role="tablist" aria-label="Business" sx={{
-      display: 'flex', gap: 0.5, p: 0.5,
-      bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5,
-      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-      '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
+      display: 'flex', gap: { xs: 0.75, sm: 1 }, flexWrap: 'wrap',
     }}>
-      {opts.map((o) => {
-        const active = value === o.key;
+      {brands.map((b) => {
+        const active = value === b;
+        const accent = brandAccent(b);
         return (
           <Box
-            key={o.key}
+            key={b}
             role="tab"
             aria-selected={active}
             tabIndex={0}
-            onClick={() => onChange(o.key)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(o.key); } }}
+            onClick={() => onChange(b)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(b); } }}
             sx={{
-              cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
-              px: { xs: 1.5, sm: 1.9 }, py: 0.85, borderRadius: 2,
-              fontSize: 12.5, fontWeight: 700, letterSpacing: 0.2,
-              color: active ? D.ink : D.muted,
-              bgcolor: active ? D.green : 'transparent',
-              transition: 'color .18s ease, background-color .18s ease',
-              '&:hover': active ? {} : { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' },
-              '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+              display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none',
+              px: { xs: 1.25, sm: 1.5 }, py: 0.85, borderRadius: 2.5,
+              border: `1px solid ${active ? accent : D.line}`,
+              bgcolor: active ? `${accent}1f` : 'transparent',
+              opacity: active ? 1 : 0.68,
+              transition: 'opacity .18s ease, background-color .18s ease, border-color .18s ease',
+              '&:hover': { opacity: 1, bgcolor: active ? `${accent}1f` : `${accent}12` },
+              '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
             }}
           >
-            {o.label}
+            <BrandCube brand={b} size={26} />
+            <MuiTypography sx={{
+              fontSize: 13, fontWeight: 800, letterSpacing: 0.2, whiteSpace: 'nowrap',
+              color: active ? accent : D.muted,
+            }}>
+              {b}
+            </MuiTypography>
           </Box>
         );
       })}
@@ -2414,6 +2418,8 @@ function NjTaxReminder({ token, onNavigate }) {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
         sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, py: 1.75, cursor: 'pointer',
           '&:hover': { bgcolor: 'rgba(240,180,41,0.10)' } }}>
+        {/* Joint Printing mark — so it's clear which business this belongs to. */}
+        <BrandCube brand="Joint Printing" size={24} style={{ marginRight: 2 }} />
         <Box sx={{ fontSize: 22, flexShrink: 0 }}>🧾</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <MuiTypography sx={{ color: '#f0b429', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
@@ -3021,16 +3027,10 @@ function StudioBody({ token, onLogout }) {
             sx={{ mb: { xs: 2.5, md: 3.5 } }}
           >
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
-              <Box sx={{
-                width: 34, height: 34, borderRadius: 1.75, flexShrink: 0,
-                bgcolor: D.greenDk, color: D.green,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: `0 0 0 4px rgba(74,222,128,0.06)`,
-              }}>
-                <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  sx={{ width: 22, height: 22, objectFit: 'contain' }} />
-              </Box>
+              {/* Transparent brand mark — no tile behind it (the box is already a
+                  clean cube on transparent). */}
+              <BrandCube brand="Joint Printing" size={34} />
+
               <Box sx={{ minWidth: 0 }}>
                 <MuiTypography
                   sx={{
