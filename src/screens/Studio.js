@@ -2401,6 +2401,9 @@ function MerchSeasonReminder({ onPick }) {
 function NjTaxReminder({ token, onNavigate }) {
   const [data, setData] = React.useState(null);
   const [open, setOpen] = React.useState(false);
+  const [filing, setFiling] = React.useState(false);
+  const [fileErr, setFileErr] = React.useState('');
+  const fileRef = React.useRef(null);
   React.useEffect(() => {
     if (!token) return undefined;
     let cancelled = false;
@@ -2409,7 +2412,47 @@ function NjTaxReminder({ token, onNavigate }) {
       .catch(() => { if (!cancelled) setData(null); });
     return () => { cancelled = true; };
   }, [token]);
-  if (!data || !data.active) return null;   // only shows inside the reminder window
+
+  // "Mark filed": optionally push the NJ confirmation into Finances' receipts
+  // (the scanner books it like any other receipt), then stamp the quarter
+  // filed — which dismisses this banner for good.
+  const markFiled = async (file) => {
+    if (!data || !data.periodKey || filing) return;
+    setFiling(true); setFileErr('');
+    try {
+      const hdr = { headers: { Authorization: `Bearer ${token}` } };
+      let receiptId = '';
+      if (file) {
+        const fileDataUrl = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = () => reject(new Error('Could not read the file'));
+          fr.readAsDataURL(file);
+        });
+        const up = await axios.post(`${config.backendUrl}/api/receipts`,
+          { fileDataUrl, fileName: file.name || `nj-st50-${data.periodKey}.pdf` }, hdr);
+        receiptId = up.data && up.data.receipt ? up.data.receipt._id : '';
+      }
+      await axios.post(`${config.backendUrl}/api/finances/nj-sales-tax/filed`,
+        { period: data.periodKey, receiptId }, hdr);
+      setData((d) => (d ? { ...d, filed: true } : d));
+    } catch (e) {
+      setFileErr(e.response?.data?.message || 'Could not mark it filed — try again.');
+    } finally {
+      setFiling(false);
+    }
+  };
+  const onMarkFiledClick = () => {
+    if (!data || !data.periodKey || filing) return;
+    // Receipt first (it lands in Finances), but never block the dismissal on it.
+    if (window.confirm('Attach the NJ filing confirmation?\n\nOK — choose the file (it saves to Finances receipts, then dismisses this reminder)\nCancel — mark filed without a receipt')) {
+      fileRef.current && fileRef.current.click();
+    } else {
+      markFiled(null);
+    }
+  };
+
+  if (!data || !data.active || data.filed) return null;   // window closed, or already filed
   const soon = data.daysUntilDue <= 3;
   return (
     <Box sx={{ borderRadius: 3, overflow: 'hidden', border: `1px solid ${soon ? '#f0b429' : 'rgba(240,180,41,0.4)'}`,
@@ -2518,9 +2561,20 @@ function NjTaxReminder({ token, onNavigate }) {
                 '&:hover': { bgcolor: '#e0a51f' } }}>
               File the ST-50 →
             </Button>
-            <MuiTypography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.5, flex: 1, minWidth: 200 }}>
-              These are the orders that charged NJ tax with a confirmation in {data.period} —
-              double-check against your QuickBooks before you submit.
+            {/* Done filing → attach the confirmation (lands in Finances receipts)
+                and dismiss this banner for the quarter. */}
+            <Button size="small" onClick={onMarkFiledClick} disabled={filing || !data.periodKey}
+              sx={{ color: '#f0b429', border: '1.5px solid rgba(240,180,41,0.5)', fontWeight: 800, fontSize: 12,
+                px: 1.75, py: 0.4, borderRadius: 999, textTransform: 'none', flexShrink: 0,
+                '&:hover': { borderColor: '#f0b429', bgcolor: 'rgba(240,180,41,0.10)' },
+                '&.Mui-disabled': { color: D.faint, borderColor: D.line } }}>
+              {filing ? 'Saving…' : 'Mark filed ✓'}
+            </Button>
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) markFiled(f); }} />
+            <MuiTypography sx={{ color: fileErr ? '#f87171' : D.faint, fontSize: 11, lineHeight: 1.5, flex: 1, minWidth: 200 }}>
+              {fileErr || `These are the orders that charged NJ tax with a confirmation in ${data.period} —
+              double-check against your QuickBooks before you submit.`}
             </MuiTypography>
           </Box>
         </Box>
