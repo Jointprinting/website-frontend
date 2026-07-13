@@ -2475,9 +2475,9 @@ function NjTaxReminder({ token, onNavigate }) {
             </Box>
           )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.25, flexWrap: 'wrap' }}>
-            {/* Straight to the NJ ST-50 login (taxcode 55) — no hunting through nj.gov. */}
+            {/* Straight to the NJ Tax Portal — no hunting through nj.gov. */}
             <Button component="a" size="small"
-              href="https://www1.state.nj.us/TYTR_BusinessFilings/jsp/common/Login.jsp?taxcode=55"
+              href="https://www.nj.gov/treasury/taxation/taxportal/index.shtml"
               target="_blank" rel="noopener noreferrer"
               sx={{ bgcolor: '#f0b429', color: '#1a1405', fontWeight: 800, fontSize: 12, px: 1.75, py: 0.5,
                 borderRadius: 999, textTransform: 'none', flexShrink: 0,
