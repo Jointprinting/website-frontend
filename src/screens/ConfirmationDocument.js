@@ -327,6 +327,14 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                     )}
                     <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
                       <Typography sx={{ fontWeight: 800, fontSize: 15.5, mb: 1.25, overflowWrap: 'anywhere' }}>{confItemTitle(it, idx)}</Typography>
+                      {/* Estimated turnaround for THIS item — carried from the quote
+                          line the client picked, so the doc they sign sets the
+                          delivery expectation per product. */}
+                      {Number(it.turnaroundWeeks) > 0 && (
+                        <Typography sx={{ color: D.muted, fontSize: 12, mt: -1, mb: 1.25 }}>
+                          Estimated turnaround: ~{Number(it.turnaroundWeeks)} week{Number(it.turnaroundWeeks) === 1 ? '' : 's'}
+                        </Typography>
+                      )}
                       {sizes.length > 0 && (
                         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
                           <thead>

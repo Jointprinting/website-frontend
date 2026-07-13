@@ -230,6 +230,9 @@ export function confLocationTax(conf) {
   const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
   const lines = taxed.map((st) => {
     const subtotal = items.reduce((sum, it) => {
+      // NJ clothing exemption — mirrors backend computeLocationTax: a taxExempt
+      // item (apparel) contributes nothing to the taxable base; promos still tax.
+      if (it && it.taxExempt) return sum;
       const itemRevenue = ((it && it.sizes) || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
       const itemQty = ((it && it.sizes) || []).reduce((q, sz) => q + n(sz.qty), 0);
       if (itemQty <= 0) return sum;

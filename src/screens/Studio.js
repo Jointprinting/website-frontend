@@ -2398,6 +2398,132 @@ function MerchSeasonReminder({ onPick }) {
   );
 }
 
+// Upload a state-filing confirmation into Finances AND book it as a real
+// transaction in one motion. Receipts never auto-book (by design — the AI only
+// fills fields), so without the confirm step a filing receipt sat invisible in
+// a server-side review queue. Prompts for the true amount paid (state portals
+// add a card surcharge), then: POST /receipts (store) → POST /receipts/:id/confirm
+// (book the expense, linked to the file). Returns the receipt id, '' when the
+// upload succeeded but booking failed (file still saved), or null if the owner
+// cancelled the amount prompt.
+async function bookFilingReceipt(hdr, file, { fileName, amountPrompt, defaultAmount, category, party, summary }) {
+  const raw = window.prompt(amountPrompt, (Number(defaultAmount) || 0).toFixed(2));
+  if (raw === null) return null;
+  const amount = Number(String(raw).replace(/[^0-9.]/g, '')) || Number(defaultAmount) || 0;
+  const fileDataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error('Could not read the file'));
+    fr.readAsDataURL(file);
+  });
+  const up = await axios.post(`${config.backendUrl}/api/receipts`,
+    { fileDataUrl, fileName: file.name || fileName }, hdr);
+  const receiptId = up.data && up.data.receipt ? up.data.receipt._id : '';
+  if (!receiptId) return '';
+  try {
+    await axios.post(`${config.backendUrl}/api/receipts/${receiptId}/confirm`, {
+      force: true,
+      extracted: {
+        type: 'expense', category, party, amount, summary,
+        date: new Date().toISOString().slice(0, 10),
+      },
+    }, hdr);
+  } catch (e) {
+    // The file is saved either way; booking can be finished from Finances.
+    console.warn('[filing] receipt booked-upload confirm failed:', e.message);
+  }
+  return receiptId;
+}
+
+// NJ LLC annual report — the $75/yr state filing, due by the end of April (the
+// LLC's anniversary month). Same shape as the ST-50 banner: a window-scoped
+// reminder with a straight-to-the-portal button and a "Mark filed" that books
+// the confirmation into Finances and dismisses the year.
+function LlcAnnualReportReminder({ token }) {
+  const [data, setData] = React.useState(null);
+  const [filing, setFiling] = React.useState(false);
+  const [fileErr, setFileErr] = React.useState('');
+  const fileRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+    axios.get(`${config.backendUrl}/api/finances/nj-annual-report`, { headers: { Authorization: `Bearer ${token}` }, timeout: 12000 })
+      .then((r) => { if (!cancelled) setData(r.data || null); })
+      .catch(() => { if (!cancelled) setData(null); });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const markFiled = async (file) => {
+    if (!data || filing) return;
+    setFiling(true); setFileErr('');
+    try {
+      const hdr = { headers: { Authorization: `Bearer ${token}` } };
+      let receiptId = '';
+      if (file) {
+        receiptId = await bookFilingReceipt(hdr, file, {
+          fileName: `nj-llc-annual-report-${data.year}.pdf`,
+          amountPrompt: 'Total paid (the $75 fee plus the portal’s card fee):',
+          defaultAmount: data.fee || 75,
+          category: 'Other',
+          party: 'NJ Division of Revenue',
+          summary: `NJ LLC annual report ${data.year}`,
+        });
+        if (receiptId === null) return;
+      }
+      await axios.post(`${config.backendUrl}/api/finances/nj-annual-report/filed`,
+        { year: String(data.year), receiptId: receiptId || '' }, hdr);
+      setData((d) => (d ? { ...d, filed: true } : d));
+    } catch (e) {
+      setFileErr(e.response?.data?.message || 'Could not mark it filed — try again.');
+    } finally {
+      setFiling(false);
+    }
+  };
+  const onMarkFiledClick = () => {
+    if (!data || filing) return;
+    if (window.confirm('Attach the filing confirmation?\n\nOK — choose the file (it books into Finances, then dismisses this reminder)\nCancel — mark filed without a receipt')) {
+      fileRef.current && fileRef.current.click();
+    } else {
+      markFiled(null);
+    }
+  };
+
+  if (!data || !data.active || data.filed) return null;
+  const soon = data.daysUntilDue <= 5;
+  return (
+    <Box sx={{ borderRadius: 3, border: `1px solid ${soon ? '#f0b429' : 'rgba(240,180,41,0.4)'}`,
+      bgcolor: 'rgba(240,180,41,0.06)', px: { xs: 2, md: 2.5 }, py: 1.75,
+      display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+      <BrandCube brand="Joint Printing" size={24} style={{ marginRight: 2 }} />
+      <Box sx={{ fontSize: 22, flexShrink: 0 }}>🏛️</Box>
+      <Box sx={{ flex: 1, minWidth: 200 }}>
+        <MuiTypography sx={{ color: '#f0b429', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+          NJ LLC annual report due {fmtDate(data.dueDate)} · {data.daysUntilDue <= 0 ? 'due now' : `in ${data.daysUntilDue} day${data.daysUntilDue === 1 ? '' : 's'}`}
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.text, fontSize: 14.5, fontWeight: 800, mt: 0.2 }}>
+          File the {data.year} annual report — ${data.fee} + the portal's card fee
+        </MuiTypography>
+        {fileErr && <MuiTypography sx={{ color: '#f87171', fontSize: 11, mt: 0.2 }}>{fileErr}</MuiTypography>}
+      </Box>
+      <Button component="a" size="small"
+        href="https://www.njportal.com/DOR/AnnualReports" target="_blank" rel="noopener noreferrer"
+        sx={{ bgcolor: '#f0b429', color: '#1a1405', fontWeight: 800, fontSize: 12, px: 1.75, py: 0.5,
+          borderRadius: 999, textTransform: 'none', flexShrink: 0, '&:hover': { bgcolor: '#e0a51f' } }}>
+        File it →
+      </Button>
+      <Button size="small" onClick={onMarkFiledClick} disabled={filing}
+        sx={{ color: '#f0b429', border: '1.5px solid rgba(240,180,41,0.5)', fontWeight: 800, fontSize: 12,
+          px: 1.75, py: 0.4, borderRadius: 999, textTransform: 'none', flexShrink: 0,
+          '&:hover': { borderColor: '#f0b429', bgcolor: 'rgba(240,180,41,0.10)' },
+          '&.Mui-disabled': { color: D.faint, borderColor: D.line } }}>
+        {filing ? 'Saving…' : 'Mark filed ✓'}
+      </Button>
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden
+        onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) markFiled(f); }} />
+    </Box>
+  );
+}
+
 function NjTaxReminder({ token, onNavigate }) {
   const [data, setData] = React.useState(null);
   const [open, setOpen] = React.useState(false);
@@ -2413,8 +2539,9 @@ function NjTaxReminder({ token, onNavigate }) {
     return () => { cancelled = true; };
   }, [token]);
 
-  // "Mark filed": optionally push the NJ confirmation into Finances' receipts
-  // (the scanner books it like any other receipt), then stamp the quarter
+  // "Mark filed": push the NJ confirmation into Finances AND book it as a real
+  // transaction on the spot (receipts never auto-book — without the confirm
+  // step the upload sat invisible in a review queue), then stamp the quarter
   // filed — which dismisses this banner for good.
   const markFiled = async (file) => {
     if (!data || !data.periodKey || filing) return;
@@ -2423,18 +2550,18 @@ function NjTaxReminder({ token, onNavigate }) {
       const hdr = { headers: { Authorization: `Bearer ${token}` } };
       let receiptId = '';
       if (file) {
-        const fileDataUrl = await new Promise((resolve, reject) => {
-          const fr = new FileReader();
-          fr.onload = () => resolve(fr.result);
-          fr.onerror = () => reject(new Error('Could not read the file'));
-          fr.readAsDataURL(file);
+        receiptId = await bookFilingReceipt(hdr, file, {
+          fileName: `nj-st50-${data.periodKey}${file.name && file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.pdf'}`,
+          amountPrompt: `Total paid (from the NJ confirmation — includes their card fee):`,
+          defaultAmount: data.totalTax,
+          category: 'Sales Tax',
+          party: 'NJ Division of Taxation',
+          summary: `NJ ST-50 ${data.period} sales tax remittance`,
         });
-        const up = await axios.post(`${config.backendUrl}/api/receipts`,
-          { fileDataUrl, fileName: file.name || `nj-st50-${data.periodKey}.pdf` }, hdr);
-        receiptId = up.data && up.data.receipt ? up.data.receipt._id : '';
+        if (receiptId === null) return; // owner cancelled the amount prompt
       }
       await axios.post(`${config.backendUrl}/api/finances/nj-sales-tax/filed`,
-        { period: data.periodKey, receiptId }, hdr);
+        { period: data.periodKey, receiptId: receiptId || '' }, hdr);
       setData((d) => (d ? { ...d, filed: true } : d));
     } catch (e) {
       setFileErr(e.response?.data?.message || 'Could not mark it filed — try again.');
@@ -2637,6 +2764,8 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
       {/* NJ sales-tax (ST-50) reminder — only inside its ~2-week filing window. */}
       {showJpVitals && <NjTaxReminder token={token} onNavigate={onNavigate} />}
+      {/* NJ LLC annual report ($75/yr, due end of April) — same window pattern. */}
+      {showJpVitals && <LlcAnnualReportReminder token={token} />}
 
       {/* Merch-season nudge — 4/20 & 7/10, the two dispensary dates worth prepping for. */}
       {showJpVitals && <MerchSeasonReminder onPick={onPick} />}

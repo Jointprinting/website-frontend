@@ -48,8 +48,14 @@ import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } fr
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 
+// Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
+// clicking 30% prices the line so that exactly 30% of what the client pays is
+// profit — price = cost / (1 − margin). The old strip applied +% MARKUP over
+// cost, so clicking "10%" yielded a 9.1% margin and read as broken.
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
+const priceAtMargin = (cogs, marginPct) =>
+  marginPct >= 100 ? 0 : cogs / (1 - marginPct / 100);
 
 const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
 
@@ -251,10 +257,12 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
         : { noMarkup: true, markup: 1, unitPrice: '' });
       return;
     }
-    const c = lineCogsPerUnit(lines[i]);   // markup applies over this line's true unit cost
+    // Target MARGIN: price so that pct% of what the client pays is profit.
+    const c = lineCogsPerUnit(lines[i]);
+    const price = +priceAtMargin(c, pct).toFixed(2);
     setLine(i, {
-      unitPrice: +(c * (1 + pct / 100)).toFixed(2),
-      markup:    +(1 + pct / 100).toFixed(4),
+      unitPrice: price,
+      markup:    c > 0 ? +(price / c).toFixed(4) : 1,
       noMarkup:  false,
     });
   };
@@ -739,21 +747,36 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
 
   const colIdxs = (q) => grid.brands.map(b => (grid.cellAt(b.key, q) || {}).idx).filter(i => i !== undefined);
 
-  // The tier strip highlights a tier only when EVERY cell is committed at it.
+  // The tier strip highlights a margin only when EVERY cell is committed at it.
   const uniformPct = (() => {
     const pcts = all.map(i => {
       const l = lines[i];
       const c = lineCogsPerUnit(l);
-      return c > 0 && num(l.unitPrice) > 0 ? Math.round((num(l.unitPrice) / c - 1) * 100) : null;
+      const p = num(l.unitPrice);
+      return c > 0 && p > 0 ? Math.round((1 - c / p) * 100) : null;
     });
     return pcts.every(p => p !== null && p === pcts[0]) ? pcts[0] : null;
   })();
 
-  const applyTier = (pct) => onPatchIdxs(all, (l) => ({
-    unitPrice: +(lineCogsPerUnit(l) * (1 + pct / 100)).toFixed(2),
-    markup:    +(1 + pct / 100).toFixed(4),
-    noMarkup:  false,   // choosing a tier turns off fixed-price
-  }));
+  // Price every cell to hit the target MARGIN over its own cost.
+  const applyTier = (pct) => onPatchIdxs(all, (l) => {
+    const c = lineCogsPerUnit(l);
+    const price = +priceAtMargin(c, pct).toFixed(2);
+    return {
+      unitPrice: price,
+      markup:    c > 0 ? +(price / c).toFixed(4) : 1,
+      noMarkup:  false,   // choosing a margin turns off fixed-price
+    };
+  });
+
+  // "How much do I make at m%?" — the whole design's profit at a given margin
+  // (every cell priced at its own cost / (1 − m)), shown on each chip.
+  const profitAtMargin = (pct) => all.reduce((sum, i) => {
+    const l = lines[i];
+    const c = lineCogsPerUnit(l);
+    if (c <= 0) return sum;
+    return sum + num(l.qty) * (priceAtMargin(c, pct) - c);
+  }, 0);
 
   // Promo / fixed-price (the 0% chip): the vendor catalog already has margin
   // baked in, so this design carries no markup. Clicking 0% resets EVERY cell
@@ -1023,9 +1046,11 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   // expected state, not an underpricing accident — no red ⚠.
                   const promoAuto = !!l.noMarkup && !committed;
                   const lowMargin = !promoAuto && cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
+                  const cellLabel = { fontSize: 8, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: D.faint, lineHeight: 1.6 };
+                  const cellVal = { fontSize: 10, fontWeight: 700, ...mono, lineHeight: 1.6, textAlign: 'right' };
                   return (
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
-                      border: `1px solid ${lowMargin ? 'rgba(248,113,113,0.6)' : committed ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
                       {/* Show the field EMPTY when the price is auto (0/blank) so the
                           computed auto price shows through as the placeholder — a stored
@@ -1036,33 +1061,27 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
                         InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
                         sx={cellTf} />
-                      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={0.25}>
-                        <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
-                          color: committed ? D.faint : D.amber }}>
-                          {eff > 0 ? `${committed ? '' : 'auto · '}${fmt(eff * q)}` : 'set costs'}
-                        </Typography>
-                        {/* Profit/unit + margin — one decimal near the floor, so a 19.9%
-                            (red, under the 20% floor) never reads identical to a 20.1%. */}
-                        <Typography sx={{ fontSize: 9.5, fontWeight: 800, ...mono,
-                          color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct) }}
-                          title={promoAuto
-                            ? `0% markup — the price sits at COGS (${fmt(cogs)}/u) until you type the client price`
-                            : lowMargin
-                              ? `⚠ Low margin — ${pct.toFixed(1)}% is under your ${MARGIN_FLOOR}% floor (${fmt(profit)}/unit profit at ${fmt(eff)}, COGS ${fmt(cogs)}/u). Raise the price or check the costs.`
-                              : `${fmt(profit)}/unit profit · ${pct.toFixed(1)}% margin at ${fmt(eff)} (COGS ${fmt(cogs)}/u)${committed ? '' : ' · auto price'}`}>
-                          {cogs > 0 && eff > 0
-                            ? promoAuto
-                              ? 'at cost · 0%'
-                              : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`
-                            : '—'}
-                        </Typography>
-                      </Stack>
-                      {/* The COGS this cell prices against (blank + print + its own
-                          setup/ship spread over THIS run size) — shown so the margin
-                          math is never a mystery. */}
-                      {cogs > 0 && (
-                        <Typography sx={{ fontSize: 9, ...mono, color: D.faint, mt: 0.15 }}>
-                          COGS {fmt(cogs)}/u
+                      {/* Every number LABELED so nothing needs decoding: what the client
+                          pays in total, what you make, what it costs you. */}
+                      {cogs > 0 && eff > 0 ? (
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 0.75 }}>
+                          <Typography sx={cellLabel}>{committed ? 'Total' : 'Total · auto'}</Typography>
+                          <Typography sx={{ ...cellVal, color: committed ? D.text : D.amber }}>{fmt(eff * q)}</Typography>
+                          <Typography sx={cellLabel}>Profit</Typography>
+                          <Typography sx={{ ...cellVal, color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct) }}
+                            title={promoAuto
+                              ? `0% margin — the price sits at COGS until you type the client price`
+                              : lowMargin
+                                ? `⚠ ${pct.toFixed(1)}% is under your ${MARGIN_FLOOR}% margin floor — raise the price or check the costs`
+                                : `${fmt(profit * q)} total profit on this cell`}>
+                            {promoAuto ? 'at cost · 0%' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
+                          </Typography>
+                          <Typography sx={cellLabel}>COGS</Typography>
+                          <Typography sx={{ ...cellVal, color: D.muted }}>{fmt(cogs)}/u</Typography>
+                        </Box>
+                      ) : (
+                        <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', color: D.amber }}>
+                          set costs
                         </Typography>
                       )}
                     </Box>
@@ -1181,14 +1200,14 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: fixedPrice ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            {fixedPrice ? 'Markup 0% · you set the prices' : 'Markup · all options'}
+            {fixedPrice ? 'Margin 0% · you set the prices' : 'Margin · all options'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10, flex: 1, minWidth: 120 }}>
             {fixedPrice
               ? 'type each client price — COGS still reads your real cost'
               : uniformPct != null && uniformPct > 0
-                ? `+${uniformPct}% → ${(uniformPct / (100 + uniformPct) * 100).toFixed(0)}% margin — profit/unit shows on every cell`
-                : 'click a markup — every option prices at its own cost × markup'}
+                ? `every option priced at a true ${uniformPct}% margin — you make ${fmt(profitAtMargin(uniformPct))} total if they take everything`
+                : 'click your margin — every option prices to hit it; the $ under each is your total profit at that margin'}
           </Typography>
         </Stack>
         <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
@@ -1209,18 +1228,22 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           </Box>
           {TIERS.map(pct => {
             const sel = !fixedPrice && uniformPct === pct;
+            const totalProfit = profitAtMargin(pct);
             return (
               <Box key={pct} onClick={() => applyTier(pct)} sx={{
-                cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
-                py: 0.95, px: 0.5, borderRadius: 1.75,
+                cursor: 'pointer', flex: '1 0 62px', minWidth: 62, textAlign: 'center',
+                py: 0.7, px: 0.5, borderRadius: 1.75,
                 bgcolor: sel ? D.green : 'transparent',
                 boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
                 transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
                 '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
-              }}>
-                <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13, fontWeight: 800, ...mono }}
-                  title={`every option at its own cost × ${(1 + pct / 100).toFixed(2)} — ${(pct / (100 + pct) * 100).toFixed(0)}% margin`}>
-                  +{pct}%
+              }}
+                title={`price every option at a true ${pct}% margin — ${fmt(totalProfit)} total profit if the client takes everything`}>
+                <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12.5, fontWeight: 800, ...mono }}>
+                  {pct}%
+                </Typography>
+                <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9.5, fontWeight: 700, ...mono, mt: 0.1 }}>
+                  {totalProfit > 0 ? `+${fmt(totalProfit)}` : '—'}
                 </Typography>
               </Box>
             );
@@ -1267,8 +1290,9 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
   const profit    = unitPrice - cogsPerUnit;
   const marginPct = unitPrice > 0 ? (profit / unitPrice) * 100 : 0;
   const marginCol = marginColor(marginPct);
-  const selectedPct = cogsPerUnit > 0 && committed
-    ? Math.round((num(line.unitPrice) / cogsPerUnit - 1) * 100)
+  // The committed price's true margin — what the tier strip highlights.
+  const selectedPct = cogsPerUnit > 0 && committed && num(line.unitPrice) > 0
+    ? Math.round((1 - cogsPerUnit / num(line.unitPrice)) * 100)
     : null;
 
   return (
@@ -1387,11 +1411,11 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: line.noMarkup ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            {line.noMarkup ? 'Markup 0% · you set the price' : 'Markup'}
+            {line.noMarkup ? 'Margin 0% · you set the price' : 'Margin'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10 }}>
             COGS {fmt(cogsPerUnit)}/unit
-            {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click to lock that price
+            {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click your margin; the $ is your total profit at it
           </Typography>
         </Stack>
         {cogsPerUnit <= 0 ? (
@@ -1420,27 +1444,32 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
               </Typography>
             </Box>
             {TIERS.map(pct => {
-              const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
-              const tierProfit = price - cogsPerUnit;   // profit per unit at this markup
-              const tierMargin = price > 0 ? (tierProfit / price) * 100 : 0;
+              // A true pct% margin: price = cost / (1 − pct). The chip shows the
+              // margin, the resulting unit price, and the TOTAL profit at this
+              // line's quantity — "how much do I make at 30%?" at a glance.
+              const price = +priceAtMargin(cogsPerUnit, pct).toFixed(2);
+              const tierProfitTotal = (price - cogsPerUnit) * qty;
               const sel = !line.noMarkup && selectedPct === pct;
               return (
                 <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
-                  cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
+                  cursor: 'pointer', flex: '1 0 70px', minWidth: 70, textAlign: 'center',
                   py: 0.7, px: 0.5, borderRadius: 1.75,
                   bgcolor: sel ? D.green : 'transparent',
                   boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
                   transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
                   '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
-                }}>
+                }}
+                  title={`${pct}% margin → ${fmt(price)}/unit · ${fmt(tierProfitTotal)} total profit at ${qty} units`}>
                   <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700,
                     transition: 'color 0.18s' }}>
-                    +{pct}%
+                    {pct}%
                   </Typography>
-                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13, fontWeight: 800,
-                    ...mono, transition: 'color 0.18s' }}
-                    title={`${fmt(tierProfit)}/unit profit · ${tierMargin.toFixed(0)}% margin`}>
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12.5, fontWeight: 800,
+                    ...mono, transition: 'color 0.18s' }}>
                     {fmt(price)}
+                  </Typography>
+                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9, fontWeight: 700, ...mono, mt: 0.1 }}>
+                    +{fmt(tierProfitTotal)}
                   </Typography>
                 </Box>
               );

@@ -654,6 +654,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
 
   const loseDeal = React.useCallback(async (deal, reason = '') => {
     if (!deal || !deal._id) return;
+    // Confirm-gated: closing a deal shouldn't happen on a stray tap (Win is
+    // already un-clickable — it happens automatically on delivery).
+    if (!window.confirm(`Mark "${deal.title || deal.dealNumber || 'this deal'}" as LOST?`)) return;
     try {
       await axios.post(`${dealsBase}/${deal._id}/lose`, { reason }, authHdr);
       flash('Deal marked lost.');
