@@ -1,4 +1,5 @@
 // Pace/streak math for the Content planner — the fun parts must be honest.
+// Instagram-only (owner decision); legacy platforms simply don't count.
 import { weekStart, postedCountsForWeek, weekMet, streakWeeks } from './_content';
 
 const posted = (platform, iso) => ({ platform, status: 'posted', postedAt: iso, archived: false });
@@ -18,43 +19,45 @@ describe('weekStart', () => {
 
 describe('postedCountsForWeek', () => {
   const ws = weekStart(new Date('2026-07-09T12:00:00'));
-  it('counts only live posts inside the week, per platform', () => {
+  it('counts only live IG posts inside the week', () => {
     const posts = [
-      posted('linkedin', '2026-07-07T10:00:00'),
       posted('instagram', '2026-07-08T10:00:00'),
-      posted('linkedin', '2026-06-30T10:00:00'),                    // last week
-      { ...posted('linkedin', '2026-07-07T10:00:00'), status: 'drafted' },  // pulled back — no longer live
-      { ...posted('instagram', '2026-07-07T10:00:00'), archived: true },    // archived
+      posted('instagram', '2026-06-30T10:00:00'),                    // last week
+      { ...posted('instagram', '2026-07-07T10:00:00'), status: 'drafted' },  // pulled back — no longer live
+      { ...posted('instagram', '2026-07-07T10:00:00'), archived: true },     // archived
+      posted('linkedin', '2026-07-07T10:00:00'),                     // legacy platform — not counted
     ];
-    expect(postedCountsForWeek(posts, ws)).toEqual({ linkedin: 1, instagram: 1 });
+    expect(postedCountsForWeek(posts, ws)).toEqual({ instagram: 1 });
   });
 });
 
 describe('weekMet', () => {
-  it('requires every platform with a goal to hit it', () => {
-    expect(weekMet({ linkedin: 1, instagram: 0 }, { linkedin: 1, instagram: 1 })).toBe(false);
-    expect(weekMet({ linkedin: 1, instagram: 1 }, { linkedin: 1, instagram: 1 })).toBe(true);
-    // a 0 goal is paused, not failing
-    expect(weekMet({ linkedin: 2, instagram: 0 }, { linkedin: 1, instagram: 0 })).toBe(true);
+  it('requires the IG goal to be hit', () => {
+    expect(weekMet({ instagram: 0 }, { instagram: 1 })).toBe(false);
+    expect(weekMet({ instagram: 1 }, { instagram: 1 })).toBe(true);
+    expect(weekMet({ instagram: 3 }, { instagram: 2 })).toBe(true);
   });
-  it('an all-zero pace can never be met (no fake infinite streaks)', () => {
-    expect(weekMet({ linkedin: 5, instagram: 5 }, { linkedin: 0, instagram: 0 })).toBe(false);
+  it('a zero pace can never be met (no fake infinite streaks)', () => {
+    expect(weekMet({ instagram: 5 }, { instagram: 0 })).toBe(false);
+  });
+  it('a stale linkedin goal in a stored pace is ignored', () => {
+    expect(weekMet({ instagram: 1 }, { instagram: 1, linkedin: 3 })).toBe(true);
   });
 });
 
 describe('streakWeeks', () => {
   const now = new Date('2026-07-09T12:00:00');               // Thu of week Jul 6
-  const pace = { linkedin: 1, instagram: 0 };
+  const pace = { instagram: 1 };
   it('an unfinished current week does not break a run built through last week', () => {
-    const posts = [posted('linkedin', '2026-06-30T10:00:00'), posted('linkedin', '2026-06-23T10:00:00')];
+    const posts = [posted('instagram', '2026-06-30T10:00:00'), posted('instagram', '2026-06-23T10:00:00')];
     expect(streakWeeks(posts, pace, now)).toBe(2);
   });
   it('the current week joins the streak as soon as it is met', () => {
-    const posts = [posted('linkedin', '2026-07-07T10:00:00'), posted('linkedin', '2026-06-30T10:00:00')];
+    const posts = [posted('instagram', '2026-07-07T10:00:00'), posted('instagram', '2026-06-30T10:00:00')];
     expect(streakWeeks(posts, pace, now)).toBe(2);
   });
   it('a gap resets the streak', () => {
-    const posts = [posted('linkedin', '2026-07-07T10:00:00'), posted('linkedin', '2026-06-16T10:00:00')];
+    const posts = [posted('instagram', '2026-07-07T10:00:00'), posted('instagram', '2026-06-16T10:00:00')];
     expect(streakWeeks(posts, pace, now)).toBe(1);
   });
   it('no posts, no streak', () => {

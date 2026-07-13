@@ -32,11 +32,13 @@ import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/newsletter`;
 
+// Customers first — the owner's rule: newsletters go to people who already
+// buy (mirrors the backend default in models/Newsletter.js).
 const AUDIENCES = [
-  { key: 'all', label: 'All clients' },
   { key: 'customers', label: 'Customers only' },
-  { key: 'leads', label: 'Leads / prospects' },
   { key: 'tag', label: 'By CRM tag…' },
+  { key: 'all', label: 'All clients' },
+  { key: 'leads', label: 'Leads / prospects' },
 ];
 
 const inkInput = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 } };
@@ -337,7 +339,7 @@ export default function NewsletterTab({ token, onBack }) {
               <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: 1.5, bgcolor: D.panel }}>
                 <Typography sx={{ ...eyebrow, mb: 1, display: 'block' }}>Who gets it</Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'center' }}>
-                  <TextField select value={draft.audience || 'all'} onChange={(e) => patch({ audience: e.target.value })} size="small" sx={{ ...inkInput, minWidth: 180 }}>
+                  <TextField select value={draft.audience || 'customers'} onChange={(e) => patch({ audience: e.target.value })} size="small" sx={{ ...inkInput, minWidth: 180 }}>
                     {AUDIENCES.map((a) => <MenuItem key={a.key} value={a.key}>{a.label}</MenuItem>)}
                   </TextField>
                   {draft.audience === 'tag' && (

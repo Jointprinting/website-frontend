@@ -312,10 +312,16 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     const projSlugs = [project.companyName, project.clientName]
       .map(_slug).filter(Boolean);
     if (!projSlugs.length) return [];
+    // Numbers the owner explicitly X'd off this project — an exclusion is the
+    // only thing that makes "remove" stick, otherwise the client-name match
+    // just re-surfaces the mockup on the next render/session.
+    const normNum = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
+    const excluded = new Set((project.excludedMockups || []).map(normNum));
     const out = [];
     const seenIds = new Set();
     const push = (m) => {
       const id = m._id || m.remoteId || m.name;
+      if (excluded.has(normNum(m.pageState && m.pageState.mockupNum))) return;
       if (!seenIds.has(id)) { seenIds.add(id); out.push(m); }
     };
     // Exact slug match first
@@ -1646,9 +1652,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
     const current = project.mockupNumbers || [];
     const currentKeys = new Set(current.map(norm));
+    // Never re-promote a number the owner X'd off — the exclusion is what makes
+    // "remove" stick against the client-name matcher.
+    const excludedKeys = new Set((project.excludedMockups || []).map(norm));
     const toAdd = (autoMatched || [])
       .map(m => m.pageState && m.pageState.mockupNum)
-      .filter(n => n && !currentKeys.has(norm(n)));
+      .filter(n => n && !currentKeys.has(norm(n)) && !excludedKeys.has(norm(n)));
     lastAutoLinkedRef.current = project._id;
     if (toAdd.length > 0) {
       onSave(project._id, { mockupNumbers: [...current, ...toAdd] })
@@ -1810,10 +1819,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const updateLocal = (patch) => setLocal(prev => ({ ...prev, ...patch }));
 
   // Drop one mockup # from this project (typo, wrong #, never-made design).
+  // ALSO records it on excludedMockups — without the exclusion, the client-name
+  // auto-matcher (and the silent auto-link effect) would just re-attach it and
+  // the X would look like it "doesn't delete". Re-linking on purpose still
+  // works via the Edit picker or Mockup Studio (explicit link clears nothing).
   const removeMockup = async (num) => {
-    const next = (local.mockupNumbers || []).filter(n => n !== num);
-    updateLocal({ mockupNumbers: next });
-    await onSave(project._id, { mockupNumbers: next });
+    const nk = _normKey(num);
+    const next = (local.mockupNumbers || []).filter(n => _normKey(n) !== nk);
+    const excluded = [...new Set([...(local.excludedMockups || project.excludedMockups || []), num])];
+    updateLocal({ mockupNumbers: next, excludedMockups: excluded });
+    await onSave(project._id, { mockupNumbers: next, excludedMockups: excluded });
   };
 
   return (
@@ -1973,12 +1988,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         {(() => {
           const explicitNums = local.mockupNumbers || [];
           const explicitKeys = new Set(explicitNums.map(n => _normKey(n)));
+          // Numbers the owner X'd off this project. Checked here (not just in
+          // the parent's matcher) so a removal disappears INSTANTLY — the
+          // autoMatched prop only refreshes after the save round-trips.
+          const excludedKeys = new Set((local.excludedMockups || project.excludedMockups || []).map(n => _normKey(n)));
           // Auto-matched mockups (by client/title slug) that aren't already in
           // the explicit list. These appear without anyone manually typing #s.
           const autoTiles = (autoMatched || [])
             .filter(m => {
               const k = _normKey(m.pageState?.mockupNum || '');
-              return k && !explicitKeys.has(k);
+              return k && !explicitKeys.has(k) && !excludedKeys.has(k);
             })
             .map(m => ({ num: m.pageState?.mockupNum || '', item: m, source: 'auto' }));
           const explicitTiles = explicitNums.map(n => ({
@@ -2060,10 +2079,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       '&:hover .tile-x': { opacity: 1 },
                       '&:hover': t.item ? { borderColor: B.green, transform: 'translateY(-1px)' } : {},
                     }}>
-                      {t.source !== 'auto' && (
+                      {(
                         <IconButton className="tile-x" size="small"
                           onClick={(e) => { e.stopPropagation(); removeMockup(t.num); }}
-                          title={`Remove ${t.num} from this project`}
+                          title={t.source === 'auto'
+                            ? `Remove ${t.num} — it won't auto-match back onto this project`
+                            : `Remove ${t.num} from this project`}
                           sx={{
                             position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
                             opacity: 0, transition: 'opacity 0.12s',
