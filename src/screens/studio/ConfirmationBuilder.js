@@ -1107,6 +1107,25 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
           <SmallField label="Printer (who's printing this)"
             value={item.printerName} onChange={v => onUpdate({ printerName: v })} />
         </Box>
+        {/* NJ taxes promo products but exempts clothing — per item, so a mixed
+            apparel+promo order taxes only the promo slice. Seeded from the
+            product wording; one tap to flip when the guess is wrong. */}
+        <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box onClick={() => onUpdate({ taxExempt: !item.taxExempt })}
+            title={item.taxExempt
+              ? 'Marked as clothing — excluded from NJ sales tax. Tap to make it taxable.'
+              : 'Counted in NJ sales tax (promo/product). Tap to mark it tax-exempt clothing.'}
+            sx={{ cursor: 'pointer', px: 1.1, py: 0.35, borderRadius: 999, fontSize: 10, fontWeight: 800,
+              letterSpacing: 0.3, border: `1.5px solid ${item.taxExempt ? D.line : 'rgba(240,180,41,0.55)'}`,
+              color: item.taxExempt ? D.muted : '#f0b429',
+              bgcolor: item.taxExempt ? 'transparent' : 'rgba(240,180,41,0.08)',
+              transition: 'all 0.15s ease', '&:hover': { borderColor: '#f0b429' } }}>
+            {item.taxExempt ? 'NJ tax: exempt (clothing)' : 'NJ tax: taxable'}
+          </Box>
+          <Typography sx={{ color: D.faint, fontSize: 10 }}>
+            NJ exempts clothing; promos (grinders, trays, bags…) are taxable.
+          </Typography>
+        </Box>
       </Box>
 
       {/* Sizes */}
@@ -1337,6 +1356,12 @@ function quoteVariantKey(o) {
     .map(s => String(s || '').trim().toLowerCase()).join('|');
 }
 
+// NJ exempts CLOTHING from sales tax; promo products (grinders, trays, bags,
+// lighters…) are taxable. Best-effort guess from the product wording — the
+// owner confirms/flips per item, this just gets the default right.
+const APPAREL_RE = /\b(tee|t-?shirts?|shirts?|hoodies?|hoods?|crewnecks?|crews?|sweatshirts?|sweaters?|sweatpants?|joggers?|pants?|shorts?|polos?|long ?sleeves?|tanks?|jackets?|windbreakers?|beanies?|hats?|caps?|socks?|apparel|jerse?ys?|zip[- ]?ups?|pullovers?|fleece)\b/i;
+export function isApparelDescription(s) { return APPAREL_RE.test(String(s || '')); }
+
 function seedItemFromQuote(line) {
   const description = line.description || '';
   // Carry the quote line's true cost/unit (blank + print + setup/ship spread
@@ -1366,6 +1391,11 @@ function seedItemFromQuote(line) {
     color:     line.color || '',
     printerName: line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
+    // Client-facing estimated turnaround, carried from the picked quote line.
+    turnaroundWeeks: Number(line.turnaroundWeeks) || 0,
+    // NJ taxes promos, not clothing — guess from the product wording; the owner
+    // can flip it per item in the builder. Drives computeLocationTax.
+    taxExempt: isApparelDescription(`${line.description || ''} ${line.styleCode || ''}`),
     // Carry the QUANTITY the client picked onto one "OS" (one-size) row at the
     // approved unit price, so the confirmation opens ~complete with the real
     // order total — not $0 with seven empty size rows. The owner splits this into

@@ -33,7 +33,9 @@ function DealStagePill({ stage }) {
   );
 }
 
-function DealCard({ deal, onWin, onLose, onReopen, onOpen, onEdit, onRemove }) {
+// onWin intentionally not consumed here — a deal wins itself when its order is
+// delivered (backend hook); the prop stays for API compatibility.
+function DealCard({ deal, onWin: _onWin, onLose, onReopen, onOpen, onEdit, onRemove }) {
   const [menuEl, setMenuEl] = React.useState(null);
   const m = dealStageMeta(deal.stage);
   const open = isOpenDeal(deal);
@@ -81,18 +83,16 @@ function DealCard({ deal, onWin, onLose, onReopen, onOpen, onEdit, onRemove }) {
         </Stack>
       </Stack>
 
-      {/* Actions — Win is the headline for an open deal (its first win → client). */}
-      <Stack direction="row" spacing={0.75} sx={{ mt: 1, pl: 0.5 }}>
+      {/* Actions — no manual Win: a deal wins ITSELF when its order is marked
+          delivered (owner's rule — no accidental wins). Lost stays manual,
+          confirm-gated in the transport. */}
+      <Stack direction="row" spacing={0.75} sx={{ mt: 1, pl: 0.5 }} alignItems="center">
         {open && (
           <>
-            <Button
-              onClick={() => onWin(deal)} size="small" variant="contained"
-              startIcon={<EmojiEventsOutlinedIcon sx={{ fontSize: 15 }} />}
-              sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, borderRadius: 999, px: 1.5, py: 0.3,
-                bgcolor: D.green, color: D.ink, boxShadow: 'none', '&:hover': { bgcolor: '#5cec8e' } }}
-            >
-              Win
-            </Button>
+            <Typography title="No manual Win — the deal flips to Won automatically when its linked order is marked Delivered."
+              sx={{ color: D.faint, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+              <EmojiEventsOutlinedIcon sx={{ fontSize: 14 }} /> wins when delivered
+            </Typography>
             <Button
               onClick={() => onLose(deal)} size="small"
               startIcon={<CloseRoundedIcon sx={{ fontSize: 15 }} />}
