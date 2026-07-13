@@ -112,8 +112,9 @@ function DraftReplyBox({ row, text, onChangeText, onDraftReply, onError }) {
   );
 }
 
-export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCompany, onDraftReply, onError }) {
+export default function WorklistPanel({ worklist, loading, onSetStatus, onNotAReply, onOpenCompany, onDraftReply, onError }) {
   const [menu, setMenu] = React.useState(null); // { anchor, row }
+  const [dismissing, setDismissing] = React.useState({}); // enrollmentId → busy
   // The owner's in-progress draft edits, keyed by reply _id. Lives HERE (not in
   // DraftReplyBox) so an edit survives the row re-bucketing when its status
   // changes and the silent worklist refreshes — session-only, by design: the
@@ -125,6 +126,18 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
   const pickStatus = async (row, next, extra) => {
     closeMenu();
     try { await onSetStatus(row._id, next, extra); } catch (e) { onError?.(e.response?.data?.message || 'Could not update the reply'); }
+  };
+
+  // Bridge-bucket correction: a lead marked 'replied' that was really an
+  // auto-responder (no triaged reply exists to run the menu action on). Undo the
+  // false warm by ENROLLMENT id — resumes the drip, drops the warm tag — the same
+  // fix the "not a real reply" reply action makes, one tap from where it shows.
+  const dismissBridge = async (row) => {
+    if (!row.enrollmentId || !onNotAReply) return;
+    setDismissing((p) => ({ ...p, [row.enrollmentId]: true }));
+    try { await onNotAReply(row.enrollmentId); }
+    catch (e) { onError?.(e.response?.data?.message || 'Could not correct that lead'); }
+    finally { setDismissing((p) => ({ ...p, [row.enrollmentId]: false })); }
   };
 
   if (loading) {
@@ -193,7 +206,8 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
                       </Stack>
                       {bridge ? (
                         <Typography sx={{ fontSize: 11.5, color: D.muted, mt: 0.3 }}>
-                          Marked replied {r.repliedAt ? fmtDate(r.repliedAt) : ''} — no triaged reply yet. Open the company, then log the reply.
+                          Marked replied {r.repliedAt ? fmtDate(r.repliedAt) : ''} — no triaged reply yet. Open the company to log it,
+                          or hit <b>Not a real reply</b> if it was an auto-responder (resumes the drip, drops the warm tag).
                         </Typography>
                       ) : (
                         <>
@@ -219,12 +233,22 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onOpenCo
                       )}
                     </Box>
                     {bridge ? (
-                      canOpen && (
-                        <Button size="small" onClick={() => onOpenCompany(r.companyKey)}
-                          sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none', '&:hover': { color: D.green } }}>
-                          Open in CRM
-                        </Button>
-                      )
+                      <Stack spacing={0.25} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+                        {canOpen && (
+                          <Button size="small" onClick={() => onOpenCompany(r.companyKey)}
+                            sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none', '&:hover': { color: D.green } }}>
+                            Open in CRM
+                          </Button>
+                        )}
+                        {onNotAReply && r.enrollmentId && (
+                          <Button size="small" disabled={!!dismissing[r.enrollmentId]}
+                            onClick={() => dismissBridge(r)}
+                            sx={{ color: D.faint, fontSize: 10.5, fontWeight: 700, textTransform: 'none',
+                              '&:hover': { color: '#f87171' } }}>
+                            {dismissing[r.enrollmentId] ? 'Correcting…' : 'Not a real reply'}
+                          </Button>
+                        )}
+                      </Stack>
                     ) : (
                       <IconButton size="small" onClick={(e) => setMenu({ anchor: e.currentTarget, row: r })}
                         sx={{ color: D.muted, '&:hover': { color: D.green } }}>

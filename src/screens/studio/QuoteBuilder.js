@@ -41,9 +41,6 @@ import GridViewOutlinedIcon    from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon  from '@mui/icons-material/ViewAgendaOutlined';
 import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
 import LinkIcon                from '@mui/icons-material/Link';
-import RedeemOutlinedIcon      from '@mui/icons-material/RedeemOutlined';
-import axios                   from 'axios';
-import config                  from '../../config.json';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -63,6 +60,11 @@ const GROUP_HUES = [
   'rgba(196, 181, 253, 0.65)',  // violet
   'rgba(94, 234, 212, 0.60)',   // teal
 ];
+
+// Margin guardrail: warn (⚠) when a priced line's margin drops below this floor,
+// so a cell never gets sent underpriced by accident. Promo/fixed lines with no
+// cost entered read as no-margin-known and are skipped (not flagged).
+const MARGIN_FLOOR = 20;
 
 // Margin colour spectrum: 0% → red, ~40% → green. Capped so 50%+ stays green.
 function marginColor(pct) {
@@ -155,7 +157,7 @@ function suggestSupplierUrl(line) {
   return `https://www.ssactivewear.com/p/${hit[1]}/${style}`;
 }
 
-export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }) {
+export default function QuoteBuilder({ open, project, onClose, onSave }) {
   const fullScreen = useMobileFullScreen();
   const [lines,        setLines]        = useState([]);
   const [shipToState,  setShipToState]  = useState('');
@@ -165,12 +167,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
   // Groups the owner explicitly opened up as individual cards (per-line
   // control for one odd option). UI-only escape hatch — nothing is stored.
   const [cardView,     setCardView]     = useState(() => new Set());
-  // Promo catalog picker state (kept up here with the other hooks — must sit
-  // above the early `if (!project) return null` so hook order stays stable).
-  const [promoOpen,    setPromoOpen]    = useState(false);
-  const [promoItems,   setPromoItems]   = useState([]);
-  const [promoLoading, setPromoLoading] = useState(false);
-  const [promoErr,     setPromoErr]     = useState('');
 
   // Seed from the freshest source: a local draft (which survives a tab close
   // or crash mid-quote) wins over the server copy. Keyed on project id so an
@@ -242,10 +238,19 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
     setDirty(true);
   };
   const selectTier = (i, pct) => {
+    // 0% = the promo / fixed-price lane: nothing marked up — the price sits at
+    // cost until the owner types the client price. Click again to leave.
+    if (pct === 0) {
+      setLine(i, lines[i].noMarkup
+        ? { noMarkup: false }
+        : { noMarkup: true, markup: 1, unitPrice: '' });
+      return;
+    }
     const c = lineCogsPerUnit(lines[i]);   // markup applies over this line's true unit cost
     setLine(i, {
       unitPrice: +(c * (1 + pct / 100)).toFixed(2),
       markup:    +(1 + pct / 100).toFixed(4),
+      noMarkup:  false,
     });
   };
   const addLine    = () => { setLines(prev => [...prev, emptyLine()]); setDirty(true); };
@@ -262,33 +267,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
     setDirty(true);
   };
 
-  // ── Promo catalog picker ────────────────────────────────────────────────────
-  // Pull fixed-price promo products (lighters, grinders, ashtrays…) straight into
-  // the quote as 0%-markup lines — the vendor price already includes margin. The
-  // owner's cost rides along as blankCost so the COGS estimate stays honest.
-  // (State declared up top with the other hooks.)
-  const openPromo = async () => {
-    setPromoOpen(true); setPromoErr('');
-    if (promoItems.length) return;
-    setPromoLoading(true);
-    try {
-      const r = await axios.get(`${config.backendUrl}/api/promo-catalog`, authHdr || {});
-      setPromoItems(Array.isArray(r.data) ? r.data : []);
-    } catch (e) {
-      setPromoErr(e.response?.data?.message || e.message || 'Could not load the promo catalog.');
-    } finally { setPromoLoading(false); }
-  };
-  const addPromo = (it, qty) => appendLines([{
-    ...emptyLine(),
-    qty: Number(qty) || Number(it.minQty) || 1,
-    styleCode: it.sku || '',
-    description: [it.name, it.color, it.description].filter(Boolean).join(' — '),
-    supplier: it.vendor || '',
-    blankCost: Number(it.cost) || 0,
-    markup: 1,
-    noMarkup: true,               // promo = fixed price, already marked up
-    unitPrice: Number(it.price) || 0,
-  }]);
   const swapLines = (pairs) => {
     setLines(prev => {
       const next = [...prev];
@@ -465,11 +443,8 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
               ))}
           </Stack>
           <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
-            A design grid pitches one design across options × quantities — options can be brands (3 tees at 50
-            and 100 = one grid, not six lines) or print variants (a 6-print vs 7-print front, each row carrying
-            its own print + setup cost via the row's ⌄ drawer). The client still picks exactly ONE option per
-            design. Groups and single lines work like always: group alternatives so the client picks one;
-            ungrouped lines are always included. Nothing counts toward the project total until they pick.
+            A design grid pitches one design across options × quantities (brands or print variants); the client
+            picks ONE per design. Ungrouped single lines are always included. Nothing counts toward the total until they pick.
           </Typography>
         </Box>
 
@@ -498,12 +473,6 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
                   px: 2, transition: 'background-color 0.18s, color 0.18s',
                   '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
                 Add a single line
-              </Button>
-              <Button onClick={openPromo} startIcon={<RedeemOutlinedIcon />}
-                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
-                  px: 2, transition: 'background-color 0.18s, color 0.18s',
-                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-                Promo catalog
               </Button>
             </Stack>
           </Box>
@@ -550,78 +519,9 @@ export default function QuoteBuilder({ open, project, onClose, onSave, authHdr }
                 '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add line
             </Button>
-            <Button onClick={openPromo} startIcon={<RedeemOutlinedIcon sx={{ fontSize: 16 }} />}
-              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
-                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
-                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-              Promo catalog
-            </Button>
           </Stack>
         )}
       </DialogContent>
-      {/* Promo catalog picker — fixed-price promos → 0%-markup lines. */}
-      <PromoPickerDialog
-        open={promoOpen} onClose={() => setPromoOpen(false)}
-        items={promoItems} loading={promoLoading} err={promoErr}
-        onAdd={addPromo}
-      />
-    </Dialog>
-  );
-}
-
-// Lists the active promo catalog; each row adds a fixed-price (0%-markup) line to
-// the quote at a chosen quantity. Stays open so several promos can be added in a
-// row (dispensary promo orders are often a few items at once).
-function PromoPickerDialog({ open, onClose, items, loading, err, onAdd }) {
-  const [qty, setQty] = useState({});
-  const [added, setAdded] = useState({});
-  const q = (it) => Number(qty[it._id]) || Number(it.minQty) || 1;
-  const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: D.bg, backgroundImage: 'none', border: `1px solid ${D.line}`, borderRadius: 3 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.75, borderBottom: `1px solid ${D.line}` }}>
-        <RedeemOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
-        <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, flexGrow: 1 }}>Promo catalog</Typography>
-        <IconButton onClick={onClose} size="small" sx={{ color: D.muted }}><CloseIcon fontSize="small" /></IconButton>
-      </Box>
-      <DialogContent sx={{ ...scrollbar, p: 2 }}>
-        {loading ? (
-          <Typography sx={{ color: D.muted, fontSize: 13, textAlign: 'center', py: 3 }}>Loading…</Typography>
-        ) : err ? (
-          <Typography sx={{ color: '#f87171', fontSize: 13, textAlign: 'center', py: 3 }}>{err}</Typography>
-        ) : items.length === 0 ? (
-          <Typography sx={{ color: D.muted, fontSize: 13, textAlign: 'center', py: 3 }}>
-            No promo items yet. Add them in the <b style={{ color: '#fff' }}>Promo Catalog</b> tool (import a vendor quote PDF).
-          </Typography>
-        ) : (
-          <Stack spacing={1}>
-            {items.map((it) => (
-              <Box key={it._id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
-                border: `1px solid ${D.line}`, borderRadius: 2, p: 1.25, bgcolor: D.panel }}>
-                <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-                  <Typography sx={{ color: '#fff', fontSize: 13.5, fontWeight: 700, lineHeight: 1.2 }}>{it.name}</Typography>
-                  <Typography sx={{ color: D.muted, fontSize: 11.5 }}>
-                    {[it.category, it.color, money(it.price) + '/ea', it.minQty ? `min ${it.minQty}` : ''].filter(Boolean).join(' · ')}
-                  </Typography>
-                </Box>
-                <TextField type="number" size="small" value={qty[it._id] ?? (it.minQty || 1)}
-                  onChange={(e) => setQty((m) => ({ ...m, [it._id]: e.target.value }))}
-                  sx={{ ...dropInput, width: 78 }} inputProps={{ min: 1 }} />
-                <Button size="small" variant="outlined"
-                  onClick={() => { onAdd(it, q(it)); setAdded((m) => ({ ...m, [it._id]: (m[it._id] || 0) + 1 })); }}
-                  sx={{ color: D.green, borderColor: D.line, textTransform: 'none', fontWeight: 700, minWidth: 64,
-                    '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
-                  {added[it._id] ? `Added${added[it._id] > 1 ? ` ×${added[it._id]}` : ''}` : 'Add'}
-                </Button>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </DialogContent>
-      <Box sx={{ px: 2.5, py: 1.5, borderTop: `1px solid ${D.line}`, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button onClick={onClose} sx={{ color: D.green, textTransform: 'none', fontWeight: 700 }}>Done</Button>
-      </Box>
     </Dialog>
   );
 }
@@ -901,16 +801,47 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         ...(accent ? { borderLeftColor: accent } : {}),
         boxShadow: '0 10px 28px rgba(0,0,0,0.34)' },
     }}>
-      {/* Design header: name + shared design fields (broadcast to every cell) */}
-      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 1,
+      {/* Design header, two calm rows:
+          row 1 — WHAT this design is (name + the mockup/render the client signs
+          off), with the card actions on the right;
+          row 2 — design-wide production fields broadcast to every cell (print,
+          setup, shipping, turnaround). Per-option overrides stay in each row's
+          ⌄ drawer. */}
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1.75, pb: 0.25,
         display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
-        <QF label="Design (client picks 1 option)" sx={{ width: { xs: '100%', sm: 190 } }}>
+        <QF label="Design (client picks 1 option)" sx={{ width: { xs: '100%', sm: 230 } }}>
           <BufferedTF fullWidth value={grid.group} placeholder="Front-hit tee"
             onCommit={renameGroup} sx={groupChip} />
         </QF>
         <DesignAttach line={{ mockupNum: sharedVal('mockupNum'), image: sharedVal('image') || firstLine.image || '' }}
           onPatch={(patch) => onPatchIdxs(all, patch)} tf={tf}
-          sx={{ width: { xs: '100%', sm: 210 } }} />
+          sx={{ width: { xs: '100%', sm: 230 } }} />
+        <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
+          <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
+            title="Open this design's options as individual line cards (full per-option control)"
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+            Edit as cards
+          </Button>
+          <Stack>
+            <IconButton size="small" onClick={onMoveUp} disabled={!onMoveUp} title="Move design up"
+              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+              <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton size="small" onClick={onMoveDown} disabled={!onMoveDown} title="Move design down"
+              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
+              <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Stack>
+          <IconButton size="small" onClick={removeGrid} title="Remove this design (all its options)"
+            sx={{ color: D.muted, transition: 'color 0.18s, background-color 0.18s',
+              '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
+            <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Stack>
+      </Box>
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1,
+        display: 'flex', alignItems: 'flex-end', gap: 1.25, flexWrap: 'wrap' }}>
         <QF label="Print type" sx={{ width: { xs: '48%', sm: 132 } }}>
           <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
             <Select value={sharedVal('printType')} displayEmpty
@@ -948,29 +879,6 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
             placeholder={numMixedOver(all, 'turnaroundWeeks') ? 'varies' : 'wks'}
             onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
         </QF>
-        <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
-          <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
-            title="Open this design's options as individual line cards (full per-option control)"
-            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
-              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
-            Edit as cards
-          </Button>
-          <Stack>
-            <IconButton size="small" onClick={onMoveUp} disabled={!onMoveUp} title="Move design up"
-              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
-              <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-            <IconButton size="small" onClick={onMoveDown} disabled={!onMoveDown} title="Move design down"
-              sx={{ color: D.muted, p: 0.15, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.35 } }}>
-              <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Stack>
-          <IconButton size="small" onClick={removeGrid} title="Remove this design (all its options)"
-            sx={{ color: D.muted, transition: 'color 0.18s, background-color 0.18s',
-              '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
-            <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Stack>
       </Box>
 
       {/* The matrix: option rows × quantity columns. Every cell is a real
@@ -983,8 +891,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           <Box sx={{ alignSelf: 'end', pb: 0.5, position: 'sticky', left: 0, zIndex: 2, bgcolor: D.panel }}>
             <Typography sx={headCellSx}>Options the client picks from</Typography>
             <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.2, lineHeight: 1.35 }}>
-              Name the brand or variant, its style #, and the blank $/unit. Open <b>⌄</b> on a row for its
-              print $, setup $ &amp; shipping — set per quantity when a run size prices differently.
+              Name each option + its blank $/unit. Open <b>⌄</b> for print, setup &amp; shipping (per run size).
             </Typography>
           </Box>
           {grid.qtys.map(q => (
@@ -1075,9 +982,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   const cogs = lineCogsPerUnit(l);
                   const profit = eff - cogs;
                   const pct = eff > 0 ? (profit / eff) * 100 : 0;
+                  const lowMargin = cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
                   return (
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
-                      border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      border: `1px solid ${lowMargin ? 'rgba(248,113,113,0.6)' : committed ? D.line : 'rgba(251,191,36,0.35)'}`,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
                       {/* Show the field EMPTY when the price is auto (0/blank) so the
                           computed auto price shows through as the placeholder — a stored
@@ -1088,14 +996,18 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
                         InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
                         sx={cellTf} />
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={0.25}>
                         <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
                           color: committed ? D.faint : D.amber }}>
                           {eff > 0 ? `${committed ? '' : 'auto · '}${fmt(eff * q)}` : 'set costs'}
                         </Typography>
-                        <Typography sx={{ fontSize: 10, fontWeight: 800, ...mono, color: marginColor(pct) }}
-                          title={`${fmt(profit)}/unit profit at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
-                          {cogs > 0 && eff > 0 ? `${pct.toFixed(0)}%` : '—'}
+                        {/* Profit/unit + margin — the two numbers the owner reads after
+                            clicking a markup, right where the price landed. */}
+                        <Typography sx={{ fontSize: 9.5, fontWeight: 800, ...mono, color: lowMargin ? '#f87171' : marginColor(pct) }}
+                          title={lowMargin
+                            ? `⚠ Low margin — ${pct.toFixed(0)}% is under your ${MARGIN_FLOOR}% floor (${fmt(profit)}/unit at ${fmt(eff)}). Raise the price or check the costs.`
+                            : `${fmt(profit)}/unit profit · ${pct.toFixed(0)}% margin at ${fmt(eff)}${committed ? '' : ' (auto price)'}`}>
+                          {cogs > 0 && eff > 0 ? `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct.toFixed(0)}%` : '—'}
                         </Typography>
                       </Stack>
                     </Box>
@@ -1206,54 +1118,59 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         </Button>
       </Box>
 
-      {/* One tier strip for the whole design: each cell gets the tier applied
-          over its OWN unit cost, so every option/quantity prices correctly from
-          a single click. Typing in a cell overrides just that cell. */}
+      {/* One markup strip for the whole design: each cell gets the markup applied
+          over its OWN unit cost, so every option/quantity prices correctly from a
+          single click. Typing in a cell overrides just that cell. "0%" is the
+          promo / fixed-price lane: nothing is marked up — you type each client
+          price (catalog price already carries the margin); COGS stays honest. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
-          <Typography sx={{ color: fixedPrice ? D.muted : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            {fixedPrice ? 'Fixed price · no markup' : 'Markup tiers · all options'}
+          <Typography sx={{ color: fixedPrice ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+            {fixedPrice ? 'Markup 0% · you set the prices' : 'Markup · all options'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10, flex: 1, minWidth: 120 }}>
             {fixedPrice
-              ? 'Promo — you type each client price; nothing marked up. COGS still reads your real cost.'
-              : 'click a tier to price every cell at cost × tier (+% markup / resulting margin)'}
+              ? 'type each client price — COGS still reads your real cost'
+              : uniformPct != null && uniformPct > 0
+                ? `+${uniformPct}% → ${(uniformPct / (100 + uniformPct) * 100).toFixed(0)}% margin — profit/unit shows on every cell`
+                : 'click a markup — every option prices at its own cost × markup'}
           </Typography>
-          {/* Promo toggle — for vendor-catalog items already priced with margin. */}
-          <Box onClick={toggleFixed} title="Promo items whose catalog price already includes your margin — no markup added"
-            sx={{ cursor: 'pointer', flexShrink: 0, px: 1.1, py: 0.5, borderRadius: 999, fontSize: 10, fontWeight: 800,
-              letterSpacing: 0.3, border: `1.5px solid ${fixedPrice ? D.green : D.line}`,
-              color: fixedPrice ? D.ink : D.muted, bgcolor: fixedPrice ? D.green : 'transparent',
-              transition: 'all 0.16s ease', '&:hover': { borderColor: D.green, color: fixedPrice ? D.ink : D.green } }}>
-            {fixedPrice ? '✓ Promo · fixed price' : 'Promo · fixed price'}
-          </Box>
         </Stack>
-        {!fixedPrice && (
-          <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
-            borderRadius: 2.5, p: 0.5, display: 'flex',
-            overflowX: 'auto', ...scrollbar }}>
-            {TIERS.map(pct => {
-              const sel = uniformPct === pct;
-              return (
-                <Box key={pct} onClick={() => applyTier(pct)} sx={{
-                  cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
-                  py: 0.7, px: 0.5, borderRadius: 1.75,
-                  bgcolor: sel ? D.green : 'transparent',
-                  boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
-                  transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
-                  '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
-                }}>
-                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 10, fontWeight: 700 }}>
-                    +{pct}%
-                  </Typography>
-                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 10.5, fontWeight: 700, ...mono }}>
-                    {(pct / (100 + pct) * 100).toFixed(0)}% margin
-                  </Typography>
-                </Box>
-              );
-            })}
+        <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
+          borderRadius: 2.5, p: 0.5, display: 'flex',
+          overflowX: 'auto', ...scrollbar }}>
+          <Box onClick={toggleFixed}
+            title="No markup — promo / catalog items whose price already includes your margin; you type each client price"
+            sx={{
+              cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
+              py: 0.95, px: 0.5, borderRadius: 1.75,
+              bgcolor: fixedPrice ? D.amber : 'transparent',
+              transition: 'background-color 0.18s ease, transform 0.15s ease',
+              '&:hover': fixedPrice ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
+            }}>
+            <Typography sx={{ color: fixedPrice ? D.ink : D.muted, fontSize: 13, fontWeight: 800, ...mono }}>
+              0%
+            </Typography>
           </Box>
-        )}
+          {TIERS.map(pct => {
+            const sel = !fixedPrice && uniformPct === pct;
+            return (
+              <Box key={pct} onClick={() => applyTier(pct)} sx={{
+                cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
+                py: 0.95, px: 0.5, borderRadius: 1.75,
+                bgcolor: sel ? D.green : 'transparent',
+                boxShadow: sel ? `0 2px 12px ${D.glow}` : 'none',
+                transition: 'background-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
+                '&:hover': sel ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
+              }}>
+                <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13, fontWeight: 800, ...mono }}
+                  title={`every option at its own cost × ${(1 + pct / 100).toFixed(2)} — ${(pct / (100 + pct) * 100).toFixed(0)}% margin`}>
+                  +{pct}%
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
       </Box>
     </Box>
   );
@@ -1407,16 +1324,19 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
         </QF>
       </Box>
 
-      {/* Markup tier strip — a segmented control on an inset darker track.
-          Only the SELECTED tier wears the brand green; the rest stay neutral. */}
+      {/* Markup strip — a segmented control on an inset darker track. Each chip
+          reads "+markup%" over the PRICE this line would sell at ("markup, then
+          the cost at that number"). Only the SELECTED tier wears the brand green.
+          "0%" is the promo / fixed-price lane: no markup added, you type the
+          client price. Profit/unit + margin land in the footer on selection. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
-          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            Markup tiers
+          <Typography sx={{ color: line.noMarkup ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+            {line.noMarkup ? 'Markup 0% · you set the price' : 'Markup'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10 }}>
             COGS {fmt(cogsPerUnit)}/unit
-            {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click a tier to lock that price
+            {setupShipPerUnit > 0 ? ` (incl. ${fmt(setupShipPerUnit)} setup+ship/unit)` : ''} — click to lock that price
           </Typography>
         </Stack>
         {cogsPerUnit <= 0 ? (
@@ -1428,10 +1348,27 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
           <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
             borderRadius: 2.5, p: 0.5, display: 'flex',
             overflowX: 'auto', ...scrollbar }}>
+            <Box onClick={() => onSelectTier(0)}
+              title="No markup — promo / catalog price already includes your margin; type the client price"
+              sx={{
+                cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
+                py: 0.7, px: 0.5, borderRadius: 1.75,
+                bgcolor: line.noMarkup ? D.amber : 'transparent',
+                transition: 'background-color 0.18s ease, transform 0.15s ease',
+                '&:hover': line.noMarkup ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
+              }}>
+              <Typography sx={{ color: line.noMarkup ? D.ink : D.muted, fontSize: 10, fontWeight: 700 }}>
+                0%
+              </Typography>
+              <Typography sx={{ color: line.noMarkup ? D.ink : D.text, fontSize: 13, fontWeight: 800, ...mono }}>
+                {fmt(cogsPerUnit)}
+              </Typography>
+            </Box>
             {TIERS.map(pct => {
               const price = +(cogsPerUnit * (1 + pct / 100)).toFixed(2);
-              const tierProfit = price - cogsPerUnit;   // profit per unit at this margin
-              const sel = selectedPct === pct;
+              const tierProfit = price - cogsPerUnit;   // profit per unit at this markup
+              const tierMargin = price > 0 ? (tierProfit / price) * 100 : 0;
+              const sel = !line.noMarkup && selectedPct === pct;
               return (
                 <Box key={pct} onClick={() => onSelectTier(pct)} sx={{
                   cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
@@ -1445,14 +1382,10 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
                     transition: 'color 0.18s' }}>
                     +{pct}%
                   </Typography>
-                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12, fontWeight: 800,
-                    ...mono, transition: 'color 0.18s' }}>
+                  <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 13, fontWeight: 800,
+                    ...mono, transition: 'color 0.18s' }}
+                    title={`${fmt(tierProfit)}/unit profit · ${tierMargin.toFixed(0)}% margin`}>
                     {fmt(price)}
-                  </Typography>
-                  <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9, fontWeight: 600,
-                    ...mono, mt: 0.1, transition: 'color 0.18s' }}
-                    title="Profit per unit at this margin">
-                    {fmt(tierProfit)}/u
                   </Typography>
                 </Box>
               );

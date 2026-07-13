@@ -17,8 +17,17 @@ import markJpn from '../modules/images/mark_jpn.png';
 export const BRAND_MARKS = {
   'Joint Printing': markJp,
   'JP Webworks':    markJpw,
-  'JP Nucleus':     markJpn,
+  'JP Atom':        markJpn,
 };
+
+// Each business's accent — matches its cube color, so the hub takes on that
+// business's "vibe" when it's the one in focus (green / blue / violet).
+export const BRAND_ACCENT = {
+  'Joint Printing': '#4ade80', // green
+  'JP Webworks':    '#54a6ff', // blue
+  'JP Atom':        '#9e82ff', // violet
+};
+export const brandAccent = (brand) => BRAND_ACCENT[brand] || BRAND_ACCENT['Joint Printing'];
 
 export default function BrandCube({ brand, size = 28, style }) {
   const src = BRAND_MARKS[brand];

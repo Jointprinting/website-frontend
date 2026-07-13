@@ -480,6 +480,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             worklist={worklist} worklistLoading={worklistLoading}
             showIgnored={showIgnored} onToggleIgnored={toggleIgnored}
             onSetStatus={setReplyStatus}
+            onNotAReply={notAReply}
             onAddReply={addReply}
             onSync={syncGmail}
             onOpenCompany={openCompany}

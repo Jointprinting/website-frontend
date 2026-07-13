@@ -61,7 +61,6 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import RedeemOutlinedIcon from '@mui/icons-material/RedeemOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
@@ -71,11 +70,10 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
-import BrandCube, { BRAND_MARKS } from '../common/BrandCube';
+import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
-import PromoCatalogTab from './studio/PromoCatalogTab';
 import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
@@ -1653,7 +1651,6 @@ const HUB_GROUPS = [
           { id: 'lookbooks',   label: 'Lookbooks',    desc: 'Shareable client galleries',    Icon: AutoStoriesOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
           { id: 'catalogs',    label: 'Catalogs',     desc: 'Curated picks, featured items', Icon: MenuBookOutlinedIcon },
-          { id: 'promocatalog', label: 'Promo Catalog', desc: 'Promo products & prices — import PDFs', Icon: RedeemOutlinedIcon },
         ],
       },
       {
@@ -1701,17 +1698,17 @@ const HUB_GROUPS = [
   {
     // Brand-new venture: a premium studio that builds bespoke business operating
     // systems for other companies — this very Studio is the demo and the
-    // jumping-off skeleton. "JP Nucleus" is a working placeholder (first invoices
-    // still carry JP branding, so it stays in the family for now). No live tools
-    // yet, so instead of empty tiles the group shows a `foundation` panel: what it
-    // is + the concrete roadmap. Real tools (Prospects, Demo, Builds) slot into a
-    // tier here the moment they exist — the switcher + section are already wired.
-    brand: 'JP Nucleus',
+    // jumping-off skeleton. Named "JP Atom" (owner's pick; stays in the JP family
+    // since first invoices carry JP branding). No live tools yet, so instead of
+    // empty tiles the group shows a `foundation` panel: what it is + the concrete
+    // roadmap. Real tools (Prospects, Demo, Builds) slot into a tier here the
+    // moment they exist — the switcher + section are already wired.
+    brand: 'JP Atom',
     tagline: 'Bespoke business systems',
     foundation: {
       blurb: 'A premium studio that builds custom operating systems for other businesses. Your Studio is the showpiece and the starting skeleton — you fork it, tailor it to a client, and charge a build fee plus a flat monthly. Fewer clients, bigger tickets, all run from here.',
       steps: [
-        { done: true,  label: 'Name it (placeholder: JP Nucleus)' },
+        { done: true,  label: 'Name it: JP Atom' },
         { done: false, label: 'Publish the plan, pricing & positioning' },
         { done: false, label: 'Stand up a click-around demo (example data, no private info)' },
         { done: false, label: 'Record the walkthrough video for marketing' },
@@ -1900,8 +1897,11 @@ function _fmtCountdown(iso) {
 // content (the Paused chip / collapse affordance).
 function SectionHeader({ brand, tagline, dim, right }) {
   // Real businesses wear their cube mark; utility headers (e.g. "Signals") and
-  // dimmed sections keep the plain accent bar.
-  const showMark = !dim && !!BRAND_MARKS[brand];
+  // dimmed sections keep the plain accent bar. The label + bar take the business's
+  // own accent color so each section reads in that business's vibe.
+  const isBrand = !!BRAND_MARKS[brand];
+  const showMark = !dim && isBrand;
+  const accent = isBrand ? brandAccent(brand) : D.green;
   return (
     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
       {showMark ? (
@@ -1909,16 +1909,14 @@ function SectionHeader({ brand, tagline, dim, right }) {
       ) : (
         <Box sx={{
           width: 3, alignSelf: 'stretch', minHeight: 28, borderRadius: 2,
-          background: dim
-            ? 'rgba(255,255,255,0.18)'
-            : `linear-gradient(180deg, ${D.green}, ${D.greenDk})`,
+          background: dim ? 'rgba(255,255,255,0.18)' : accent,
           opacity: dim ? 1 : 0.9, flexShrink: 0,
         }} />
       )}
       <Box sx={{ minWidth: 0 }}>
         <MuiTypography sx={{
           ...eyebrow,
-          color: dim ? D.faint : D.green,
+          color: dim ? D.faint : accent,
           fontSize: 11, letterSpacing: 2.4, lineHeight: 1.1,
         }}>
           {brand}
@@ -2007,41 +2005,44 @@ function TierLabel({ children }) {
   );
 }
 
-// Business switcher — the command-center header. Each business is its own focused
-// context (its own stats + tools), one at a time — no blended "all" view.
-// Extensible: it reads the brands straight off HUB_GROUPS, so onboarding a future
-// business is one entry, no switcher edit.
+// Business switcher — a row of the businesses' own cube marks, so the owner picks
+// by logo (and always sees "what's from what"). The active one lights up in its
+// own accent color (green / blue / violet), giving the hub that business's vibe.
+// Reads brands straight off HUB_GROUPS, so a new business needs no switcher edit.
 function BizSwitcher({ value, onChange, brands }) {
-  const opts = brands.map((b) => ({ key: b, label: b }));
   return (
     <Box role="tablist" aria-label="Business" sx={{
-      display: 'flex', gap: 0.5, p: 0.5,
-      bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5,
-      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-      '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
+      display: 'flex', gap: { xs: 0.75, sm: 1 }, flexWrap: 'wrap',
     }}>
-      {opts.map((o) => {
-        const active = value === o.key;
+      {brands.map((b) => {
+        const active = value === b;
+        const accent = brandAccent(b);
         return (
           <Box
-            key={o.key}
+            key={b}
             role="tab"
             aria-selected={active}
             tabIndex={0}
-            onClick={() => onChange(o.key)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(o.key); } }}
+            onClick={() => onChange(b)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(b); } }}
             sx={{
-              cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
-              px: { xs: 1.5, sm: 1.9 }, py: 0.85, borderRadius: 2,
-              fontSize: 12.5, fontWeight: 700, letterSpacing: 0.2,
-              color: active ? D.ink : D.muted,
-              bgcolor: active ? D.green : 'transparent',
-              transition: 'color .18s ease, background-color .18s ease',
-              '&:hover': active ? {} : { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' },
-              '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+              display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none',
+              px: { xs: 1.25, sm: 1.5 }, py: 0.85, borderRadius: 2.5,
+              border: `1px solid ${active ? accent : D.line}`,
+              bgcolor: active ? `${accent}1f` : 'transparent',
+              opacity: active ? 1 : 0.68,
+              transition: 'opacity .18s ease, background-color .18s ease, border-color .18s ease',
+              '&:hover': { opacity: 1, bgcolor: active ? `${accent}1f` : `${accent}12` },
+              '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
             }}
           >
-            {o.label}
+            <BrandCube brand={b} size={26} />
+            <MuiTypography sx={{
+              fontSize: 13, fontWeight: 800, letterSpacing: 0.2, whiteSpace: 'nowrap',
+              color: active ? accent : D.muted,
+            }}>
+              {b}
+            </MuiTypography>
           </Box>
         );
       })}
@@ -2051,7 +2052,7 @@ function BizSwitcher({ value, onChange, brands }) {
 
 // A brand-new business has no live tools yet, so its section shows this instead of
 // empty tiles: a one-line "what it is" + a real roadmap checklist. Honest
-// groundwork — the moment JP Nucleus grows real tools, they render as a tier above
+// groundwork — the moment JP Atom grows real tools, they render as a tier above
 // this and the panel can retire.
 function FoundationPanel({ data }) {
   const done = data.steps.filter((s) => s.done).length;
@@ -2353,6 +2354,50 @@ function PulseBar({ pulse }) {
 // quarterly due date (Jan/Apr/Jul/Oct 20). Pulls the quarter's NJ-taxed orders
 // from the backend so the numbers to file are right there to double-check, then
 // expands to the per-order breakdown. Silent + absent the rest of the year.
+// Merch-season nudge — the two dispensary dates that actually move merch orders:
+// 4/20 (the big one) and 7/10 (concentrate day). Shows a heads-up in the ~8 weeks
+// before each so the owner pitches BEFORE the rush, not during. Pure client-side
+// date math — no backend, no config.
+const MERCH_SEASONS = [
+  { key: '4/20', month: 3, day: 20, blurb: 'the biggest dispensary merch day of the year' },
+  { key: '7/10', month: 6, day: 10, blurb: 'the 7/10 concentrate holiday' },
+];
+function MerchSeasonReminder({ onPick }) {
+  const now = new Date();
+  const LEAD = 56; // start the nudge ~8 weeks out
+  let hit = null;
+  for (const e of MERCH_SEASONS) {
+    let d = new Date(now.getFullYear(), e.month, e.day);
+    // If this year's date already passed, look to next year's.
+    if (d.getTime() < now.getTime() - 86400000) d = new Date(now.getFullYear() + 1, e.month, e.day);
+    const days = Math.ceil((d.getTime() - now.getTime()) / 86400000);
+    if (days >= 0 && days <= LEAD && (!hit || days < hit.days)) hit = { ...e, days };
+  }
+  if (!hit) return null;
+  const wks = Math.max(1, Math.round(hit.days / 7));
+  return (
+    <Box sx={{ borderRadius: 3, border: '1px solid rgba(74,222,128,0.4)', bgcolor: 'rgba(74,222,128,0.06)',
+      display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, py: 1.75, flexWrap: 'wrap' }}>
+      <Box sx={{ fontSize: 22, flexShrink: 0 }}>🌿</Box>
+      <Box sx={{ flex: 1, minWidth: 180 }}>
+        <MuiTypography sx={{ color: D.green, fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+          {hit.key} is {hit.days <= 0 ? 'today' : `~${wks} week${wks === 1 ? '' : 's'} out`}
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.text, fontSize: 14.5, fontWeight: 800, mt: 0.2 }}>
+          Merch season — pitch your dispensaries before the rush
+        </MuiTypography>
+        <MuiTypography sx={{ color: D.muted, fontSize: 12, mt: 0.15 }}>
+          {hit.key} is {hit.blurb}. Lead time is tight — get quotes &amp; mockups moving now.
+        </MuiTypography>
+      </Box>
+      <Stack direction="row" spacing={1}>
+        <Button size="small" onClick={() => onPick && onPick('outreach')} sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Plan outreach →</Button>
+        <Button size="small" onClick={() => onPick && onPick('content')} sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Plan a post →</Button>
+      </Stack>
+    </Box>
+  );
+}
+
 function NjTaxReminder({ token, onNavigate }) {
   const [data, setData] = React.useState(null);
   const [open, setOpen] = React.useState(false);
@@ -2373,6 +2418,8 @@ function NjTaxReminder({ token, onNavigate }) {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
         sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, py: 1.75, cursor: 'pointer',
           '&:hover': { bgcolor: 'rgba(240,180,41,0.10)' } }}>
+        {/* Joint Printing mark — so it's clear which business this belongs to. */}
+        <BrandCube brand="Joint Printing" size={24} style={{ marginRight: 2 }} />
         <Box sx={{ fontSize: 22, flexShrink: 0 }}>🧾</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <MuiTypography sx={{ color: '#f0b429', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
@@ -2390,6 +2437,40 @@ function NjTaxReminder({ token, onNavigate }) {
       </Box>
       <Collapse in={open} timeout={260} unmountOnExit>
         <Box sx={{ px: { xs: 1.5, md: 2.5 }, pb: 2 }}>
+          {/* ST-50 cheat sheet — the numbers exactly as the NJ portal form asks
+              for them, so filing is copy-type-done. Lines 3/5/7/9/11 calculate
+              themselves on the form. Renders once the API returns totalGross. */}
+          {data.totalGross != null && (
+            <Box sx={{ mb: 1.5, borderRadius: 2, border: '1px solid rgba(240,180,41,0.4)', overflow: 'hidden' }}>
+              <Box sx={{ px: 1.5, py: 0.7, bgcolor: 'rgba(240,180,41,0.10)', borderBottom: `1px solid ${D.line}` }}>
+                <MuiTypography sx={{ color: '#f0b429', fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase' }}>
+                  ST-50 · type these into the form ({data.period})
+                </MuiTypography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 0, bgcolor: D.inset }}>
+                {[
+                  ['Line 1', 'Total gross receipts', data.totalGross, 'every sale booked this quarter, tax excluded'],
+                  ['Line 2', 'Non-taxable receipts', data.totalNonTaxable, 'out-of-state + untaxed sales'],
+                  ['Line 3', 'Taxable receipts', data.totalTaxable, 'auto-calculates on the form — check it matches'],
+                  ['Line 8', 'Sales tax collected', data.totalTax, 'what your orders actually charged'],
+                ].map(([ln, label, val, hint]) => (
+                  <Box key={ln} title={hint} sx={{ px: 1.5, py: 1, borderRight: `1px solid ${D.line}`,
+                    '&:last-of-type': { borderRight: 'none' } }}>
+                    <MuiTypography sx={{ color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                      {ln} · {label}
+                    </MuiTypography>
+                    <MuiTypography sx={{ ...mono, color: ln === 'Line 8' ? '#f0b429' : D.text, fontSize: 15, fontWeight: 800, mt: 0.2 }}>
+                      {money(val)}
+                    </MuiTypography>
+                  </Box>
+                ))}
+              </Box>
+              <MuiTypography sx={{ color: D.faint, fontSize: 10.5, px: 1.5, py: 0.7, borderTop: `1px solid ${D.line}`, lineHeight: 1.5 }}>
+                The rate (6.625%) pre-fills; lines 3, 5, 7, 9 &amp; 11 calculate themselves. Line 10 (use tax) is
+                $0 unless you bought untaxed goods for your own use.
+              </MuiTypography>
+            </Box>
+          )}
           {data.orders.length === 0 ? (
             <MuiTypography sx={{ color: D.muted, fontSize: 12.5, py: 1 }}>
               No NJ-taxed orders booked this quarter — file a $0 return.
@@ -2427,10 +2508,21 @@ function NjTaxReminder({ token, onNavigate }) {
               </Box>
             </Box>
           )}
-          <MuiTypography sx={{ color: D.faint, fontSize: 11, mt: 1, lineHeight: 1.5 }}>
-            File at nj.gov (Sales &amp; Use Tax, ST-50). These are the orders that charged NJ tax with a
-            confirmation in {data.period} — double-check against your QuickBooks before you submit.
-          </MuiTypography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.25, flexWrap: 'wrap' }}>
+            {/* Straight to the NJ Tax Portal — no hunting through nj.gov. */}
+            <Button component="a" size="small"
+              href="https://www.nj.gov/treasury/taxation/taxportal/index.shtml"
+              target="_blank" rel="noopener noreferrer"
+              sx={{ bgcolor: '#f0b429', color: '#1a1405', fontWeight: 800, fontSize: 12, px: 1.75, py: 0.5,
+                borderRadius: 999, textTransform: 'none', flexShrink: 0,
+                '&:hover': { bgcolor: '#e0a51f' } }}>
+              File the ST-50 →
+            </Button>
+            <MuiTypography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.5, flex: 1, minWidth: 200 }}>
+              These are the orders that charged NJ tax with a confirmation in {data.period} —
+              double-check against your QuickBooks before you submit.
+            </MuiTypography>
+          </Box>
         </Box>
       </Collapse>
     </Box>
@@ -2491,6 +2583,9 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 
       {/* NJ sales-tax (ST-50) reminder — only inside its ~2-week filing window. */}
       {showJpVitals && <NjTaxReminder token={token} onNavigate={onNavigate} />}
+
+      {/* Merch-season nudge — 4/20 & 7/10, the two dispensary dates worth prepping for. */}
+      {showJpVitals && <MerchSeasonReminder onPick={onPick} />}
 
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
@@ -2587,7 +2682,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
             })()}
 
             {/* Brand-new business with no live tools yet → show its foundation /
-                roadmap instead of an empty section (JP Nucleus). */}
+                roadmap instead of an empty section (JP Atom). */}
             {group.foundation && <FoundationPanel data={group.foundation} />}
           </Stack>
         </Box>
@@ -2977,16 +3072,10 @@ function StudioBody({ token, onLogout }) {
             sx={{ mb: { xs: 2.5, md: 3.5 } }}
           >
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
-              <Box sx={{
-                width: 34, height: 34, borderRadius: 1.75, flexShrink: 0,
-                bgcolor: D.greenDk, color: D.green,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: `0 0 0 4px rgba(74,222,128,0.06)`,
-              }}>
-                <Box component="img" src={`${process.env.PUBLIC_URL}/logo512.png`} alt="Joint Printing"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  sx={{ width: 22, height: 22, objectFit: 'contain' }} />
-              </Box>
+              {/* Transparent brand mark — no tile behind it (the box is already a
+                  clean cube on transparent). */}
+              <BrandCube brand="Joint Printing" size={34} />
+
               <Box sx={{ minWidth: 0 }}>
                 <MuiTypography
                   sx={{
@@ -3074,7 +3163,6 @@ function StudioBody({ token, onLogout }) {
                   {view === 'submissions'  && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
-                  {view === 'promocatalog' && <PromoCatalogTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}

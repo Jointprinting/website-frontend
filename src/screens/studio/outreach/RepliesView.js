@@ -35,7 +35,7 @@ const headSx = { color: D.faint, borderColor: D.line, fontSize: 10.5, fontWeight
 export default function RepliesView({
   replies = [], loading, showIgnored, onToggleIgnored,
   worklist, worklistLoading,
-  onSetStatus, onAddReply, onSync, onOpenCompany, onDraftReply, onError,
+  onSetStatus, onNotAReply, onAddReply, onSync, onOpenCompany, onDraftReply, onError,
 }) {
   const fullScreen = useMobileFullScreen();
   const [mode, setMode] = React.useState('worklist'); // 'worklist' = command center, 'all' = full inbox
@@ -105,7 +105,7 @@ export default function RepliesView({
       {mode === 'worklist' && (
         <WorklistPanel
           worklist={worklist} loading={worklistLoading}
-          onSetStatus={onSetStatus} onOpenCompany={onOpenCompany}
+          onSetStatus={onSetStatus} onNotAReply={onNotAReply} onOpenCompany={onOpenCompany}
           onDraftReply={onDraftReply} onError={onError}
         />
       )}
