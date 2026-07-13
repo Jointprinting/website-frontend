@@ -2437,6 +2437,40 @@ function NjTaxReminder({ token, onNavigate }) {
       </Box>
       <Collapse in={open} timeout={260} unmountOnExit>
         <Box sx={{ px: { xs: 1.5, md: 2.5 }, pb: 2 }}>
+          {/* ST-50 cheat sheet — the numbers exactly as the NJ portal form asks
+              for them, so filing is copy-type-done. Lines 3/5/7/9/11 calculate
+              themselves on the form. Renders once the API returns totalGross. */}
+          {data.totalGross != null && (
+            <Box sx={{ mb: 1.5, borderRadius: 2, border: '1px solid rgba(240,180,41,0.4)', overflow: 'hidden' }}>
+              <Box sx={{ px: 1.5, py: 0.7, bgcolor: 'rgba(240,180,41,0.10)', borderBottom: `1px solid ${D.line}` }}>
+                <MuiTypography sx={{ color: '#f0b429', fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase' }}>
+                  ST-50 · type these into the form ({data.period})
+                </MuiTypography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 0, bgcolor: D.inset }}>
+                {[
+                  ['Line 1', 'Total gross receipts', data.totalGross, 'every sale booked this quarter, tax excluded'],
+                  ['Line 2', 'Non-taxable receipts', data.totalNonTaxable, 'out-of-state + untaxed sales'],
+                  ['Line 3', 'Taxable receipts', data.totalTaxable, 'auto-calculates on the form — check it matches'],
+                  ['Line 8', 'Sales tax collected', data.totalTax, 'what your orders actually charged'],
+                ].map(([ln, label, val, hint]) => (
+                  <Box key={ln} title={hint} sx={{ px: 1.5, py: 1, borderRight: `1px solid ${D.line}`,
+                    '&:last-of-type': { borderRight: 'none' } }}>
+                    <MuiTypography sx={{ color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                      {ln} · {label}
+                    </MuiTypography>
+                    <MuiTypography sx={{ ...mono, color: ln === 'Line 8' ? '#f0b429' : D.text, fontSize: 15, fontWeight: 800, mt: 0.2 }}>
+                      {money(val)}
+                    </MuiTypography>
+                  </Box>
+                ))}
+              </Box>
+              <MuiTypography sx={{ color: D.faint, fontSize: 10.5, px: 1.5, py: 0.7, borderTop: `1px solid ${D.line}`, lineHeight: 1.5 }}>
+                The rate (6.625%) pre-fills; lines 3, 5, 7, 9 &amp; 11 calculate themselves. Line 10 (use tax) is
+                $0 unless you bought untaxed goods for your own use.
+              </MuiTypography>
+            </Box>
+          )}
           {data.orders.length === 0 ? (
             <MuiTypography sx={{ color: D.muted, fontSize: 12.5, py: 1 }}>
               No NJ-taxed orders booked this quarter — file a $0 return.
