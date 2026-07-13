@@ -15,6 +15,7 @@ import AddIcon             from '@mui/icons-material/Add';
 import SearchIcon          from '@mui/icons-material/Search';
 import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
+import ContentCopyIcon     from '@mui/icons-material/ContentCopy';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
@@ -1530,6 +1531,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
+  // "Add a variation" in flight — the tile whose duplicate is being cloned.
+  const [duplicatingNum, setDuplicatingNum] = useState('');
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
   // Open the Mockup Studio (/jpstudio) deep-linked to THIS project, so every
@@ -1818,6 +1821,26 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 
   const updateLocal = (patch) => setLocal(prev => ({ ...prev, ...patch }));
 
+  // "Add a variation": server-side clone of a mockup into the project's next
+  // letter — identical art, new number/identity, immediately editable in the
+  // studio. The endpoint reserves the number atomically (same path as the
+  // studio + promo upload) so concurrent saves can't collide.
+  const addVariation = async (t) => {
+    if (!project?._id || duplicatingNum) return;
+    setDuplicatingNum(t.num || 'x');
+    try {
+      const { data } = await axios.post(`${base}/orders/${project._id}/mockups/duplicate`,
+        { remoteId: t.item?.remoteId || '', mockupNum: t.num || '' }, authHdr);
+      updateLocal({ mockupNumbers: [...(local.mockupNumbers || []), data.mockupNum] });
+      onToast?.(`Variation added · ${data.mockupNum}`, 'success');
+      await onReload?.();
+    } catch (e) {
+      onToast?.(e.response?.data?.message || 'Could not add a variation — try again.', 'error');
+    } finally {
+      setDuplicatingNum('');
+    }
+  };
+
   // Drop one mockup # from this project (typo, wrong #, never-made design).
   // ALSO records it on excludedMockups — without the exclusion, the client-name
   // auto-matcher (and the silent auto-link effect) would just re-attach it and
@@ -2079,6 +2102,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       '&:hover .tile-x': { opacity: 1 },
                       '&:hover': t.item ? { borderColor: B.green, transform: 'translateY(-1px)' } : {},
                     }}>
+                      {/* "Add a variation" — duplicate this mockup as a NEW one
+                          (next letter, same art) linked to this project. */}
+                      {t.item && (
+                        <IconButton className="tile-x" size="small"
+                          disabled={!!duplicatingNum}
+                          onClick={(e) => { e.stopPropagation(); addVariation(t); }}
+                          title={`Add a variation — duplicate ${t.num} as a new mockup`}
+                          sx={{
+                            position: 'absolute', top: 2, left: 2, zIndex: 1, p: 0.25,
+                            opacity: 0, transition: 'opacity 0.12s',
+                            bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
+                            '&:hover': { bgcolor: B.green, color: '#06140c' },
+                            '&.Mui-disabled': { bgcolor: 'rgba(0,0,0,0.5)', color: B.muted },
+                          }}>
+                          {duplicatingNum === t.num
+                            ? <JpLoader size={12} />
+                            : <ContentCopyIcon sx={{ fontSize: 12 }} />}
+                        </IconButton>
+                      )}
                       {(
                         <IconButton className="tile-x" size="small"
                           onClick={(e) => { e.stopPropagation(); removeMockup(t.num); }}
