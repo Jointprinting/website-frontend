@@ -484,8 +484,12 @@ export default function ApprovalView() {
     if (!canSubmitPicks) return;
     setPickBusy(true);
     try {
+      // Picks post the line's stable id (lid) when the server provided one —
+      // ids survive owner-side edits/reorders between pushes, indexes don't.
+      // Index fallback keeps very old payloads working.
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`,
-        { picks: groupNames.map(g => pickFor(g)).filter(i => i !== undefined) });
+        { picks: groupNames.map(g => pickFor(g)).filter(i => i !== undefined)
+            .map(i => (quoteLines[i] && quoteLines[i].lid) || i) });
       setRepicking(false);
       await refresh();
     } catch (e) {

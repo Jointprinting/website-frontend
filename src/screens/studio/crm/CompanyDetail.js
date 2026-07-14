@@ -53,7 +53,9 @@ function financeCogsHint(finance) {
   const est = Number(finance.estimatedCogs) || 0;
   const hasReceipts = (Number(finance.receiptCount) || 0) > 0;
   if (!hasReceipts) {
-    return est > 0 ? `${fmtMoney0(est)} est · no receipts yet` : `${fmtMoney0(actual)} COGS`;
+    // Profit itself now falls back to the estimate server-side
+    // (profitIsEstimate) — the hint says which cost the number stands on.
+    return est > 0 ? `− ${fmtMoney0(est)} est. cost · no receipts yet` : `${fmtMoney0(actual)} COGS`;
   }
   const base = `${fmtMoney0(actual)} COGS · receipts`;
   return Math.abs(actual - est) >= 1 ? `${base} · ${fmtMoney0(est)} est` : base;
@@ -795,9 +797,15 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
                 // (the owner asked "where does the 5k open est come from?"), so hide
                 // it. It still shows for genuine open pipeline (unpaid/early work).
                 hint={
-                  client.dealValue && !(finance.paidCount > 0 && finance.outstanding === 0)
-                    ? `${fmtMoney0(client.dealValue)} open est.`
-                    : null
+                  // When more than one collected order backs this number, say
+                  // so — a company that "won one job" showing 2 collected
+                  // orders is how a duplicate doc doubles revenue silently
+                  // (run Duplicate cleanup / archive the twin if it's one job).
+                  finance.paidCount > 1
+                    ? `across ${finance.paidCount} collected orders`
+                    : client.dealValue && !(finance.paidCount > 0 && finance.outstanding === 0)
+                      ? `${fmtMoney0(client.dealValue)} open est.`
+                      : null
                 }
               />
               <Metric

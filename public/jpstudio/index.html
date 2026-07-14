@@ -2039,7 +2039,10 @@ async function loadApiColor(colorObj, parentData) {
   // Title (when blank) and subtitle are both derived from the picked S&S
   // product. Title is normally set from the project ("[Company] Merch"), so we
   // only fill it here when nothing's there yet. Subtitle always reflects the
-  // chosen product/colorway in the house style, e.g. "Comfort Colors 1717, Black".
+  // chosen product/colorway in the house style, e.g. "Comfort Colors 1717, Black"
+  // — and it FOLLOWS re-imports: picking a different product replaces a
+  // subtitle this importer wrote (tracked via _ssSubtitle), while a subtitle
+  // the owner typed by hand is never touched.
   const pg = state.pages[state.currentPage];
   const brandStyle = parentData?.name || ((document.getElementById('ss-style').value || '').trim());
   const color = colorObj.color || (document.getElementById('ss-color').value || '').trim();
@@ -2049,10 +2052,11 @@ async function loadApiColor(colorObj, parentData) {
     pg.title = titleVal;
   }
   const subEl = document.getElementById('f-subtitle');
-  if (subEl && !pg.subtitle && brandStyle) {
+  if (subEl && brandStyle && (!pg.subtitle || pg.subtitle === pg._ssSubtitle)) {
     const subtitleVal = brandStyle + (color ? ', ' + color : '');
     subEl.value = subtitleVal;
     pg.subtitle = subtitleVal;
+    pg._ssSubtitle = subtitleVal;
   }
   markPreviewDirty();
 }
@@ -3743,8 +3747,17 @@ async function recolorArtwork(side,fromHex,toHex){
 }
 // First artwork upload auto-fills colors; a replacement refreshes the chips but
 // won't silently wipe colors you've already named — tap ✨ to refill.
+// Ink-color counting is a SCREEN-PRINTING concept (one screen per ink) — DTG /
+// DTF / embroidery / sublimation don't price by color, so the auto-scan only
+// fires when this side's print type is screen printing (or not set yet, since
+// screen print is the default job). The ✨ button still works for any type.
+function _sideIsScreenPrint(pg, side){
+  const t = String(((side==='front' ? pg.printFront : pg.printBack) || {}).type || '').toLowerCase();
+  return !t || /screen/.test(t);
+}
 async function _onArtworkChanged(side){
   const pg=state.pages[state.currentPage]; if(!pg) return;
+  if(!_sideIsScreenPrint(pg, side)){ _inkMsg(side,'Color count skipped — '+(((side==='front'?pg.printFront:pg.printBack)||{}).type)+' doesn’t price by ink color. Tap ✨ if you want the palette anyway.',''); return; }
   const existing=pg[side+'Colors']||[];
   if(existing.length===0){ await autoDetectColors(side,{auto:true}); return; }
   try{ _inkPalette[side]=await analyzeArtwork(pg[side+'LogoBase64']); }catch(e){ _inkPalette[side]=null; }

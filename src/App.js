@@ -50,6 +50,7 @@ const PreorderView = lazy(() => import('./screens/PreorderView'));
 // nav/footer would muddle whose product it is (same reasoning as Webworks).
 const AtomLanding = lazy(() => import('./screens/AtomLanding'));
 const AtomDemo = lazy(() => import('./screens/AtomDemo'));
+const AtomContact = lazy(() => import('./screens/AtomContact'));
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
@@ -164,6 +165,7 @@ function AppShell() {
           {/* JP Atom — the studio as a product: landing + guided live demo. */}
           <Route exact path="/atom" element={<AtomLanding />} />
           <Route exact path="/atom/demo" element={<AtomDemo />} />
+          <Route exact path="/atom/contact" element={<AtomContact />} />
           {/* Public lookbook gallery — token-gated by the backend (404/410). */}
           <Route exact path="/lookbook/:id" element={<LookbookView />} />
           {/* JP Webworks client-site preview — public, no auth; the backend
