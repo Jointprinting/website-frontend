@@ -251,9 +251,10 @@ function DealCard({ deal, onOpen, onDragStart, onDragEnd, dragging, locked }) {
 // A short, purpose-y line for an empty lane so a quiet column reads as "nothing
 // here yet," not "broken." Keyed by deal stage; unknown stages fall back.
 const STAGE_EMPTY_HINT = {
-  qualifying: 'New leads land here',
-  quoted: 'Quotes waiting on a yes',   // stage id is 'quoted' (label "Quote sent")
-  won: 'Won deals collect here',
+  details_needed: 'New jobs land here — chase product + design details',
+  quoting: 'Details in hand — mockups & quote in progress',
+  quote_sent: 'Quotes waiting on a yes',
+  won: 'Won deals collect here (auto, on delivery)',
   lost: 'Closed-lost deals',
 };
 

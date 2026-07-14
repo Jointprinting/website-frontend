@@ -536,7 +536,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage }) {
   // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -714,6 +714,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
           onOpen={onOpenDeal}
           onEdit={onEditDeal}
           onRemove={onRemoveDeal}
+          onStartJob={onStartJob}
+          onSetStage={onSetDealStage}
         />
       )}
 

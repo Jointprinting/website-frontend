@@ -126,23 +126,27 @@ export const BOARD_COLUMN_TO_ORDER_STATUS = {
 // moves (models/Deal.js on the API). A business (companyKey) has MANY deals, and
 // its "client" status is DERIVED from them (≥1 won deal), replacing the old
 // hand-set won/customer company stage. MIRRORS models/Deal.js DEAL_STAGES — keep
-// the order + values in sync. Ordered open → closed:
-//   qualifying — chasing the order details from a (often cold) lead, pre-quote
-//   quoted     — a quote/order exists (shown as "Quote sent")
-//   won / lost — closed
-export const DEAL_STAGES = ['qualifying', 'quoted', 'won', 'lost'];
-export const DEAL_OPEN_STAGES = ['qualifying', 'quoted'];
+// the order + values in sync. Ordered open → closed, matching how the owner
+// actually works a job:
+//   details_needed — chasing product + design details from the client
+//   quoting        — details in hand; mockups + the quote are being built
+//   quote_sent     — the quote/approval link went out (auto-stamped on share)
+//   won            — ONLY when the linked order is delivered (auto; no Win button)
+//   lost
+export const DEAL_STAGES = ['details_needed', 'quoting', 'quote_sent', 'won', 'lost'];
+export const DEAL_OPEN_STAGES = ['details_needed', 'quoting', 'quote_sent'];
 // Board lanes: the forward pipeline across the top; Lost tucked into a closed lane.
-export const DEAL_BOARD_ACTIVE = ['qualifying', 'quoted', 'won'];
+export const DEAL_BOARD_ACTIVE = ['details_needed', 'quoting', 'quote_sent', 'won'];
 export const DEAL_BOARD_CLOSED = ['lost'];
 
 export const DEAL_STAGE_META = {
-  qualifying: { label: 'Qualifying', color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
-  quoted:     { label: 'Quote sent', color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
-  won:        { label: 'Won',        color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
-  lost:       { label: 'Lost',       color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+  details_needed: { label: 'Details needed', color: '#60a5fa', bg: 'rgba(96,165,250,0.14)' },
+  quoting:        { label: 'Design & quote', color: '#22d3ee', bg: 'rgba(34,211,238,0.14)' },
+  quote_sent:     { label: 'Quote sent',     color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  won:            { label: 'Won',            color: '#4ade80', bg: 'rgba(74,222,128,0.16)' },
+  lost:           { label: 'Lost',           color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
 };
-export const dealStageMeta = (s) => DEAL_STAGE_META[s] || DEAL_STAGE_META.qualifying;
+export const dealStageMeta = (s) => DEAL_STAGE_META[s] || DEAL_STAGE_META.details_needed;
 
 // A deal that "wins" — the celebratory accent, and the rung that makes a client.
 export const isWonDeal = (d) => !!(d && !d.archived && d.stage === 'won');
@@ -156,13 +160,14 @@ export const isClientFromDeals = (deals) =>
   (Array.isArray(deals) ? deals : []).some(isWonDeal);
 
 // Which deal stage an Order.status maps to — MIRRORS models/Deal.js
-// dealStageFromOrderStatus (placed+ = won; quoted/approved = quoted; cancelled =
-// lost). Keep in sync.
+// dealStageFromOrderStatus. Won is delivery-only (owner's rule); a placed/
+// in-production/shipped order is still an OPEN deal at quote_sent. Keep in sync.
 export const dealStageFromOrderStatus = (status) => {
   switch (String(status || '')) {
-    case 'placed': case 'in_production': case 'shipped': case 'delivered': return 'won';
+    case 'delivered': return 'won';
     case 'cancelled': return 'lost';
-    default: return 'quoted';
+    case 'placed': case 'in_production': case 'shipped': case 'approved': return 'quote_sent';
+    default: return 'quoting';
   }
 };
 

@@ -706,6 +706,28 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     }
   };
 
+  // UPS auto-delivered, on demand: sweeps open orders whose client timeline
+  // carries a UPS tracking link and flips delivered ones (the hourly poller
+  // does this on its own — the button is the "check right now" + first-test
+  // path). 503 until the UPS keys are set on the API host.
+  const handleUpsCheck = async () => {
+    flash('Checking UPS for delivered packages…');
+    try {
+      const r = await axios.post(`${base}/orders/ups-check`, {}, authHdr);
+      const d = r.data || {};
+      if (!d.checked) {
+        flash('UPS: no open orders carry a UPS tracking link yet — paste one on a timeline step first.');
+      } else {
+        flash(`UPS: checked ${d.checked} order${d.checked === 1 ? '' : 's'} — ${d.delivered ? `${d.delivered} auto-delivered 🎉` : 'nothing delivered yet'}.`);
+      }
+      if (d.delivered) loadProjects();
+    } catch (e) {
+      flash(e?.response?.status === 503
+        ? 'UPS keys not set yet — add UPS_CLIENT_ID / UPS_CLIENT_SECRET on the API host, then retry.'
+        : (e?.response?.data?.message || 'UPS check failed.'), 'error');
+    }
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
       {/* Header */}
@@ -809,6 +831,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
                 secondary="Bulk-link orphan mockups">Auto-link mockups</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleUpsCheck(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Sweep UPS links → auto-deliver">Check UPS now</ListItemText>
             </MenuItem>
           </Menu>
         </Stack>
