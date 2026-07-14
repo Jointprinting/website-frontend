@@ -38,12 +38,16 @@ const LookbookView  = lazy(() => import('./screens/LookbookView'));
 const WebworksPreview = lazy(() => import('./screens/WebworksPreview'));
 // A LIVE client site on its own CONNECTED domain (see HostGate below).
 const ClientSite = lazy(() => import('./screens/ClientSite'));
+// Client portal (/portal/:token) — one magic link per company: every order's
+// status + timeline + links to the live approval pages. Bare chrome, same
+// pattern as the approval view.
+const PortalView = lazy(() => import('./screens/PortalView'));
 
 // Routes that should be presented bare — no public coupon banner, no public
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
-// marketing site chrome doesn't belong on it. Approval and lookbook views are
-// clean client-facing surfaces, also bare.
-const STUDIO_ROUTES = ['/studio', '/admin', '/approve', '/lookbook'];
+// marketing site chrome doesn't belong on it. Approval, lookbook, and portal
+// views are clean client-facing surfaces, also bare.
+const STUDIO_ROUTES = ['/studio', '/admin', '/approve', '/lookbook', '/portal'];
 
 // Per-route titles + meta descriptions. Every page used to share the single
 // static title from index.html, which hurts SEO and makes tabs/history
@@ -67,6 +71,7 @@ function useRouteMeta(pathname) {
   React.useEffect(() => {
     const meta = ROUTE_META[pathname]
       || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null)
+      || (pathname.startsWith('/portal') ? { title: 'Your Orders | Joint Printing' } : null)
       // Lookbooks retitle themselves to the lookbook's title once it loads
       // (LookbookView) — this is just the pre-fetch placeholder.
       || (pathname.startsWith('/lookbook') ? { title: 'Lookbook | Joint Printing' } : null)
@@ -140,6 +145,8 @@ function AppShell() {
           <Route exact path="/terms" element={<Terms />} />
           <Route exact path="/privacy" element={<Privacy />} />
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
+          {/* Client portal — one magic link per company; token-gated by the backend. */}
+          <Route exact path="/portal/:token" element={<PortalView />} />
           {/* Public lookbook gallery — token-gated by the backend (404/410). */}
           <Route exact path="/lookbook/:id" element={<LookbookView />} />
           {/* JP Webworks client-site preview — public, no auth; the backend

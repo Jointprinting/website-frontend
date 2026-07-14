@@ -536,7 +536,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage, onOpenPortal, onRevokePortal }) {
   // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -649,6 +649,23 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
             )}
           </Box>
           <Stack direction="row" spacing={1} flexShrink={0}>
+            {onOpenPortal && (
+              <Button onClick={onOpenPortal}
+                title={client.portalToken
+                  ? 'Copy this company’s portal link (magic link — all their orders, no login)'
+                  : 'Create + copy this company’s portal link (magic link — all their orders, no login)'}
+                sx={{ color: D.green, border: `1px solid ${D.line}`, fontWeight: 700, textTransform: 'none',
+                  borderRadius: 999, px: 2, '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+                Client portal
+              </Button>
+            )}
+            {onRevokePortal && client.portalToken && (
+              <Button onClick={onRevokePortal} title="Revoke the portal link — the URL stops working immediately"
+                sx={{ minWidth: 0, px: 1.25, color: D.faint, border: `1px solid ${D.line}`, fontWeight: 700,
+                  textTransform: 'none', borderRadius: 999, '&:hover': { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } }}>
+                ✕
+              </Button>
+            )}
             <Button onClick={onLog} startIcon={<EditNoteOutlinedIcon />}
               sx={{ color: D.text, border: `1px solid ${D.line}`, fontWeight: 700, textTransform: 'none',
                 borderRadius: 999, px: 2, '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}>
