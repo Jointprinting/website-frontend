@@ -12,13 +12,15 @@
 export const SOURCE_FILTERS = [
   { value: 'all',      label: 'All sources' },
   { value: 'webworks', label: 'JP Webworks' },
+  { value: 'atom',     label: 'JP Atom' },
   { value: 'contact',  label: 'Contact form' },
 ];
 
 export const matchesSource = (item, filter) =>
   filter === 'all' ? true
     : filter === 'webworks' ? item.source === 'webworks'
-    : item.source !== 'webworks';
+    : filter === 'atom' ? item.source === 'atom'
+    : item.source !== 'webworks' && item.source !== 'atom';
 
 // The source a list is actually sliced by. `lockedSource` (the JP Webworks
 // Inquiries view is HARD-locked to 'webworks') always wins over the user's

@@ -4056,6 +4056,45 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
               </Stack>
             )}
 
+            {/* REVENUE TWINS — the Bract House pattern: 2+ collected orders on
+                one company, so revenue rollups double-count. Review each pair;
+                if it's really ONE job, archive the twin from its drawer (the
+                strong ones — same dollar value or a clone — are listed first). */}
+            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 3, mb: 1 }}>
+              Double-counted revenue suspects · {((data && data.revenueTwins) || []).length}
+            </Typography>
+            {((data && data.revenueTwins) || []).length === 0 ? (
+              <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                No companies with multiple collected orders — nothing is double-counting.
+              </Typography>
+            ) : (
+              <Stack gap={1}>
+                {(data.revenueTwins || []).map((t) => (
+                  <Box key={t.companyKey} sx={{ p: 1.25, borderRadius: 1.5,
+                    border: `1px solid ${t.strong ? 'rgba(251,191,36,0.5)' : B.border}` }}>
+                    <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                      <Typography sx={{ color: B.white, fontWeight: 700, fontSize: 12.5 }}>{t.companyName}</Typography>
+                      <Typography sx={{ color: t.strong ? '#fbbf24' : B.muted, fontSize: 11 }}>
+                        {t.suspicion} · counting {fmt(t.totalCounted)}
+                      </Typography>
+                    </Stack>
+                    <Stack gap={0.25} sx={{ mt: 0.5 }}>
+                      {t.orders.map((o) => (
+                        <Typography key={o._id} sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                          #{o.projectNumber || o.orderNumber || o._id} · {o.status}{o.paid ? ' · paid' : ''} · {fmt(o.totalValue)}
+                          {o.importedFrom ? ` · ${o.importedFrom}` : ''}
+                          {o.orderDate ? ` · ${new Date(o.orderDate).toLocaleDateString()}` : ''}
+                        </Typography>
+                      ))}
+                    </Stack>
+                    <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.5 }}>
+                      One real job? Open the newer/emptier twin in the tracker and archive it — revenue corrects instantly. A legit repeat order stays.
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+
             {/* Manual merge for non-collision cases (different keys entirely) */}
             <Box sx={{ mt: 3, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1 }}>
               <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
