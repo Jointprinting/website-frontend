@@ -44,6 +44,8 @@ import GridViewOutlinedIcon    from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon  from '@mui/icons-material/ViewAgendaOutlined';
 import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
 import LinkIcon                from '@mui/icons-material/Link';
+import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -120,6 +122,23 @@ function emptyLine() {
   };
 }
 
+// Signature of what the CLIENT would see for a set of lines — used to compare
+// the builder's current state against the pushed snapshot (quoteLinesPublished)
+// so the header can say "client link current ✓" vs "push your edits". Hidden
+// lines are excluded (they never reach the client) and every field is
+// normalized (inputs hold strings, the server holds numbers).
+const SIG_NUM = ['qty', 'unitPrice', 'markup', 'blankCost', 'printCost', 'setupCost', 'shippingCost', 'turnaroundWeeks'];
+const SIG_STR = ['group', 'description', 'styleCode', 'color', 'printType', 'printDetails', 'supplierUrl', 'image', 'mockupNum'];
+function quoteSig(lines) {
+  return JSON.stringify((Array.isArray(lines) ? lines : [])
+    .filter(l => l && !l.hiddenFromClient)
+    .map(l => [
+      ...SIG_NUM.map(k => num(l[k])),
+      ...SIG_STR.map(k => String(l[k] ?? '')),
+      l.noMarkup ? 1 : 0,
+    ]));
+}
+
 // ── Design grids: detection over the flat lines array ────────────────────────
 
 // Row identity + matrix detection live in src/common/quoteGrid.js — ONE
@@ -178,6 +197,10 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   const [cardView,     setCardView]     = useState(() => new Set());
   // The promo catalog picker (vendor items with client price + net cost baked in).
   const [promoOpen,    setPromoOpen]    = useState(false);
+  // What the CLIENT's link currently shows (signature of the pushed snapshot).
+  // Autosave keeps edits owner-side; "Push to client" updates the link.
+  const [pushedSig, setPushedSig] = useState(null);
+  const [pushing,   setPushing]   = useState(false);
 
   // Seed from the freshest source: a local draft (which survives a tab close
   // or crash mid-quote) wins over the server copy. Keyed on project id so an
@@ -203,6 +226,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     setPrinterName(seed.printerName || '');
     setCardView(new Set());
     setDirty(false);
+    setPushedSig(project.quotePushedAt && Array.isArray(project.quoteLinesPublished)
+      ? quoteSig(project.quoteLinesPublished) : null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project?._id]);
 
@@ -348,6 +373,22 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     onClose();
   };
 
+  // Send the current quote to the CLIENT's link. Autosave only ever updates
+  // the owner's copy; the approval page serves the last pushed snapshot, so
+  // mid-edit numbers never flash at the client. Sharing the link the first
+  // time pushes automatically (backend); this button is for edits after that.
+  const pushToClient = async () => {
+    setPushing(true);
+    try {
+      if (dirty) await persist();
+      await axios.post(`${config.backendUrl}/api/orders/${project._id}/quote/push`, {}, authHdr);
+      setPushedSig(quoteSig(lines));
+    } catch (e) { /* header keeps showing "push your edits" — retry is one click */ }
+    finally { setPushing(false); }
+  };
+  const shared = !!project.approvalToken;
+  const clientCurrent = pushedSig != null && pushedSig === quoteSig(lines);
+
   const inkInput = {
     ...dropInput,
     '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 },
@@ -436,13 +477,29 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
             {saving ? 'Saving…' : (dirty ? 'Saving soon…' : 'Saved')}
           </Typography>
         </Stack>
+        {/* The client's link shows the last PUSHED version — autosave keeps
+            edits owner-side. Only relevant once a link has been shared. */}
+        {shared && (clientCurrent ? (
+          <Typography sx={{ fontSize: 11, fontWeight: 700, color: D.green, whiteSpace: 'nowrap', mr: 0.5 }}
+            title="The client's quote link matches what you see here.">
+            Client link current ✓
+          </Typography>
+        ) : (
+          <Button size="small" onClick={pushToClient} disabled={pushing}
+            title="Your edits are saved but the client's link still shows the last pushed version — this sends the update."
+            sx={{ bgcolor: D.amber, color: '#211703', fontWeight: 800, fontSize: 11, textTransform: 'none',
+              px: 1.5, py: 0.4, borderRadius: 999, whiteSpace: 'nowrap', mr: 0.5,
+              '&:hover': { bgcolor: '#f5cd53' }, '&.Mui-disabled': { bgcolor: D.inset, color: D.faint } }}>
+            {pushing ? 'Pushing…' : 'Push update to client'}
+          </Button>
+        ))}
         <IconButton size="small" onClick={closeWithSave} sx={{ color: D.muted, '&:hover': { color: D.text } }}><CloseIcon fontSize="small" /></IconButton>
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
         {/* Project-level meta — sticks with the quote so re-quotes don't forget.
             Setup + shipping moved onto each line (each option carries its own). */}
-        <Box sx={{ display: 'grid', gap: 1.25, mb: 2.5, maxWidth: 640,
+        <Box sx={{ display: 'grid', gap: 1.25, mb: 1, maxWidth: 640,
           gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           <QF label="Ship to (state)">
             <TextField size="small" fullWidth value={shipToState} placeholder="PA"
@@ -453,6 +510,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
               onChange={e => setMeta(setPrinterName)(e.target.value)} sx={inkInput} />
           </QF>
         </Box>
+        <PrinterSuggest shipToState={shipToState} printerName={printerName}
+          onPick={(name) => setMeta(setPrinterName)(name)} authHdr={authHdr} />
 
         {/* Flow explainer — sets expectations for how a finished quote reaches
             the client, so the pitch → pick → confirm → approve steps are clear. */}
@@ -747,15 +806,16 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
 
   const colIdxs = (q) => grid.brands.map(b => (grid.cellAt(b.key, q) || {}).idx).filter(i => i !== undefined);
 
-  // The tier strip highlights a margin only when EVERY cell is committed at it.
+  // The tier strip highlights a margin only when EVERY visible cell is
+  // committed at it (hidden rows are parked — they don't vote).
   const uniformPct = (() => {
-    const pcts = all.map(i => {
+    const pcts = all.filter(i => !(lines[i] && lines[i].hiddenFromClient)).map(i => {
       const l = lines[i];
       const c = lineCogsPerUnit(l);
       const p = num(l.unitPrice);
       return c > 0 && p > 0 ? Math.round((1 - c / p) * 100) : null;
     });
-    return pcts.every(p => p !== null && p === pcts[0]) ? pcts[0] : null;
+    return pcts.length && pcts.every(p => p !== null && p === pcts[0]) ? pcts[0] : null;
   })();
 
   // Price every cell to hit the target MARGIN over its own cost.
@@ -770,9 +830,10 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
   });
 
   // "How much do I make at m%?" — the whole design's profit at a given margin
-  // (every cell priced at its own cost / (1 − m)), shown on each chip.
+  // (every visible cell priced at its own cost / (1 − m)), shown on each chip.
   const profitAtMargin = (pct) => all.reduce((sum, i) => {
     const l = lines[i];
+    if (l && l.hiddenFromClient) return sum;
     const c = lineCogsPerUnit(l);
     if (c <= 0) return sum;
     return sum + num(l.qty) * (priceAtMargin(c, pct) - c);
@@ -848,8 +909,51 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
   });
 
   const nCols = grid.qtys.length;
-  const tableCols = `minmax(280px, 1.3fr) repeat(${nCols}, minmax(122px, 1fr)) 40px`;
+  const tableCols = `minmax(280px, 1.3fr) repeat(${nCols}, minmax(158px, 1fr)) 40px`;
   const headCellSx = { color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase' };
+
+  // Visible (non-hidden) cells only — hidden rows are owner-side parking and
+  // never part of what the client can take, so never part of the design math.
+  const visible = all.filter(i => !(lines[i] && lines[i].hiddenFromClient));
+  // Design rollup at CURRENT prices: what the client pays, what you make, and
+  // what it costs you if they take every visible option. Recomputes live as
+  // margins are clicked or costs typed.
+  const designTotals = visible.reduce((t, i) => {
+    const l = lines[i];
+    const q = num(l.qty);
+    const c = lineCogsPerUnit(l);
+    const e = lineEffectivePrice(l);
+    if (c > 0 || e > 0) { t.billed += e * q; t.cogs += c * q; t.profit += (e - c) * q; }
+    return t;
+  }, { billed: 0, cogs: 0, profit: 0 });
+
+  // Price ONE option row at a target margin (same math as the design strip).
+  const applyRowTier = (idxs, pct) => onPatchIdxs(idxs, (l) => {
+    const c = lineCogsPerUnit(l);
+    const price = +priceAtMargin(c, pct).toFixed(2);
+    return { unitPrice: price, markup: c > 0 ? +(price / c).toFixed(4) : 1, noMarkup: false };
+  });
+
+  // Copy THIS option's costs (print $/u, setup, shipping, print specs) to
+  // every other option at the matching run size — brands usually share print
+  // pricing and differ only on the blank. Blank $, prices, links stay per-row.
+  const copyCostsToAll = (b) => {
+    const srcByQty = {};
+    grid.qtys.forEach(q => { const c = grid.cellAt(b.key, q); if (c) srcByQty[q] = c.line; });
+    const mine = new Set(b.idxs);
+    onPatchIdxs(all.filter(i => !mine.has(i)), (l) => {
+      const s = srcByQty[num(l.qty)];
+      return s ? {
+        printCost: s.printCost, setupCost: s.setupCost, shippingCost: s.shippingCost,
+        printType: s.printType, printDetails: s.printDetails,
+      } : {};
+    });
+  };
+
+  const toggleRowHidden = (b) => {
+    const hide = !(b.first && b.first.hiddenFromClient);
+    onPatchIdxs(b.idxs, { hiddenFromClient: hide, ...(hide ? { accepted: false } : {}) });
+  };
 
   return (
     <Box sx={{
@@ -1000,7 +1104,8 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                 <Box sx={{ display: 'grid', gap: 0.6, alignItems: 'center', p: 0.9, borderRadius: 2,
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
                   position: 'sticky', left: 0, zIndex: 1,
-                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 96px 30px' }}>
+                  opacity: bLine.hiddenFromClient ? 0.5 : 1,
+                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 96px 26px 30px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
@@ -1023,6 +1128,17 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                     onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
                     InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', mr: 0.4, whiteSpace: 'nowrap' }}>blank&nbsp;$</Typography> }}
                     sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 600, fontSize: 12.5, textAlign: 'left' } }} />
+                  {/* Park this option: stays here with all its costs, but the
+                      client never sees it (and it drops out of the design math). */}
+                  <IconButton size="small" onClick={() => toggleRowHidden(b)}
+                    title={bLine.hiddenFromClient
+                      ? 'Hidden from the client — click to show it on their quote again'
+                      : 'Hide this option from the client (kept here for you)'}
+                    sx={{ color: bLine.hiddenFromClient ? D.amber : D.faint, p: 0.3, '&:hover': { color: D.amber } }}>
+                    {bLine.hiddenFromClient
+                      ? <VisibilityOffOutlinedIcon sx={{ fontSize: 15 }} />
+                      : <VisibilityOutlinedIcon sx={{ fontSize: 15 }} />}
+                  </IconButton>
                   <IconButton size="small" onClick={() => toggleRow(bIdx)}
                     title="Per-option costs: print $/u, setup $ & shipping (per quantity), print details, product link"
                     sx={{ color: open ? D.green : D.muted, p: 0.3,
@@ -1051,6 +1167,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                   return (
                     <Box key={`c-${bIdx}-${q}`} sx={{ p: 0.9, borderRadius: 2, bgcolor: D.inset,
                       border: `1px solid ${committed ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      opacity: l.hiddenFromClient ? 0.5 : 1,
                       display: 'flex', flexDirection: 'column', gap: 0.4, justifyContent: 'center' }}>
                       {/* Show the field EMPTY when the price is auto (0/blank) so the
                           computed auto price shows through as the placeholder — a stored
@@ -1061,23 +1178,30 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
                         InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
                         sx={cellTf} />
-                      {/* Every number LABELED so nothing needs decoding: what the client
-                          pays in total, what you make, what it costs you. */}
+                      {/* Every number LABELED, per-unit AND total: what the client
+                          is billed, what you make, what it costs you. All three
+                          recompute live as margins are clicked. */}
                       {cogs > 0 && eff > 0 ? (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 0.75 }}>
-                          <Typography sx={cellLabel}>{committed ? 'Total' : 'Total · auto'}</Typography>
-                          <Typography sx={{ ...cellVal, color: committed ? D.text : D.amber }}>{fmt(eff * q)}</Typography>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', columnGap: 0.6 }}>
+                          <Typography sx={cellLabel}>{committed ? 'Client' : 'Client·auto'}</Typography>
+                          <Typography sx={{ ...cellVal, color: committed ? D.text : D.amber }}>{fmt(eff)}/u</Typography>
+                          <Typography sx={{ ...cellVal, color: committed ? D.text : D.amber, fontWeight: 800 }}
+                            title={`Order total billed to the client for ${q} units`}>{fmt(eff * q)}</Typography>
                           <Typography sx={cellLabel}>Profit</Typography>
                           <Typography sx={{ ...cellVal, color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct) }}
                             title={promoAuto
                               ? `0% margin — the price sits at COGS until you type the client price`
                               : lowMargin
                                 ? `⚠ ${pct.toFixed(1)}% is under your ${MARGIN_FLOOR}% margin floor — raise the price or check the costs`
-                                : `${fmt(profit * q)} total profit on this cell`}>
-                            {promoAuto ? 'at cost · 0%' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
+                                : `${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}% margin`}>
+                            {promoAuto ? 'at cost' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u`}
+                          </Typography>
+                          <Typography sx={{ ...cellVal, color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct), fontWeight: 800 }}>
+                            {promoAuto ? '0%' : `${fmt(profit * q)} · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
                           </Typography>
                           <Typography sx={cellLabel}>COGS</Typography>
                           <Typography sx={{ ...cellVal, color: D.muted }}>{fmt(cogs)}/u</Typography>
+                          <Typography sx={{ ...cellVal, color: D.muted }}>{fmt(cogs * q)}</Typography>
                         </Box>
                       ) : (
                         <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', color: D.amber }}>
@@ -1143,6 +1267,38 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                         </Stack>
                       </QF>
                     </Box>
+                    {/* Row toolbelt: price JUST this option at its own margin (an
+                        expensive product can run leaner than its grid-mates), and
+                        copy this row's costs onto every other option — brands
+                        usually share print pricing and differ only on the blank. */}
+                    <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${D.line}`,
+                      display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                      <Typography sx={headCellSx}>Margin · this option only</Typography>
+                      {[20, 25, 30, 35, 40, 45, 50].map(p => {
+                        const rowSel = b.idxs.every(i => {
+                          const l2 = lines[i]; const c2 = lineCogsPerUnit(l2); const up = num(l2 && l2.unitPrice);
+                          return c2 > 0 && up > 0 && Math.round((1 - c2 / up) * 100) === p;
+                        });
+                        return (
+                          <Chip key={p} size="small" label={`${p}%`} onClick={() => applyRowTier(b.idxs, p)}
+                            sx={{ ...mono, fontWeight: 800, fontSize: 11, cursor: 'pointer', height: 22,
+                              bgcolor: rowSel ? D.green : 'rgba(255,255,255,0.05)',
+                              color: rowSel ? D.ink : D.muted,
+                              border: `1px solid ${rowSel ? D.green : D.line}`,
+                              '&:hover': { bgcolor: rowSel ? D.green : 'rgba(74,222,128,0.12)' } }} />
+                        );
+                      })}
+                      <Box sx={{ flex: 1 }} />
+                      {grid.brands.length > 1 && (
+                        <Button size="small" onClick={() => copyCostsToAll(b)}
+                          title="Copy this option's print $/u, setup, shipping and print specs onto every other option at the matching run size — blank $ and prices stay per-option"
+                          sx={{ color: D.green, fontSize: 11, fontWeight: 700, textTransform: 'none',
+                            border: `1px dashed ${D.line}`, borderRadius: 999, px: 1.5,
+                            '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+                          Copy costs → all options
+                        </Button>
+                      )}
+                    </Box>
                     {/* Costs PER QUANTITY — each run size can carry its own print
                         $/u, setup $ and shipping $ for this exact option, so a
                         grinder that prints cheaper at 480 than 240 (or ships more
@@ -1198,6 +1354,27 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
           promo / fixed-price lane: nothing is marked up — you type each client
           price (catalog price already carries the margin); COGS stays honest. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
+        {/* Design rollup at CURRENT prices — the three numbers that matter,
+            recomputed live as margins are clicked. "Take everything" = every
+            visible option; the client usually picks one per design, so per-cell
+            totals above are the per-pick truth. */}
+        {designTotals.billed > 0 && (
+          <Stack direction="row" alignItems="baseline" gap={2} mb={1} flexWrap="wrap"
+            sx={{ bgcolor: 'rgba(255,255,255,0.025)', border: `1px solid ${D.line}`, borderRadius: 2, px: 1.5, py: 0.8 }}>
+            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+              If they take every option
+            </Typography>
+            <Typography sx={{ ...mono, color: D.text, fontSize: 12, fontWeight: 800 }}>
+              client billed {fmt(designTotals.billed)}
+            </Typography>
+            <Typography sx={{ ...mono, color: marginColor(designTotals.billed > 0 ? (designTotals.profit / designTotals.billed) * 100 : 0), fontSize: 12, fontWeight: 800 }}>
+              your profit {fmt(designTotals.profit)}
+            </Typography>
+            <Typography sx={{ ...mono, color: D.muted, fontSize: 12, fontWeight: 700 }}>
+              COGS {fmt(designTotals.cogs)}
+            </Typography>
+          </Stack>
+        )}
         <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: fixedPrice ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
             {fixedPrice ? 'Margin 0% · you set the prices' : 'Margin · all options'}
@@ -1207,7 +1384,7 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
               ? 'type each client price — COGS still reads your real cost'
               : uniformPct != null && uniformPct > 0
                 ? `every option priced at a true ${uniformPct}% margin — you make ${fmt(profitAtMargin(uniformPct))} total if they take everything`
-                : 'click your margin — every option prices to hit it; the $ under each is your total profit at that margin'}
+                : 'click a margin — every option reprices to hit it; the number on each chip is YOUR TOTAL PROFIT at that margin (per-option margins live in each row’s ⌄ drawer)'}
           </Typography>
         </Stack>
         <Box sx={{ bgcolor: D.inset, border: `1px solid ${D.line}`,
@@ -1242,8 +1419,8 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
                 <Typography sx={{ color: sel ? D.ink : D.text, fontSize: 12.5, fontWeight: 800, ...mono }}>
                   {pct}%
                 </Typography>
-                <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9.5, fontWeight: 700, ...mono, mt: 0.1 }}>
-                  {totalProfit > 0 ? `+${fmt(totalProfit)}` : '—'}
+                <Typography sx={{ color: sel ? 'rgba(6,20,12,0.72)' : D.muted, fontSize: 9, fontWeight: 700, ...mono, mt: 0.1 }}>
+                  {totalProfit > 0 ? `${fmt(totalProfit)} profit` : '—'}
                 </Typography>
               </Box>
             );
@@ -1251,6 +1428,54 @@ function DesignGridCard({ grid, lines, accent, onPatchIdxs, onRemoveIdxs, onSetL
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// Printer network strip under the quote meta: which of your printers can
+// legally take this job (nexus rule: the printer's home state must differ
+// from the ship-to state), one click to set. Suggestion only — the text field
+// stays free-form for printers not in the network yet.
+function PrinterSuggest({ shipToState, printerName, onPick, authHdr }) {
+  const [printers, setPrinters] = useState(null);
+  useEffect(() => {
+    let gone = false;
+    axios.get(`${config.backendUrl}/api/printers`, authHdr)
+      .then(r => { if (!gone) setPrinters(r.data.printers || []); })
+      .catch(() => { if (!gone) setPrinters([]); });
+    return () => { gone = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!printers || !printers.length) return <Box sx={{ mb: 1.5 }} />;
+  const st = String(shipToState || '').trim().toUpperCase();
+  return (
+    <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" sx={{ mb: 2.5 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+        Your network
+      </Typography>
+      {printers.map(p => {
+        const blocked = !!st && String(p.state).toUpperCase() === st;
+        const picked = (printerName || '').toLowerCase().includes(String(p.name || '').split(' ')[0].toLowerCase());
+        return (
+          <Chip key={p.key} size="small"
+            label={`${p.name.replace(/,? Inc\.?$/i, '')} · ${p.state}${blocked ? ' — nexus ⚠' : ''}`}
+            onClick={() => !blocked && onPick(p.name)}
+            title={blocked
+              ? `Ships to ${st} — same state as this printer. Nexus rule: pick an out-of-state printer.`
+              : `${p.location || p.state} · ${(p.capabilities || []).slice(0, 3).join(', ')}${p.catalogEffective ? ` · pricing eff. ${p.catalogEffective}` : ''}`}
+            sx={{ fontWeight: 700, fontSize: 11, height: 24,
+              cursor: blocked ? 'not-allowed' : 'pointer',
+              bgcolor: picked ? D.green : blocked ? 'rgba(248,113,113,0.10)' : 'rgba(255,255,255,0.05)',
+              color: picked ? D.ink : blocked ? '#f87171' : D.muted,
+              border: `1px solid ${picked ? D.green : blocked ? 'rgba(248,113,113,0.4)' : D.line}`,
+              '&:hover': blocked || picked ? {} : { bgcolor: 'rgba(74,222,128,0.12)', color: D.text } }} />
+        );
+      })}
+      {st && printers.every(p => String(p.state).toUpperCase() === st) && (
+        <Typography sx={{ color: D.amber, fontSize: 11, fontWeight: 700 }}>
+          every network printer is in {st} — you'll need one out of state for this job
+        </Typography>
+      )}
+    </Stack>
   );
 }
 
@@ -1297,6 +1522,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
 
   return (
     <Box sx={{
+      opacity: line.hiddenFromClient ? 0.55 : 1,
       border: `1px solid ${D.line}`,
       // Lines that share a group wear a per-group hue down the left edge so
       // alternative options are scannable as a set.
@@ -1349,6 +1575,18 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
             <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Stack>
+        {/* Park this line: kept for you (costs, notes, math) but the client
+            never sees it and it never counts toward totals. */}
+        <IconButton size="small"
+          onClick={() => onPatch({ hiddenFromClient: !line.hiddenFromClient, ...(line.hiddenFromClient ? {} : { accepted: false }) })}
+          title={line.hiddenFromClient
+            ? 'Hidden from the client — click to show it on their quote again'
+            : 'Hide this line from the client (kept here for you)'}
+          sx={{ color: line.hiddenFromClient ? D.amber : D.faint, mb: 0.3, '&:hover': { color: D.amber } }}>
+          {line.hiddenFromClient
+            ? <VisibilityOffOutlinedIcon sx={{ fontSize: 17 }} />
+            : <VisibilityOutlinedIcon sx={{ fontSize: 17 }} />}
+        </IconButton>
         <IconButton size="small" onClick={onRemove} title="Remove line"
           sx={{ color: D.muted, mb: 0.3, transition: 'color 0.18s, background-color 0.18s',
             '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
@@ -1651,9 +1889,9 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
       <Box sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box sx={accentBar} />
         <Typography sx={{ fontWeight: 800, fontSize: 14, flex: 1 }}>
-          Promo catalog
+          Cannabis Promotions
           <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
-            client price + your cost per run size, from the vendor catalogs
+            client price + your cost per run size — every item here POs to Cannabis Promotions
           </Typography>
         </Typography>
         <IconButton size="small" onClick={onClose} sx={{ color: D.muted, '&:hover': { color: D.text } }}><CloseIcon fontSize="small" /></IconButton>

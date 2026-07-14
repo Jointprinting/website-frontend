@@ -11,9 +11,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Stack, Typography, Button, Chip } from '@mui/material';
-import { A, atomMono, AtomMark } from './AtomLanding';
+import { A, atomMono, AtomLogo, atomPrimaryBtn, atomGhostBtn } from './AtomLanding';
 
-const CONTACT = 'mailto:nate@jointprinting.com?subject=JP%20Atom%20—%20I%20drove%20the%20demo';
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n) => `$${Math.round(Number(n || 0)).toLocaleString('en-US')}`;
 
@@ -327,96 +326,115 @@ function ClientStop() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   The tour shell.                                                            */
+   The app shell — the demo IS the product: a sidebar studio you drive.       */
 
-const STOPS = [
-  { key: 'pipeline', label: 'Pipeline', title: 'Deals move themselves', copy: 'Every job is a card. Sharing the quote, getting the approval, delivering the order — the work moves the card, not your mouse.', el: <PipelineStop /> },
-  { key: 'quoter', label: 'Quoter', title: 'Margin-true quoting', copy: 'Pick a margin. Every run size reprices to a real margin — with your profit on the chip before you hit send.', el: <QuoterStop /> },
-  { key: 'orders', label: 'Orders', title: 'Delivery on autopilot', copy: 'Paste the UPS link once. The tracker ticks itself, the client’s page stays current, and delivery wins the deal.', el: <OrdersStop /> },
-  { key: 'client', label: 'Client view', title: 'What your client sees', copy: 'One branded link: proof, options, prices, approval. No portal logins, no PDFs bouncing around.', el: <ClientStop /> },
+const SURFACES = [
+  { key: 'pipeline', label: 'Pipeline', icon: '🧲', coach: 'Hit “Share quote” on Summit Coffee — the card moves itself. You never drag.', el: <PipelineStop /> },
+  { key: 'quoter', label: 'Quoter', icon: '💰', coach: 'Click a margin chip — every run size reprices with your profit on it.', el: <QuoterStop /> },
+  { key: 'orders', label: 'Orders', icon: '🚚', coach: 'Press play — UPS delivers it and the deal wins itself.', el: <OrdersStop /> },
+  { key: 'client', label: 'Client view', icon: '✍️', coach: 'This is their link. Approve it as the client — the shop knows instantly.', el: <ClientStop /> },
 ];
 
 export default function AtomDemo() {
-  const [stop, setStop] = useState(0);
+  const [surf, setSurf] = useState(0);
+  const [visited, setVisited] = useState(() => new Set([0]));
   useEffect(() => { document.title = 'JP Atom — live demo'; }, []);
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [stop]);
-  const s = STOPS[stop];
-  const last = stop === STOPS.length - 1;
+  const pick = (i) => { setSurf(i); setVisited((v) => new Set(v).add(i)); };
+  const s = SURFACES[surf];
+  const allSeen = visited.size >= SURFACES.length;
+
+  const navItem = (t, i) => (
+    <Box key={t.key} onClick={() => pick(i)} role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') pick(i); }}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1.1, borderRadius: 2.5, cursor: 'pointer',
+        bgcolor: i === surf ? 'rgba(167,139,250,0.14)' : 'transparent',
+        border: `1px solid ${i === surf ? A.lineHi : 'transparent'}`,
+        transition: 'background-color .15s',
+        '&:hover': { bgcolor: 'rgba(167,139,250,0.08)' },
+        '&:focus-visible': { outline: `2px solid ${A.violet}`, outlineOffset: 2 } }}>
+      <Box component="span" sx={{ fontSize: 16 }} aria-hidden>{t.icon}</Box>
+      <Typography sx={{ fontSize: 13.5, fontWeight: i === surf ? 800 : 600, color: i === surf ? A.text : A.muted, flex: 1 }}>
+        {t.label}
+      </Typography>
+      {visited.has(i) && i !== surf && <Typography sx={{ color: A.violet, fontSize: 11 }}>✓</Typography>}
+    </Box>
+  );
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: A.bg, color: A.text, position: 'relative', overflow: 'hidden' }}>
       <Box sx={{ position: 'absolute', top: -280, left: '50%', transform: 'translateX(-50%)', width: 900, height: 480,
         borderRadius: '50%', background: A.glow, filter: 'blur(110px)', pointerEvents: 'none' }} />
 
-      <Box sx={{ maxWidth: 980, mx: 'auto', px: { xs: 2, md: 4 }, pb: 8, position: 'relative' }}>
-        {/* top bar */}
-        <Stack direction="row" alignItems="center" gap={1.25} sx={{ py: 2.5 }}>
-          <AtomMark size={26} />
-          <Typography sx={{ fontWeight: 900, fontSize: 16, letterSpacing: -0.2 }}>JP&nbsp;Atom</Typography>
-          <Chip size="small" label="live demo — fake shop, real behavior" sx={{ ...atomMono, bgcolor: 'rgba(167,139,250,0.12)', color: A.violet, fontSize: 10, height: 20 }} />
+      {/* top bar */}
+      <Box sx={{ borderBottom: `1px solid ${A.line}`, position: 'relative' }}>
+        <Stack direction="row" alignItems="center" gap={1.25} sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 3 }, py: 1.75 }}>
+          <Box component={RouterLink} to="/atom" sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', color: A.text }}>
+            <AtomLogo size={28} />
+            <Typography sx={{ fontWeight: 900, fontSize: 16, letterSpacing: -0.2 }}>JP&nbsp;Atom</Typography>
+          </Box>
+          <Chip size="small" label="live demo — fake shop, real behavior"
+            sx={{ ...atomMono, bgcolor: 'rgba(167,139,250,0.12)', color: A.violet, fontSize: 10, height: 20, display: { xs: 'none', sm: 'inline-flex' } }} />
           <Box sx={{ flex: 1 }} />
-          <Button component={RouterLink} to="/atom" sx={{ color: A.muted, textTransform: 'none', fontWeight: 700, fontSize: 13, '&:hover': { color: A.text } }}>
-            ← Back
+          <Button component={RouterLink} to="/atom/contact"
+            sx={{ ...atomPrimaryBtn, fontSize: 13, px: 2, py: 0.6, boxShadow: 'none' }}>
+            Get started
           </Button>
         </Stack>
+      </Box>
 
-        {/* coach strip */}
-        <Box sx={{ mt: { xs: 1, md: 3 }, mb: 2.5 }}>
-          <Stack direction="row" gap={0.75} flexWrap="wrap" alignItems="center">
-            {STOPS.map((t, i) => (
-              <Chip key={t.key} label={`${i + 1} · ${t.label}`} onClick={() => setStop(i)}
-                sx={{ fontWeight: 800, fontSize: 12, cursor: 'pointer',
-                  bgcolor: i === stop ? A.violet : 'rgba(255,255,255,0.05)',
-                  color: i === stop ? A.ink : i < stop ? A.violet : A.muted,
-                  border: `1px solid ${i === stop ? A.violet : A.line}`,
-                  '&:hover': { bgcolor: i === stop ? A.violet : 'rgba(167,139,250,0.12)' } }} />
-            ))}
+      <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 }, position: 'relative',
+        display: 'flex', gap: { xs: 0, md: 3 }, flexDirection: { xs: 'column', md: 'row' } }}>
+
+        {/* sidebar — the studio's nav, like the real thing */}
+        <Box sx={{ width: { xs: '100%', md: 200 }, flexShrink: 0 }}>
+          <Stack direction={{ xs: 'row', md: 'column' }} gap={0.5} sx={{ overflowX: 'auto', pb: { xs: 1, md: 0 } }}>
+            {SURFACES.map(navItem)}
           </Stack>
-          <Typography sx={{ fontWeight: 900, fontSize: { xs: 24, md: 30 }, letterSpacing: -0.8, mt: 2 }}>{s.title}</Typography>
-          <Typography sx={{ color: A.muted, fontSize: 14, maxWidth: 620, mt: 0.5, lineHeight: 1.55 }}>{s.copy}</Typography>
+          <Box sx={{ display: { xs: 'none', md: 'block' }, mt: 3, p: 1.5, borderRadius: 2.5, border: `1px dashed ${A.line}` }}>
+            <Typography sx={{ ...atomMono, color: A.faint, fontSize: 9.5, letterSpacing: 1.5, textTransform: 'uppercase', mb: 0.5 }}>
+              also inside
+            </Typography>
+            <Typography sx={{ color: A.muted, fontSize: 11.5, lineHeight: 1.7 }}>
+              CRM · Finances · Receipts<br />Mockup studio · Field sales<br />Content planner · your build
+            </Typography>
+          </Box>
         </Box>
 
-        {/* the stop — keyed so each entrance replays the rise */}
-        <Box key={s.key} sx={{ animation: 'atomRise 0.4s ease', ...FX }}>{s.el}</Box>
+        {/* the surface */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }}>
+            <Typography sx={{ fontWeight: 900, fontSize: { xs: 20, md: 24 }, letterSpacing: -0.5 }}>{s.label}</Typography>
+            <Typography sx={{ color: A.muted, fontSize: 13, mt: 0.25 }}>{s.coach}</Typography>
+          </Stack>
+          <Box key={s.key} sx={{ animation: 'atomRise 0.4s ease', ...FX }}>{s.el}</Box>
 
-        {/* tour nav / finale */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} gap={1.5} sx={{ mt: 4 }}>
-          {!last ? (
-            <Button onClick={() => setStop(stop + 1)}
-              sx={{ bgcolor: A.violet, color: A.ink, fontWeight: 800, textTransform: 'none', fontSize: 14, px: 3, py: 1, borderRadius: 999,
-                boxShadow: `0 8px 32px ${A.glow}`, '&:hover': { bgcolor: '#b8a3fb' } }}>
-              Next stop: {STOPS[stop + 1].label} →
-            </Button>
-          ) : (
-            <Box sx={{ ...card, width: '100%', p: { xs: 2.5, md: 3 }, textAlign: 'center', borderColor: A.lineHi, animation: 'atomPop 0.6s ease' }}>
-              <Typography sx={{ ...eyebrow }}>That’s the tour — the real thing goes deeper</Typography>
-              <Typography sx={{ fontWeight: 900, fontSize: { xs: 20, md: 26 }, letterSpacing: -0.5, mt: 1 }}>
-                Want this with <Box component="span" sx={{ color: A.violet }}>your logo</Box> on it?
-              </Typography>
-              <Typography sx={{ color: A.muted, fontSize: 13.5, mt: 1, maxWidth: 560, mx: 'auto' }}>
-                Founding pricing: <Box component="span" sx={{ color: A.text, fontWeight: 800 }}>$995 setup + $295/mo</Box>
-                <Box component="span" sx={{ color: A.faint }}> (list $2,495 + $495)</Box> — and custom builds are the point,
-                not an add-on. Field sales mode, finances, content planner, whatever your shop needs wired in.
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} justifyContent="center" sx={{ mt: 2.5 }}>
-                <Button component="a" href={CONTACT}
-                  sx={{ bgcolor: A.violet, color: A.ink, fontWeight: 800, textTransform: 'none', fontSize: 14, px: 3, py: 1, borderRadius: 999,
-                    boxShadow: `0 8px 32px ${A.glow}`, '&:hover': { bgcolor: '#b8a3fb' } }}>
-                  Claim founding pricing
+          {/* Next / finale */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} gap={1.5} sx={{ mt: 3 }}>
+            {surf < SURFACES.length - 1 && (
+              <Button onClick={() => pick(surf + 1)}
+                sx={{ ...atomGhostBtn, fontSize: 13.5, px: 2.5, py: 0.8 }}>
+                Next: {SURFACES[surf + 1].icon} {SURFACES[surf + 1].label} →
+              </Button>
+            )}
+            {allSeen && (
+              <Box sx={{ ...card, flex: 1, p: 2, borderColor: A.lineHi, display: 'flex', alignItems: 'center',
+                gap: 2, flexWrap: 'wrap', animation: 'atomPop 0.6s ease' }}>
+                <Box sx={{ flex: 1, minWidth: 220 }}>
+                  <Typography sx={{ fontWeight: 900, fontSize: 16 }}>
+                    Want this with <Box component="span" sx={{ color: A.violet }}>your logo</Box> on it?
+                  </Typography>
+                  <Typography sx={{ color: A.muted, fontSize: 12.5 }}>
+                    Founding pricing <b style={{ color: A.text }}>$995 setup + $295/mo</b>
+                    <Box component="span" sx={{ color: A.faint }}> (list $2,495 + $495)</Box> — custom builds included in the DNA.
+                  </Typography>
+                </Box>
+                <Button component={RouterLink} to="/atom/contact" sx={{ ...atomPrimaryBtn, fontSize: 13.5, px: 2.5, py: 0.9 }}>
+                  Get started →
                 </Button>
-                <Button component={RouterLink} to="/atom"
-                  sx={{ color: A.text, fontWeight: 700, textTransform: 'none', fontSize: 14, px: 2.5, py: 1, borderRadius: 999, border: `1px solid ${A.line}`,
-                    '&:hover': { borderColor: A.lineHi } }}>
-                  Back to the pitch
-                </Button>
-              </Stack>
-            </Box>
-          )}
-          {!last && (
-            <Typography sx={{ color: A.faint, fontSize: 12 }}>
-              or click any stop above — everything here is clickable
-            </Typography>
-          )}
-        </Stack>
+              </Box>
+            )}
+          </Stack>
+        </Box>
       </Box>
     </Box>
   );
