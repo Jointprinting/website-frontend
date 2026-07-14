@@ -868,10 +868,11 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr]);
 
-  // Fire one queued catalog email. Offline-safe: tapping SEND in a dead zone
+  // Fire one queued catalog email. Offline-safe: checking a box in a dead zone
   // queues the request and it goes out when signal returns. The server stamps
   // catalogSentAt (idempotent — a replay is a no-op) and books the ~2-day
-  // "did you look at it?" check-in call into CRM Today.
+  // "did you look at it?" check-in call into CRM Today. Sent rows stay visible
+  // with a ✓ (owner's ask: checkbox semantics, not vanishing rows).
   const sendCatalogNow = React.useCallback(async (row) => {
     setSendingStopId(row.stopId);
     try {
@@ -881,13 +882,17 @@ export default function RoadTripTab({ token, onNavigate }) {
         body: {},
         label: `Catalog · ${row.name}`,
       });
-      setCatQueue((prev) => ({ ...prev, rows: prev.rows.filter((r) => String(r.stopId) !== String(row.stopId)) }));
+      setCatQueue((prev) => ({
+        ...prev,
+        rows: prev.rows.map((r) => (String(r.stopId) === String(row.stopId) ? { ...r, sent: true } : r)),
+      }));
       showToast(
         res.queued
           ? `Catalog to ${row.name} queued — sends when you're back on signal.`
           : `Catalog sent to ${row.email} — check-in call booked ~2 days out (CRM Today).`,
         res.queued ? 'info' : 'success',
       );
+      return true;
     } catch (err) {
       const status = err?.response?.status;
       showToast(
@@ -896,10 +901,29 @@ export default function RoadTripTab({ token, onNavigate }) {
           : (err?.response?.data?.message || 'Catalog send failed.'),
         'error',
       );
+      return false;
     } finally {
       setSendingStopId(null);
     }
   }, [api, showToast]);
+
+  // "Check all" — send every unsent catalog in the queue, one after another
+  // (sequential so one SMTP hiccup stops the batch instead of spraying errors).
+  const [sendingAll, setSendingAll] = React.useState(false);
+  const sendAllCatalogs = React.useCallback(async () => {
+    const pending = (catQueue.rows || []).filter((r) => r.email && !r.sent);
+    if (!pending.length) return;
+    setSendingAll(true);
+    try {
+      for (const row of pending) {
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await sendCatalogNow(row);
+        if (!ok) break;
+      }
+    } finally {
+      setSendingAll(false);
+    }
+  }, [catQueue.rows, sendCatalogNow]);
 
   // Save the on-road visit capture: the people land on the company card's
   // contacts (server merges, never replaces — addContacts), the meeting + 🔥
@@ -1675,7 +1699,7 @@ export default function RoadTripTab({ token, onNavigate }) {
       {/* Tonight's catalog sends — promises made at the counter today. Each
           send books its own ~2-day check-in call into CRM Today (check-ins
           live in the CRM, not here). */}
-      {todayHdr(`CATALOGS TO SEND TONIGHT${catQueue.rows.length ? ` · ${catQueue.rows.length}` : ''}`)}
+      {todayHdr(`CATALOGS TO SEND TONIGHT${catQueue.rows.length ? ` · ${catQueue.rows.filter((r) => !r.sent).length || '✓'}` : ''}`)}
       {!catQueue.loaded ? (
         <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1 }}>loading…</Typography>
       ) : !catQueue.rows.length ? (
@@ -1684,36 +1708,57 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Typography>
       ) : (
         <Stack spacing={0.5}>
-          {catQueue.rows.map((row) => (
-            <Box key={String(row.stopId)} sx={{
-              display: 'flex', alignItems: 'center', gap: 1,
-              border: `1px solid ${TERM.amber}`, borderRadius: 0.5, p: 1,
-              bgcolor: 'rgba(251,191,36,0.06)',
-            }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography noWrap sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, color: TERM.text }}>{row.name}</Typography>
-                <Typography noWrap sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>
-                  {row.email || 'no email captured'}{row.visitedAt ? ` · visited ${new Date(row.visitedAt).toLocaleDateString()}` : ''}
-                </Typography>
-              </Box>
-              <Box role="button" tabIndex={0}
-                onClick={() => row.email && sendingStopId !== row.stopId && sendCatalogNow(row)}
-                sx={{
-                  ml: 'auto', flexShrink: 0, fontFamily: MONO, fontSize: 9.5, fontWeight: 900, letterSpacing: 1,
-                  px: 1.25, py: 0.6, borderRadius: 0.5, textAlign: 'center',
-                  cursor: row.email ? 'pointer' : 'default',
-                  color: row.email ? TERM.greenDk : TERM.muted,
-                  bgcolor: row.email ? TERM.green : 'transparent',
-                  border: `1px solid ${row.email ? TERM.green : TERM.borderDim}`,
-                  opacity: sendingStopId === row.stopId ? 0.6 : 1,
-                  '&:hover': row.email ? { opacity: 0.9 } : {},
-                }}>
-                {sendingStopId === row.stopId ? 'SENDING…' : '📬 SEND'}
-              </Box>
+          {catQueue.rows.filter((r) => r.email && !r.sent).length > 1 && (
+            <Box role="button" tabIndex={0} onClick={() => !sendingAll && sendAllCatalogs()}
+              sx={{
+                fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
+                py: { xs: 1.1, md: 0.8 }, cursor: 'pointer', borderRadius: 0.5,
+                color: sendingAll ? TERM.amber : TERM.greenDk,
+                bgcolor: sendingAll ? 'transparent' : TERM.green,
+                border: `1.5px solid ${sendingAll ? TERM.amber : TERM.green}`, '&:hover': { opacity: 0.9 },
+              }}>
+              {sendingAll ? 'SENDING ALL…' : `📬 SEND ALL (${catQueue.rows.filter((r) => r.email && !r.sent).length})`}
             </Box>
-          ))}
+          )}
+          {catQueue.rows.map((row) => {
+            const busyRow = sendingStopId === row.stopId;
+            return (
+              <Box key={String(row.stopId)}
+                role="button" tabIndex={0}
+                onClick={() => row.email && !row.sent && !busyRow && sendCatalogNow(row)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  border: `1px solid ${row.sent ? TERM.green : TERM.amber}`, borderRadius: 0.5,
+                  p: { xs: 1.25, md: 1 },
+                  bgcolor: row.sent ? 'rgba(74,222,128,0.06)' : 'rgba(251,191,36,0.06)',
+                  cursor: row.email && !row.sent ? 'pointer' : 'default',
+                  '&:hover': row.email && !row.sent ? { borderColor: TERM.green } : {},
+                }}>
+                {/* Checkbox: ☐ owed → ✓ sent. Tapping the row sends. */}
+                <Box sx={{
+                  width: 22, height: 22, flexShrink: 0, borderRadius: 0.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: MONO, fontSize: 14, fontWeight: 900,
+                  color: row.sent ? TERM.greenDk : (row.email ? TERM.amber : TERM.muted),
+                  bgcolor: row.sent ? TERM.green : 'transparent',
+                  border: `1.5px solid ${row.sent ? TERM.green : (row.email ? TERM.amber : TERM.borderDim)}`,
+                }}>
+                  {busyRow ? '…' : (row.sent ? '✓' : '')}
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography noWrap sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, color: TERM.text, textDecoration: row.sent ? 'line-through' : 'none', opacity: row.sent ? 0.7 : 1 }}>
+                    {row.name}
+                  </Typography>
+                  <Typography noWrap sx={{ fontFamily: MONO, fontSize: 9, color: row.sent ? TERM.green : TERM.muted }}>
+                    {row.sent ? `sent to ${row.email} ✓ · check-in booked`
+                      : (row.email || 'no email captured — add one via + LOG VISIT')}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })}
           <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
-            each send auto-books the "did you look at it?" call ~2 days out — it shows in CRM Today, not here
+            check a store (or SEND ALL) to email the catalog — each send books the "did you look at it?" call ~2 days out in CRM Today
           </Typography>
         </Stack>
       )}
