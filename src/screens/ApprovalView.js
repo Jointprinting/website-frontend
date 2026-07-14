@@ -41,7 +41,7 @@ const PAY_FEES = { cc: 0.0299, ach: 0.01 };
 // found the dark read "murky", so both are offered and the choice persists).
 // The key set matches ConfirmationDocument's DOC so the SAME tokens theme both
 // the picker and the confirmation document. `onAccent` = text on a green fill. ─
-const TOKENS = {
+export const TOKENS = {
   dark: {
     bg:      '#0b1210',                    // lifted near-black canvas (was murky at #070b09)
     panel:   '#111c17',                    // elevated, green-tinted dark panel
@@ -80,9 +80,9 @@ const TOKENS = {
   },
 };
 
-const sxCard = (T) => ({ bgcolor: T.panel, border: `1px solid ${T.line}`, borderRadius: 3 });
-const sxEyebrow = (T) => ({ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: T.green });
-const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
+export const sxCard = (T) => ({ bgcolor: T.panel, border: `1px solid ${T.line}`, borderRadius: 3 });
+export const sxEyebrow = (T) => ({ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: T.green });
+export const mono = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
 
 function money(n) {
   return `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1321,7 +1321,7 @@ function PaymentChoice({ value, onChange, baseTotal, locked = false, T }) {
 // TrackingTimeline — post-approval client view of where the project is. Dark
 // card, green progress meter, per-step optional carrier link.
 // ─────────────────────────────────────────────────────────────────────────────
-function TrackingTimeline({ steps, T }) {
+export function TrackingTimeline({ steps, T }) {
   const eyebrow = sxEyebrow(T);
   if (!Array.isArray(steps) || steps.length === 0) return null;
 

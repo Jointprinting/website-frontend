@@ -694,6 +694,34 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     }
   }, [authHdr, flash, refreshAffected, onNavigate]);
 
+  // Client portal magic link: mint (idempotent — same URL every time) and copy
+  // to the clipboard. Revoke kills the URL immediately (the token is cleared
+  // server-side, so a leaked link dies at the lookup).
+  const openPortal = React.useCallback(async (companyKey) => {
+    if (!companyKey) return;
+    try {
+      const r = await axios.post(`${base}/${encodeURIComponent(companyKey)}/portal`, {}, authHdr);
+      const url = `${window.location.origin}/portal/${r.data?.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — still flash the URL */ }
+      flash(`Portal link copied — send it to the client: ${url}`);
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not create the portal link.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected]);
+
+  const revokePortal = React.useCallback(async (companyKey) => {
+    if (!companyKey) return;
+    if (!window.confirm('Revoke this company’s portal link? The URL stops working immediately (you can mint a fresh one anytime).')) return;
+    try {
+      await axios.delete(`${base}/${encodeURIComponent(companyKey)}/portal`, authHdr);
+      flash('Portal link revoked.');
+      refreshAffected();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not revoke the portal link.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected]);
+
   const archiveDeal = React.useCallback(async (deal) => {
     if (!deal || !deal._id) return;
     try {
@@ -1178,6 +1206,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             { openDealsCount: (detail?.deals || []).filter((d) => d && !d.archived && !['won', 'lost'].includes(d.stage)).length },
           )}
           onSetDealStage={moveDealStage}
+          // Client portal magic link — mint+copy / revoke.
+          onOpenPortal={() => detail?.client && openPortal(detail.client.companyKey)}
+          onRevokePortal={() => detail?.client && revokePortal(detail.client.companyKey)}
         />
       );
     }
