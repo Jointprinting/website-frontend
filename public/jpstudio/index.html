@@ -4554,7 +4554,11 @@ async function saveMockupToLibrary() {
     document.getElementById('f-mockupnum').value = pg.mockupNum;
   }
   // Auto-generate PDF filename from mockup # if not set — just the # (no slug).
-  if (!pg.pdfName && pg.mockupNum) {
+  // Also HEAL a stale auto-name: a duplicated variation used to inherit its
+  // source's pdfName (mockup #000145C exporting as 000145A.pdf), so when the
+  // name looks auto-generated but doesn't match this mockup's number anymore,
+  // re-derive it. Custom (non-number-shaped) filenames are never touched.
+  if (pg.mockupNum && _pdfNameStale(pg)) {
     const num = String(pg.mockupNum).replace(/^#/,'');
     pg.pdfName = `${num}.pdf`;
     document.getElementById('f-pdfname').value = pg.pdfName;
@@ -4790,6 +4794,16 @@ function renderMockupList(containerId, items, opts) {
     </div>`;
   }).join('');
 }
+// A pdfName is STALE when it's missing, or when it clearly came from the
+// number-only auto-generator (digits + optional letters + .pdf) but no longer
+// matches this page's mockup number — the inherited-filename bug on duplicated
+// variations. Anything hand-typed (non-number-shaped) is respected as-is.
+function _pdfNameStale(pg) {
+  const name = String(pg.pdfName || '').trim();
+  if (!name) return true;
+  if (!/^\d+[A-Z]*\.pdf$/i.test(name)) return false;
+  return name.toLowerCase() !== `${String(pg.mockupNum).replace(/^#/,'').toLowerCase()}.pdf`;
+}
 async function loadAssetToStudio(type,item) {
   const pg=state.pages[state.currentPage];
   if (type==='blank'){ pg.frontBlankBase64=item.base64; pg.frontCompositeBase64=null; updateThumb('frontBlank',item.base64); scheduleUpdate(); toast('Blank loaded to front ✓'); }
@@ -4834,6 +4848,9 @@ async function loadMockup(id,e) {
   // (same remoteId, same letter) instead of minting a new lettered duplicate.
   ps._savedRemoteId = item.remoteId || '';
   ps._savedDbId = item.id;
+  // Heal a stale auto-generated pdfName (a pre-fix duplicate inherited its
+  // source's filename) so the very next export uses THIS mockup's number.
+  if (ps.mockupNum && _pdfNameStale(ps)) ps.pdfName = `${String(ps.mockupNum).replace(/^#/,'')}.pdf`;
   // MULTI-PAGE: a mockup saved with extra views restores as ONE file with all
   // its pages (page 1 = ps, hydrated above). Identity is stamped on every
   // page so a re-save from any page updates the same item.

@@ -42,6 +42,9 @@ const ClientSite = lazy(() => import('./screens/ClientSite'));
 // status + timeline + links to the live approval pages. Bare chrome, same
 // pattern as the approval view.
 const PortalView = lazy(() => import('./screens/PortalView'));
+// Preorder page (/preorder/:token) — expiring public link where a client's
+// people commit to quantities (not payments). Bare chrome, approval-page kin.
+const PreorderView = lazy(() => import('./screens/PreorderView'));
 // JP ATOM (/atom + /atom/demo) — the studio productized, its own violet brand.
 // Bare chrome: it pitches OTHER merch shops, so Joint Printing's marketing
 // nav/footer would muddle whose product it is (same reasoning as Webworks).
@@ -52,7 +55,7 @@ const AtomDemo = lazy(() => import('./screens/AtomDemo'));
 // footer. Studio is admin-only (its own dark UI, internal navigation), so the
 // marketing site chrome doesn't belong on it. Approval, lookbook, and portal
 // views are clean client-facing surfaces, also bare.
-const STUDIO_ROUTES = ['/studio', '/admin', '/approve', '/lookbook', '/portal', '/atom'];
+const STUDIO_ROUTES = ['/studio', '/admin', '/approve', '/lookbook', '/portal', '/preorder', '/atom'];
 
 // Per-route titles + meta descriptions. Every page used to share the single
 // static title from index.html, which hurts SEO and makes tabs/history
@@ -77,6 +80,7 @@ function useRouteMeta(pathname) {
     const meta = ROUTE_META[pathname]
       || (pathname.startsWith('/approve') ? { title: 'Order Approval | Joint Printing' } : null)
       || (pathname.startsWith('/portal') ? { title: 'Your Orders | Joint Printing' } : null)
+      || (pathname.startsWith('/preorder') ? { title: 'Preorder | Joint Printing' } : null)
       // JP Atom retitles itself on mount (its own brand, not Joint Printing) —
       // this is just the pre-fetch placeholder.
       || (pathname.startsWith('/atom') ? { title: 'JP Atom' } : null)
@@ -155,6 +159,8 @@ function AppShell() {
           <Route exact path="/approve/:projectId" element={<ApprovalView />} />
           {/* Client portal — one magic link per company; token-gated by the backend. */}
           <Route exact path="/portal/:token" element={<PortalView />} />
+          {/* Preorder commitments — expiring public link, token-gated by the backend. */}
+          <Route exact path="/preorder/:token" element={<PreorderView />} />
           {/* JP Atom — the studio as a product: landing + guided live demo. */}
           <Route exact path="/atom" element={<AtomLanding />} />
           <Route exact path="/atom/demo" element={<AtomDemo />} />
