@@ -697,6 +697,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // Client portal magic link: mint (idempotent — same URL every time) and copy
   // to the clipboard. Revoke kills the URL immediately (the token is cleared
   // server-side, so a leaked link dies at the lookup).
+  // HALTED (owner, 2026-07-14): the buttons are unplugged below until the
+  // portal sits behind a real sign-in (v2) — the callbacks stay wired-ready.
+  // eslint-disable-next-line no-unused-vars
   const openPortal = React.useCallback(async (companyKey) => {
     if (!companyKey) return;
     try {
@@ -710,6 +713,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     }
   }, [authHdr, flash, refreshAffected]);
 
+  // eslint-disable-next-line no-unused-vars
   const revokePortal = React.useCallback(async (companyKey) => {
     if (!companyKey) return;
     if (!window.confirm('Revoke this company’s portal link? The URL stops working immediately (you can mint a fresh one anytime).')) return;
