@@ -669,7 +669,30 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // Reopen a closed deal back to an open stage (the API's save hook clears the
   // won/lost stamps). Doesn't touch the company's stage — reopening doesn't undo
   // an earned client status (they still have the history / other wins).
-  const reopenDeal = React.useCallback((deal) => updateDeal(deal._id, { stage: 'quoted' }), [updateDeal]);
+  const reopenDeal = React.useCallback((deal) => updateDeal(deal._id, { stage: 'quoting' }), [updateDeal]);
+
+  // One-tap "Start new job": mints the project AND its deal card together on
+  // the API, then drops the owner straight into the project to build mockups
+  // and the quote. Confirm-gated when the company already has open work, so a
+  // stray tap can't mint a surprise second project #.
+  const startJob = React.useCallback(async (company, { openDealsCount = 0 } = {}) => {
+    const key = company && company.companyKey;
+    if (!key) return;
+    if (openDealsCount > 0 && !window.confirm(
+      `${company.companyName || 'This company'} already has ${openDealsCount} open deal${openDealsCount > 1 ? 's' : ''} — start ANOTHER job (a new project #)?`
+    )) return;
+    try {
+      const res = await axios.post(`${dealsBase}/start-job`, {
+        companyKey: key, companyName: company.companyName || '',
+      }, authHdr);
+      const pn = res.data?.order?.projectNumber || '';
+      flash(`New job started${pn ? ` — Project #${pn}` : ''}. Off to mockups & the quote →`);
+      refreshAffected();
+      if (onNavigate && pn) onNavigate({ view: 'clients', projectNumber: pn });
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not start the job.', 'error');
+    }
+  }, [authHdr, flash, refreshAffected, onNavigate]);
 
   const archiveDeal = React.useCallback(async (deal) => {
     if (!deal || !deal._id) return;
@@ -1149,6 +1172,12 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
           onReopenDeal={reopenDeal}
           onRemoveDeal={archiveDeal}
           onOpenDeal={openDeal}
+          // One-tap job start: deal + project together, then into the quoter.
+          onStartJob={() => detail?.client && startJob(
+            { companyKey: detail.client.companyKey, companyName: detail.client.companyName || detail.client.clientName || '' },
+            { openDealsCount: (detail?.deals || []).filter((d) => d && !d.archived && !['won', 'lost'].includes(d.stage)).length },
+          )}
+          onSetDealStage={moveDealStage}
         />
       );
     }

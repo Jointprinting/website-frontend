@@ -30,7 +30,7 @@ export default function DealDialog({
   const editing = !!(initial && initial._id);
   const [title, setTitle] = React.useState('');
   const [value, setValue] = React.useState('');
-  const [stage, setStage] = React.useState('qualifying');
+  const [stage, setStage] = React.useState('details_needed');
   const [picked, setPicked] = React.useState(null); // { companyKey, label }
   const [saving, setSaving] = React.useState(false);
 
@@ -39,7 +39,7 @@ export default function DealDialog({
     if (!open) return;
     setTitle(initial?.title || '');
     setValue(initial?.value != null && initial?.value !== 0 ? String(initial.value) : '');
-    setStage(initial?.stage || 'qualifying');
+    setStage(initial?.stage || 'details_needed');
     setPicked(null);
     setSaving(false);
   }, [open, initial]);

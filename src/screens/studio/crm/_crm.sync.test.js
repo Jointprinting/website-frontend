@@ -46,23 +46,23 @@ test('BOARD_PROBABILITY mirrors controllers/crm.js', () => {
 });
 
 test('DEAL_STAGES mirrors models/Deal.js (order matters)', () => {
-  expect(DEAL_STAGES).toEqual(['qualifying', 'quoted', 'won', 'lost']);
+  expect(DEAL_STAGES).toEqual(['details_needed', 'quoting', 'quote_sent', 'won', 'lost']);
 });
 
-test('dealStageFromOrderStatus mirrors models/Deal.js', () => {
-  expect(dealStageFromOrderStatus('placed')).toBe('won');
-  expect(dealStageFromOrderStatus('in_production')).toBe('won');
-  expect(dealStageFromOrderStatus('shipped')).toBe('won');
+test('dealStageFromOrderStatus mirrors models/Deal.js (won is delivery-only)', () => {
+  expect(dealStageFromOrderStatus('placed')).toBe('quote_sent');
+  expect(dealStageFromOrderStatus('in_production')).toBe('quote_sent');
+  expect(dealStageFromOrderStatus('shipped')).toBe('quote_sent');
   expect(dealStageFromOrderStatus('delivered')).toBe('won');
   expect(dealStageFromOrderStatus('cancelled')).toBe('lost');
-  expect(dealStageFromOrderStatus('quoted')).toBe('quoted');
-  expect(dealStageFromOrderStatus('approved')).toBe('quoted');
-  expect(dealStageFromOrderStatus('')).toBe('quoted');
+  expect(dealStageFromOrderStatus('quoted')).toBe('quoting');
+  expect(dealStageFromOrderStatus('approved')).toBe('quote_sent');
+  expect(dealStageFromOrderStatus('')).toBe('quoting');
 });
 
 test('isClientFromDeals — ≥1 non-archived won deal ⇒ client', () => {
   expect(isClientFromDeals([])).toBe(false);
-  expect(isClientFromDeals([{ stage: 'qualifying' }, { stage: 'quoted' }])).toBe(false);
+  expect(isClientFromDeals([{ stage: 'details_needed' }, { stage: 'quote_sent' }])).toBe(false);
   expect(isClientFromDeals([{ stage: 'won' }])).toBe(true);
   // An archived won deal doesn't count (mirrors services/dealService.js).
   expect(isClientFromDeals([{ stage: 'won', archived: true }])).toBe(false);

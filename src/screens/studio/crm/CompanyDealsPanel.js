@@ -18,8 +18,9 @@ import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import { D, mono } from '../_shared';
-import { Eyebrow, dealStageMeta, dealTitle, fmtMoney0, isOpenDeal } from './_crm';
+import { Eyebrow, DEAL_OPEN_STAGES, dealStageMeta, dealTitle, fmtMoney0, isOpenDeal } from './_crm';
 
 // Small colored stage pill for a deal.
 function DealStagePill({ stage }) {
@@ -33,9 +34,38 @@ function DealStagePill({ stage }) {
   );
 }
 
+// One-tap stage stepper for an OPEN deal: the three working stages as chips.
+// Won isn't here (delivery-only, auto) and Lost stays a separate confirm-gated
+// button — this is purely "where is this job right now."
+function DealStageStepper({ deal, onSetStage }) {
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ mt: 1, pl: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+      {DEAL_OPEN_STAGES.map((s) => {
+        const m = dealStageMeta(s);
+        const active = deal.stage === s;
+        return (
+          <Box key={s} role="button" tabIndex={0}
+            onClick={() => !active && onSetStage(deal, s)}
+            title={active ? m.label : `Move to ${m.label}`}
+            sx={{
+              px: 0.9, py: 0.25, borderRadius: 999, cursor: active ? 'default' : 'pointer',
+              fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, userSelect: 'none',
+              color: active ? m.color : D.faint,
+              bgcolor: active ? m.bg : 'transparent',
+              border: `1px solid ${active ? `${m.color}66` : D.line}`,
+              '&:hover': active ? {} : { color: m.color, borderColor: `${m.color}55` },
+            }}>
+            {m.label}
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
 // onWin intentionally not consumed here — a deal wins itself when its order is
 // delivered (backend hook); the prop stays for API compatibility.
-function DealCard({ deal, onWin: _onWin, onLose, onReopen, onOpen, onEdit, onRemove }) {
+function DealCard({ deal, onWin: _onWin, onLose, onReopen, onOpen, onEdit, onRemove, onSetStage }) {
   const [menuEl, setMenuEl] = React.useState(null);
   const m = dealStageMeta(deal.stage);
   const open = isOpenDeal(deal);
@@ -82,6 +112,9 @@ function DealCard({ deal, onWin: _onWin, onLose, onReopen, onOpen, onEdit, onRem
           </IconButton>
         </Stack>
       </Stack>
+
+      {/* Where the job is right now — one-tap stage chips (open stages only). */}
+      {open && onSetStage && <DealStageStepper deal={deal} onSetStage={onSetStage} />}
 
       {/* Actions — no manual Win: a deal wins ITSELF when its order is marked
           delivered (owner's rule — no accidental wins). Lost stays manual,
@@ -175,6 +208,7 @@ function ClosedDealRow({ deal, onReopen, onOpen, onEdit, onRemove }) {
 
 export default function CompanyDealsPanel({
   deals, hasOrders, onNew, onWin, onLose, onReopen, onOpen, onEdit, onRemove,
+  onStartJob, onSetStage,
 }) {
   const [showClosed, setShowClosed] = React.useState(false);
   const list = Array.isArray(deals) ? deals.filter((d) => d && !d.archived) : [];
@@ -195,13 +229,26 @@ export default function CompanyDealsPanel({
             <Typography sx={{ ...mono, color: D.faint, fontSize: 11, fontWeight: 700 }}>{total}</Typography>
           )}
         </Stack>
-        <Button
-          onClick={onNew} size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-          sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12.5, color: D.green, borderRadius: 999, px: 1.25,
-            border: `1px solid ${D.line}`, '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}
-        >
-          New deal
-        </Button>
+        <Stack direction="row" spacing={0.75}>
+          {onStartJob && (
+            <Button
+              onClick={onStartJob} size="small" startIcon={<RocketLaunchOutlinedIcon sx={{ fontSize: 15 }} />}
+              title="One tap: new deal card + project # together, then straight into mockups & the quote"
+              sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12.5, color: '#0b1410', borderRadius: 999, px: 1.5,
+                bgcolor: D.green, '&:hover': { bgcolor: D.green, opacity: 0.9 } }}
+            >
+              Start new job
+            </Button>
+          )}
+          <Button
+            onClick={onNew} size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+            title="Just a deal card (no project yet) — for a job still at the details stage"
+            sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12.5, color: D.green, borderRadius: 999, px: 1.25,
+              border: `1px solid ${D.line}`, '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(74,222,128,0.06)' } }}
+          >
+            New deal
+          </Button>
+        </Stack>
       </Stack>
 
       {total === 0 ? (
@@ -210,8 +257,8 @@ export default function CompanyDealsPanel({
           <Typography sx={{ color: D.muted, fontSize: 13, fontWeight: 700 }}>No deals yet</Typography>
           <Typography sx={{ color: D.faint, fontSize: 12, mt: 0.25 }}>
             {hasOrders
-              ? 'Start one here — or run “Set up deals from my orders” on the Deals board to seed cards from this company’s orders.'
-              : 'Start a deal to track this opportunity through the pipeline.'}
+              ? '“Start new job” spins up the deal card + project together and drops you into mockups & the quote.'
+              : 'New order coming? “Start new job” makes the deal card + project in one tap.'}
           </Typography>
         </Box>
       ) : (
@@ -223,6 +270,7 @@ export default function CompanyDealsPanel({
               deal={d}
               onWin={onWin} onLose={onLose} onReopen={onReopen}
               onOpen={onOpen} onEdit={onEdit} onRemove={onRemove}
+              onSetStage={onSetStage}
             />
           ))}
 
