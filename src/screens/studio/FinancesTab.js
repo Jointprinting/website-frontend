@@ -110,6 +110,12 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // In-progress orders (paid or in production) missing a cost receipt I haven't
   // entered yet — printer / blanks / shipping. From /api/finances/missing-receipts.
   const [needsReceipts, setNeedsReceipts] = useState(null);
+  // Receipt inbox: uploaded receipts the scanner could NOT auto-attach to an
+  // existing ledger row — they sit at status pending/review/failed until booked
+  // or dismissed here. This is the surface that was missing when the first
+  // ST-50 receipt "disappeared": uploads never auto-book a new transaction.
+  const [receiptInbox, setReceiptInbox] = useState([]);
+  const [bookRec, setBookRec] = useState(null);   // the receipt being booked (dialog)
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -166,7 +172,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t, m, c, g, nr] = await Promise.all([
+      const [s, o, t, m, c, g, nr, rc] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
@@ -177,6 +183,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         // Guarded so a momentary backend gap (e.g. right after a deploy, before the
         // route is live) can't reject the whole load and blank out the finance tab.
         axios.get(`${base}/finances/missing-receipts`, authHdr).catch(() => ({ data: null })),
+        // Uploaded receipts awaiting review/booking — same guard.
+        axios.get(`${base}/receipts`, authHdr).catch(() => ({ data: null })),
       ]);
       // Coerce every list to an array of non-null rows at the boundary, so no
       // downstream .map can hit a null row and white-screen the tab regardless of
@@ -190,6 +198,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setClients(arr(c.data && c.data.clients));
       setGaps(g.data || null);
       setNeedsReceipts(nr.data || null);
+      setReceiptInbox(arr(rc.data && rc.data.receipts)
+        .filter((r) => ['pending', 'processing', 'review', 'failed'].includes(r.status)));
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -263,6 +273,44 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     if (!window.confirm('Delete this transaction?')) return;
     await axios.delete(`${base}/finances/transactions/${editTxn._id}`, authHdr);
     setEditTxn(null); await load();
+  };
+
+  // ── Receipt inbox actions ────────────────────────────────────────────────
+  // Book an inbox receipt into the ledger: POST /receipts/:id/confirm with the
+  // (owner-edited) extracted fields. The API's 409 duplicate guard surfaces as
+  // a confirm — "book anyway" retries with force. Booking links the Transaction
+  // to the stored file, so the ledger row carries the receipt automatically.
+  const bookReceipt = async (rec, extracted, { force = false } = {}) => {
+    try {
+      await axios.post(`${base}/receipts/${rec._id}/confirm`, { extracted, force }, authHdr);
+      setBookRec(null);
+      setBusy('Receipt booked into the ledger ✓');
+      await load();
+    } catch (e) {
+      if (e?.response?.status === 409 && !force) {
+        if (window.confirm('This looks like a duplicate of a transaction already in the ledger. Book it anyway?')) {
+          return bookReceipt(rec, extracted, { force: true });
+        }
+        return;
+      }
+      setBusy(e?.response?.data?.message || 'Could not book the receipt.');
+    }
+  };
+  // Not a real cost (junk shot, duplicate photo) → soft-dismiss. The file stays
+  // stored and searchable; it just leaves the inbox.
+  const dismissReceipt = async (rec) => {
+    if (!window.confirm(`Ignore "${rec.fileName || 'this receipt'}"? The file stays stored — it just leaves the inbox.`)) return;
+    try {
+      await axios.put(`${base}/receipts/${rec._id}`, { status: 'ignored' }, authHdr);
+      await load();
+    } catch (e) { setBusy(e?.response?.data?.message || 'Could not dismiss the receipt.'); }
+  };
+  // A failed read gets one more shot at the AI scanner.
+  const reprocessReceipt = async (rec) => {
+    try {
+      await axios.post(`${base}/receipts/${rec._id}/reprocess`, {}, authHdr);
+      setBusy('Re-reading the receipt — give it a minute, then refresh.');
+    } catch (e) { setBusy(e?.response?.data?.message || 'Could not re-read the receipt.'); }
   };
 
   // Delete a SPECIFIC transaction (used by the right-click menu, which already
@@ -556,6 +604,14 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                 description: `${(row.missingLabels && row.missingLabels[0]) || 'cost'} receipt — order #${row.orderNumber}${row.client && row.client !== '—' ? ` · ${row.client}` : ''}`,
               })} />
 
+            {/* Receipt inbox — uploads the scanner couldn't auto-attach. Booking
+                here is what actually puts them in the ledger (uploads never
+                auto-book), so nothing "disappears" after an upload again. */}
+            <ReceiptInbox receipts={receiptInbox}
+              onBook={(rec) => setBookRec(rec)}
+              onDismiss={dismissReceipt}
+              onReprocess={reprocessReceipt} />
+
             <MonthlyTrend months={months} />
 
             <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
@@ -735,6 +791,11 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
           categories={finCfg.categories} custom={finCfg.customCategories}
           onAdd={addCategory} onRemove={removeCategory}
           onClose={() => setShowCats(false)} />
+      )}
+      {bookRec && (
+        <BookReceiptDialog receipt={bookRec} categories={finCfg.categories}
+          onClose={() => setBookRec(null)}
+          onBook={(extracted) => bookReceipt(bookRec, extracted)} />
       )}
       {openOrder && <OrderDialog orderNumber={openOrder} txns={txns} cogsCategories={finCfg.cogsCategories}
         onClose={() => setOpenOrder(null)}
@@ -995,6 +1056,178 @@ function NeedsReceipts({ data, onOpenOrder, onAdd }) {
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// "Receipt inbox" — uploaded receipts the AI scanner could not auto-attach to an
+// existing ledger row (status pending/review/failed). Each row: what the scanner
+// read, a link to the stored file, and one-tap Book / Ignore. Renders nothing
+// when the inbox is empty — it's a nudge, not furniture. Mirrors NeedsReceipts'
+// shape so the two receipt surfaces read as siblings.
+function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess }) {
+  const rows = Array.isArray(receipts) ? receipts : [];
+  if (!rows.length) return null;
+  const amber = '#fbbf24';
+  const statusLabel = (r) => (
+    r.status === 'review' ? 'needs review'
+      : r.status === 'failed' ? 'read failed'
+        : 'scanning…');
+  return (
+    <Box sx={{ border: `1px solid rgba(251,191,36,0.4)`, bgcolor: 'rgba(251,191,36,0.05)', borderRadius: 2, overflow: 'hidden',
+      animation: 'jpRise 460ms ease both' }}>
+      <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+        <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.5 }}>
+          <ReceiptLongOutlinedIcon sx={{ color: amber }} />
+          <Typography sx={{ color: amber, fontWeight: 800, fontSize: 14, flex: 1 }}>Receipt inbox</Typography>
+          <Typography sx={{ ...mono, color: amber, fontWeight: 800, fontSize: 13 }}>{rows.length}</Typography>
+        </Stack>
+        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+          Uploaded receipts waiting on you — booking one here is what puts it in the ledger.
+        </Typography>
+      </Box>
+      <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+              <Box component="th">Uploaded</Box>
+              <Box component="th">What the scanner read</Box>
+              <Box component="th">Status</Box>
+              <Box component="th" />
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {rows.map((r) => {
+              const ex = r.extracted || {};
+              const readBits = [
+                ex.vendor || ex.seller,
+                ex.amount ? money(ex.amount) : '',
+                ex.category || '',
+                ex.date || '',
+              ].filter(Boolean).join(' · ');
+              return (
+                <Box component="tr" key={r._id}
+                  sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, whiteSpace: 'nowrap' } }}>
+                  <Box component="td" sx={{ color: B.muted, fontSize: 11.5 }}>
+                    {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
+                  </Box>
+                  <Box component="td" sx={{ color: B.white, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {r.fileUrl ? (
+                      <Box component="a" href={r.fileUrl} target="_blank" rel="noreferrer"
+                        sx={{ color: B.green, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                        {r.fileName || 'receipt'}
+                      </Box>
+                    ) : (r.fileName || 'receipt')}
+                    {readBits && (
+                      <Box component="span" sx={{ color: B.muted, ml: 0.75, fontSize: 11.5 }}>— {readBits}</Box>
+                    )}
+                  </Box>
+                  <Box component="td">
+                    <Box component="span" sx={{ fontSize: 9.5, fontWeight: 800, color: amber, bgcolor: 'rgba(251,191,36,0.14)',
+                      border: '1px solid rgba(251,191,36,0.32)', borderRadius: 1, px: 0.55, py: 0.15, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      {statusLabel(r)}
+                    </Box>
+                  </Box>
+                  <Box component="td" sx={{ textAlign: 'right' }}>
+                    <Button size="small" onClick={() => onBook(r)}
+                      sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                        '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Book</Button>
+                    {r.status === 'failed' && (
+                      <Button size="small" onClick={() => onReprocess(r)}
+                        sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                          '&:hover': { color: B.white } }}>Re-read</Button>
+                    )}
+                    <Button size="small" onClick={() => onDismiss(r)}
+                      sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                        '&:hover': { color: '#f87171' } }}>Ignore</Button>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// The booking editor for one inbox receipt: the scanner's read, editable, then
+// CONFIRM → /receipts/:id/confirm books the Transaction with the file attached.
+function BookReceiptDialog({ receipt, categories = CATEGORIES, onClose, onBook }) {
+  const ex = receipt.extracted || {};
+  const [type, setType] = useState(ex.documentKind === 'sales_invoice' ? 'income' : 'expense');
+  const [category, setCategory] = useState(ex.category || 'Other');
+  const [party, setParty] = useState(ex.vendor || ex.seller || '');
+  const [amount, setAmount] = useState(ex.amount ? String(ex.amount) : '');
+  const [date, setDate] = useState(ex.date || ymd(new Date()));
+  const [orderNumber, setOrderNumber] = useState(ex.orderNumber || '');
+  const [summary, setSummary] = useState(ex.summary || '');
+  const [saving, setSaving] = useState(false);
+  const canBook = Number(amount) > 0 && !saving;
+
+  const submit = async () => {
+    if (!canBook) return;
+    setSaving(true);
+    try {
+      await onBook({
+        type, category, party, amount: Number(amount), date,
+        orderNumber: String(orderNumber).replace(/[^0-9-]/g, ''), summary,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, backgroundImage: 'none' } }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <ReceiptLongOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Book receipt</Typography>
+        {receipt.fileUrl && (
+          <Button component="a" href={receipt.fileUrl} target="_blank" rel="noreferrer" size="small"
+            sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, '&:hover': { color: B.green } }}>
+            View file ↗
+          </Button>
+        )}
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Stack gap={1.5}>
+          <Stack direction="row" gap={1}>
+            <FormControl size="small" fullWidth>
+              <Select value={type} onChange={(e) => setType(e.target.value)} sx={darkInput}>
+                <MenuItem value="expense">Expense</MenuItem>
+                <MenuItem value="income">Income</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" fullWidth>
+              <Select value={categories.includes(category) ? category : 'Other'}
+                onChange={(e) => setCategory(e.target.value)} sx={darkInput}>
+                {categories.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Stack>
+          <TextField size="small" label="Who (vendor / payer)" value={party}
+            onChange={(e) => setParty(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+          <Stack direction="row" gap={1}>
+            <TextField size="small" label="Amount" type="number" value={amount} autoFocus={!Number(amount)}
+              onChange={(e) => setAmount(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+            <TextField size="small" label="Date" type="date" value={date}
+              onChange={(e) => setDate(e.target.value)} sx={darkInput} InputLabelProps={{ shrink: true, sx: { color: B.muted } }} />
+          </Stack>
+          <TextField size="small" label="Order # (optional — links it to the job)" value={orderNumber}
+            onChange={(e) => setOrderNumber(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+          <TextField size="small" label="Note" value={summary} multiline minRows={2}
+            onChange={(e) => setSummary(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+          <Stack direction="row" gap={1} justifyContent="flex-end">
+            <Button onClick={onClose} sx={{ color: B.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={submit} disabled={!canBook} startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
+              sx={{ bgcolor: canBook ? B.green : 'rgba(255,255,255,0.08)', color: canBook ? '#08130c' : B.muted,
+                textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: B.green, opacity: 0.9 } }}>
+              {saving ? 'Booking…' : 'Book it'}
+            </Button>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
   );
 }
 
