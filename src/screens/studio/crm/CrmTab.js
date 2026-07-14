@@ -697,6 +697,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // Client portal magic link: mint (idempotent — same URL every time) and copy
   // to the clipboard. Revoke kills the URL immediately (the token is cleared
   // server-side, so a leaked link dies at the lookup).
+  // HALTED (owner, 2026-07-14): the buttons are unplugged below until the
+  // portal sits behind a real sign-in (v2) — the callbacks stay wired-ready.
+  // eslint-disable-next-line no-unused-vars
   const openPortal = React.useCallback(async (companyKey) => {
     if (!companyKey) return;
     try {
@@ -710,6 +713,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     }
   }, [authHdr, flash, refreshAffected]);
 
+  // eslint-disable-next-line no-unused-vars
   const revokePortal = React.useCallback(async (companyKey) => {
     if (!companyKey) return;
     if (!window.confirm('Revoke this company’s portal link? The URL stops working immediately (you can mint a fresh one anytime).')) return;
@@ -1206,9 +1210,12 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             { openDealsCount: (detail?.deals || []).filter((d) => d && !d.archived && !['won', 'lost'].includes(d.stage)).length },
           )}
           onSetDealStage={moveDealStage}
-          // Client portal magic link — mint+copy / revoke.
-          onOpenPortal={() => detail?.client && openPortal(detail.client.companyKey)}
-          onRevokePortal={() => detail?.client && revokePortal(detail.client.companyKey)}
+          // Client portal — HALTED by the owner (2026-07-14) until it sits
+          // behind a real sign-in (magic links can be forwarded; a third party
+          // would see the client's order totals). The backend is dark too
+          // (PORTAL_ENABLED gate); openPortal/revokePortal stay wired for v2.
+          // onOpenPortal={() => detail?.client && openPortal(detail.client.companyKey)}
+          // onRevokePortal={() => detail?.client && revokePortal(detail.client.companyKey)}
         />
       );
     }
