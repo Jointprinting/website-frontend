@@ -2325,8 +2325,15 @@ function _trimPageStateForSync(pageState) {
     // Image objects (DOM Image) don't serialize anyway, but be explicit.
     'frontBlankImg', 'backBlankImg', 'frontLogoImg', 'backLogoImg',
   ];
+  // External/promo mockups (uploaded product shots) carry their ONLY image
+  // inline in the front fields — the upload pre-scales it to ≤1600px, so it's
+  // small enough to keep. Trimming it here left the durable copy with just an
+  // R2-URL thumbnail the canvas can't always composite (CORS), which is how
+  // promos went blank after a re-sync. Everything else still trims.
+  const KEEP = pageState.external === true
+    ? ['frontBlankBase64', 'frontCompositeBase64'] : [];
   const out = { ...pageState };
-  HEAVY.forEach(k => { if (k in out) out[k] = null; });
+  HEAVY.forEach(k => { if (k in out && !KEEP.includes(k)) out[k] = null; });
   return out;
 }
 
@@ -2507,12 +2514,37 @@ async function syncFromBackend() {
   let synced = 0;
   try {
     for (const store of ['blanks','logos','mockups']) {
-      const res = await fetch(`${BACKEND}/api/studio/library/${store}`, { headers:{'Authorization':'Bearer '+token} });
+      // MOCKUPS sync in two phases: pull the light summary list (name/savedAt/
+      // remoteId — no inline pageState base64), work out which items are
+      // actually new or newer than our local copy, then fetch full docs for
+      // just those in batches. A steady-state open downloads a few KB instead
+      // of the entire library's base64 — this is what made the studio slow to
+      // load. Blanks/logos stay a single full pull (one image each, R2-hosted).
+      const twoPhase = store === 'mockups';
+      const res = await fetch(`${BACKEND}/api/studio/library/${store}${twoPhase ? '?summary=1' : ''}`, { headers:{'Authorization':'Bearer '+token} });
       if (!res.ok) continue;
-      const remoteItems = await res.json();
+      let remoteItems = await res.json();
       if (!remoteItems.length) continue;
       const localItems = await dbGetAll(store);
       const localByRemoteId = new Map(localItems.filter(i=>i.remoteId).map(i=>[i.remoteId, i]));
+      if (twoPhase) {
+        // Same pull conditions the merge below applies — evaluated on the
+        // summary so we can skip fetching what we'd skip writing anyway.
+        const wanted = remoteItems.filter(ri => {
+          const existing = ri.remoteId ? localByRemoteId.get(ri.remoteId) : null;
+          if (!existing) return true;
+          const remoteNewer = (ri.savedAt || 0) > (existing.savedAt || 0);
+          const localClean = existing.cloudSyncedAt && existing.cloudSyncedAt >= (existing.savedAt || 0);
+          return remoteNewer && localClean;
+        }).map(ri => ri.remoteId).filter(Boolean);
+        remoteItems = [];
+        for (let i = 0; i < wanted.length; i += 25) {
+          const batch = wanted.slice(i, i + 25).join(',');
+          const fr = await fetch(`${BACKEND}/api/studio/library/${store}/full?ids=${encodeURIComponent(batch)}`, { headers:{'Authorization':'Bearer '+token} });
+          if (fr.ok) remoteItems.push(...await fr.json());
+        }
+        if (!remoteItems.length) continue;
+      }
       for (const ri of remoteItems) {
         // Known item: pull the cloud copy down only when it's NEWER than ours
         // and our row has nothing unpushed. (syncAll pushes before pulling, so

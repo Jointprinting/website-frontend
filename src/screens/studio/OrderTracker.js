@@ -2206,21 +2206,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 </Stack>
               </Stack>
               {tiles.length === 0 ? (
-                <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3,
+                /* One set of actions only — the header row above already has
+                   "New mockup" (build in Studio) and "Upload" (promo/product
+                   shot). Duplicating them here read as two different features. */
+                <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3, px: 2,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
-                  No mockups yet — make one in the Mockup Studio (it auto-links here), or upload a promo/product shot your printer made.
-                  <Stack direction="row" gap={1} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
-                    <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
-                      onClick={goStudio}
-                      sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
-                      Open Mockup Studio
-                    </Button>
-                    <Button size="small" startIcon={uploadingPromo ? <JpLoader size={13} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
-                      onClick={() => promoInputRef.current?.click()} disabled={uploadingPromo}
-                      sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
-                      {uploadingPromo ? 'Uploading…' : 'Upload a promo mockup'}
-                    </Button>
-                  </Stack>
+                  No mockups yet — <b>New mockup</b> builds one in the Mockup Studio (it auto-links here);
+                  <b> Upload</b> takes a promo/product shot your printer made and files it as a numbered mockup.
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>

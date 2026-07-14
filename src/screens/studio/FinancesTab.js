@@ -208,6 +208,14 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
   useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
 
+  // Status lines auto-clear — "Cleared 46 receipts ✓" must not live in the
+  // header forever. In-flight messages (ending in …) stay until replaced.
+  useEffect(() => {
+    if (!busy || String(busy).endsWith('…')) return undefined;
+    const t = setTimeout(() => setBusy(''), 6000);
+    return () => clearTimeout(t);
+  }, [busy]);
+
   // Live finance config (categories incl. the owner's custom ones / COGS set /
   // fee rates). Reusable so the manage-categories dialog can refresh it after an
   // add/remove; a failure just keeps the hardcoded mirrors — same numbers as before.
@@ -570,21 +578,15 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                 color={pct(summary.margin) >= 0 ? B.green : '#f87171'}
                 sub="after monthly overhead too" />
             </Box>
-            {/* Owner cash lens — profit (earned), take-home (draws), and any owner
-                contribution. Profit stays draw-excluded (correct for taxes). Numbers
-                + labels only; the figures speak for themselves. Shown whenever
-                there's a draw or a contribution to report. */}
+            {/* Owner cash lens, demoted to a footnote (owner: profit EARNED is the
+                headline — what he took out is bookkeeping, not the story). One
+                quiet line instead of tiles that shouted TAKE-HOME. */}
             {(summary.ownerDraw > 0 || summary.ownerContribution > 0) && (
-              <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
-                <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1 }}>Your money</Typography>
-                <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2,1fr)', md: summary.ownerContribution > 0 ? 'repeat(3,1fr)' : 'repeat(2,1fr)' } }}>
-                  <Stat label="Profit (earned)" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} />
-                  <Stat label="Take-home (draws)" value={money(summary.takeHome)} color={B.white} />
-                  {summary.ownerContribution > 0 && (
-                    <Stat label="Owner contribution" value={money(summary.ownerContribution)} color={B.white} />
-                  )}
-                </Box>
-              </Box>
+              <Typography sx={{ color: B.muted, fontSize: 11.5, px: 0.5, lineHeight: 1.5 }}>
+                Draws so far: <Box component="span" sx={{ color: B.white, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.takeHome)}</Box>
+                {summary.ownerContribution > 0 && <> · contributed back: <Box component="span" sx={{ color: B.white, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.ownerContribution)}</Box></>}
+                {' '}— net profit above is what you earned, whether or not you took it out.
+              </Typography>
             )}
 
             {/* Money owed to you / Unrecorded payments — the additive lens that
