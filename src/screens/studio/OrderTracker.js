@@ -1671,6 +1671,184 @@ function NextActionCard({ project, onRun }) {
   );
 }
 
+// Preorder links for THIS project — mint an expiring public page where the
+// client's people commit to quantities (names + counts, never payments), then
+// watch the tally roll up here. Lives on the approval tab because it's the
+// project's other client-facing link; commitments also land in the order's
+// activity feed (backend controllers/preorders.js).
+function PreorderSection({ order, authHdr, onToast }) {
+  const [links, setLinks] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [days, setDays] = useState(14);
+  const [rows, setRows] = useState([]);
+  const [expanded, setExpanded] = useState('');
+
+  const load = React.useCallback(async () => {
+    if (!order?._id) return;
+    try {
+      const r = await axios.get(`${base}/preorders?orderId=${order._id}`, authHdr);
+      setLinks(r.data.preorders || []);
+    } catch { setLinks([]); }
+  }, [order?._id, authHdr]);
+  useEffect(() => { load(); }, [load]);
+
+  const openCreate = () => {
+    // Prefill the items from what the client already picked (confirmation),
+    // falling back to accepted quote lines — same source order the approval
+    // page uses. Sizes default to the apparel run; promo items just clear it.
+    const conf = ((order.confirmation && order.confirmation.items) || []).map((i) => i && i.description).filter(Boolean);
+    const fromQuote = (order.quoteLines || []).filter((l) => l && l.accepted).map((l) => l.description).filter(Boolean);
+    const labels = [...new Set(conf.length ? conf : fromQuote)].slice(0, 6);
+    setRows(labels.length
+      ? labels.map((l) => ({ label: l, sizes: 'S, M, L, XL, 2XL' }))
+      : [{ label: '', sizes: 'S, M, L, XL, 2XL' }]);
+    setTitle(`${order.companyName || order.clientName || 'Merch'} — preorder`);
+    setNote(''); setDays(14); setCreating(true);
+  };
+
+  const create = async () => {
+    const items = rows
+      .map((r) => ({ label: (r.label || '').trim(), sizes: (r.sizes || '').split(',').map((s) => s.trim()).filter(Boolean) }))
+      .filter((r) => r.label);
+    if (!title.trim() || !items.length) { onToast('Give it a title and at least one item.', 'error'); return; }
+    setBusy(true);
+    try {
+      const r = await axios.post(`${base}/preorders`,
+        { title: title.trim(), note: note.trim(), items, orderId: order._id, expiresDays: Number(days) || 0 }, authHdr);
+      const url = `${window.location.origin}/preorder/${r.data.preorder.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — link still copyable from the row */ }
+      onToast('Preorder link created + copied — send it to the client.', 'success');
+      setCreating(false); load();
+    } catch (e) {
+      onToast(e?.response?.data?.message || 'Could not create the link.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const copy = async (l) => {
+    const url = `${window.location.origin}/preorder/${l.token}`;
+    try { await navigator.clipboard.writeText(url); onToast('Preorder link copied.', 'success'); }
+    catch { onToast(url, 'success'); }
+  };
+  const toggleClosed = async (l) => {
+    try { await axios.patch(`${base}/preorders/${l._id}`, { revoke: !l.revokedAt }, authHdr); load(); }
+    catch (e) { onToast(e?.response?.data?.message || 'Could not update the link.', 'error'); }
+  };
+
+  const tf = { '& .MuiInputBase-root': { color: B.white, fontSize: 12, bgcolor: B.bg }, '& fieldset': { borderColor: `${B.border} !important` } };
+  return (
+    <Box sx={{ px: 2.5, pb: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Preorder commitments{links && links.length ? ` · ${links.length}` : ''}
+        </Typography>
+        {!creating && (
+          <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={openCreate}
+            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+            New preorder link
+          </Button>
+        )}
+      </Stack>
+
+      {creating && (
+        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.5, mb: 1 }}>
+          <Stack gap={1}>
+            <TextField size="small" fullWidth value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title the client's people will see" sx={tf} />
+            <TextField size="small" fullWidth value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="Note (optional) — deadline, pickup details…" sx={tf} />
+            {rows.map((r, i) => (
+              <Stack key={i} direction="row" gap={1}>
+                <TextField size="small" fullWidth value={r.label} placeholder="Item — e.g. Staff tee, 3-color front"
+                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} sx={tf} />
+                <TextField size="small" value={r.sizes} placeholder="Sizes (blank = none)" sx={{ ...tf, width: 170, flexShrink: 0 }}
+                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, sizes: e.target.value } : x)))} />
+                <Button size="small" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} disabled={rows.length === 1}
+                  sx={{ color: B.muted, minWidth: 30, fontSize: 14 }}>✕</Button>
+              </Stack>
+            ))}
+            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+              <Button size="small" onClick={() => setRows((rs) => [...rs, { label: '', sizes: 'S, M, L, XL, 2XL' }])}
+                sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>+ item</Button>
+              <Box sx={{ flex: 1 }} />
+              <Typography sx={{ color: B.muted, fontSize: 11 }}>Expires in</Typography>
+              <TextField size="small" type="number" value={days} onChange={(e) => setDays(e.target.value)}
+                sx={{ ...tf, width: 64 }} inputProps={{ min: 0 }} />
+              <Typography sx={{ color: B.muted, fontSize: 11 }}>days (0 = never)</Typography>
+            </Stack>
+            <Stack direction="row" gap={1} justifyContent="flex-end">
+              <Button size="small" onClick={() => setCreating(false)} sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>Cancel</Button>
+              <Button size="small" onClick={create} disabled={busy}
+                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, fontSize: 11, textTransform: 'none', px: 1.5,
+                  '&:hover': { bgcolor: '#3bd070' } }}>
+                {busy ? 'Creating…' : 'Create + copy link'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Box>
+      )}
+
+      {links === null ? null : links.length === 0 && !creating ? (
+        <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
+          No preorder links yet — mint one and the client's people commit to
+          quantities (never payments) before you place the run.
+        </Box>
+      ) : (
+        <Stack gap={0.75}>
+          {(links || []).map((l) => {
+            const itemLabel = new Map((l.items || []).map((it) => [it.id, it.label]));
+            const isOpen = l.open;
+            return (
+              <Box key={l._id} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.25 }}>
+                <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                  <Typography sx={{ color: isOpen ? B.green : B.muted, fontSize: 13, lineHeight: 1 }}>●</Typography>
+                  <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 140 }} noWrap>{l.title}</Typography>
+                  <Typography sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                    {l.tally.people} in · {l.tally.totalQty} units
+                    {isOpen && l.expiresAt ? ` · until ${new Date(l.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : (isOpen ? '' : ' · closed')}
+                  </Typography>
+                  <Button size="small" onClick={() => copy(l)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Copy</Button>
+                  <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? B.green : '#f87171', fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
+                    {l.revokedAt ? 'Reopen' : 'Close'}
+                  </Button>
+                  <Button size="small" onClick={() => setExpanded(expanded === l._id ? '' : l._id)}
+                    sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
+                    {expanded === l._id ? 'Hide' : 'Tally'}
+                  </Button>
+                </Stack>
+                {expanded === l._id && (
+                  <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${B.faint}` }}>
+                    {l.tally.totalQty === 0 ? (
+                      <Typography sx={{ color: B.muted, fontSize: 11 }}>No commitments yet.</Typography>
+                    ) : (
+                      <Stack gap={0.5}>
+                        {Object.entries(l.tally.byItem).map(([itemId, t]) => (
+                          <Typography key={itemId} sx={{ color: B.white, fontSize: 11 }}>
+                            <b>{itemLabel.get(itemId) || 'Item'}</b> — {t.qty} units
+                            <Box component="span" sx={{ color: B.muted }}>
+                              {' '}({Object.entries(t.bySize).map(([s, q]) => `${s} ${q}`).join(' · ')})
+                            </Box>
+                          </Typography>
+                        ))}
+                        <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.25 }}>
+                          {(l.commitments || []).slice(-8).reverse().map((c) => `${c.name} (${c.qty}${c.size ? ` ${c.size}` : ''})`).join(' · ')}
+                          {(l.commitments || []).length > 8 ? ' · …' : ''}
+                        </Typography>
+                      </Stack>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
 function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
@@ -2521,6 +2699,10 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           )}
         </Box>
       </Box>
+
+      {/* Preorder links — the project's other client-facing URL: people commit
+          to quantities before the run is placed. */}
+      <PreorderSection order={local} authHdr={authHdr} onToast={onToast} />
 
       {/* Approval events — what the client did on the shared link. The full
           merged history (admin + client) lives under Files & Activity. */}
