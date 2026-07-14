@@ -312,6 +312,18 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setBusy('Re-reading the receipt — give it a minute, then refresh.');
     } catch (e) { setBusy(e?.response?.data?.message || 'Could not re-read the receipt.'); }
   };
+  // One tap clears a whole backlog (e.g. a batch upload full of non-order
+  // receipts): every review-status receipt flips to ignored. Files stay stored.
+  const ignoreAllReceipts = async () => {
+    const n = receiptInbox.filter((r) => r.status === 'review').length;
+    if (!n) return;
+    if (!window.confirm(`Ignore all ${n} waiting receipt${n === 1 ? '' : 's'}? Files stay stored — they just leave the inbox. Book the real ones first.`)) return;
+    try {
+      await axios.post(`${base}/receipts/archive-rest`, {}, authHdr);
+      setBusy(`Cleared ${n} receipt${n === 1 ? '' : 's'} from the inbox ✓`);
+      await load();
+    } catch (e) { setBusy(e?.response?.data?.message || 'Could not clear the inbox.'); }
+  };
 
   // Delete a SPECIFIC transaction (used by the right-click menu, which already
   // confirms). Mirrors deleteTxn but targets the passed row instead of editTxn.
@@ -610,7 +622,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             <ReceiptInbox receipts={receiptInbox}
               onBook={(rec) => setBookRec(rec)}
               onDismiss={dismissReceipt}
-              onReprocess={reprocessReceipt} />
+              onReprocess={reprocessReceipt}
+              onIgnoreAll={ignoreAllReceipts} />
 
             <MonthlyTrend months={months} />
 
@@ -1064,7 +1077,7 @@ function NeedsReceipts({ data, onOpenOrder, onAdd }) {
 // read, a link to the stored file, and one-tap Book / Ignore. Renders nothing
 // when the inbox is empty — it's a nudge, not furniture. Mirrors NeedsReceipts'
 // shape so the two receipt surfaces read as siblings.
-function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess }) {
+function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess, onIgnoreAll }) {
   const rows = Array.isArray(receipts) ? receipts : [];
   if (!rows.length) return null;
   const amber = '#fbbf24';
@@ -1072,6 +1085,7 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess }) {
     r.status === 'review' ? 'needs review'
       : r.status === 'failed' ? 'read failed'
         : 'scanning…');
+  const reviewCount = rows.filter((r) => r.status === 'review').length;
   return (
     <Box sx={{ border: `1px solid rgba(251,191,36,0.4)`, bgcolor: 'rgba(251,191,36,0.05)', borderRadius: 2, overflow: 'hidden',
       animation: 'jpRise 460ms ease both' }}>
@@ -1079,6 +1093,13 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess }) {
         <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: 0.5 }}>
           <ReceiptLongOutlinedIcon sx={{ color: amber }} />
           <Typography sx={{ color: amber, fontWeight: 800, fontSize: 14, flex: 1 }}>Receipt inbox</Typography>
+          {onIgnoreAll && reviewCount > 1 && (
+            <Button size="small" onClick={onIgnoreAll}
+              sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+                border: `1px solid ${B.border}`, borderRadius: 999, '&:hover': { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } }}>
+              Ignore all {reviewCount}
+            </Button>
+          )}
           <Typography sx={{ ...mono, color: amber, fontWeight: 800, fontSize: 13 }}>{rows.length}</Typography>
         </Stack>
         <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
