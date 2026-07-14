@@ -62,7 +62,7 @@ describe('visibleSubmissions (the list SubmissionsTab renders)', () => {
 });
 
 describe('SOURCE_FILTERS vocabulary', () => {
-  test('covers all / webworks / contact (mirrored by the backend source field)', () => {
-    expect(SOURCE_FILTERS.map((f) => f.value)).toEqual(['all', 'webworks', 'contact']);
+  test('covers all / webworks / atom / contact (mirrored by the backend source field)', () => {
+    expect(SOURCE_FILTERS.map((f) => f.value)).toEqual(['all', 'webworks', 'atom', 'contact']);
   });
 });

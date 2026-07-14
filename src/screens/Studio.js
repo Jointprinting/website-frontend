@@ -546,6 +546,10 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
           ? <>Every website lead from /webworks/start lands here — its own inbox,
               separate from the Joint Printing contact-form leads. Click a row for
               details, update as you work.</>
+          : lockedSource === 'atom'
+          ? <>Every JP Atom lead from /atom/contact lands here — its own inbox with
+              what they run on today, monthly volume, and what they want handled
+              first. Click a row for details, update as you reach out.</>
           : <>Every contact form submission is saved here so you don&apos;t lose a lead even
               if email hiccups. Filter, click any row for details, update as you work.</>}
       </MuiTypography>
@@ -597,7 +601,9 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
           <Box py={8} textAlign="center">
             <InboxIcon sx={{ fontSize: 56, color: 'rgba(255,255,255,0.18)', mb: 2 }} />
             <MuiTypography sx={{ color: BRAND.muted }}>
-              {lockedSource === 'webworks'
+              {lockedSource === 'atom'
+                ? (statusFilter === 'all' ? 'No JP Atom inquiries yet.' : `No "${statusMeta(statusFilter).label}" inquiries.`)
+                : lockedSource === 'webworks'
                 ? (statusFilter === 'all' ? 'No JP Webworks inquiries yet.' : `No "${statusMeta(statusFilter).label}" inquiries.`)
                 : sourceFilter !== 'all' && items.length > 0
                 ? `No ${SOURCE_FILTERS.find((s) => s.value === sourceFilter)?.label} submissions here.`
@@ -606,6 +612,8 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
             <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
               {lockedSource === 'webworks'
                 ? <>They&apos;ll appear here as soon as someone finishes /webworks/start.</>
+                : lockedSource === 'atom'
+                ? <>They&apos;ll appear here as soon as someone finishes /atom/contact.</>
                 : <>They&apos;ll appear here as soon as someone fills out your contact form.</>}
             </MuiTypography>
           </Box>
@@ -1705,12 +1713,22 @@ const HUB_GROUPS = [
     // moment they exist — the switcher + section are already wired.
     brand: 'JP Atom',
     tagline: 'Bespoke business systems',
+    tiers: [
+      {
+        id: 'atom',
+        tools: [
+          // JP Atom's OWN inbox — /atom/contact leads, hard-locked to
+          // source:'atom' exactly like the JP Webworks Inquiries tile.
+          { id: 'atominquiries', label: 'Inquiries', desc: 'Leads from /atom/contact', Icon: InboxIcon },
+        ],
+      },
+    ],
     foundation: {
       blurb: 'A premium studio that builds custom operating systems for other businesses. Your Studio is the showpiece and the starting skeleton — you fork it, tailor it to a client, and charge a build fee plus a flat monthly. Fewer clients, bigger tickets, all run from here.',
       steps: [
         { done: true,  label: 'Name it: JP Atom' },
-        { done: false, label: 'Publish the plan, pricing & positioning' },
-        { done: false, label: 'Stand up a click-around demo (example data, no private info)' },
+        { done: true,  label: 'Publish the plan, pricing & positioning (/atom — founding $995 + $295/mo)' },
+        { done: true,  label: 'Stand up a click-around demo (/atom/demo — fake shop, real behavior)' },
         { done: false, label: 'Record the walkthrough video for marketing' },
         { done: false, label: 'Land the first paid build' },
       ],
@@ -1973,6 +1991,7 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
         // /webworks/start leads — so one badge never clears the other's.
         const badge = t.id === 'submissions' ? (unseenInquiries?.contact || 0)
           : t.id === 'jpwinquiries' ? (unseenInquiries?.webworks || 0)
+          : t.id === 'atominquiries' ? (unseenInquiries?.atom || 0)
           : 0;
         return (
           <HubCard
@@ -2753,10 +2772,40 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   // they show only when Joint Printing is the focused business.
   const showJpVitals = activeBiz === 'Joint Printing';
 
+  // UNANSWERED INQUIRIES — owner rule: a waiting lead banners on ALL THREE
+  // brand pages (not just its own) until he's reached out. Counts are the
+  // unseen ones per source; clicking jumps to that source's inbox (which
+  // marks them seen — "reached out" clears the banner).
+  const inquiryBanner = (() => {
+    const rows = [
+      ['contact', 'Joint Printing', 'submissions'],
+      ['webworks', 'JP Webworks', 'jpwinquiries'],
+      ['atom', 'JP Atom', 'atominquiries'],
+    ].map(([src, label, view]) => ({ src, label, view, n: (unseenInquiries && unseenInquiries[src]) || 0 }))
+      .filter((r) => r.n > 0);
+    return rows.length ? rows : null;
+  })();
+
   return (
     <Stack spacing={3.5}>
       {/* Command-center header: focus one business, or 'All' for the roll-up. */}
       <BizSwitcher value={activeBiz} onChange={changeBiz} brands={brands} />
+
+      {inquiryBanner && (
+        <Box sx={{ border: '1px solid rgba(251,191,36,0.45)', bgcolor: 'rgba(251,191,36,0.08)',
+          borderRadius: 2.5, px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <MuiTypography sx={{ color: D.amber, fontWeight: 800, fontSize: 13 }}>
+            📬 {inquiryBanner.reduce((t, r) => t + r.n, 0)} inquir{inquiryBanner.reduce((t, r) => t + r.n, 0) === 1 ? 'y' : 'ies'} waiting on you
+          </MuiTypography>
+          {inquiryBanner.map((r) => (
+            <Chip key={r.src} size="small" onClick={() => onPick && onPick(r.view)}
+              label={`${r.label} · ${r.n}`}
+              sx={{ bgcolor: 'rgba(251,191,36,0.15)', color: D.amber, fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
+                '&:hover': { bgcolor: 'rgba(251,191,36,0.28)' } }} />
+          ))}
+          <MuiTypography sx={{ color: D.faint, fontSize: 11, ml: 'auto' }}>clears when you open the inbox</MuiTypography>
+        </Box>
+      )}
 
       {/* The single date + the business's live vitals — the hub's one opening
           line (no greeting, no nudge copy, no duplicate date). JP-scoped. */}
@@ -2998,7 +3047,7 @@ function StudioBody({ token, onLogout }) {
     // One source-scoped unseen count per Inquiries tile (?source= ships with
     // the backend counterpart; an older backend ignores the param and both
     // tiles briefly show the global count — harmless, self-heals on deploy).
-    ['contact', 'webworks'].forEach((source) => {
+    ['contact', 'webworks', 'atom'].forEach((source) => {
       axios.get(`${config.backendUrl}/api/submissions/unseen-count?source=${source}`, authH)
         .then((res) => { if (!cancelled) setUnseenInquiries((u) => ({ ...u, [source]: res.data?.count || 0 })); })
         .catch(() => { /* silent — bubble just won't show */ });
@@ -3033,8 +3082,8 @@ function StudioBody({ token, onLogout }) {
     // Webworks inbox the /webworks/start leads — so opening one never wipes
     // the unseen state of leads the owner hasn't looked at in the other. (An
     // older backend ignores the body and marks everything — harmless.)
-    if (id === 'submissions' || id === 'jpwinquiries') {
-      const source = id === 'jpwinquiries' ? 'webworks' : 'contact';
+    if (id === 'submissions' || id === 'jpwinquiries' || id === 'atominquiries') {
+      const source = id === 'jpwinquiries' ? 'webworks' : id === 'atominquiries' ? 'atom' : 'contact';
       if ((unseenInquiries[source] || 0) > 0) {
         setUnseenInquiries((u) => ({ ...u, [source]: 0 }));
         axios.post(`${config.backendUrl}/api/submissions/mark-all-seen`, { source },
@@ -3345,6 +3394,7 @@ function StudioBody({ token, onLogout }) {
                       Webworks one is hard-locked to /webworks/start leads. */}
                   {view === 'submissions'  && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} />}
                   {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
+                  {view === 'atominquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="atom" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
                   {view === 'mockup'      && <MockupLauncherTab />}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}

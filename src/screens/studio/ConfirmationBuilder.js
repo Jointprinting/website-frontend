@@ -181,7 +181,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         // vendor render (items with no mockup number — ashtrays etc.); the
         // positional auto-match is the fallback.
         const items = chosenQuoteLines(project.quoteLines).map((line, i) =>
-          ({ ...seedItemFromQuote(line),
+          ({ ...seedItemFromQuote(line, project.printerName),
              mockupNum: line.mockupNum || matchedNums[i] || '',
              customMockupDataUrl: line.image || '' }),
         );
@@ -287,7 +287,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   const reseedFromPicks = () => {
     const matched = inferMockupNumsFor(project, mockups);
     const items = chosenQuoteLines(project.quoteLines).map((line, i) => ({
-      ...seedItemFromQuote(line),
+      ...seedItemFromQuote(line, project.printerName),
       mockupNum: line.mockupNum || matched[i] || '',
       customMockupDataUrl: line.image || '',
     }));
@@ -1362,7 +1362,7 @@ function quoteVariantKey(o) {
 const APPAREL_RE = /\b(tee|t-?shirts?|shirts?|hoodies?|hoods?|crewnecks?|crews?|sweatshirts?|sweaters?|sweatpants?|joggers?|pants?|shorts?|polos?|long ?sleeves?|tanks?|jackets?|windbreakers?|beanies?|hats?|caps?|socks?|apparel|jerse?ys?|zip[- ]?ups?|pullovers?|fleece)\b/i;
 export function isApparelDescription(s) { return APPAREL_RE.test(String(s || '')); }
 
-function seedItemFromQuote(line) {
+function seedItemFromQuote(line, projectPrinter) {
   const description = line.description || '';
   // Carry the quote line's true cost/unit (blank + print + setup/ship spread
   // over its qty) so the order's COGS can be derived from the confirmation.
@@ -1389,7 +1389,10 @@ function seedItemFromQuote(line) {
     // sharpens the PO cost-recovery match on the backend (utils/poCost lineKey).
     printDetails: line.printDetails || '',
     color:     line.color || '',
-    printerName: line.supplier || '',
+    // The printer that decorates this item: the quote's chosen printer.
+    // (line.supplier is the BLANK vendor — mapping it here left the printer
+    // blank on every seeded item and forced a re-type at PO time.)
+    printerName: projectPrinter || line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
     // Client-facing estimated turnaround, carried from the picked quote line.
     turnaroundWeeks: Number(line.turnaroundWeeks) || 0,
