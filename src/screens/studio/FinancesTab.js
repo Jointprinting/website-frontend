@@ -1082,7 +1082,8 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess }) {
           <Typography sx={{ ...mono, color: amber, fontWeight: 800, fontSize: 13 }}>{rows.length}</Typography>
         </Stack>
         <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
-          Uploaded receipts waiting on you — booking one here is what puts it in the ledger.
+          Clean reads book themselves into the ledger automatically — these are the ones that need your eyes
+          (unclear read, possible duplicate, or a refund).
         </Typography>
       </Box>
       <Box sx={{ overflowX: 'auto', ...scrollbar }}>

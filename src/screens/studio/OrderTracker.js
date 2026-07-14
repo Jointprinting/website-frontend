@@ -706,6 +706,51 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     }
   };
 
+  // Duplicate-order cleanup: preview groups (same company + same amount, one
+  // job imported twice), archive the redundant copies in one tap, undo by
+  // batch id. "Gone" = archived out of every working surface (board, dashboards,
+  // finances) — data preserved, restorable via UNDO.
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupLoading, setDupLoading] = useState(false);
+  const [dupData, setDupData] = useState(null);
+  const [dupBusy, setDupBusy] = useState(false);
+  const [dupBatch, setDupBatch] = useState(() => localStorage.getItem('jp-orderdedup-batch') || '');
+  const handleOpenDup = async () => {
+    setDupOpen(true); setDupLoading(true); setDupData(null);
+    try {
+      const r = await axios.get(`${base}/orders/dedup/preview`, authHdr);
+      setDupData(r.data);
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not scan for duplicates.', 'error');
+      setDupOpen(false);
+    } finally { setDupLoading(false); }
+  };
+  const applyDup = async () => {
+    setDupBusy(true);
+    try {
+      const r = await axios.post(`${base}/orders/dedup/apply`, { confirm: true }, authHdr);
+      const batch = r.data?.batchId || '';
+      if (batch) { setDupBatch(batch); localStorage.setItem('jp-orderdedup-batch', batch); }
+      flash(r.data?.note || `Archived ${r.data?.archived || 0} duplicate order(s).`);
+      setDupOpen(false);
+      loadProjects();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Cleanup failed.', 'error');
+    } finally { setDupBusy(false); }
+  };
+  const revertDup = async () => {
+    if (!dupBatch) return;
+    setDupBusy(true);
+    try {
+      const r = await axios.post(`${base}/orders/dedup/revert`, { batchId: dupBatch, confirm: true }, authHdr);
+      flash(r.data?.note || 'Restored.');
+      setDupBatch(''); localStorage.removeItem('jp-orderdedup-batch');
+      loadProjects();
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Undo failed.', 'error');
+    } finally { setDupBusy(false); }
+  };
+
   // UPS auto-delivered, on demand: sweeps open orders whose client timeline
   // carries a UPS tracking link and flips delivered ones (the hourly poller
   // does this on its own — the button is the "check right now" + first-test
@@ -837,6 +882,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
                 secondary="Sweep UPS links → auto-deliver">Check UPS now</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenDup(); }}>
+              <ListItemIcon sx={{ color: B.muted }}><CleaningServicesOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondary="Same job entered twice → keep one">Clean duplicate orders</ListItemText>
             </MenuItem>
           </Menu>
         </Stack>
@@ -1026,6 +1077,72 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           return updated;
         }}
       />
+
+      {/* Duplicate-order cleanup: preview → keep/archive per group → apply (undo by batch). */}
+      {dupOpen && (
+        <Dialog open onClose={() => setDupOpen(false)} maxWidth="sm" fullWidth
+          PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, backgroundImage: 'none' } }}>
+          <Box sx={{ px: 2.5, pt: 2, pb: 1.25, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CleaningServicesOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
+            <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Duplicate orders</Typography>
+            <IconButton size="small" onClick={() => setDupOpen(false)}><CloseIcon fontSize="small" /></IconButton>
+          </Box>
+          <DialogContent sx={{ p: 2.5, ...scrollbar }}>
+            {dupLoading ? (
+              <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
+            ) : !dupData ? null : dupData.duplicateGroups === 0 ? (
+              <Typography sx={{ color: B.muted, fontSize: 13 }}>
+                No duplicates found — every job exists exactly once. ✨
+                {dupBatch && ' (A previous cleanup can still be undone below.)'}
+              </Typography>
+            ) : (
+              <>
+                <Typography sx={{ color: B.muted, fontSize: 12.5, mb: 1.5 }}>
+                  {dupData.duplicateGroups} job{dupData.duplicateGroups === 1 ? '' : 's'} exist{dupData.duplicateGroups === 1 ? 's' : ''} more
+                  than once (same company, same amount). Cleaning keeps the best copy and archives {dupData.ordersToArchive} redundant
+                  one{dupData.ordersToArchive === 1 ? '' : 's'} — they vanish from the board, dashboards, and finances, and stay recoverable via UNDO.
+                </Typography>
+                <Stack gap={1.25}>
+                  {(dupData.groups || []).map((g, i) => (
+                    <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.25 }}>
+                      <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 12.5, mb: 0.5 }}>
+                        {(g.keep && g.keep[0] && (g.keep[0].companyName || g.keep[0].clientName)) || g.companyKey} · {fmt(g.amount)}
+                      </Typography>
+                      {(g.keep || []).map((o) => (
+                        <Typography key={String(o._id)} sx={{ color: B.green, fontSize: 11.5, fontFamily: 'monospace' }}>
+                          ✓ keep — #{o.orderNumber || o.projectNumber || o._id} · {o.status}{o.importedFrom ? ` · ${o.importedFrom}` : ''}
+                        </Typography>
+                      ))}
+                      {(g.archive || []).map((o) => (
+                        <Typography key={String(o._id)} sx={{ color: B.muted, fontSize: 11.5, fontFamily: 'monospace', textDecoration: 'line-through' }}>
+                          ✕ archive — #{o.orderNumber || o.projectNumber || o._id} · {o.status}{o.importedFrom ? ` · ${o.importedFrom}` : ''}
+                        </Typography>
+                      ))}
+                    </Box>
+                  ))}
+                </Stack>
+              </>
+            )}
+            <Stack direction="row" gap={1} justifyContent="flex-end" sx={{ mt: 2 }}>
+              {dupBatch && (
+                <Button onClick={revertDup} disabled={dupBusy} startIcon={<ReplayIcon sx={{ fontSize: 15 }} />}
+                  sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, '&:hover': { color: B.white } }}>
+                  Undo last cleanup
+                </Button>
+              )}
+              <Box sx={{ flex: 1 }} />
+              <Button onClick={() => setDupOpen(false)} sx={{ color: B.muted, textTransform: 'none', fontWeight: 700 }}>Close</Button>
+              {dupData && dupData.duplicateGroups > 0 && (
+                <Button onClick={applyDup} disabled={dupBusy}
+                  sx={{ bgcolor: B.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2,
+                    '&:hover': { bgcolor: B.green, opacity: 0.9 } }}>
+                  {dupBusy ? 'Cleaning…' : `Clean ${dupData.ordersToArchive} duplicate${dupData.ordersToArchive === 1 ? '' : 's'}`}
+                </Button>
+              )}
+            </Stack>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <MockupHealthDialog
         open={healthOpen}

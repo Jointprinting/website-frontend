@@ -49,6 +49,7 @@ import JpLoader from '../../common/JpLoader';
 import {
   PLATFORMS, POST_STATUSES, weekStart, weekLabel,
   postedCountsForWeek, weekMet, streakWeeks,
+  rollupPostedStats, followerDelta, bestPostingDay, topTagByViews,
 } from './_content';
 
 const API = `${config.backendUrl}/api/social/posts`;
@@ -159,6 +160,8 @@ function StatLogger({ post, onLog, busy }) {
     ['comments', '💬', 'comments'], ['shares', '↗', 'shares'],
   ];
   const openIt = () => { setV({ views: last.views || '', likes: last.likes || '', comments: last.comments || '', shares: last.shares || '' }); setOpen(true); };
+  const prev = (post.stats || [])[post.stats.length - 2] || null;
+  const viewsDelta = prev ? (Number(last.views) || 0) - (Number(prev.views) || 0) : 0;
   if (!open) {
     return (
       <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
@@ -169,6 +172,12 @@ function StatLogger({ post, onLog, busy }) {
               <Box component="span" sx={{ color: D.green, fontWeight: 800, ml: 0.75 }}
                 title="Engagement — likes + comments per view">
                 {(((Number(last.likes) || 0) + (Number(last.comments) || 0)) / Number(last.views) * 100).toFixed(1)}% eng
+              </Box>
+            )}
+            {viewsDelta !== 0 && (
+              <Box component="span" title="Views gained since the previous check"
+                sx={{ color: viewsDelta > 0 ? D.green : '#f87171', fontWeight: 800, ml: 0.75 }}>
+                {viewsDelta > 0 ? `▲${viewsDelta}` : `▼${Math.abs(viewsDelta)}`}
               </Box>
             )}
           </Typography>
@@ -207,6 +216,55 @@ function StatLogger({ post, onLog, busy }) {
   );
 }
 
+// ── Insights strip — the account's results at a glance ───────────────────────
+// Everything here is computed from data already loaded (posted cards' stat
+// series + the account's daily follower history) — no extra fetches. Renders
+// nothing until there's at least one posted card with numbers.
+function InsightsStrip({ posts, account, onOpenPost }) {
+  const roll = rollupPostedStats(posts);
+  if (!roll.count) return null;
+  const d30 = account ? followerDelta(account.followerHistory, 30) : 0;
+  const day = bestPostingDay(posts);
+  const tag = topTagByViews(posts);
+  const bestLast = roll.best && roll.best.stats ? roll.best.stats[roll.best.stats.length - 1] : null;
+  const Tile = ({ label, value, tone }) => (
+    <Box sx={{ textAlign: 'center', minWidth: 84 }}>
+      <Typography sx={{ color: tone || D.text, fontSize: 19, fontWeight: 900, ...mono, lineHeight: 1.1 }}>{value}</Typography>
+      <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 0.2 }}>{label}</Typography>
+    </Box>
+  );
+  return (
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 3, bgcolor: D.panel, p: { xs: 1.5, md: 2 }, mb: 2 }}>
+      <Typography sx={{ ...eyebrow, display: 'block', mb: 1 }}>Your results</Typography>
+      <Stack direction="row" gap={{ xs: 2, md: 3.5 }} flexWrap="wrap" alignItems="center">
+        <Tile label="Posts tracked" value={roll.count} />
+        <Tile label="Total views" value={roll.views.toLocaleString()} tone={D.green} />
+        <Tile label="Total likes" value={roll.likes.toLocaleString()} />
+        <Tile label="Avg engagement" value={`${roll.avgEng}%`} tone={D.green} />
+        {account && <Tile label="Followers 30d" value={d30 > 0 ? `+${d30}` : String(d30)} tone={d30 >= 0 ? D.green : '#f87171'} />}
+        {roll.best && bestLast && (
+          <Box onClick={() => onOpenPost(roll.best)} title="Open your best post"
+            sx={{ cursor: 'pointer', minWidth: 0, maxWidth: 260, '&:hover': { opacity: 0.85 } }}>
+            <Typography noWrap sx={{ color: D.text, fontSize: 12.5, fontWeight: 800 }}>
+              🏆 {roll.best.title || (roll.best.body || '').slice(0, 40) || 'Best post'}
+            </Typography>
+            <Typography sx={{ color: D.muted, fontSize: 10.5, ...mono }}>
+              {(Number(bestLast.views) || 0).toLocaleString()} views · your best
+            </Typography>
+          </Box>
+        )}
+      </Stack>
+      {(day || tag) && (
+        <Typography sx={{ color: D.muted, fontSize: 11.5, mt: 1.25, lineHeight: 1.5 }}>
+          {day && <>📅 Your <b style={{ color: D.text }}>{day.day}</b> posts engage best ({day.eng}% avg).</>}
+          {day && tag && ' '}
+          {tag && <>🏷 <b style={{ color: D.text }}>#{tag.tag}</b> is your top tag — {tag.avgViews.toLocaleString()} avg views.</>}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 // Downscale an IG reference image the same way the quoter shrinks design
 // renders — the planner needs a thumbnail, never a full-res original.
 function readRefImage(file) {
@@ -230,7 +288,7 @@ function readRefImage(file) {
 
 // One post card: identity row, body preview, then the contextual next step —
 // the card always tells you the ONE thing to do next.
-function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
+function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats, onTag }) {
   const sm = statusMeta(post.status);
   const next =
     post.status === 'idea'      ? { label: 'Write the draft', go: () => onEdit(post, 'drafted') } :
@@ -265,7 +323,10 @@ function PostCard({ post, busy, onEdit, onPatch, onArchive, onLogStats }) {
               </Typography>
             )}
             {(post.tags || []).slice(0, 3).map((t) => (
-              <Typography key={t} sx={{ color: D.faint, fontSize: 10.5 }}>#{t}</Typography>
+              <Typography key={t} onClick={onTag ? (e) => { e.stopPropagation(); onTag(t); } : undefined}
+                title={onTag ? `Filter by #${t}` : undefined}
+                sx={{ color: D.faint, fontSize: 10.5, cursor: onTag ? 'pointer' : 'default',
+                  '&:hover': onTag ? { color: D.green } : {} }}>#{t}</Typography>
             ))}
           </Stack>
         </Box>
@@ -439,6 +500,7 @@ export default function ContentTab({ token, onBack }) {
   const [connErr, setConnErr] = React.useState('');
   const [syncBusy, setSyncBusy] = React.useState(false);
   const [filter, setFilter] = React.useState('active');    // active | idea | drafted | scheduled | posted | archived
+  const [tagFilter, setTagFilter] = React.useState('');     // '' = all tags; stacks on top of the status filter
   const [quick, setQuick] = React.useState('');
   const [quickPlat, setQuickPlat] = React.useState('');
   const [editing, setEditing] = React.useState(null);      // working copy in the dialog
@@ -586,10 +648,15 @@ export default function ContentTab({ token, onBack }) {
     key === 'active' ? active.length :
     key === 'archived' ? (posts || []).filter((p) => p.archived).length :
     active.filter((p) => p.status === key).length;
+  // Tag lens on top of the status filter — organize the library by campaign/
+  // theme (#420, #hoodies, …). Chips derive from whatever tags exist.
+  const allTags = [...new Set((posts || []).flatMap((p) => (p && p.tags) || []))].sort();
+  const tagCount = (t) => active.filter((p) => (p.tags || []).includes(t)).length;
   const shown = (posts || []).filter((p) =>
-    filter === 'active' ? !p.archived :
-    filter === 'archived' ? p.archived :
-    (!p.archived && p.status === filter));
+    (filter === 'active' ? !p.archived :
+      filter === 'archived' ? p.archived :
+        (!p.archived && p.status === filter))
+    && (!tagFilter || ((p.tags || []).includes(tagFilter))));
   // Pipeline order inside "everything": working items first, posted last.
   const ORDER = { idea: 0, drafted: 1, scheduled: 2, posted: 3 };
   const sorted = [...shown].sort((a, b) =>
@@ -660,6 +727,10 @@ export default function ContentTab({ token, onBack }) {
             onConnect={() => { setConnErr(''); setConnOpen(true); }}
             onSync={syncIg} onDisconnect={disconnectIg} />
 
+          {/* ── Results at a glance + strategy hints (auto-hides until there
+                 are posted cards with numbers) ─────────────────────────────── */}
+          <InsightsStrip posts={posts} account={account} onOpenPost={openEditor} />
+
           {/* ── Quick capture ──────────────────────────────────────────── */}
           <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.inset,
             p: 1.5, mb: 2 }}>
@@ -689,7 +760,7 @@ export default function ContentTab({ token, onBack }) {
           </Box>
 
           {/* ── Filters ────────────────────────────────────────────────── */}
-          <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1.5 }}>
+          <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: allTags.length ? 0.75 : 1.5 }}>
             {FILTERS.map((f) => (
               <Box key={f.key} onClick={() => setFilter(f.key)}
                 sx={{ cursor: 'pointer', borderRadius: 999, px: 1.5, py: 0.5, fontSize: 12, fontWeight: 700,
@@ -703,6 +774,29 @@ export default function ContentTab({ token, onBack }) {
               </Box>
             ))}
           </Stack>
+          {allTags.length > 0 && (
+            <Stack direction="row" gap={0.6} flexWrap="wrap" sx={{ mb: 1.5 }}>
+              {allTags.map((t) => (
+                <Box key={t} onClick={() => setTagFilter(tagFilter === t ? '' : t)}
+                  sx={{ cursor: 'pointer', borderRadius: 999, px: 1.1, py: 0.3, fontSize: 11, fontWeight: 700,
+                    color: tagFilter === t ? D.ink : D.faint,
+                    bgcolor: tagFilter === t ? '#fbbf24' : 'transparent',
+                    border: `1px solid ${tagFilter === t ? '#fbbf24' : D.line}`,
+                    transition: 'all 0.15s ease',
+                    '&:hover': tagFilter === t ? {} : { color: D.text, borderColor: D.lineHi } }}>
+                  #{t}
+                  <Box component="span" sx={{ ml: 0.5, ...mono, fontSize: 10, opacity: 0.75 }}>{tagCount(t)}</Box>
+                </Box>
+              ))}
+              {tagFilter && (
+                <Box onClick={() => setTagFilter('')}
+                  sx={{ cursor: 'pointer', borderRadius: 999, px: 1.1, py: 0.3, fontSize: 11, fontWeight: 700,
+                    color: D.muted, border: `1px dashed ${D.line}`, '&:hover': { color: D.text } }}>
+                  clear ✕
+                </Box>
+              )}
+            </Stack>
+          )}
 
           {/* ── Cards ──────────────────────────────────────────────────── */}
           {sorted.length === 0 ? (
@@ -720,7 +814,8 @@ export default function ContentTab({ token, onBack }) {
                   onEdit={openEditor}
                   onPatch={patchPost}
                   onArchive={(post) => patchPost(post, { archived: !post.archived })}
-                  onLogStats={logStats} />
+                  onLogStats={logStats}
+                  onTag={(t) => setTagFilter(t)} />
               ))}
             </Box>
           )}
@@ -824,6 +919,36 @@ export default function ContentTab({ token, onBack }) {
                   onChange={(e) => setEditing((p) => ({ ...p, postUrl: e.target.value }))}
                   sx={inkInput} InputLabelProps={{ sx: { color: D.muted } }} />
               </Stack>
+              {/* Numbers for THIS post — the "open a post, see how it did" ask.
+                  Read-only; the synced/logged series drives it. */}
+              {editing._id && editing.status === 'posted' && (editing.stats || []).length > 0 && (() => {
+                const s = editing.stats;
+                const lastS = s[s.length - 1];
+                const firstS = s[0];
+                const grow = (k) => (Number(lastS[k]) || 0) - (Number(firstS[k]) || 0);
+                return (
+                  <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, bgcolor: D.inset, p: 1.5 }}>
+                    <Typography sx={{ ...eyebrow, display: 'block', mb: 0.75 }}>How this post is doing</Typography>
+                    <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+                      <Typography sx={{ color: D.text, fontSize: 13, ...mono }}>
+                        👁 {(Number(lastS.views) || 0).toLocaleString()} · ❤️ {(Number(lastS.likes) || 0).toLocaleString()} · 💬 {Number(lastS.comments) || 0} · ↗ {Number(lastS.shares) || 0}
+                        {Number(lastS.views) > 0 && (
+                          <Box component="span" sx={{ color: D.green, fontWeight: 800, ml: 0.75 }}>
+                            {(((Number(lastS.likes) || 0) + (Number(lastS.comments) || 0)) / Number(lastS.views) * 100).toFixed(1)}% eng
+                          </Box>
+                        )}
+                      </Typography>
+                      <Sparkline stats={s} />
+                    </Stack>
+                    {s.length > 1 && (
+                      <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.5 }}>
+                        since first check: +{grow('views').toLocaleString()} views · +{grow('likes')} likes · +{grow('comments')} comments
+                        · {s.length} check-in{s.length === 1 ? '' : 's'} · last {fmtRelative(lastS.at)}
+                      </Typography>
+                    )}
+                  </Box>
+                );
+              })()}
               {/* IG visual reference — a downscaled thumbnail, never a full-res file. */}
               <Stack direction="row" gap={1} alignItems="center">
                 <input ref={fileRef} type="file" accept="image/*" hidden
