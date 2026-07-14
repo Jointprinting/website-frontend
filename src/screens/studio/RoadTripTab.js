@@ -78,6 +78,11 @@ const LAYER_CLUSTERS = 'jp-disp-clusters';
 const LAYER_COUNTS   = 'jp-disp-counts';
 const LAYER_POINTS   = 'jp-disp-points';
 const LAYER_HEAT     = 'jp-heat-layer';
+// Corridor day planner: the drive's route line + the proposed stops along it.
+const CORRIDOR_SRC        = 'jp-corridor-route';
+const CORRIDOR_STOPS_SRC  = 'jp-corridor-stops';
+const LAYER_CORRIDOR_LINE  = 'jp-corridor-line';
+const LAYER_CORRIDOR_STOPS = 'jp-corridor-stop-pts';
 
 const CUSTOM_TYPE_COLORS = { friend: '#06b6d4', client: '#a855f7', printer: '#f97316', other: '#94a3b8' };
 const CUSTOM_TYPE_LABELS = { friend: 'FRIEND', client: 'CLIENT', printer: 'PRINTER', other: 'WAYPOINT' };
@@ -418,6 +423,14 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [contactStop, setContactStop] = React.useState(null); // { stopId, dedupKey }
   const [contactForm, setContactForm] = React.useState({ name: '', role: '', inCharge: '', phone: '', email: '', notes: '', interest: 0, sendCatalog: true });
 
+  // CORRIDOR planner — from where I am, through the towns I pass, to where I'm
+  // sleeping: fetch the drive from Mapbox Directions, scan our dispensary DB
+  // along the band, prune the out-of-the-way ones, save the rest to the run.
+  const [corForm, setCorForm] = React.useState({ from: '', via: '', to: '', bufferMi: 3 });
+  const [corBusy, setCorBusy] = React.useState(false);
+  const [corPlan, setCorPlan] = React.useState(null);   // { miles, stops:[…] } | null
+  const corridorRef = React.useRef(null);               // { geometry, stops } — survives style swaps
+
   // Location
   const [myLoc, setMyLoc] = React.useState(null);
   const myLocRef = React.useRef(null);
@@ -544,6 +557,37 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
     if (!map.getSource(HEAT_SRC)) {
       map.addSource(HEAT_SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    // Corridor plan: the drive as a cyan line + proposed stops as rings. Added
+    // here (not in a toggle effect) so a style swap re-creates them; the data
+    // itself lives in corridorRef and is re-applied right after.
+    if (!map.getSource(CORRIDOR_SRC)) {
+      map.addSource(CORRIDOR_SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: LAYER_CORRIDOR_LINE, type: 'line', source: CORRIDOR_SRC,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': TERM.cyan, 'line-width': 3.5, 'line-opacity': 0.75, 'line-dasharray': [0.1, 1.6] },
+      }, map.getLayer(LAYER_CLUSTERS) ? LAYER_CLUSTERS : undefined);
+    }
+    if (!map.getSource(CORRIDOR_STOPS_SRC)) {
+      map.addSource(CORRIDOR_STOPS_SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: LAYER_CORRIDOR_STOPS, type: 'circle', source: CORRIDOR_STOPS_SRC,
+        paint: {
+          'circle-color': 'rgba(6,182,212,0.25)',
+          'circle-stroke-color': TERM.cyan,
+          'circle-stroke-width': 2,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 7, 11, 11, 15, 14],
+        },
+      });
+    }
+    // Re-hydrate corridor data after a style swap wiped the sources.
+    if (corridorRef.current) {
+      const { geometry, stops } = corridorRef.current;
+      const rs = map.getSource(CORRIDOR_SRC);
+      if (rs) rs.setData(geometry ? { type: 'Feature', geometry, properties: {} } : { type: 'FeatureCollection', features: [] });
+      const ss = map.getSource(CORRIDOR_STOPS_SRC);
+      if (ss) ss.setData({ type: 'FeatureCollection', features: (stops || []).map((d) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [d.lng, d.lat] }, properties: {} })) });
     }
   }, []);
 
@@ -1128,6 +1172,112 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr, showToast]);
 
+  // ── Corridor day planner ─────────────────────────────────────────────────────
+  // Geocode one town (same Mapbox endpoint the NAVIGATE search uses).
+  const geocodeOne = React.useCallback(async (q) => {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q.trim())}.json`
+      + `?access_token=${config.mapboxToken}&limit=1&country=US`;
+    const r = await fetch(url);
+    const data = await r.json();
+    const f = data.features && data.features[0];
+    if (!f) throw new Error(`Couldn't find "${q.trim()}" — try town + state.`);
+    return { label: f.place_name.split(',').slice(0, 2).join(','), lat: f.center[1], lng: f.center[0] };
+  }, []);
+
+  // Push the current plan onto the map (route line + proposed-stop rings).
+  const drawCorridor = React.useCallback((geometry, stops) => {
+    corridorRef.current = geometry ? { geometry, stops: stops || [] } : null;
+    const map = mapRef.current;
+    if (!map) return;
+    const rs = map.getSource(CORRIDOR_SRC);
+    if (rs) rs.setData(geometry ? { type: 'Feature', geometry, properties: {} } : { type: 'FeatureCollection', features: [] });
+    const ss = map.getSource(CORRIDOR_STOPS_SRC);
+    if (ss) ss.setData({ type: 'FeatureCollection', features: (stops || []).map((d) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [d.lng, d.lat] }, properties: {} })) });
+  }, []);
+
+  // Plan the corridor: geocode FROM (or use my location) / VIA / TO, fetch the
+  // drive from Mapbox Directions (browser-side, same public token the geocoder
+  // uses), then scan OUR dispensary DB along the band. Needs signal — this is
+  // the night-before/morning-of planning step, not an on-road capture.
+  const scanCorridor = React.useCallback(async () => {
+    setCorBusy(true);
+    try {
+      let from = null;
+      if (corForm.from.trim()) from = await geocodeOne(corForm.from);
+      else if (myLocRef.current) from = { label: 'My location', lat: myLocRef.current.lat, lng: myLocRef.current.lng };
+      if (!from) { showToast('Set a start — tap 📍 first or type a town.', 'info'); return; }
+      if (!corForm.to.trim()) { showToast("Where are you ending the day? Type the town you're sleeping in.", 'info'); return; }
+      const to = await geocodeOne(corForm.to);
+      const vias = [];
+      for (const t of corForm.via.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 3)) {
+        vias.push(await geocodeOne(t)); // eslint-disable-line no-await-in-loop
+      }
+      const coords = [from, ...vias, to].map((p) => `${p.lng},${p.lat}`).join(';');
+      const dirUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}`
+        + `?geometries=geojson&overview=full&access_token=${config.mapboxToken}`;
+      const dr = await fetch(dirUrl);
+      const dd = await dr.json();
+      const route = dd.routes && dd.routes[0];
+      if (!route) throw new Error(dd.message || 'No drivable route found between those points.');
+      const miles = Math.round((route.distance / 1609.34) * 10) / 10;
+
+      // Decimate the polyline (the API caps at 600 points) and scan our DB.
+      const line = route.geometry.coordinates;
+      const step = Math.max(1, Math.ceil(line.length / 400));
+      const points = line.filter((_, i) => i % step === 0 || i === line.length - 1)
+        .map(([lng, lat]) => ({ lat, lng }));
+      const resp = await axios.post(`${api}/api/roadtrip/dispensaries/corridor`,
+        { points, bufferMi: corForm.bufferMi }, authHdr);
+      const stops = resp.data?.results || [];
+      setCorPlan({ miles, stops, fromLabel: from.label, toLabel: to.label });
+      drawCorridor(route.geometry, stops);
+      const b = new mapboxgl.LngLatBounds();
+      line.forEach((c) => b.extend(c));
+      mapRef.current?.fitBounds(b, { padding: 70 });
+      showToast(stops.length
+        ? `${stops.length} dispos along the ${miles} mi drive — ✕ the out-of-the-way ones, then add the rest.`
+        : `Route found (${miles} mi) — no dispos in the band; widen the corridor?`, stops.length ? 'success' : 'info');
+    } catch (err) {
+      showToast(err?.response?.data?.message || err.message || 'Corridor scan failed.', 'error');
+    } finally {
+      setCorBusy(false);
+    }
+  }, [api, authHdr, corForm, geocodeOne, drawCorridor, showToast]);
+
+  // Prune one proposed stop (his "remove the unnecessarily-out-of-the-way ones").
+  const removeCorStop = React.useCallback((d) => {
+    setCorPlan((prev) => {
+      if (!prev) return prev;
+      const stops = prev.stops.filter((x) => String(x._id) !== String(d._id));
+      drawCorridor(corridorRef.current && corridorRef.current.geometry, stops);
+      return { ...prev, stops };
+    });
+  }, [drawCorridor]);
+
+  const clearCorridor = React.useCallback(() => {
+    setCorPlan(null);
+    drawCorridor(null, []);
+  }, [drawCorridor]);
+
+  // Commit the pruned plan to Today's Run (bulk add; server dedupes + resolves
+  // CRM matches per stop, capped at 80 server-side).
+  const addCorridorToRun = React.useCallback(async () => {
+    const ids = (corPlan?.stops || []).map((d) => String(d._id));
+    if (!ids.length) return;
+    try {
+      const r = await axios.post(`${api}/api/roadtrip/run/stops`, { dispensaryIds: ids }, authHdr);
+      if (r.data?.run) setRun(r.data.run);
+      setRunMiles(null);
+      const added = r.data?.added || 0;
+      showToast(added
+        ? `${added} stop${added === 1 ? '' : 's'} on the day${r.data?.capped ? ' (server caps a single add at 80 — trim and re-add the rest)' : ''}. Hit ⚡ OPTIMIZE when you're rolling.`
+        : 'All of those are already on the day.', added ? 'success' : 'info');
+      clearCorridor();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Could not add the corridor to the run.', 'error');
+    }
+  }, [api, authHdr, corPlan, showToast, clearCorridor]);
+
   // Manual reorder — move a stop up/down the day list. Optimistic local swap,
   // then persist the full order via PATCH /run {stopOrder} (already supported
   // server-side; visited stops keep their place at the head). Rapid taps fire
@@ -1570,6 +1720,89 @@ export default function RoadTripTab({ token, onNavigate }) {
     </Box>
   );
 
+  // CORRIDOR PLAN — the day planner: from → through → to, scan the band along
+  // the drive, ✕ the out-of-the-way ones, send the rest to Today's Run.
+  const corridorPanel = (
+    <PanelSection title={`CORRIDOR PLAN${corPlan ? ` · ${corPlan.stops.length}` : ''}`} persistKey="jpfm-corridor">
+      {!corPlan ? (
+        <Stack spacing={0.75}>
+          <input value={corForm.from} onChange={(e) => setCorForm((f) => ({ ...f, from: e.target.value }))}
+            placeholder={myLoc ? 'From — leave blank to use my 📍' : 'From — town, ST'}
+            style={inputStyle} />
+          <input value={corForm.via} onChange={(e) => setCorForm((f) => ({ ...f, via: e.target.value }))}
+            placeholder="Through (optional) — towns, comma-separated"
+            style={inputStyle} />
+          <input value={corForm.to} onChange={(e) => setCorForm((f) => ({ ...f, to: e.target.value }))}
+            placeholder="To — where you're sleeping tonight"
+            style={inputStyle} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1 }}>BAND</Typography>
+            {[2, 3, 5, 8].map((m) => (
+              <Box key={m} role="button" onClick={() => setCorForm((f) => ({ ...f, bufferMi: m }))}
+                sx={{ px: 1, py: 0.3, borderRadius: 0.5, cursor: 'pointer', fontFamily: MONO, fontSize: 9.5, fontWeight: 800,
+                  color: corForm.bufferMi === m ? TERM.cyan : TERM.muted,
+                  border: `1px solid ${corForm.bufferMi === m ? TERM.cyan : TERM.borderDim}`,
+                  '&:hover': { color: TERM.cyan } }}>
+                {m}mi
+              </Box>
+            ))}
+          </Box>
+          <Box role="button" tabIndex={0} onClick={() => !corBusy && scanCorridor()}
+            sx={{
+              fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
+              py: 0.9, cursor: 'pointer', borderRadius: 0.5,
+              color: corBusy ? TERM.amber : '#06272e', bgcolor: corBusy ? 'transparent' : TERM.cyan,
+              border: `1.5px solid ${corBusy ? TERM.amber : TERM.cyan}`, '&:hover': { opacity: 0.9 },
+            }}>
+            {corBusy ? 'SCANNING…' : '🛣 SCAN MY ROUTE'}
+          </Box>
+          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
+            Maps the whole day: your drive + every dispo within the band, in driving order. Needs signal — plan before you roll.
+          </Typography>
+        </Stack>
+      ) : (
+        <Stack spacing={0.5}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, lineHeight: 1.5 }}>
+            {corPlan.fromLabel} → {corPlan.toLabel} · {corPlan.miles} mi · ✕ what's out of the way
+          </Typography>
+          <Box sx={{ maxHeight: 260, overflowY: 'auto' }}>
+            <Stack spacing={0.4}>
+              {corPlan.stops.map((d, i) => (
+                <Box key={String(d._id)} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5, px: 0.75, py: 0.5 }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.cyan, fontWeight: 800, width: 18, flexShrink: 0 }}>{i + 1}</Typography>
+                  <Box role="button" onClick={() => mapRef.current && mapRef.current.flyTo({ center: [d.lng, d.lat], zoom: 12.5 })}
+                    title="Show on the map"
+                    sx={{ minWidth: 0, cursor: 'pointer', flex: 1 }}>
+                    <Typography noWrap sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: TERM.text }}>{d.name}</Typography>
+                    <Typography noWrap sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted }}>
+                      {d.distanceMi} mi off route{d.crm && d.crm.stage ? ` · ${d.crm.stage}` : ''}{d.lastVisitedAt ? ' · visited before' : ''}
+                    </Typography>
+                  </Box>
+                  <Box role="button" onClick={() => removeCorStop(d)} title="Prune — unnecessarily out of the way"
+                    sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 900, color: TERM.muted, cursor: 'pointer', px: 0.5, '&:hover': { color: TERM.red } }}>✕</Box>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+          {corPlan.stops.length > 0 && (
+            <Box role="button" tabIndex={0} onClick={addCorridorToRun}
+              sx={{
+                fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
+                py: 0.9, cursor: 'pointer', borderRadius: 0.5, color: TERM.greenDk, bgcolor: TERM.green,
+                border: `1.5px solid ${TERM.green}`, '&:hover': { opacity: 0.9 },
+              }}>
+              ＋ ADD {corPlan.stops.length} TO TODAY'S RUN
+            </Box>
+          )}
+          <Box role="button" onClick={clearCorridor}
+            sx={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textAlign: 'center', py: 0.6,
+              cursor: 'pointer', borderRadius: 0.5, color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+              '&:hover': { color: TERM.text } }}>CLEAR PLAN</Box>
+        </Stack>
+      )}
+    </PanelSection>
+  );
+
   const runPanel = (
     <PanelSection title={`TODAY'S RUN · ${run?.stops?.length || 0}`} persistKey="jpfm-run">
       {(!run || !run.stops?.length) ? (
@@ -1896,6 +2129,7 @@ export default function RoadTripTab({ token, onNavigate }) {
           <Box sx={{ p: 2 }}>
             {todayPanel}
             {navigatePanel}
+            {corridorPanel}
             {segmentsPanel}
             {runPanel}
             {filtersPanel}
@@ -2019,6 +2253,7 @@ export default function RoadTripTab({ token, onNavigate }) {
         }}>
           <Box sx={{ p: 2 }}>
             {navigatePanel}
+            {corridorPanel}
             {segmentsPanel}
             {filtersPanel}
           </Box>
