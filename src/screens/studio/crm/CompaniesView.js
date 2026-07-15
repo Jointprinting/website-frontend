@@ -39,27 +39,6 @@ import {
   primaryPhone, isWonStage, CRM_SEGMENTS, SEGMENT_META, segmentOf,
 } from './_crm';
 
-// A tiny lead-quality badge (A–D) — how actionable this lead is for cold email +
-// road visits (scored server-side in services/leadScore.js). Hover shows why.
-// Shown on leads/prospects, not existing customers (their lead stage is behind them).
-const GRADE_TONE = { A: D.green, B: D.amber, C: D.muted, D: '#f87171' };
-function LeadGradeChip({ grade, reasons }) {
-  if (!grade) return null;
-  const tone = GRADE_TONE[grade] || D.faint;
-  const title = reasons && reasons.length
-    ? `Lead quality ${grade} — ${reasons.join(', ')}`
-    : `Lead quality ${grade}`;
-  return (
-    <Box
-      component="span" title={title}
-      sx={{ ...mono, fontSize: 11, fontWeight: 800, color: tone, border: `1px solid ${tone}66`,
-        borderRadius: 1, px: 0.6, lineHeight: 1.6, letterSpacing: 0.3, flexShrink: 0 }}
-    >
-      {grade}
-    </Box>
-  );
-}
-
 function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
   const name = c.companyName || c.clientName || c.companyKey;
   const phone = primaryPhone(c);
@@ -90,7 +69,6 @@ function CompanyRow({ c, onOpen, onUnarchive, bindCompany }) {
             {customer && <StarRateRoundedIcon sx={{ fontSize: 16, color: stageMeta('customer').color }} />}
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5, minWidth: 0 }}>{name}</Typography>
             <StageChip stage={c.stage} dot />
-            {!customer && <LeadGradeChip grade={c.leadGrade} reasons={c.leadReasons} />}
           </Stack>
           <Typography sx={{ color: D.muted, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {[
