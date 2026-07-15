@@ -3,10 +3,12 @@
 // the JP Webworks Inquiries view rides on (Studio view 'jpwinquiries').
 
 import {
-  SOURCE_FILTERS, matchesSource, effectiveSource, visibleSubmissions,
+  SOURCE_FILTERS, SOURCE_META, matchesSource, effectiveSource, visibleSubmissions,
+  submissionSource, countsBySource,
 } from './_submissions';
 
 const webworksLead = { _id: 'w1', source: 'webworks' };
+const atomLead     = { _id: 'a1', source: 'atom' };
 const contactLead  = { _id: 'c1', source: 'contact' };
 const legacyLead   = { _id: 'c2' }; // pre-source records = contact-form leads
 
@@ -64,5 +66,37 @@ describe('visibleSubmissions (the list SubmissionsTab renders)', () => {
 describe('SOURCE_FILTERS vocabulary', () => {
   test('covers all / webworks / atom / contact (mirrored by the backend source field)', () => {
     expect(SOURCE_FILTERS.map((f) => f.value)).toEqual(['all', 'webworks', 'atom', 'contact']);
+  });
+});
+
+describe('submissionSource', () => {
+  test('normalizes to a SOURCE_META key; legacy/unknown → contact', () => {
+    expect(submissionSource(webworksLead)).toBe('webworks');
+    expect(submissionSource(atomLead)).toBe('atom');
+    expect(submissionSource(contactLead)).toBe('contact');
+    expect(submissionSource(legacyLead)).toBe('contact');
+    expect(submissionSource({ source: 'nonsense' })).toBe('contact');
+    expect(submissionSource(null)).toBe('contact');
+  });
+
+  test('SOURCE_META has an entry for every real source, badging only the distinct brands', () => {
+    expect(SOURCE_META.webworks.badge).toBe(true);
+    expect(SOURCE_META.atom.badge).toBe(true);
+    expect(SOURCE_META.contact.badge).toBe(false); // default inbox → no per-row tag
+    ['webworks', 'atom', 'contact'].forEach((k) => {
+      expect(typeof SOURCE_META[k].label).toBe('string');
+      expect(typeof SOURCE_META[k].chip).toBe('string');
+    });
+  });
+});
+
+describe('countsBySource (the source chips)', () => {
+  test('counts every source in one pass — including atom, which the old map dropped', () => {
+    const withAtom = [webworksLead, atomLead, contactLead, legacyLead];
+    expect(countsBySource(withAtom)).toEqual({ all: 4, webworks: 1, atom: 1, contact: 2 });
+  });
+
+  test('tolerates a missing list', () => {
+    expect(countsBySource(undefined)).toEqual({ all: 0, webworks: 0, atom: 0, contact: 0 });
   });
 });

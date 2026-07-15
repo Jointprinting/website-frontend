@@ -71,7 +71,7 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
-import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
+import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, countsBySource } from './studio/_submissions';
 import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
@@ -528,11 +528,9 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
     [items, sourceFilter, lockedSource]
   );
 
-  const sourceCounts = React.useMemo(() => ({
-    all: items.length,
-    webworks: items.filter((it) => matchesSource(it, 'webworks')).length,
-    contact: items.filter((it) => matchesSource(it, 'contact')).length,
-  }), [items]);
+  // One pass over every source (incl. atom, which the old hand-written map
+  // dropped so the JP Atom chip always read 0).
+  const sourceCounts = React.useMemo(() => countsBySource(items), [items]);
 
   const statusCounts = React.useMemo(() => {
     const counts = { all: visible.length };
@@ -566,7 +564,7 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
               key={s.value}
               active={sourceFilter === s.value} label={s.label} count={sourceCounts[s.value] || 0}
               onClick={() => setSourceFilter(s.value)}
-              color={s.value === 'webworks' ? '#17b878' : BRAND.green}
+              color={SOURCE_META[s.value]?.chip || BRAND.green}
             />
           ))}
         </Stack>
@@ -650,10 +648,11 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
             <MuiTypography variant="caption" sx={{ color: BRAND.muted }}>
               {selected?.companyName}
             </MuiTypography>
-            {selected?.source === 'webworks' && (
-              <Chip label="JP Webworks lead" size="small" sx={{
+            {selected && SOURCE_META[submissionSource(selected)]?.badge && (
+              <Chip label={`${SOURCE_META[submissionSource(selected)].label} lead`} size="small" sx={{
                 mt: 0.6, height: 20, fontSize: 11, fontWeight: 700,
-                bgcolor: 'rgba(23,184,120,0.16)', color: '#4ade80',
+                bgcolor: SOURCE_META[submissionSource(selected)].bg,
+                color: SOURCE_META[submissionSource(selected)].color,
               }} />
             )}
           </Box>
@@ -930,7 +929,13 @@ function SubmissionRow({ item, onClick, formatDate }) {
               · {item.companyName || '(no company)'}
             </MuiTypography>
             {item.honeypot && <Chip label="bot" size="small" sx={{ height: 18, fontSize: 10, bgcolor: 'rgba(248,113,113,0.2)', color: '#f87171' }} />}
-            {item.source === 'webworks' && <Chip label="JP Webworks" size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: 'rgba(23,184,120,0.18)', color: '#4ade80' }} />}
+            {SOURCE_META[submissionSource(item)]?.badge && (
+              <Chip label={SOURCE_META[submissionSource(item)].label} size="small" sx={{
+                height: 18, fontSize: 10, fontWeight: 700,
+                bgcolor: SOURCE_META[submissionSource(item)].bg,
+                color: SOURCE_META[submissionSource(item)].color,
+              }} />
+            )}
           </Stack>
           <MuiTypography variant="body2" sx={{
             color: BRAND.muted, fontFamily: 'monospace', fontSize: 12.5,
@@ -938,6 +943,8 @@ function SubmissionRow({ item, onClick, formatDate }) {
           }}>
             {item.source === 'webworks'
               ? `${item.email}${item.phone ? ' · ' + item.phone : ''}${item.webworks?.planInterest ? ' · ' + item.webworks.planInterest : ''}`
+              : item.source === 'atom'
+              ? `${item.email}${item.phone ? ' · ' + item.phone : ''}`
               : `${item.email} · ${item.phone} · qty ${item.quantity || '?'} · in-hand ${item.inHandDate || '?'}`}
           </MuiTypography>
         </Box>
