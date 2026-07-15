@@ -331,6 +331,52 @@ export function clientApproved(project) {
   );
 }
 
+// Superseded-aware summary of what the client has actually DONE on the shared
+// approval link *this cycle* (since approvalSupersededAt). This is what lets the
+// Order Tracker's next-action stop forever saying "Share approval link" once the
+// link is out — it can instead reflect reality: emailed / opened / asked for
+// changes. Same strict cutoff rule as clientApproved(): only events and sends
+// strictly newer than approvalSupersededAt count, so resetting/rotating the link
+// (which bumps supersededAt) resets this signal too. Pure — safe to unit-test.
+export function approvalActivity(project) {
+  const cutoff = project && project.approvalSupersededAt
+    ? new Date(project.approvalSupersededAt).getTime() : 0;
+  const fresh = (t) => {
+    const ms = t ? new Date(t).getTime() : 0;
+    return Number.isFinite(ms) && ms > cutoff ? ms : 0;
+  };
+
+  let emailedCount = 0, lastSentAt = 0;
+  for (const r of ((project && project.approvalRecipients) || [])) {
+    const ms = fresh(r && r.sentAt);
+    if (ms) { emailedCount += 1; if (ms > lastSentAt) lastSentAt = ms; }
+  }
+
+  let viewCount = 0, lastViewAt = 0;
+  let requestedChanges = false, lastChangeAt = 0, lastChangeMsg = '';
+  let approved = false;
+  for (const e of ((project && project.approvalEvents) || [])) {
+    const ms = fresh(e && e.at);
+    if (!ms) continue;
+    if (e.kind === 'viewed') { viewCount += 1; if (ms > lastViewAt) lastViewAt = ms; }
+    else if (e.kind === 'approved') { approved = true; }
+    else if (e.kind === 'requested_changes') {
+      requestedChanges = true;
+      if (ms > lastChangeAt) { lastChangeAt = ms; lastChangeMsg = (e && e.message) || ''; }
+    }
+  }
+
+  return {
+    emailedCount, lastSentAt,
+    viewCount, lastViewAt,
+    requestedChanges, lastChangeAt, lastChangeMsg,
+    approved,
+    // "shared" = the client demonstrably has the link this cycle — it was emailed
+    // to them, or they've opened it (so copy/paste + text sharing counts too).
+    shared: emailedCount > 0 || viewCount > 0,
+  };
+}
+
 // Archive purge window — MIRROR of backend services/archivePurge.js
 // ARCHIVE_TTL_DAYS. Archived lookbooks + content posts hard-delete this many
 // days after archiving (the owner's rule; money records never purge).
