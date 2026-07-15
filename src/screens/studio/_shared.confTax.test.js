@@ -74,6 +74,19 @@ describe('confLocationTax', () => {
     };
     expect(round(confLocationTax(conf).total)).toBe(66.25); // 1000 × 6.625%
   });
+
+  test('NJ clothing exemption: a taxExempt item is left out of the taxable base', () => {
+    // Promo 100@$10 = 1000 (taxed); apparel 50@$20 = 1000 (exempt). Only the
+    // promo is taxed: 1000 × 6.625% = 66.25 — not 132.50 on the full 2000.
+    const conf = {
+      items: [
+        { sizes: [{ label: 'OS', qty: 100, unitPrice: 10 }], allocations: [{ key: 'nj', qty: 100 }] },
+        { taxExempt: true, sizes: [{ label: 'M', qty: 50, unitPrice: 20 }], allocations: [{ key: 'nj', qty: 50 }] },
+      ],
+      shipTos: [{ key: 'nj', label: 'NJ', taxRate: 6.625 }],
+    };
+    expect(round(confLocationTax(conf).total)).toBe(66.25);
+  });
 });
 
 describe('confRevenue with location tax', () => {
@@ -144,6 +157,6 @@ test('roundCents snaps half-up to cents (no sub-cent drift)', () => {
   expect(roundCents(0.30000000000000004)).toBe(0.3);
 });
 
-test('STATE_TAX_RATES matches the backend territory map', () => {
-  expect(STATE_TAX_RATES).toEqual({ NJ: 6.625, NY: 8, CT: 6.35, MA: 6.25, VT: 6, PA: 6 });
+test('STATE_TAX_RATES auto-prefills ONLY NJ (the only nexus) — matches the backend', () => {
+  expect(STATE_TAX_RATES).toEqual({ NJ: 6.625 });
 });
