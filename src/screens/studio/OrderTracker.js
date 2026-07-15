@@ -1746,6 +1746,7 @@ function PreorderSection({ order, authHdr, onToast }) {
   const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
+  const [pickup, setPickup] = useState('');
   const [days, setDays] = useState(14);
   const [moq, setMoq] = useState(0);
   const [rows, setRows] = useState([]);
@@ -1771,7 +1772,7 @@ function PreorderSection({ order, authHdr, onToast }) {
       ? labels.map((l) => ({ label: l, sizes: 'S, M, L, XL, 2XL' }))
       : [{ label: '', sizes: 'S, M, L, XL, 2XL' }]);
     setTitle(`${order.companyName || order.clientName || 'Merch'} — preorder`);
-    setNote(''); setDays(14); setMoq(0); setCreating(true);
+    setNote(''); setPickup(''); setDays(14); setMoq(0); setCreating(true);
   };
 
   const create = async () => {
@@ -1782,7 +1783,7 @@ function PreorderSection({ order, authHdr, onToast }) {
     setBusy(true);
     try {
       const r = await axios.post(`${base}/preorders`,
-        { title: title.trim(), note: note.trim(), items, orderId: order._id, expiresDays: Number(days) || 0, moq: Number(moq) || 0 }, authHdr);
+        { title: title.trim(), note: note.trim(), pickupLocation: pickup.trim(), items, orderId: order._id, expiresDays: Number(days) || 0, moq: Number(moq) || 0 }, authHdr);
       // Send the CLIENT link — the store owner shares the customer link from there.
       const url = `${window.location.origin}/preorder/c/${r.data.preorder.clientToken}`;
       try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — link still copyable from the row */ }
@@ -1829,7 +1830,9 @@ function PreorderSection({ order, authHdr, onToast }) {
             <TextField size="small" fullWidth value={title} onChange={(e) => setTitle(e.target.value)}
               placeholder="Title the client's people will see" sx={tf} />
             <TextField size="small" fullWidth value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder="Note (optional) — deadline, pickup details…" sx={tf} />
+              placeholder="Note (optional) — deadline, details…" sx={tf} />
+            <TextField size="small" fullWidth value={pickup} onChange={(e) => setPickup(e.target.value)}
+              placeholder="Pickup location (optional) — store name + address" sx={tf} />
             {rows.map((r, i) => (
               <Stack key={i} direction="row" gap={1}>
                 <TextField size="small" fullWidth value={r.label} placeholder="Item — e.g. Staff tee, 3-color front"
