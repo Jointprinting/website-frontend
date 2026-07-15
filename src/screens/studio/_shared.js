@@ -197,11 +197,13 @@ export const deriveCompanyKey = (companyName, clientName = '') =>
 export const hasConfirmation = (conf) =>
   !!(conf && Array.isArray(conf.items) && conf.items.length > 0);
 
-// Default sales-tax rates (percent) for the owner's territory. Choosing a state
-// on a confirmation shipTo PRE-FILLS that location's taxRate; the owner can
-// override per location. Keyed by USPS code. MUST match the backend
+// Auto-prefill sales-tax rate (percent) for the owner's ONLY nexus: New Jersey.
+// JP collects NJ tax on NJ-bound taxable goods and NOTHING out of state. Choosing
+// a state on a confirmation shipTo PRE-FILLS its taxRate ONLY for NJ; any other
+// state prefills nothing (stays 0), and the per-location "Tax rate %" field is a
+// manual override for a future nexus. Keyed by USPS code. MUST match the backend
 // models/Order.js STATE_TAX_RATES.
-export const STATE_TAX_RATES = { NJ: 6.625, NY: 8, CT: 6.35, MA: 6.25, VT: 6, PA: 6 };
+export const STATE_TAX_RATES = { NJ: 6.625 };
 
 // Round-half-up to cents — mirrors backend models/Order.js roundCents. Snaps a
 // grand total / tax line to a real cent amount so floating-point sums don't
