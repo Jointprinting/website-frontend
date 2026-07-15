@@ -72,7 +72,7 @@ import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
-import { StudioDialogHost } from './studio/_dialog';
+import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
@@ -494,12 +494,12 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
         if (selected && selected._id === id) setSelected(updated);
       }
     } catch (e) {
-      alert('Could not update: ' + (e?.response?.data?.message || e.message));
+      await alertDialog({ title: 'Could not update', message: e?.response?.data?.message || e.message });
     }
   };
 
   const removeSubmission = async (id) => {
-    if (!window.confirm('Delete this submission permanently? This cannot be undone.')) return;
+    if (!(await confirmDialog({ message: 'Delete this submission permanently? This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await axios.delete(`${config.backendUrl}/api/submissions/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -507,7 +507,7 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
       setItems((arr) => arr.filter((it) => it._id !== id));
       setDialogOpen(false);
     } catch (e) {
-      alert('Could not delete: ' + (e?.response?.data?.message || e.message));
+      await alertDialog({ title: 'Could not delete', message: e?.response?.data?.message || e.message });
     }
   };
 
@@ -814,7 +814,7 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
                   setSelected((s) => s ? { ...s, orderId, status: 'quoted' } : s);
                   setProjectCreated({ projectNumber: res.data?.order?.projectNumber || '?' });
                 } catch (e) {
-                  alert('Could not start project: ' + (e?.response?.data?.message || e.message));
+                  await alertDialog({ title: 'Could not start project', message: e?.response?.data?.message || e.message });
                 } finally {
                   setStartingProject(false);
                 }
@@ -1071,8 +1071,8 @@ function EditableScript({
                 />
                 <Button
                   size="small"
-                  onClick={() => {
-                    if (window.confirm('Reset this back to the default script?')) onResetOverride();
+                  onClick={async () => {
+                    if (await confirmDialog({ message: 'Reset this back to the default script?', confirmLabel: 'Reset', danger: true })) onResetOverride();
                   }}
                   sx={{
                     textTransform: 'none', color: 'rgba(248,113,113,0.7)',
@@ -2417,7 +2417,7 @@ function MerchSeasonReminder({ onPick }) {
 // upload succeeded but booking failed (file still saved), or null if the owner
 // cancelled the amount prompt.
 async function bookFilingReceipt(hdr, file, { fileName, amountPrompt, defaultAmount, category, party, summary }) {
-  const raw = window.prompt(amountPrompt, (Number(defaultAmount) || 0).toFixed(2));
+  const raw = await promptDialog({ title: 'Amount paid', message: amountPrompt, defaultValue: (Number(defaultAmount) || 0).toFixed(2), confirmLabel: 'Save' });
   if (raw === null) return null;
   const amount = Number(String(raw).replace(/[^0-9.]/g, '')) || Number(defaultAmount) || 0;
   const fileDataUrl = await new Promise((resolve, reject) => {
@@ -2489,9 +2489,14 @@ function LlcAnnualReportReminder({ token }) {
       setFiling(false);
     }
   };
-  const onMarkFiledClick = () => {
+  const onMarkFiledClick = async () => {
     if (!data || filing) return;
-    if (window.confirm('Attach the filing confirmation?\n\nOK — choose the file (it books into Finances, then dismisses this reminder)\nCancel — mark filed without a receipt')) {
+    if (await confirmDialog({
+      title: 'Attach the filing confirmation?',
+      message: 'Choose the file — it books into Finances, then dismisses this reminder. Or mark it filed now without a receipt.',
+      confirmLabel: 'Choose file',
+      cancelLabel: 'File without receipt',
+    })) {
       fileRef.current && fileRef.current.click();
     } else {
       markFiled(null);
@@ -2579,10 +2584,15 @@ function NjTaxReminder({ token, onNavigate }) {
       setFiling(false);
     }
   };
-  const onMarkFiledClick = () => {
+  const onMarkFiledClick = async () => {
     if (!data || !data.periodKey || filing) return;
     // Receipt first (it lands in Finances), but never block the dismissal on it.
-    if (window.confirm('Attach the NJ filing confirmation?\n\nOK — choose the file (it saves to Finances receipts, then dismisses this reminder)\nCancel — mark filed without a receipt')) {
+    if (await confirmDialog({
+      title: 'Attach the NJ filing confirmation?',
+      message: 'Choose the file — it saves to Finances receipts, then dismisses this reminder. Or mark it filed now without a receipt.',
+      confirmLabel: 'Choose file',
+      cancelLabel: 'File without receipt',
+    })) {
       fileRef.current && fileRef.current.click();
     } else {
       markFiled(null);

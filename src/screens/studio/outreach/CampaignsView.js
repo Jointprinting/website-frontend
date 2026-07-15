@@ -20,6 +20,7 @@ import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen } from '../_shared';
+import { confirmDialog } from '../_dialog';
 import { EmptyState, Eyebrow, StageChip } from '../crm/_crm';
 import {
   StatusChip, campaignStatusMeta, renderPreview, hasSpintax, lintContent, SAMPLE_CONTEXT, MERGE_FIELDS,
@@ -48,8 +49,11 @@ function DraftSequenceDialog({ open, onClose, vertical, verticalList, stepsHaveC
     // Never overwrite hand-written steps without a confirm — and ask BEFORE the
     // AI call so cancelling costs nothing.
     if (stepsHaveContent) {
-      // eslint-disable-next-line no-alert
-      if (!window.confirm('Replace the steps currently in the editor with the AI draft?\n\nOnly this editor changes — nothing is saved until you hit Save, and nothing sends until you Launch.')) return;
+      if (!(await confirmDialog({
+        title: 'Replace the steps in the editor?',
+        message: 'The AI draft replaces the steps currently in the editor. Only this editor changes — nothing is saved until you hit Save, and nothing sends until you Launch.',
+        confirmLabel: 'Replace with draft',
+      }))) return;
     }
     setBusy(true);
     try {
@@ -610,9 +614,12 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                     {onRecoverSends && ((c.stats.failed || 0) + (c.stats.stopped || 0)) > 0 && (
                       <Tooltip title="Requeue leads dropped by a SENDER-side send error (SMTP down, auth, unverified sender) — undoes the wrongful suppression + do-not-email so the drip resumes. Real bounces and opt-outs stay blocked.">
                         <Button
-                          onClick={() => {
-                            // eslint-disable-next-line no-alert
-                            if (window.confirm('Requeue leads that were dropped by a sender-side send error?\n\nThis reverses only drops caused by an SMTP/sender problem — real bounces and opt-outs are kept blocked — and resumes the drip. Safe to run.')) onRecoverSends();
+                          onClick={async () => {
+                            if (await confirmDialog({
+                              title: 'Requeue sender-dropped leads?',
+                              message: 'This reverses only drops caused by an SMTP/sender problem — real bounces and opt-outs are kept blocked — and resumes the drip. Safe to run.',
+                              confirmLabel: 'Requeue dropped',
+                            })) onRecoverSends();
                           }}
                           startIcon={<ForwardToInboxOutlinedIcon sx={{ fontSize: 16 }} />}
                           sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: D.amber }}>
@@ -623,9 +630,13 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                     {onUnenrollAll && c.stats.enrolled > 0 && (
                       <Tooltip title="Remove everyone from this campaign so you can re-enroll fresh leads (keeps anyone already emailed)">
                         <Button
-                          onClick={() => {
-                            // eslint-disable-next-line no-alert
-                            if (window.confirm(`Unenroll all ${c.stats.enrolled} from "${c.name}"? Anyone already emailed is kept.`)) onUnenrollAll(c._id);
+                          onClick={async () => {
+                            if (await confirmDialog({
+                              title: 'Unenroll all?',
+                              message: `Unenroll all ${c.stats.enrolled} from "${c.name}"? Anyone already emailed is kept.`,
+                              confirmLabel: 'Unenroll all',
+                              danger: true,
+                            })) onUnenrollAll(c._id);
                           }}
                           startIcon={<PersonRemoveOutlinedIcon sx={{ fontSize: 16 }} />}
                           sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
@@ -636,9 +647,13 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                     {onReset && c.stats.enrolled > 0 && (
                       <Tooltip title="Full fresh start — clears the WHOLE roster (including already-emailed) so the campaign re-runs from email 1. Opt-outs and CRM contacts are kept.">
                         <Button
-                          onClick={() => {
-                            // eslint-disable-next-line no-alert
-                            if (window.confirm(`Reset "${c.name}"?\n\nThis clears ALL ${c.stats.enrolled} enrollments — including anyone already emailed — so the campaign re-runs cleanly from email 1 as leads refill.\n\nOpt-outs/unsubscribes and every CRM contact are kept. Old-run stats are cleared.`)) onReset(c._id);
+                          onClick={async () => {
+                            if (await confirmDialog({
+                              title: `Reset "${c.name}"?`,
+                              message: `This clears ALL ${c.stats.enrolled} enrollments — including anyone already emailed — so the campaign re-runs cleanly from email 1 as leads refill.\n\nOpt-outs/unsubscribes and every CRM contact are kept. Old-run stats are cleared.`,
+                              confirmLabel: 'Reset campaign',
+                              danger: true,
+                            })) onReset(c._id);
                           }}
                           startIcon={<RestartAltOutlinedIcon sx={{ fontSize: 16 }} />}
                           sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
@@ -649,9 +664,13 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                     {onDelete && (
                       <Tooltip title="Delete this campaign for good — removes it and any enrollments. Opt-outs and CRM contacts are kept.">
                         <Button
-                          onClick={() => {
-                            // eslint-disable-next-line no-alert
-                            if (window.confirm(`Delete "${c.name}" for good?\n\nThis removes the campaign${c.stats.enrolled ? ` and all ${c.stats.enrolled} enrollments` : ''}. Opt-outs and CRM contacts are kept. This can't be undone.`)) onDelete(c._id);
+                          onClick={async () => {
+                            if (await confirmDialog({
+                              title: `Delete "${c.name}" for good?`,
+                              message: `This removes the campaign${c.stats.enrolled ? ` and all ${c.stats.enrolled} enrollments` : ''}. Opt-outs and CRM contacts are kept. This can't be undone.`,
+                              confirmLabel: 'Delete',
+                              danger: true,
+                            })) onDelete(c._id);
                           }}
                           startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
                           sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: '#f87171' }}>
