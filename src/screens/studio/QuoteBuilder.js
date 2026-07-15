@@ -1219,7 +1219,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
                   position: 'sticky', left: 0, zIndex: 1,
                   opacity: bLine.hiddenFromClient ? 0.5 : 1,
-                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 96px 26px 30px' }}>
+                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 120px 26px 30px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
