@@ -44,6 +44,7 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
+import { sortMockupTiles, mockupBadge } from './_mockupNumbers';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1367,7 +1368,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
   // Keep unresolved tiles in — they render as "NOT IN STUDIO" amber boxes
   // and the user uses that as a flag for "this is a legacy mockup from my
   // old GDrive system, not in jpstudio yet".
-  const ownTiles = (project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
+  // Ordered by mockup number (design → colour → edit) so the 4 shown are the
+  // sensible lead tiles, and colours/edits read in sequence — same grouping as
+  // the drawer grid.
+  const ownTiles = sortMockupTiles(project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
   let mockupTiles = ownTiles;
   let usingFallback = false;
   if (mockupTiles.length === 0) {
@@ -2474,7 +2478,10 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           // Drop tiles that don't resolve to a studio item — the silent
           // auto-link effect prunes them from mockupNumbers shortly after, so
           // showing an orange "NOT IN STUDIO" placeholder just confuses.
-          const tiles = [...explicitTiles.filter(t => t.item), ...autoTiles];
+          // Then ORDER by mockup number so a design's colours (A, B, C…) and each
+          // colour's edits (#150A, #150A2…) sit adjacent — the grouping Nate asked
+          // for, derived from the number itself (promo/unparseable tiles sort last).
+          const tiles = sortMockupTiles([...explicitTiles.filter(t => t.item), ...autoTiles], t => t.num);
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
@@ -2596,14 +2603,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                           )}
                         </Box>
                       )}
-                      <Box sx={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0,
-                        bgcolor: 'rgba(0,0,0,0.7)', color: B.white,
-                        fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
-                        textAlign: 'center', py: 0.2,
-                      }}>
-                        {t.num}
-                      </Box>
+                      {(() => {
+                        // Colour letter / edit badge, derived from the number.
+                        // Edits (#150A2) get a green bar so a revision reads at a
+                        // glance, grouped with its colour-original (#150A).
+                        const badge = mockupBadge(t.num);        // 'A', 'A·v2', or ''
+                        const isEdit = badge.includes('·v');
+                        return (
+                          <Box sx={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            bgcolor: isEdit ? 'rgba(74,222,128,0.88)' : 'rgba(0,0,0,0.7)',
+                            color: isEdit ? '#052012' : B.white,
+                            fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
+                            textAlign: 'center', py: 0.2,
+                          }}
+                          title={isEdit ? `Edit — revision ${badge} of colour ${badge.split('·')[0]}` : (badge ? `Colour ${badge}` : '')}>
+                            {t.num}
+                          </Box>
+                        );
+                      })()}
                     </Box>
                   );
                   })}
