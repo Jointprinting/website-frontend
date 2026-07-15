@@ -33,6 +33,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
+import { confirmDialog, promptDialog } from '../_dialog';
 import {
   dayKey, stageMeta, isHiddenTag, boardColumnMeta, BOARD_COLUMN_TO_ORDER_STATUS,
   followUpStatus,
@@ -656,7 +657,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     if (!deal || !deal._id) return;
     // Confirm-gated: closing a deal shouldn't happen on a stray tap (Win is
     // already un-clickable — it happens automatically on delivery).
-    if (!window.confirm(`Mark "${deal.title || deal.dealNumber || 'this deal'}" as LOST?`)) return;
+    if (!(await confirmDialog({ title: 'Mark deal as lost?', message: `"${deal.title || deal.dealNumber || 'this deal'}" will be marked LOST.`, confirmLabel: 'Mark lost', danger: true }))) return;
     try {
       await axios.post(`${dealsBase}/${deal._id}/lose`, { reason }, authHdr);
       flash('Deal marked lost.');
@@ -678,9 +679,11 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const startJob = React.useCallback(async (company, { openDealsCount = 0 } = {}) => {
     const key = company && company.companyKey;
     if (!key) return;
-    if (openDealsCount > 0 && !window.confirm(
-      `${company.companyName || 'This company'} already has ${openDealsCount} open deal${openDealsCount > 1 ? 's' : ''} — start ANOTHER job (a new project #)?`
-    )) return;
+    if (openDealsCount > 0 && !(await confirmDialog({
+      title: 'Start another job?',
+      message: `${company.companyName || 'This company'} already has ${openDealsCount} open deal${openDealsCount > 1 ? 's' : ''}. Start ANOTHER job (a new project #)?`,
+      confirmLabel: 'Start job',
+    }))) return;
     try {
       const res = await axios.post(`${dealsBase}/start-job`, {
         companyKey: key, companyName: company.companyName || '',
@@ -716,7 +719,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // eslint-disable-next-line no-unused-vars
   const revokePortal = React.useCallback(async (companyKey) => {
     if (!companyKey) return;
-    if (!window.confirm('Revoke this company’s portal link? The URL stops working immediately (you can mint a fresh one anytime).')) return;
+    if (!(await confirmDialog({ title: 'Revoke portal link?', message: 'The URL stops working immediately. You can mint a fresh one anytime.', confirmLabel: 'Revoke', danger: true }))) return;
     try {
       await axios.delete(`${base}/${encodeURIComponent(companyKey)}/portal`, authHdr);
       flash('Portal link revoked.');
@@ -1069,7 +1072,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // tag (case-insensitive de-dupe) and PATCHes the whole tags array, the same
   // shape the detail TagEditor commits.
   const addTagToCompany = React.useCallback(async (key, currentTags) => {
-    const raw = window.prompt('Add a tag');
+    const raw = await promptDialog({ title: 'Add a tag', placeholder: 'Tag name' });
     const t = (raw || '').trim();
     if (!t) return;
     const existing = Array.isArray(currentTags) ? currentTags : [];

@@ -33,6 +33,7 @@ import {
   D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
   fmtRelative, useMobileFullScreen, scrollbar, ARCHIVE_TTL_DAYS, purgeDaysLeft,
 } from './_shared';
+import { confirmDialog } from './_dialog';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/newsletter`;
@@ -328,7 +329,7 @@ export default function NewsletterTab({ token, onBack }) {
   };
 
   const sendReal = async () => {
-    if (!window.confirm(`Send "${draft.subject}" to ${audiencePreview ? audiencePreview.count : 'all'} client${audiencePreview && audiencePreview.count === 1 ? '' : 's'}? This can't be undone.`)) return;
+    if (!(await confirmDialog({ title: 'Send newsletter?', message: `Send "${draft.subject}" to ${audiencePreview ? audiencePreview.count : 'all'} client${audiencePreview && audiencePreview.count === 1 ? '' : 's'}? This can't be undone.`, confirmLabel: 'Send' }))) return;
     setBusy(true);
     try {
       const { data } = await axios.post(`${API}/${openId}/send`, {}, authHdr);

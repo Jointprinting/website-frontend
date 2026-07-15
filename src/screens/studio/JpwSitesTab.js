@@ -41,6 +41,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import config from '../../config.json';
 import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative } from './_shared';
+import { confirmDialog, promptDialog } from './_dialog';
 import { TEMPLATES, getTemplate } from '../../webworks/templates';
 import JpLoader from '../../common/JpLoader';
 
@@ -791,7 +792,7 @@ export default function JpwSitesTab({ token }) {
   };
 
   const removeSite = async (site) => {
-    if (!window.confirm(`Delete "${site.name}" permanently? The preview link stops working immediately.`)) return;
+    if (!(await confirmDialog({ title: 'Delete site?', message: `Delete "${site.name}" permanently? The preview link stops working immediately.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await axios.delete(`${API}/${site._id}`, authHdr);
       setSites((arr) => arr.filter((s) => s._id !== site._id));
@@ -862,7 +863,7 @@ export default function JpwSitesTab({ token }) {
       await navigator.clipboard.writeText(url);
       flash('Preview link copied — send it to the prospect');
     } catch (_) {
-      window.prompt('Copy the preview link:', url);
+      await promptDialog({ title: 'Copy the preview link', message: 'Select and copy this link:', defaultValue: url });
     }
   };
 
