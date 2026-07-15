@@ -24,6 +24,7 @@ import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
+import { alertDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import ConfirmationDocument, { DOC } from '../ConfirmationDocument';
 
@@ -332,7 +333,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alert(`PDF generation failed: ${e.response?.data?.message || e.message}.`);
+      alertDialog(`PDF generation failed: ${e.response?.data?.message || e.message}.`);
     } finally {
       setPdfBusy(false);
     }
@@ -347,7 +348,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     if (!onShareApproval) return;
     const issues = shareIssuesFor(local);
     if (issues.length > 0) {
-      alert(issues.length === 1 ? issues[0]
+      alertDialog(issues.length === 1 ? issues[0]
         : `This confirmation isn't ready to share:\n\n• ${issues.join('\n• ')}`);
       return;
     }
@@ -371,7 +372,7 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     if (!onPublish) return;
     const issues = shareIssuesFor(local);
     if (issues.length > 0) {
-      alert(issues.length === 1 ? issues[0]
+      alertDialog(issues.length === 1 ? issues[0]
         : `This confirmation isn't ready to push:\n\n• ${issues.join('\n• ')}`);
       return;
     }
@@ -950,7 +951,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
       const dataUrl = await compressImageToDataUrl(file);
       onUpdate({ customMockupDataUrl: dataUrl, mockupNum: '' });
     } catch (err) {
-      alert(`Couldn't process image: ${err.message || err}`);
+      alertDialog(`Couldn't process image: ${err.message || err}`);
     }
     e.target.value = '';
   };
@@ -966,7 +967,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
       })));
       onUpdate({ mockupSnapshots: [...(item.mockupSnapshots || []), ...snaps] });
     } catch (err) {
-      alert(`Couldn't process images: ${err.message || err}`);
+      alertDialog(`Couldn't process images: ${err.message || err}`);
     }
     e.target.value = '';
   };
@@ -1140,7 +1141,7 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
                 <Button size="small"
                   onClick={() => {
                     const first = item.sizes.find(s => Number(s.unitPrice) > 0);
-                    if (!first) { alert('Type a unit price in any size first, then click "$ to all" to copy it across.'); return; }
+                    if (!first) { alertDialog('Type a unit price in any size first, then click "$ to all" to copy it across.'); return; }
                     onUpdate({ sizes: item.sizes.map(s => ({ ...s, unitPrice: first.unitPrice })) });
                   }}
                   sx={{ color: D.muted, fontSize: 10, textTransform: 'none', borderRadius: 999, '&:hover': { color: D.green } }}>
