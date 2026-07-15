@@ -1769,15 +1769,25 @@ function PreorderSection({ order, authHdr, onToast }) {
     const fromQuote = (order.quoteLines || []).filter((l) => l && l.accepted).map((l) => l.description).filter(Boolean);
     const labels = [...new Set(conf.length ? conf : fromQuote)].slice(0, 6);
     setRows(labels.length
-      ? labels.map((l) => ({ label: l, sizes: 'S, M, L, XL, 2XL' }))
-      : [{ label: '', sizes: 'S, M, L, XL, 2XL' }]);
+      ? labels.map((l) => ({ label: l, sizes: 'S, M, L, XL, 2XL', variants: [] }))
+      : [{ label: '', sizes: 'S, M, L, XL, 2XL', variants: [] }]);
     setTitle(`${order.companyName || order.clientName || 'Merch'} — preorder`);
     setNote(''); setPickup(''); setDays(14); setMoq(0); setCreating(true);
   };
 
   const create = async () => {
     const items = rows
-      .map((r) => ({ label: (r.label || '').trim(), sizes: (r.sizes || '').split(',').map((s) => s.trim()).filter(Boolean) }))
+      .map((r) => ({
+        label: (r.label || '').trim(),
+        sizes: (r.sizes || '').split(',').map((s) => s.trim()).filter(Boolean),
+        variants: (r.variants || [])
+          .map((v) => ({
+            name: (v.name || '').trim(),
+            price: Number(v.price) || 0,
+            colors: (v.colors || '').split(',').map((c) => c.trim()).filter(Boolean),
+          }))
+          .filter((v) => v.name),
+      }))
       .filter((r) => r.label);
     if (!title.trim() || !items.length) { onToast('Give it a title and at least one item.', 'error'); return; }
     setBusy(true);
@@ -1809,6 +1819,11 @@ function PreorderSection({ order, authHdr, onToast }) {
     catch (e) { onToast(e?.response?.data?.message || 'Could not update the link.', 'error'); }
   };
 
+  // Brand-variant editors for an item row (optional per-design pricing).
+  const addV = (i) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, variants: [...(x.variants || []), { name: '', price: '', colors: '' }] } : x)));
+  const updV = (i, vi, patch) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, variants: (x.variants || []).map((v, k) => (k === vi ? { ...v, ...patch } : v)) } : x)));
+  const delV = (i, vi) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, variants: (x.variants || []).filter((_, k) => k !== vi) } : x)));
+
   const tf = { '& .MuiInputBase-root': { color: B.white, fontSize: 12, bgcolor: B.bg }, '& fieldset': { borderColor: `${B.border} !important` } };
   return (
     <Box sx={{ px: 2.5, pb: 2 }}>
@@ -1834,17 +1849,34 @@ function PreorderSection({ order, authHdr, onToast }) {
             <TextField size="small" fullWidth value={pickup} onChange={(e) => setPickup(e.target.value)}
               placeholder="Pickup location (optional) — store name + address" sx={tf} />
             {rows.map((r, i) => (
-              <Stack key={i} direction="row" gap={1}>
-                <TextField size="small" fullWidth value={r.label} placeholder="Item — e.g. Staff tee, 3-color front"
-                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} sx={tf} />
-                <TextField size="small" value={r.sizes} placeholder="Sizes (blank = none)" sx={{ ...tf, width: 170, flexShrink: 0 }}
-                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, sizes: e.target.value } : x)))} />
-                <Button size="small" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} disabled={rows.length === 1}
-                  sx={{ color: B.muted, minWidth: 30, fontSize: 14 }}>✕</Button>
-              </Stack>
+              <Box key={i} sx={{ border: `1px solid ${B.faint}`, borderRadius: 1, p: 1 }}>
+                <Stack direction="row" gap={1}>
+                  <TextField size="small" fullWidth value={r.label} placeholder="Item — e.g. Staff tee, 3-color front"
+                    onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} sx={tf} />
+                  <TextField size="small" value={r.sizes} placeholder="Sizes (blank = none)" sx={{ ...tf, width: 150, flexShrink: 0 }}
+                    onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, sizes: e.target.value } : x)))} />
+                  <Button size="small" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} disabled={rows.length === 1}
+                    sx={{ color: B.muted, minWidth: 30, fontSize: 14 }}>✕</Button>
+                </Stack>
+                {/* Brands & pricing (optional) — each brand its own customer price + colors */}
+                <Box sx={{ pl: 0.5, mt: (r.variants || []).length ? 0.75 : 0.25 }}>
+                  {(r.variants || []).map((v, vi) => (
+                    <Stack key={vi} direction="row" gap={0.75} alignItems="center" sx={{ mb: 0.5 }}>
+                      <TextField size="small" value={v.name} placeholder="Brand — e.g. Gildan 5000" sx={{ ...tf, flex: 1 }}
+                        onChange={(e) => updV(i, vi, { name: e.target.value })} />
+                      <TextField size="small" value={v.price} type="number" placeholder="$/ea" sx={{ ...tf, width: 72, flexShrink: 0 }}
+                        inputProps={{ min: 0, step: '0.01' }} onChange={(e) => updV(i, vi, { price: e.target.value })} />
+                      <TextField size="small" value={v.colors} placeholder="Colors (comma sep)" sx={{ ...tf, width: 150, flexShrink: 0 }}
+                        onChange={(e) => updV(i, vi, { colors: e.target.value })} />
+                      <Button size="small" onClick={() => delV(i, vi)} sx={{ color: B.muted, minWidth: 24, fontSize: 13 }}>✕</Button>
+                    </Stack>
+                  ))}
+                  <Button size="small" onClick={() => addV(i)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none' }}>+ brand / price</Button>
+                </Box>
+              </Box>
             ))}
             <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-              <Button size="small" onClick={() => setRows((rs) => [...rs, { label: '', sizes: 'S, M, L, XL, 2XL' }])}
+              <Button size="small" onClick={() => setRows((rs) => [...rs, { label: '', sizes: 'S, M, L, XL, 2XL', variants: [] }])}
                 sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>+ item</Button>
               <Box sx={{ flex: 1 }} />
               <Typography sx={{ color: B.muted, fontSize: 11 }} title="Minimum units for the drop to be a go. The public hype bar stays hidden until it's passed, then reveals as social proof. 0 = no minimum.">MOQ</Typography>
@@ -1884,6 +1916,9 @@ function PreorderSection({ order, authHdr, onToast }) {
                   <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 140 }} noWrap>{l.title}</Typography>
                   <Typography sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
                     {l.tally.people} in · {l.tally.totalQty} units
+                    {l.tally.revenue > 0 && (
+                      <Box component="span" sx={{ color: B.green, fontWeight: 700 }}>{' · '}${Math.round(l.tally.revenue).toLocaleString()}</Box>
+                    )}
                     {l.moq > 0 && (
                       <Box component="span" title="Minimum for the drop to be a go. The public hype bar reveals once this is passed."
                         sx={{ color: l.tally.totalQty >= l.moq ? B.green : '#fbbf24', fontWeight: 700 }}>
