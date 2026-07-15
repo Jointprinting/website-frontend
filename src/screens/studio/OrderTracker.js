@@ -120,6 +120,10 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [mockups,       setMockups]       = useState([]);
   const [logos,         setLogos]         = useState([]);
   const [stats,         setStats]         = useState({});
+  // Late-order flags from /orders/attention, keyed by order _id → { flag, ageDays }.
+  // Surfaced as a quiet inline badge on each card (running long ≥2wk, possibly late
+  // ≥3wk) — the "don't let a job rot" signal, on the board where he actually works.
+  const [attention,     setAttention]     = useState({});
   const [collectedThisYear, setCollectedThisYear] = useState(null);  // cash from finance ledger (matches Finances tab)
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState('');
@@ -167,7 +171,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     // We commit each settled response independently — if /dashboard 500s
     // the project list still renders, just with stale stats.
     const yr = new Date().getFullYear();
-    const [pr, mk, ds, lg, fn] = await Promise.allSettled([
+    const [pr, mk, ds, lg, fn, at] = await Promise.allSettled([
       axios.get(`${base}/orders/projects`, authHdr),
       axios.get(`${base}/studio/library/mockups?summary=1`, authHdr),
       axios.get(`${base}/orders/dashboard`, authHdr),
@@ -178,6 +182,9 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       // instead of drifting from an independent per-order accrual. "Delivered
       // this year" (order value shipped) stays alongside it as a distinct stat.
       axios.get(`${base}/finances/summary?year=${yr}`, authHdr),
+      // Late-order flags (running long ≥2wk / possibly late ≥3wk) for the inline
+      // card badge — the backend attention feed, surfaced on the board.
+      axios.get(`${base}/orders/attention`, authHdr),
     ]);
     if (pr.status === 'fulfilled') setProjects(pr.value.data.projects || []);
     else console.error('loadProjects /orders/projects failed:', pr.reason?.message || pr.reason);
@@ -197,6 +204,13 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     // hides rather than showing a misleading $0 next to a non-zero delivered value.
     if (fn.status === 'fulfilled') setCollectedThisYear(Number(fn.value.data?.income) || 0);
     else setCollectedThisYear(null);
+    // Late-order flags → { [id]: { flag, ageDays } }. A broken feed just means no
+    // badges (never blanks the board — same allSettled discipline as the rest).
+    if (at.status === 'fulfilled') {
+      const map = {};
+      for (const o of (at.value.data?.orders || [])) if (o && o._id) map[o._id] = { flag: o.flag, ageDays: o.ageDays };
+      setAttention(map);
+    } else setAttention({});
     setLoading(false);
   }, [authHdr]);
 
@@ -1005,6 +1019,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                 lookupMockup={lookupMockup}
                 companyMockupPool={companyMockupPool}
                 logo={logoFor(p)}
+                attention={attention[p._id]}
                 selectMode={selectMode}
                 selected={selectedIds.includes(p._id)}
                 bindProps={selectMode ? null : bindOrder(p)}
@@ -1341,7 +1356,7 @@ function Stat({ label, value, accent, hint }) {
   );
 }
 
-function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, selectMode, selected, bindProps }) {
+function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention, onClick, selectMode, selected, bindProps }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
 
@@ -1392,6 +1407,20 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, onClick, 
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {selected && <CheckIcon sx={{ fontSize: 15, color: B.greenDk }} />}
+          </Box>
+        )}
+        {attention && (attention.flag === 'possibly_late' || attention.flag === 'running_long') && (
+          <Box
+            title={attention.flag === 'possibly_late'
+              ? `Possibly late — placed ${attention.ageDays} days ago (turnaround is ~2–3 weeks)`
+              : `Running long — placed ${attention.ageDays} days ago`}
+            sx={{
+              position: 'absolute', top: 8, left: selectMode ? 38 : 8, zIndex: 3,
+              px: 0.75, py: '3px', borderRadius: 1, lineHeight: 1,
+              bgcolor: attention.flag === 'possibly_late' ? 'rgba(248,113,113,0.94)' : 'rgba(224,169,78,0.94)',
+              color: '#1a1205', fontSize: 9.5, fontWeight: 800, letterSpacing: 0.2,
+            }}>
+            {attention.ageDays}d · {attention.flag === 'possibly_late' ? 'possibly late' : 'running long'}
           </Box>
         )}
         {usingFallback && (
