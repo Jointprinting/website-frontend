@@ -42,7 +42,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, normOrderNo, deriveCompanyKey } from './_shared';
+import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -1588,6 +1588,46 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
   );
 }
 
+// The "share for approval" step, made state-aware. Once the link is out we don't
+// keep nagging "Share approval link" — we reflect what the client actually did
+// (emailed / opened / asked for changes) so the drawer feels like it KNOWS what's
+// happening. stage: 'pick' (client still choosing options) | 'approve' (signing
+// off the built confirmation). Reads the superseded-aware approvalActivity() so a
+// link reset cleanly returns it to the plain "Share approval link" ask.
+function shareStep(project, stage) {
+  const act = approvalActivity(project);
+  const goal = stage === 'pick' ? 'pick their options and sign off the designs' : 'approve';
+
+  // 1) Client asked for changes — the loudest signal: revise, then re-share.
+  if (act.requestedChanges) {
+    const when = act.lastChangeAt ? fmtRelative(act.lastChangeAt) : 'recently';
+    const msg = act.lastChangeMsg ? ` “${act.lastChangeMsg}”` : '';
+    return { key: 'share-changes', verb: 'Client asked for changes',
+      why: `They requested changes ${when}${msg}. Revise, then re-share the link.`,
+      cta: 'Re-share the link', action: 'share', tone: '#fbbf24' };
+  }
+  // 2) They've opened it — the ball's in their court; let the owner nudge.
+  if (act.viewCount > 0) {
+    const when = act.lastViewAt ? fmtRelative(act.lastViewAt) : 'recently';
+    const times = act.viewCount > 1 ? ` ${act.viewCount}×` : '';
+    return { key: 'share-viewed', verb: `Client opened the link${times}`,
+      why: `Last opened ${when} — waiting on them to ${goal}. Nudge them or re-send.`,
+      cta: 'Re-send / copy link', action: 'share', tone: '#2dd4bf' };
+  }
+  // 3) Emailed but not opened yet — sent and waiting.
+  if (act.emailedCount > 0) {
+    const when = act.lastSentAt ? fmtRelative(act.lastSentAt) : 'recently';
+    const who = act.emailedCount > 1 ? `${act.emailedCount} people` : 'them';
+    return { key: 'share-sent', verb: 'Shared — waiting on the client',
+      why: `Sent to ${who} ${when}, not opened yet. Give it a day, then nudge or re-send.`,
+      cta: 'Re-send / copy link', action: 'share', tone: '#60a5fa' };
+  }
+  // 4) Never shared this cycle — the original ask.
+  return stage === 'pick'
+    ? { key: 'share-pick', verb: 'Share for the client to pick', why: 'Quote is ready — send the link so they choose options and sign off the designs.', cta: 'Share approval link', action: 'share', tone: '#4ade80' }
+    : { key: 'share-approve', verb: 'Send it for approval', why: 'Confirmation is built — share the link so the client can approve.', cta: 'Share approval link', action: 'share', tone: '#4ade80' };
+}
+
 // ── Next action ───────────────────────────────────────────────────────────────
 // Reads where the project is in its lifecycle (quote -> confirmation -> approval
 // -> paid -> production -> shipped -> delivered) and returns the ONE thing to do
@@ -1618,9 +1658,9 @@ function computeNextAction(project) {
     if (!hasConf) {
       return clientPicked
         ? { key: 'confirmation', verb: 'Build the confirmation', why: 'Client picked their options — turn it into the confirmation to approve.', cta: 'Open confirmation builder', action: 'confirmation', tone: '#a78bfa' }
-        : { key: 'share-pick', verb: 'Share for the client to pick', why: 'Quote is ready — send the link so they choose options and sign off the designs.', cta: 'Share approval link', action: 'share', tone: '#4ade80' };
+        : shareStep(project, 'pick');
     }
-    return { key: 'share-approve', verb: 'Send it for approval', why: 'Confirmation is built — share the link so the client can approve.', cta: 'Share approval link', action: 'share', tone: '#4ade80' };
+    return shareStep(project, 'approve');
   }
 
   // Approved (by client sign-off or status): collect payment, then move it into
