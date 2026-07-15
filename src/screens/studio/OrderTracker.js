@@ -43,6 +43,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
+import { confirmDialog, promptDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -410,7 +411,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const removeLogo = async (project) => {
     const key = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
     if (!key) return;
-    if (!window.confirm('Remove the logo for this company?')) return;
+    if (!(await confirmDialog({ title: 'Remove logo?', message: 'Remove the logo for this company?', confirmLabel: 'Remove', danger: true }))) return;
     try {
       await axios.delete(`${base}/client-logos/${encodeURIComponent(key)}`, authHdr);
       setLogos(prev => prev.filter(l => l.companyKey !== key));
@@ -518,7 +519,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   })), [registerFallback, onBack]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this project? This cannot be undone.')) return;
+    if (!(await confirmDialog({ title: 'Delete project?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await axios.delete(`${base}/orders/${id}`, authHdr);
       setProjects(prev => prev.filter(p => p._id !== id));
@@ -555,7 +556,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
   const handleCleanupDelete = async (ids) => {
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} empty project${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: 'Delete empty projects?', message: `Delete ${ids.length} empty project${ids.length === 1 ? '' : 's'}? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await axios.post(`${base}/orders/cleanup-delete`, { ids }, authHdr);
       await loadProjects();
@@ -564,7 +565,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   };
   const handleMergeCompany = async (from, to) => {
     if (!from || !to || from === to) return;
-    if (!window.confirm(`Merge "${from}" into "${to}"?\n\nEvery project, mockup, and logo currently under "${from}" will be re-pointed to "${to}".`)) return;
+    if (!(await confirmDialog({ title: `Merge "${from}" into "${to}"?`, message: `Every project, mockup, and logo currently under "${from}" will be re-pointed to "${to}".`, confirmLabel: 'Merge' }))) return;
     try {
       const r = await axios.post(`${base}/orders/merge-company`, { from, to }, authHdr);
       await loadProjects();
@@ -638,7 +639,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const handleBulkUpdate = async (patch, label) => {
     if (selectedIds.length === 0) return;
     const n = selectedIds.length;
-    if (!window.confirm(`${label} — apply to ${n} project${n === 1 ? '' : 's'}?`)) return;
+    if (!(await confirmDialog({ message: `${label} — apply to ${n} project${n === 1 ? '' : 's'}?`, confirmLabel: 'Apply' }))) return;
     setBulkSaving(true);
     try {
       for (const id of selectedIds) {
@@ -1204,7 +1205,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           }
         }}
         onStartFresh={async () => {
-          if (!window.confirm('Start a fresh link? The current link stops working and any approvals so far reset. Use this when the quote or proof has changed.')) return;
+          if (!(await confirmDialog({ title: 'Start a fresh link?', message: 'The current link stops working and any approvals so far reset. Use this when the quote or proof has changed.', confirmLabel: 'Start fresh', danger: true }))) return;
           setShareDialog(s => ({ ...s, busy: true, err: '', notice: '' }));
           try {
             const ttlDays = Math.max(1, Math.min(365, Math.round(Number(shareDialog.ttl) || 7)));
@@ -2004,7 +2005,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       const co = project.companyName || project.clientName || '';
       // Name the product (e.g. "Plastic Grinder"). Editable later in the Studio's
       // title field. Cancel aborts; blank falls back to a company default.
-      const typed = window.prompt('Product name for this mockup (e.g. Plastic Grinder):', '');
+      const typed = await promptDialog({ title: 'Name this mockup', message: 'Product name for this mockup:', placeholder: 'e.g. Plastic Grinder' });
       if (typed === null) return;
       const productName = String(typed).trim() || `${co || 'Promo'} product`;
       const asg = await axios.post(`${base}/orders/${project._id}/mockups/assign`, {}, authHdr);
