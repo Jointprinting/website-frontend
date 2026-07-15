@@ -3,6 +3,10 @@
 // surfaces (ClientHubTab, DashboardView, future Projects/People views).
 
 import useMediaQuery from '@mui/material/useMediaQuery';
+// Sales-tax math lives in ONE dependency-free module shared with the client-facing
+// ConfirmationDocument, so the Studio's tax and the client's tax can't drift.
+// Re-exported below so every `from './_shared'` importer keeps working unchanged.
+import { roundCents, isTaxCustomLine, confLocationTax } from '../../common/confTax';
 
 // True on phone-width viewports — spread onto a <Dialog fullScreen={…}> so a
 // content-heavy modal takes the whole screen on a phone instead of a cramped,
@@ -205,52 +209,10 @@ export const hasConfirmation = (conf) =>
 // models/Order.js STATE_TAX_RATES.
 export const STATE_TAX_RATES = { NJ: 6.625 };
 
-// Round-half-up to cents — mirrors backend models/Order.js roundCents. Snaps a
-// grand total / tax line to a real cent amount so floating-point sums don't
-// drift sub-cent. Number.EPSILON nudges true *.xx5 values up to the right cent.
-export const roundCents = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
-
-// Is this add-on customLine a SALES-TAX line? Mirrors backend isTaxCustomLine:
-// an explicit `isTax` flag wins; otherwise a label mentioning "tax". Used to drop
-// a legacy tax customLine when per-location tax is active, so a job is taxed once.
-export const isTaxCustomLine = (line) =>
-  !!line && (line.isTax === true || /tax/i.test(String(line.label || '')));
-
-// Per-location sales tax for a multi-ship-to confirmation. ACTIVE only when at
-// least one shipTo carries a taxRate > 0 — otherwise a no-op, so totals stay
-// byte-identical to a single-location order. Each item's merchandise revenue
-// (Σ qty×unitPrice) is allocated to a location PROPORTIONALLY by its share of
-// the item's units (locationItemRevenue = itemRevenue × allocQty / itemTotalQty),
-// summed into the location's taxable subtotal, then × taxRate%. Tax is on
-// MERCHANDISE only (not the add-on customLines), the correct sales-tax base.
-// MUST mirror the backend models/Order.js computeLocationTax exactly.
-export function confLocationTax(conf) {
-  const n = (v) => Number(v) || 0;
-  const shipTos = (conf && Array.isArray(conf.shipTos)) ? conf.shipTos : [];
-  const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
-  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
-  const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
-  const lines = taxed.map((st) => {
-    const subtotal = items.reduce((sum, it) => {
-      // NJ clothing exemption — mirrors backend computeLocationTax: a taxExempt
-      // item (apparel) contributes nothing to the taxable base; promos still tax.
-      if (it && it.taxExempt) return sum;
-      const itemRevenue = ((it && it.sizes) || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
-      const itemQty = ((it && it.sizes) || []).reduce((q, sz) => q + n(sz.qty), 0);
-      if (itemQty <= 0) return sum;
-      const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
-      // Clamp a bad allocation share to [0,1] so the taxed base can't exceed the
-      // item's real revenue (H5). Mirrors backend computeLocationTax.
-      const share = allocQty <= 0 ? 0 : (allocQty >= itemQty ? 1 : allocQty / itemQty);
-      return sum + itemRevenue * share;
-    }, 0);
-    const rate = n(st.taxRate);
-    // Round each line to cents (H4) so the displayed tax and the summed total are
-    // real cent amounts.
-    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, subtotal, rate, value: roundCents(subtotal * rate / 100) };
-  });
-  return { active: true, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
-}
+// roundCents / isTaxCustomLine / confLocationTax are the canonical sales-tax
+// primitives — defined once in common/confTax.js and re-exported here so the
+// Studio and the client document share the exact same math. See the import above.
+export { roundCents, isTaxCustomLine, confLocationTax };
 
 export function confRevenue(conf) {
   if (!conf || !Array.isArray(conf.items)) return 0;
