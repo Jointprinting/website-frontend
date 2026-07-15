@@ -587,6 +587,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleOpenAutoLink = async () => {
     setAutoLinkOpen(true);
     setAutoLinkLoading(true);
@@ -692,6 +693,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleOpenHealth = async () => {
     setHealthOpen(true);
     setHealthLoading(true);
@@ -715,6 +717,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [dupData, setDupData] = useState(null);
   const [dupBusy, setDupBusy] = useState(false);
   const [dupBatch, setDupBatch] = useState(() => localStorage.getItem('jp-orderdedup-batch') || '');
+  // eslint-disable-next-line no-unused-vars
   const handleOpenDup = async () => {
     setDupOpen(true); setDupLoading(true); setDupData(null);
     try {
@@ -865,29 +868,21 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}>Analytics</ListItemText>
             </MenuItem>
             <Divider sx={{ borderColor: B.border }} />
-            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenHealth(); }}>
-              <ListItemIcon sx={{ color: B.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
-              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
-                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
-                secondary="Find missing / orphan mockups">Mockup health</ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenAutoLink(); }}>
-              <ListItemIcon sx={{ color: B.muted }}><AutoFixHighIcon fontSize="small" /></ListItemIcon>
-              <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
-                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
-                secondary="Bulk-link orphan mockups">Auto-link mockups</ListItemText>
-            </MenuItem>
+            {/* UPS runs itself hourly; this is the manual "check now". Mockup
+                health / auto-link retired — mockups aren't imported anymore. */}
             <MenuItem onClick={() => { setMoreAnchor(null); handleUpsCheck(); }}>
               <ListItemIcon sx={{ color: B.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
                 secondary="Sweep UPS links → auto-deliver">Check UPS now</ListItemText>
             </MenuItem>
-            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenDup(); }}>
+            {/* The rich cleanup: empty placeholders, name collisions, and the
+                revenue-twins (2+ collected orders on one company). */}
+            <MenuItem onClick={() => { setMoreAnchor(null); handleOpenCleanup(); }}>
               <ListItemIcon sx={{ color: B.muted }}><CleaningServicesOutlinedIcon fontSize="small" /></ListItemIcon>
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
-                secondary="Same job entered twice → keep one">Clean duplicate orders</ListItemText>
+                secondary="Double-counts, empties, name variants">Clean up orders</ListItemText>
             </MenuItem>
           </Menu>
         </Stack>

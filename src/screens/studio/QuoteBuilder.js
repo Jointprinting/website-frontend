@@ -76,17 +76,20 @@ const GROUP_HUES = [
 // Margin guardrail: warn (⚠) when a priced line's margin drops below this floor,
 // so a cell never gets sent underpriced by accident. Promo/fixed lines with no
 // cost entered read as no-margin-known and are skipped (not flagged).
-const MARGIN_FLOOR = 20;
-
-// Margin colour spectrum: 0% → red, ~40% → green. Capped so 50%+ stays green.
+// Below-cost is the ONLY alarming state. Any positive margin is a win, so it
+// reads green — a thin margin isn't scary, it's just less green. Owner rule:
+// red only when you'd actually lose money.
+//
+// Loss → red. Every positive margin → green, deepening as the margin grows
+// (so 15% and 40% are both clearly "good", just different greens).
 function marginColor(pct) {
-  const hue = Math.max(0, Math.min(135, pct * 3.4));   // 0 → red, 40 → ~136 → green
-  return `hsl(${hue.toFixed(0)}, 70%, 55%)`;
+  if (pct < 0) return '#f87171';
+  const light = Math.max(45, 64 - pct * 0.35);   // 0% → light green, 55%+ → deep green
+  return `hsl(142, 62%, ${light.toFixed(0)}%)`;
 }
-// Matching translucent chip background for the profit/margin pills.
 function marginBg(pct) {
-  const hue = Math.max(0, Math.min(135, pct * 3.4));
-  return `hsla(${hue.toFixed(0)}, 70%, 55%, 0.14)`;
+  if (pct < 0) return 'rgba(248,113,113,0.14)';
+  return 'rgba(74,222,128,0.14)';
 }
 
 // True per-unit cost for a line: blank + print + this option's full setup +
@@ -202,15 +205,23 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   // Autosave keeps edits owner-side; "Push to client" updates the link.
   const [pushedSig, setPushedSig] = useState(null);
   const [pushing,   setPushing]   = useState(false);
-  // The network printer's price catalog (Heritage) — powers the per-design
-  // "price the print" spec panel. Fetched once per open; null = panel hidden.
-  const [printerCat, setPrinterCat] = useState(null);
+  // The whole printer network's price catalogs — powers the per-design "price
+  // the print" panel, which lets each design price off ANY printer in the
+  // network (a job can route different designs to different printers). Fetched
+  // once per open. Empty → the panel hides and the manual cost fields stand.
+  const [printers, setPrinters] = useState([]);
   useEffect(() => {
     if (!open) return undefined;
     let gone = false;
-    axios.get(`${config.backendUrl}/api/printers/heritage`, authHdr)
-      .then((r) => { if (!gone) setPrinterCat(r.data.printer || null); })
-      .catch(() => { /* no catalog → the manual cost fields still work */ });
+    axios.get(`${config.backendUrl}/api/printers`, authHdr)
+      .then(async (r) => {
+        const list = (r.data.printers || []);
+        const full = await Promise.all(list.map((p) =>
+          axios.get(`${config.backendUrl}/api/printers/${p.key}`, authHdr)
+            .then((d) => d.data.printer).catch(() => null)));
+        if (!gone) setPrinters(full.filter(Boolean));
+      })
+      .catch(() => { /* no network → the manual cost fields still work */ });
     return () => { gone = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -535,29 +546,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
         </Box>
         <PrinterSuggest shipToState={shipToState} printerName={printerName}
           onPick={(name) => setMeta(setPrinterName)(name)} authHdr={authHdr} />
-
-        {/* Flow explainer — sets expectations for how a finished quote reaches
-            the client, so the pitch → pick → confirm → approve steps are clear. */}
-        <Box sx={{ mb: 2.5, p: 1.5, borderRadius: 2.5, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
-          <Typography sx={{ color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase', mb: 0.75 }}>
-            How this reaches your client
-          </Typography>
-          <Stack direction="row" gap={0.75} flexWrap="wrap" alignItems="center" sx={{ color: D.muted, fontSize: 11.5, lineHeight: 1.6 }}>
-            {['Build options here', 'Share the link', 'Client picks what they want', 'You build the confirmation', 'They approve + sign off art']
-              .map((step, i, a) => (
-                <React.Fragment key={step}>
-                  <Box component="span" sx={{ color: D.text, fontWeight: 600 }}>
-                    <Box component="span" sx={{ color: D.green, fontWeight: 800, ...mono, mr: 0.5 }}>{i + 1}</Box>{step}
-                  </Box>
-                  {i < a.length - 1 && <Box component="span" sx={{ color: D.faint }}>→</Box>}
-                </React.Fragment>
-              ))}
-          </Stack>
-          <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.85, lineHeight: 1.5 }}>
-            A design grid pitches one design across options × quantities (brands or print variants); the client
-            picks ONE per design. Ungrouped single lines are always included. Nothing counts toward the total until they pick.
-          </Typography>
-        </Box>
+        <Box sx={{ mb: 2 }} />
 
         {/* Lines / grids */}
         {/* Shared datalist so typing a group name autocompletes to ones
@@ -597,7 +586,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
           <Stack gap={2}>
             {blocks.map((b, bi) => b.type === 'grid' ? (
               <DesignGridCard key={`grid-${b.grid.group}`} grid={b.grid} lines={lines}
-                printerCatalog={printerCat}
+                printers={printers} shipToState={shipToState}
                 accent={accentFor(b.grid.group)}
                 onPatchIdxs={patchIdxs}
                 onRemoveIdxs={removeIdxs}
@@ -782,13 +771,17 @@ function SupplierLink({ line, onPatch, tf, sx }) {
 //   • a cell's unit price → that one line
 //   • the tier strip → per-cell price at each cell's OWN cost (so every
 //     option/quantity prices correctly from one click)
-function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
+function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
   const [openRows, setOpenRows] = useState(() => new Set());   // row cost-drawers (by row POSITION — stable across renames)
-  // The "price the print" spec: locations + colors + garment shade, priced
-  // straight off the network printer's grids (src/common/printerPricing.js).
+  // The "price the print" spec: which printer, locations + colors + garment
+  // shade, priced off that printer's grids (src/common/printerPricing.js).
   const [specOpen, setSpecOpen] = useState(false);
   const [specShade, setSpecShade] = useState('light');
   const [specLocs, setSpecLocs] = useState([{ label: 'front', colors: 1 }]);
+  const spScreen = (p) => p && p.catalog && p.catalog.screenPrinting;
+  const screenPrinters = printers.filter(spScreen);
+  const [specPrinterKey, setSpecPrinterKey] = useState('');
+  const specPrinter = screenPrinters.find(p => p.key === specPrinterKey) || screenPrinters[0] || null;
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -948,25 +941,9 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
   const tableCols = `minmax(280px, 1.3fr) repeat(${nCols}, minmax(158px, 1fr)) 40px`;
   const headCellSx = { color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase' };
 
-  // Visible (non-hidden) cells only — hidden rows are owner-side parking and
-  // never part of what the client can take, so never part of the design math.
-  const visible = all.filter(i => !(lines[i] && lines[i].hiddenFromClient));
-  // THE CLIENT PICKS ONE CELL of this design (one option at one quantity) —
-  // so the honest rollup is the RANGE across the possible picks, not a sum of
-  // mutually-exclusive cells. Recomputes live as margins/costs change.
-  const pickRange = visible.reduce((t, i) => {
-    const l = lines[i];
-    const q = num(l.qty);
-    const c = lineCogsPerUnit(l);
-    const e = lineEffectivePrice(l);
-    if (c <= 0 && e <= 0) return t;
-    const billed = e * q; const profit = (e - c) * q;
-    return {
-      n: t.n + 1,
-      billedMin: Math.min(t.billedMin, billed), billedMax: Math.max(t.billedMax, billed),
-      profitMin: Math.min(t.profitMin, profit), profitMax: Math.max(t.profitMax, profit),
-    };
-  }, { n: 0, billedMin: Infinity, billedMax: 0, profitMin: Infinity, profitMax: 0 });
+  // The client picks ONE cell of this design — the per-cell money panel above
+  // is the per-pick truth, so there's no design-level rollup (a sum of
+  // mutually-exclusive options would be a number that never happens).
 
   // Price ONE option row at a target margin (same math as the design strip).
   const applyRowTier = (idxs, pct) => onPatchIdxs(idxs, (l) => {
@@ -1084,7 +1061,7 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
             placeholder={numMixedOver(all, 'turnaroundWeeks') ? 'varies' : 'wks'}
             onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
         </QF>
-        {printerCatalog && printerCatalog.catalog && printerCatalog.catalog.screenPrinting && (
+        {specPrinter && (
           <Button size="small" onClick={() => setSpecOpen(o => !o)}
             sx={{ color: specOpen ? D.green : D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none',
               border: `1px ${specOpen ? 'solid' : 'dashed'} ${specOpen ? D.green : D.line}`, borderRadius: 999, px: 1.5, mb: 0.3,
@@ -1094,14 +1071,30 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
         )}
       </Box>
 
-      {/* PRINT SPEC — describe the job the way the printer prices it (locations
-          × ink colors, garment shade) and every quantity cell fills its print
-          $/u + setup straight from the printer's own grid: dozens-tier lookup,
-          +1 underbase color on darks, $20/color minimums, $20/screen setup. */}
-      {specOpen && printerCatalog && (
+      {/* PRINT SPEC — describe the job the way the printer prices it (which
+          printer, locations × ink colors, garment shade) and every quantity
+          cell fills its print $/u + setup straight from that printer's grid:
+          dozens-tier lookup, +1 underbase color on darks, $20/color minimums,
+          $20/screen setup. Each design can price off a DIFFERENT printer. */}
+      {specOpen && specPrinter && (
         <Box sx={{ mx: { xs: 1.5, md: 2 }, mb: 1.25, p: 1.5, borderRadius: 2.5,
           bgcolor: 'rgba(74,222,128,0.04)', border: `1px solid ${D.lineHi}` }}>
           <Stack direction="row" gap={1} alignItems="flex-end" flexWrap="wrap">
+            <QF label="Printer (this design)" sx={{ width: 200 }}>
+              <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                <Select value={specPrinter.key} onChange={e => setSpecPrinterKey(e.target.value)}
+                  sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                  {screenPrinters.map(p => {
+                    const blocked = shipToState && String(p.state).toUpperCase() === String(shipToState).toUpperCase();
+                    return (
+                      <MenuItem key={p.key} value={p.key} disabled={blocked}>
+                        {p.name.replace(/,? Inc\.?$/i, '')} · {p.state}{blocked ? ' — nexus ⚠' : ''}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </QF>
             <QF label="Garment" sx={{ width: 110 }}>
               <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
                 <Select value={specShade} onChange={e => setSpecShade(e.target.value)}
@@ -1135,7 +1128,7 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
             <Button size="small" onClick={() => {
               const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
               onPatchIdxs(all, (l) => {
-                const r = screenPrintQuote(printerCatalog.catalog.screenPrinting, { qty: num(l.qty), shade: specShade, locations });
+                const r = screenPrintQuote(specPrinter.catalog.screenPrinting, { qty: num(l.qty), shade: specShade, locations });
                 if (!r || r.error) return {};
                 return { printCost: r.printPerUnit, setupCost: r.setup,
                   printType: 'Screen Print', printDetails: specDetails({ shade: specShade, locations }) };
@@ -1143,14 +1136,14 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
             }}
               sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, fontSize: 11.5, textTransform: 'none', px: 2,
                 borderRadius: 999, mb: 0.3, '&:hover': { bgcolor: '#3bd070' } }}>
-              Fill costs from {String(printerCatalog.name || 'printer').split(' ')[0]}
+              Fill costs from {String(specPrinter.name || 'printer').split(' ')[0]}
             </Button>
           </Stack>
           {/* Live preview per run size, so he sees the tier math before applying. */}
           <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
             {grid.qtys.map(q => {
               const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
-              const r = screenPrintQuote(printerCatalog.catalog.screenPrinting, { qty: q, shade: specShade, locations });
+              const r = screenPrintQuote(specPrinter.catalog.screenPrinting, { qty: q, shade: specShade, locations });
               return (
                 <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
                   {q}u → {r && !r.error
@@ -1282,7 +1275,8 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
                   // 0% promo lane with no typed price yet: sitting AT COST is the
                   // expected state, not an underpricing accident — no red ⚠.
                   const promoAuto = !!l.noMarkup && !committed;
-                  const lowMargin = !promoAuto && cogs > 0 && eff > 0 && pct < MARGIN_FLOOR;
+                  // Only an actual LOSS is alarming (owner: anything above $0 is great).
+                  const lowMargin = !promoAuto && cogs > 0 && eff > 0 && profit < 0;
                   const cellLabel = { fontSize: 8, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: D.faint, lineHeight: 1.6 };
                   const cellVal = { fontSize: 10, fontWeight: 700, ...mono, lineHeight: 1.6, textAlign: 'right' };
                   return (
@@ -1313,7 +1307,7 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
                             title={promoAuto
                               ? `0% margin — the price sits at COGS until you type the client price`
                               : lowMargin
-                                ? `⚠ ${pct.toFixed(1)}% is under your ${MARGIN_FLOOR}% margin floor — raise the price or check the costs`
+                                ? `⚠ Below cost — you'd lose ${fmt(-profit)}/u. Raise the price or check the costs.`
                                 : `${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}% margin`}>
                             {promoAuto ? 'at cost' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u`}
                           </Typography>
@@ -1475,23 +1469,6 @@ function DesignGridCard({ grid, lines, accent, printerCatalog, onPatchIdxs, onRe
           promo / fixed-price lane: nothing is marked up — you type each client
           price (catalog price already carries the margin); COGS stays honest. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
-        {/* Per-pick rollup at CURRENT prices: the client takes ONE cell of this
-            design, so the range across cells is the honest number — smallest
-            pick to biggest pick. */}
-        {pickRange.n > 0 && (
-          <Stack direction="row" alignItems="baseline" gap={2} mb={1} flexWrap="wrap"
-            sx={{ bgcolor: 'rgba(255,255,255,0.025)', border: `1px solid ${D.line}`, borderRadius: 2, px: 1.5, py: 0.8 }}>
-            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
-              Client picks one — depending on the pick
-            </Typography>
-            <Typography sx={{ ...mono, color: D.text, fontSize: 12, fontWeight: 800 }}>
-              they're billed {fmt(pickRange.billedMin)}–{fmt(pickRange.billedMax)}
-            </Typography>
-            <Typography sx={{ ...mono, color: D.green, fontSize: 12, fontWeight: 800 }}>
-              you make {fmt(Math.max(0, pickRange.profitMin))}–{fmt(pickRange.profitMax)}
-            </Typography>
-          </Stack>
-        )}
         <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: fixedPrice ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
             {fixedPrice ? 'Margin 0% · you set the prices' : 'Margin · all options'}
