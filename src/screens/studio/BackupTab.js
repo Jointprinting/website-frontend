@@ -13,6 +13,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon    from '@mui/icons-material/ErrorOutline';
 import CloudSyncIcon       from '@mui/icons-material/CloudSync';
 import { B, fmtDate, fmtRelative } from './_shared';
+import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
 import { buildFallbackMenu } from './contextMenuActions';
 import config from '../../config.json';
@@ -86,7 +87,7 @@ export default function BackupTab({ token, onBack }) {
         if (!w || w.closed) { clearInterval(timer); loadDrive(); }
       }, 1000);
     } catch (e) {
-      alert(`Couldn't start Google Drive connect: ${e.message}`);
+      await alertDialog({ title: 'Couldn’t start Google Drive connect', message: e.message, danger: true });
     } finally {
       setDriveBusy(false);
     }
@@ -99,9 +100,9 @@ export default function BackupTab({ token, onBack }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Backup failed');
       await loadDrive();
-      alert(`Backed up to Google Drive ✓\n${data.fileName} (${(data.sizeBytes / 1024 / 1024).toFixed(1)} MB)`);
+      await alertDialog({ title: 'Backed up to Google Drive ✓', message: `${data.fileName} (${(data.sizeBytes / 1024 / 1024).toFixed(1)} MB)` });
     } catch (e) {
-      alert(`Drive backup failed: ${e.message}`);
+      await alertDialog({ title: 'Drive backup failed', message: e.message, danger: true });
       await loadDrive();
     } finally {
       setDriveBackingUp(false);
@@ -109,7 +110,7 @@ export default function BackupTab({ token, onBack }) {
   };
 
   const handleDriveDisconnect = async () => {
-    if (!window.confirm('Disconnect Google Drive? The site will stop auto-saving backups there.')) return;
+    if (!(await confirmDialog({ title: 'Disconnect Google Drive?', message: 'The site will stop auto-saving backups there.', confirmLabel: 'Disconnect', danger: true }))) return;
     setDriveBusy(true);
     try {
       await fetch(`${base}/gdrive/disconnect`, { method: 'POST', headers: authHdr.headers });
@@ -135,7 +136,7 @@ export default function BackupTab({ token, onBack }) {
       URL.revokeObjectURL(url);
       await loadStatus();
     } catch (e) {
-      alert(`Backup failed: ${e.message}`);
+      await alertDialog({ title: 'Backup failed', message: e.message, danger: true });
     } finally {
       setDownloading(false);
     }
@@ -151,29 +152,29 @@ export default function BackupTab({ token, onBack }) {
     // so re-importing a backup can't lose newer data and a stray click can't
     // wipe the database. (The backend validates the whole archive before it
     // writes a single record — a wrong file is rejected with the data intact.)
-    if (!window.confirm(
-      `Restore from "${file.name}"?\n\n` +
-      'This MERGES the backup into the current data: every record in the ZIP ' +
-      'is added or updated (matched by its id). Nothing currently on the ' +
-      'server is deleted, so this is safe to run.\n\n' +
-      'OK to restore (merge)?'
-    )) return;
+    if (!(await confirmDialog({
+      title: `Restore from "${file.name}"?`,
+      message: 'This MERGES the backup into the current data: every record in the ZIP ' +
+        'is added or updated (matched by its id). Nothing currently on the server is ' +
+        'deleted, so this is safe to run.',
+      confirmLabel: 'Restore (merge)',
+    }))) return;
 
     // Optional, deliberately separate, destructive path. Only reached if the
     // owner asks for it AND types the confirmation — so it can never happen by
     // accident. This is the "wipe and replace with exactly this backup" mode.
     let mode = 'merge';
-    const wantsReplace = window.confirm(
-      'Advanced: do a FULL REPLACE instead?\n\n' +
-      'Click Cancel to keep the safe merge above (recommended).\n\n' +
-      'Click OK only if you want to WIPE all current data and replace it with ' +
-      'exactly what is in this backup — every project, client, vendor, PO, ' +
-      'finance record, and file not in the ZIP is permanently deleted. No undo.'
-    );
+    const wantsReplace = await confirmDialog({
+      title: 'Advanced: do a FULL REPLACE instead?',
+      message: 'Keep the safe merge above (recommended) — or WIPE all current data and replace it ' +
+        'with exactly what is in this backup. Every project, client, vendor, PO, finance record, ' +
+        'and file not in the ZIP is permanently deleted. No undo.',
+      confirmLabel: 'Full replace', cancelLabel: 'Keep merge', danger: true,
+    });
     if (wantsReplace) {
-      const typed = window.prompt('Type REPLACE to confirm a full destructive replace, or Cancel to keep merge:');
+      const typed = await promptDialog({ title: 'Confirm destructive replace', message: 'Type REPLACE to confirm a full destructive replace, or cancel to keep the safe merge.', placeholder: 'REPLACE' });
       if (typed === 'REPLACE') mode = 'replace';
-      else if (typed !== null) { alert('Confirmation did not match — keeping the safe merge.'); }
+      else if (typed !== null) { await alertDialog('Confirmation didn’t match — keeping the safe merge.'); }
     }
 
     setRestoring(true);
