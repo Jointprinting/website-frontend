@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<title>JP Studio</title>
+<title>Mockup Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
@@ -1173,12 +1173,12 @@ select:focus-visible{
 <header id="header">
   <div class="brand">
     <div class="brand-pip"></div>
-    <span class="brand-name">JPSTUDIO</span>
+    <span class="brand-name">MOCKUP&nbsp;LAB</span>
   </div>
   <div class="hdr-div"></div>
   <nav class="nav-tabs">
     <button class="nav-tab" id="tab-overview-btn" onclick="switchTab('overview',this)">Overview</button>
-    <button class="nav-tab active" onclick="switchTab('studio',this)">Studio</button>
+    <button class="nav-tab active" onclick="switchTab('studio',this)">Canvas</button>
     <button class="nav-tab" onclick="switchTab('lookbook',this)">Lookbook</button>
     <button class="nav-tab" onclick="switchTab('library',this)">Library</button>
   </nav>
@@ -1422,7 +1422,7 @@ select:focus-visible{
       <span class="lb-sel-label" id="lb-sel-label">0 selected</span>
     </div>
     <div class="lb-grid" id="lb-mockup-grid">
-      <div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Build and save mockups in the Studio tab first.</div>
+      <div class="empty-state" style="grid-column:1/-1">No saved mockups yet.<br>Build and save mockups in the Canvas tab first.</div>
     </div>
     <div class="lb-export-bar" id="lb-export-bar">
       <span class="lb-eb-count" id="lb-eb-count">0 mockups</span>
@@ -1596,7 +1596,7 @@ select:focus-visible{
 
     <hr class="modal-sep"/>
     <div class="modal-footer">
-      <button class="btn btn-ac" style="flex:1" onclick="importSsImages()">↓ Import to Studio</button>
+      <button class="btn btn-ac" style="flex:1" onclick="importSsImages()">↓ Import to Canvas</button>
       <button class="btn btn-ghost" onclick="closeSsModal()">Cancel</button>
     </div>
   </div>
@@ -1647,7 +1647,7 @@ select:focus-visible{
      Hidden on desktop via CSS. Backdrop closes any open sheet on tap;
      the bottom bar is the primary mobile nav for the Studio view. -->
 <div id="mobile-drawer-backdrop" onclick="closeAllMobilePanels()"></div>
-<nav id="mobile-bottom-bar" aria-label="Studio actions">
+<nav id="mobile-bottom-bar" aria-label="Canvas actions">
   <button class="mbb-btn" onclick="toggleMobilePanel('left')" aria-label="Garment setup">
     <span class="mbb-btn-ico">⊞</span><span>Setup</span>
   </button>
@@ -3176,7 +3176,7 @@ async function renderOverview(){
   if(!groups.size){
     body.innerHTML='<div class="ov-empty">'+(term
       ? 'No mockups match “'+esc(term)+'”.'
-      : 'No mockups yet. Open the <b>Studio</b> tab to build your first — it’ll show up here grouped by project.')+'</div>';
+      : 'No mockups yet. Open the <b>Canvas</b> tab to build your first — it’ll show up here grouped by project.')+'</div>';
     return;
   }
   const arr=[...groups.values()].map(g=>{ g.items.sort((a,b)=>(b.savedAt||0)-(a.savedAt||0)); g.newest=g.items[0]?(g.items[0].savedAt||0):0; return g; });

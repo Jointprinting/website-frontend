@@ -381,7 +381,7 @@ export default function BackupTab({ token, onBack }) {
                 ['Order Tracker', 'Every project — quotes, items, mockup links, confirmations, activity, approval events'],
                 ['Clients + CRM',  'Customer records, contacts, cold-call state'],
                 ['Vendors + POs',  'Printer/supplier cards and every purchase order'],
-                ['Mockup Studio',  'Saved mockups, blanks, logos — full pageState + thumbnails'],
+                ['Mockup Lab',     'Saved mockups, blanks, logos — full pageState + thumbnails'],
                 ['Client logos',   'Per-company brand logos'],
                 ['Inquiries',      'Contact form submissions with status + admin notes'],
                 ['Site settings',  'Brand logo, banner messages, theme'],

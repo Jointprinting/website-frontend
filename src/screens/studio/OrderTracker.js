@@ -1980,7 +1980,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [duplicatingNum, setDuplicatingNum] = useState('');
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
-  // Open the Mockup Studio (/jpstudio) deep-linked to THIS project, so every
+  // Open the Mockup Lab (/jpstudio) deep-linked to THIS project, so every
   // mockup saved there auto-links to this project (the studio's smart workflow).
   const goStudio = () => project && window.open(
     // No token in the URL — /jpstudio picks up the studio session from localStorage
@@ -1990,7 +1990,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   );
 
   // Upload an EXTERNAL / promo mockup (a lighter, grinder, ashtray shot the
-  // printer made — not built in the Mockup Studio). Reserves the next mockup
+  // printer made — not built in the Mockup Lab). Reserves the next mockup
   // number for THIS project via the same authoritative endpoint the studio uses
   // (so it lettered-in beside its siblings and links to the order), then saves
   // it as a library mockup so it resolves into this project's tiles exactly like
@@ -2290,7 +2290,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // ALSO records it on excludedMockups — without the exclusion, the client-name
   // auto-matcher (and the silent auto-link effect) would just re-attach it and
   // the X would look like it "doesn't delete". Re-linking on purpose still
-  // works via the Edit picker or Mockup Studio (explicit link clears nothing).
+  // works via the Edit picker or Mockup Lab (explicit link clears nothing).
   const removeMockup = async (num) => {
     const nk = _normKey(num);
     const next = (local.mockupNumbers || []).filter(n => _normKey(n) !== nk);
@@ -2482,7 +2482,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   Mockups · {tiles.length}
                 </Typography>
                 <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
-                  {/* "New mockup" opens the Mockup Studio deep-linked to this project,
+                  {/* "New mockup" opens the Mockup Lab deep-linked to this project,
                       so each mockup saved there auto-links to it. "Edit"/"Link" opens
                       the picker to attach existing mockups. */}
                   <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
@@ -2511,7 +2511,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                    shot). Duplicating them here read as two different features. */
                 <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3, px: 2,
                   textAlign: 'center', color: B.muted, fontSize: 12 }}>
-                  No mockups yet — <b>New mockup</b> builds one in the Mockup Studio (it auto-links here);
+                  No mockups yet — <b>New mockup</b> builds one in the Mockup Lab (it auto-links here);
                   <b> Upload</b> takes a promo/product shot your printer made and files it as a numbered mockup.
                 </Box>
               ) : (
@@ -2529,7 +2529,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       : null;
                     return (
                     <Box key={i} onClick={() => editUrl && window.open(editUrl, '_blank', 'noopener,noreferrer')}
-                      title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Studio` : ''}
+                      title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Lab` : ''}
                       sx={{
                       aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
                       border: `1px solid ${t.item ? B.border : 'rgba(251,191,36,0.35)'}`,

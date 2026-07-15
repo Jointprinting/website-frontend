@@ -395,7 +395,7 @@ export default function AtomDemo() {
               also inside
             </Typography>
             <Typography sx={{ color: A.muted, fontSize: 11.5, lineHeight: 1.7 }}>
-              CRM · Finances · Receipts<br />Mockup studio · Field sales<br />Content planner · your build
+              CRM · Finances · Receipts<br />Mockup Lab · Field sales<br />Content planner · your build
             </Typography>
           </Box>
         </Box>
