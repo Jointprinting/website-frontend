@@ -1747,6 +1747,7 @@ function PreorderSection({ order, authHdr, onToast }) {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
   const [days, setDays] = useState(14);
+  const [moq, setMoq] = useState(0);
   const [rows, setRows] = useState([]);
   const [expanded, setExpanded] = useState('');
 
@@ -1770,7 +1771,7 @@ function PreorderSection({ order, authHdr, onToast }) {
       ? labels.map((l) => ({ label: l, sizes: 'S, M, L, XL, 2XL' }))
       : [{ label: '', sizes: 'S, M, L, XL, 2XL' }]);
     setTitle(`${order.companyName || order.clientName || 'Merch'} — preorder`);
-    setNote(''); setDays(14); setCreating(true);
+    setNote(''); setDays(14); setMoq(0); setCreating(true);
   };
 
   const create = async () => {
@@ -1781,7 +1782,7 @@ function PreorderSection({ order, authHdr, onToast }) {
     setBusy(true);
     try {
       const r = await axios.post(`${base}/preorders`,
-        { title: title.trim(), note: note.trim(), items, orderId: order._id, expiresDays: Number(days) || 0 }, authHdr);
+        { title: title.trim(), note: note.trim(), items, orderId: order._id, expiresDays: Number(days) || 0, moq: Number(moq) || 0 }, authHdr);
       const url = `${window.location.origin}/preorder/${r.data.preorder.token}`;
       try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — link still copyable from the row */ }
       onToast('Preorder link created + copied — send it to the client.', 'success');
@@ -1837,6 +1838,9 @@ function PreorderSection({ order, authHdr, onToast }) {
               <Button size="small" onClick={() => setRows((rs) => [...rs, { label: '', sizes: 'S, M, L, XL, 2XL' }])}
                 sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>+ item</Button>
               <Box sx={{ flex: 1 }} />
+              <Typography sx={{ color: B.muted, fontSize: 11 }} title="Minimum units for the drop to be a go. The public hype bar stays hidden until it's passed, then reveals as social proof. 0 = no minimum.">MOQ</Typography>
+              <TextField size="small" type="number" value={moq} onChange={(e) => setMoq(e.target.value)}
+                sx={{ ...tf, width: 64 }} inputProps={{ min: 0 }} />
               <Typography sx={{ color: B.muted, fontSize: 11 }}>Expires in</Typography>
               <TextField size="small" type="number" value={days} onChange={(e) => setDays(e.target.value)}
                 sx={{ ...tf, width: 64 }} inputProps={{ min: 0 }} />
@@ -1871,6 +1875,12 @@ function PreorderSection({ order, authHdr, onToast }) {
                   <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 140 }} noWrap>{l.title}</Typography>
                   <Typography sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
                     {l.tally.people} in · {l.tally.totalQty} units
+                    {l.moq > 0 && (
+                      <Box component="span" title="Minimum for the drop to be a go. The public hype bar reveals once this is passed."
+                        sx={{ color: l.tally.totalQty >= l.moq ? B.green : '#fbbf24', fontWeight: 700 }}>
+                        {' · '}{l.tally.totalQty >= l.moq ? `MOQ ✓ (${l.moq})` : `${l.tally.totalQty}/${l.moq} to MOQ`}
+                      </Box>
+                    )}
                     {isOpen && l.expiresAt ? ` · until ${new Date(l.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : (isOpen ? '' : ' · closed')}
                   </Typography>
                   <Button size="small" onClick={() => copy(l)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Copy</Button>
