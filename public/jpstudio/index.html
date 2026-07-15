@@ -4904,11 +4904,42 @@ async function loadMockupByRemoteId(remoteId) {
   if (!db || !remoteId) return false;
   try {
     const all = await dbGetAll('mockups');
-    const hit = (all || []).find(m => m.remoteId === remoteId);
-    if (!hit) return false;
+    let hit = (all || []).find(m => m.remoteId === remoteId);
+    // Fallback: a just-created variation (or a mockup made on another device)
+    // may not have landed in local IndexedDB yet — the two-phase sync's summary
+    // can lag a brand-new remoteId by a few seconds, so the local lookup above
+    // misses and the editor used to sit on a silent blank canvas. Fetch THIS one
+    // doc straight from the cloud by id, cache it, and open it. loadMockup() does
+    // all the front/back/multi-page hydration, so we only persist the raw row.
+    if (!hit) {
+      const row = await fetchMockupRowFromCloud(remoteId);
+      if (row) { const id = await dbSaveRaw('mockups', row); hit = { id }; }
+    }
+    if (!hit) { toast('Could not find that mockup — try Refresh, then reopen it.', 'error'); return false; }
     await loadMockup(hit.id);
     return true;
-  } catch (_) { return false; }
+  } catch (_) { toast('Could not open that mockup — try Refresh, then reopen it.', 'error'); return false; }
+}
+
+// Fetch a single mockup doc from the cloud by remoteId, shaped into the same
+// row syncFromBackend writes locally. Returns a ready-to-save row (loadMockup
+// rehydrates the composites) or null. Used only as the deep-link miss fallback,
+// so there's never an `existing` row to merge against.
+async function fetchMockupRowFromCloud(remoteId) {
+  const token = getStudioToken(); if (!token) return null;
+  try {
+    const fr = await fetch(`${BACKEND}/api/studio/library/mockups/full?ids=${encodeURIComponent(remoteId)}`, { headers:{'Authorization':'Bearer '+token} });
+    if (!fr.ok) return null;
+    const docs = await fr.json();
+    const ri = (docs || []).find(d => d && d.remoteId === remoteId) || (docs || [])[0];
+    if (!ri) return null;
+    return {
+      name: ri.name||'', data: ri.data||'', thumbnail: ri.thumbnail||'', client: ri.client||'',
+      pageState: ri.pageState||null, pages: ri.pages||null, extraViews: ri.extraViews||[],
+      savedAt: ri.savedAt||Date.now(), remoteId: ri.remoteId||remoteId,
+      cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0),
+    };
+  } catch (_) { return null; }
 }
 async function deleteAsset(store,id,e) {
   e.stopPropagation();
