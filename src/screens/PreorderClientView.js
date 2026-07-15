@@ -189,6 +189,11 @@ export default function PreorderClientView() {
               </Box>
             )}
 
+            {data.pickupLocation && (
+              <Typography sx={{ color: T.muted, fontSize: 12.5, px: 0.5 }}>
+                📍 Pickup: <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>{data.pickupLocation}</Box>
+              </Typography>
+            )}
             {data.note && (
               <Typography sx={{ color: T.faint, fontSize: 12.5, px: 0.5, lineHeight: 1.6 }}>{data.note}</Typography>
             )}

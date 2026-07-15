@@ -248,12 +248,18 @@ export default function PreorderView() {
               <Typography sx={{ color: T.muted, fontSize: 14, px: 0.5, lineHeight: 1.6 }}>{data.note}</Typography>
             )}
 
+            {data.pickupLocation && (
+              <Typography sx={{ color: T.muted, fontSize: 12.5, px: 0.5 }}>
+                📍 Pick up at <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>{data.pickupLocation}</Box>
+              </Typography>
+            )}
+
             {done && (
               <Box sx={{ ...sxCard(T), p: 2.5, borderColor: T.lineHi, textAlign: 'center' }}>
                 <Typography sx={{ color: T.green, fontWeight: 900, fontSize: 17 }}>You’re in 🎉</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.5 }}>
                   {done.units} unit{done.units === 1 ? '' : 's'} down for {name.trim()}. When the drop closes and hits its goal,
-                  you’ll get a payment link to lock it in — then pick up from {data.title.split('—')[0].trim() || 'the store'}.
+                  you’ll get a payment link to lock it in{data.pickupLocation ? `, then pick up at ${data.pickupLocation}` : ' — pickup details to follow'}.
                 </Typography>
                 <Typography sx={{ color: T.faint, fontSize: 11.5, mt: 0.75 }}>
                   Ordering for someone else too? Just fill it in again.
