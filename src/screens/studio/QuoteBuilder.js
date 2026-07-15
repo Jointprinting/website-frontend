@@ -47,6 +47,7 @@ import LinkIcon                from '@mui/icons-material/Link';
 import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
+import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 import { screenPrintQuote, specDetails } from '../../common/printerPricing';
@@ -694,7 +695,7 @@ function DesignAttach({ line, onPatch, tf, label = 'Design (mockup # or image)',
             e.target.value = '';
             if (!f) return;
             try { onPatch({ image: await readDesignImage(f) }); }
-            catch (err) { alert(err.message); }
+            catch (err) { alertDialog(err.message); }
           }} />
         {line.image ? (
           <Box component="img" src={line.image} alt="" title="Click to replace · the client sees this on the option card"
@@ -887,10 +888,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // New cells inherit the design's shared fields from a neighbor cell, but
   // never its pick or committed price — a fresh option starts un-accepted and
   // AUTO-priced at its own cost × markup.
-  const addColumn = () => {
+  const addColumn = async () => {
     // Ask for the quantity instead of silently doubling — the owner flagged
     // the old magic "+" as confusing next to the remove controls.
-    const raw = window.prompt('New run size (units)?', String(Math.max(...grid.qtys) * 2));
+    const raw = await promptDialog({ title: 'Add a run size', message: 'New run size (units)?', defaultValue: String(Math.max(...grid.qtys) * 2) });
     if (raw == null) return;
     const newQ = num(raw);
     if (newQ <= 0 || grid.qtys.includes(newQ)) return;
@@ -918,8 +919,8 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
     if (grid.qtys.length <= 2) return;                            // below 2 columns it stops being a grid
     onRemoveIdxs(colIdxs(q));
   };
-  const removeGrid = () => {
-    if (window.confirm(`Remove "${grid.group}" and its ${all.length} option${all.length === 1 ? '' : 's'}?`)) {
+  const removeGrid = async () => {
+    if (await confirmDialog({ title: 'Remove option group?', message: `Remove "${grid.group}" and its ${all.length} option${all.length === 1 ? '' : 's'}?`, confirmLabel: 'Remove', danger: true })) {
       onRemoveIdxs(all);
     }
   };

@@ -46,6 +46,7 @@ import {
   D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
   fmtRelative, useMobileFullScreen, ARCHIVE_TTL_DAYS, purgeDaysLeft,
 } from './_shared';
+import { confirmDialog } from './_dialog';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/lookbooks`;
@@ -578,8 +579,7 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
 
   const archive = async () => {
     const restoring = lb?.status === 'archived';
-    if (!restoring && !window.confirm(
-      `Archive "${draft?.title || 'this lookbook'}"? The client link stops working and it leaves the list — nothing is deleted.`)) return;
+    if (!restoring && !(await confirmDialog({ title: 'Archive lookbook?', message: `Archive "${draft?.title || 'this lookbook'}"? The client link stops working and it leaves the list — nothing is deleted.`, confirmLabel: 'Archive', danger: true }))) return;
     setArchiveBusy(true);
     try {
       const flushed = await flushSave();

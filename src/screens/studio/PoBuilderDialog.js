@@ -25,6 +25,7 @@ import SearchIcon              from '@mui/icons-material/Search';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, dropPrimaryBtn, hasConfirmation } from './_shared';
+import { confirmDialog, alertDialog } from './_dialog';
 
 const base = `${config.backendUrl}/api`;
 
@@ -82,9 +83,9 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
       setEditing({ ...r.data });
       setDirty(false);
       // Surface zero-cost lines (C3) so a silent $0 line gets filled in.
-      if (r.data && r.data.warning) alert(r.data.warning);
+      if (r.data && r.data.warning) alertDialog(r.data.warning);
     } catch (e) {
-      alert(`Couldn't create PO: ${e.response?.data?.message || e.message}`);
+      alertDialog(`Couldn't create PO: ${e.response?.data?.message || e.message}`);
     } finally {
       setCreating(false);
     }
@@ -117,7 +118,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
         ? `\n\n⚠ ${s.warnings.join('\n')}` : '';
       if (made.length) {
         const names = (s.vendors || made.map(p => p.vendorName)).filter(Boolean).join(', ');
-        alert(`Created ${made.length} PO${made.length === 1 ? '' : 's'}${names ? ` — ${names}` : ''}.${skipNote}${heldNote}${warnNote}`);
+        alertDialog(`Created ${made.length} PO${made.length === 1 ? '' : 's'}${names ? ` — ${names}` : ''}.${skipNote}${heldNote}${warnNote}`);
       } else {
         const skipped = (s.skipped || []).filter(Boolean);
         const base = skipped.length
@@ -125,10 +126,10 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
           : (s.held && s.held.length)
             ? 'No POs — the confirmation items have no supplier set. Assign a printer per item, then re-run.'
             : 'No POs were generated from the confirmation.';
-        alert(`${base}${heldNote && !skipped.length ? '' : heldNote}${warnNote}`);
+        alertDialog(`${base}${heldNote && !skipped.length ? '' : heldNote}${warnNote}`);
       }
     } catch (e) {
-      alert(`Couldn't generate POs: ${e.response?.data?.message || e.message}`);
+      alertDialog(`Couldn't generate POs: ${e.response?.data?.message || e.message}`);
     } finally {
       setGenerating(false);
     }
@@ -144,7 +145,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
       setDirty(false);
       return r.data;
     } catch (e) {
-      alert(`Save failed: ${e.response?.data?.message || e.message}`);
+      alertDialog(`Save failed: ${e.response?.data?.message || e.message}`);
       return null;
     } finally {
       setSaving(false);
@@ -152,13 +153,13 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
   };
 
   const deletePo = async (po) => {
-    if (!window.confirm(`Delete PO ${po.poNumber || ''}? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: 'Delete PO?', message: `Delete PO ${po.poNumber || ''}? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await axios.delete(`${base}/orders/pos/${po._id}`, authHdr);
       setPos(prev => prev.filter(p => p._id !== po._id));
       if (editing && editing._id === po._id) setEditing(null);
     } catch (e) {
-      alert(`Delete failed: ${e.response?.data?.message || e.message}`);
+      alertDialog(`Delete failed: ${e.response?.data?.message || e.message}`);
     }
   };
 
@@ -177,7 +178,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alert(`PDF failed: ${e.response?.data?.message || e.message}`);
+      alertDialog(`PDF failed: ${e.response?.data?.message || e.message}`);
     } finally {
       setPdfBusy(false);
     }
@@ -237,8 +238,8 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
     return !!nm && nm !== 'unassigned' && nm !== 'unnamed vendor';
   };
 
-  const closeGuard = () => {
-    if (dirty && !window.confirm('You have unsaved PO changes. Close anyway?')) return;
+  const closeGuard = async () => {
+    if (dirty && !(await confirmDialog({ title: 'Unsaved PO changes', message: 'You have unsaved PO changes. Close anyway?', confirmLabel: 'Close', danger: true }))) return;
     onClose();
   };
 
@@ -256,7 +257,7 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
         display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box sx={accentBar} />
         {editing && (
-          <IconButton size="small" onClick={() => { if (!dirty || window.confirm('Unsaved changes — go back anyway?')) { setEditing(null); setDirty(false); } }}
+          <IconButton size="small" onClick={async () => { if (!dirty || (await confirmDialog({ title: 'Unsaved changes', message: 'Go back anyway? Your edits will be lost.', confirmLabel: 'Go back', danger: true }))) { setEditing(null); setDirty(false); } }}
             sx={{ color: D.muted, '&:hover': { color: D.text } }}><ArrowBackIcon fontSize="small" /></IconButton>
         )}
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, letterSpacing: 0.2 }}>
