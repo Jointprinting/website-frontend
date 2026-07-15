@@ -5,7 +5,7 @@
 //
 //   Joint Printing tools:
 //     1) Submissions — mini-CRM for contact form leads
-//     2) Mockup Studio — launches /jpstudio/ in a new tab
+//     2) Mockup Lab — launches /jpstudio/ in a new tab
 //   JP Webworks tools:
 //     3) Websites — build/preview/publish client subscription sites (JpwSitesTab)
 //     4) Inquiries — JP Webworks' OWN inbox (view 'jpwinquiries'): the same
@@ -347,10 +347,11 @@ function Login({ onAuthed }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Mockup Studio launcher — opens /jpstudio/ in a new tab (no inline preview)
+//  Mockup Lab launcher — opens /jpstudio/ in a new tab (no inline preview)
+//  (the /jpstudio route + storage keys keep their names; only the display does)
 // ─────────────────────────────────────────────────────────────────────────────
 function MockupLauncherTab() {
-  // The studio token is NOT put in the URL — Mockup Studio (/jpstudio, same origin)
+  // The studio token is NOT put in the URL — Mockup Lab (/jpstudio, same origin)
   // reads the saved session from localStorage. Keeping the token out of the URL
   // avoids leaking it via server access logs / browser history.
   const [opened, setOpened] = React.useState(false);
@@ -365,7 +366,7 @@ function MockupLauncherTab() {
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
       <Stack spacing={3} alignItems="flex-start">
         <MuiTypography variant="body2" sx={{ color: BRAND.muted }}>
-          Mockup Studio opens in a new tab. Your studio session carries over —
+          Mockup Lab opens in a new tab. Your studio session carries over —
           no extra login needed.
         </MuiTypography>
 
@@ -392,7 +393,7 @@ function MockupLauncherTab() {
           </Box>
           <Box sx={{ flexGrow: 1 }}>
             <MuiTypography variant="h6" fontWeight={800} sx={{ color: BRAND.white, mb: 0.5 }}>
-              Mockup Studio
+              Mockup Lab
             </MuiTypography>
             <MuiTypography variant="body2" sx={{ color: BRAND.muted }}>
               Build apparel mockups, export PDFs, send to clients.
@@ -411,7 +412,7 @@ function MockupLauncherTab() {
               flexShrink: 0,
             }}
           >
-            Open studio
+            Open Mockup Lab
           </Button>
         </Paper>
 
@@ -1654,8 +1655,8 @@ const HUB_GROUPS = [
         label: 'More tools',
         tools: [
           { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
-          { id: 'mockup',      label: 'Mockup Studio', desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
-          // Lookbooks sit right beside the Mockup Studio: the library feeds
+          { id: 'mockup',      label: 'Mockup Lab',   desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
+          // Lookbooks sit right beside the Mockup Lab: the library feeds
           // the pages, the share link feeds the client, feedback feeds Signals.
           { id: 'lookbooks',   label: 'Lookbooks',    desc: 'Shareable client galleries',    Icon: AutoStoriesOutlinedIcon },
           { id: 'submissions', label: 'Inquiries',    desc: 'Contact-form leads',            Icon: InboxIcon },
