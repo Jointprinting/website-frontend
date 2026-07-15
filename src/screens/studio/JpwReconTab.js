@@ -30,6 +30,7 @@ import {
 import PhoneIcon from '@mui/icons-material/Phone';
 import LanguageIcon from '@mui/icons-material/Language';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import { alertDialog } from './_dialog';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
@@ -477,9 +478,9 @@ function Dashboard({ stats, usage, api, onAction, requestCleanup }) {
   const runJob = async (job) => {
     try {
       await api.runJob(job);
-      window.alert('Started in background. Refresh in a few seconds to see results.');
+      await alertDialog({ title: 'Started in background', message: 'Refresh in a few seconds to see results.' });
     } catch (e) {
-      window.alert(e?.response?.data?.message || e.message);
+      await alertDialog({ title: 'Couldn’t start', message: e?.response?.data?.message || e.message, danger: true });
     }
   };
 

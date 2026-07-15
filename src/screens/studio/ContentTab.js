@@ -45,6 +45,7 @@ import {
   D, accentBar, eyebrow, mono, dropInput, dropPrimaryBtn, dropGhostBtn,
   fmtRelative, useMobileFullScreen, scrollbar, ARCHIVE_TTL_DAYS, purgeDaysLeft,
 } from './_shared';
+import { confirmDialog } from './_dialog';
 import JpLoader from '../../common/JpLoader';
 import {
   PLATFORMS, POST_STATUSES, weekStart, weekLabel,
@@ -606,7 +607,7 @@ export default function ContentTab({ token, onBack }) {
     } finally { setSyncBusy(false); }
   };
   const disconnectIg = async () => {
-    if (!window.confirm('Disconnect Instagram? Posts and their stats stay — only the live sync stops.')) return;
+    if (!(await confirmDialog({ title: 'Disconnect Instagram?', message: 'Posts and their stats stay — only the live sync stops.', confirmLabel: 'Disconnect', danger: true }))) return;
     try { await axios.delete(ACCOUNT_API, authHdr); setAccount(null); toast('Disconnected'); }
     catch (e) { toast('Could not disconnect', 'error'); }
   };

@@ -30,6 +30,7 @@ import ExpandMoreIcon        from '@mui/icons-material/ExpandMore';
 import {
   D, mono, eyebrow, money0, fmtRelative, fmtDate, dropInput, dropPrimaryBtn, dropGhostBtn, scrollbar, STATUS_META,
 } from './_shared';
+import { confirmDialog } from './_dialog';
 import { STAGE_META } from './crm/_crm';
 import { useContextMenu } from './ContextMenu';
 import { buildFallbackMenu } from './contextMenuActions';
@@ -289,7 +290,7 @@ function AgentCard({ agent, token, onPatch, onReset }) {
     setBusy(false);
   };
   const resetPw = async () => {
-    if (!window.confirm(`Reset ${agent.displayName || agent.username}'s password? Their current one stops working immediately.`)) return;
+    if (!(await confirmDialog({ title: 'Reset password?', message: `Reset ${agent.displayName || agent.username}'s password? Their current one stops working immediately.`, confirmLabel: 'Reset password', danger: true }))) return;
     setBusy(true);
     const pw = genPassword();
     const ok = await onReset(agent.id, pw);

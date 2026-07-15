@@ -35,6 +35,7 @@ import config from '../../config.json';
 import {
   D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, money0,
 } from './_shared';
+import { alertDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
 import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
 import RebuildPrintersView from './RebuildPrintersView';
@@ -641,7 +642,7 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
       // Surface the failure (the tab's existing alert pattern) and rethrow so a
       // multi-record merge STOPS at the failed record instead of ploughing on —
       // the group's Merge button re-enables and can be retried.
-      alert(`Merge failed: ${e.response?.data?.message || e.message}`);
+      alertDialog({ title: 'Merge failed', message: e.response?.data?.message || e.message, danger: true });
       throw e;
     }
   }, [authHdr, loadVendors, loadDuplicates]);
@@ -650,7 +651,7 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
     setDetailLoading(true);
     axios.get(`${base}/orders/vendors/${id}`, authHdr)
       .then((r) => setDetail(r.data))
-      .catch((e) => { alert(`Couldn't load vendor: ${e.response?.data?.message || e.message}`); setOpenId(null); })
+      .catch((e) => { alertDialog({ title: 'Couldn’t load vendor', message: e.response?.data?.message || e.message, danger: true }); setOpenId(null); })
       .finally(() => setDetailLoading(false));
   }, [authHdr]);
 
@@ -696,7 +697,7 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
       setDetail((prev) => prev ? { ...prev, vendor: r.data.vendor, nextPo: r.data.nextPo || prev.nextPo } : prev);
       setVendors((prev) => prev.map((v) => v._id === openId ? { ...v, ...r.data.vendor } : v));
     } catch (e) {
-      alert(`Save failed: ${e.response?.data?.message || e.message}`);
+      alertDialog({ title: 'Save failed', message: e.response?.data?.message || e.message, danger: true });
     } finally {
       setSavingField('');
     }
