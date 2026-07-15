@@ -26,6 +26,7 @@ import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
 import { B, darkInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
 import QuickbooksCard from './QuickbooksCard';
+import { confirmDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
 import FinanceDedupeView from './FinanceDedupeView';
@@ -279,7 +280,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     setEditTxn(null); await load();
   };
   const deleteTxn = async () => {
-    if (!window.confirm('Delete this transaction?')) return;
+    if (!(await confirmDialog({ title: 'Delete transaction?', message: 'This removes it from the ledger.', confirmLabel: 'Delete', danger: true }))) return;
     await axios.delete(`${base}/finances/transactions/${editTxn._id}`, authHdr);
     setEditTxn(null); await load();
   };
@@ -297,7 +298,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       await load();
     } catch (e) {
       if (e?.response?.status === 409 && !force) {
-        if (window.confirm('This looks like a duplicate of a transaction already in the ledger. Book it anyway?')) {
+        if (await confirmDialog({ title: 'Possible duplicate', message: 'This looks like a duplicate of a transaction already in the ledger. Book it anyway?', confirmLabel: 'Book anyway' })) {
           return bookReceipt(rec, extracted, { force: true });
         }
         return;
@@ -308,7 +309,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // Not a real cost (junk shot, duplicate photo) → soft-dismiss. The file stays
   // stored and searchable; it just leaves the inbox.
   const dismissReceipt = async (rec) => {
-    if (!window.confirm(`Ignore "${rec.fileName || 'this receipt'}"? The file stays stored — it just leaves the inbox.`)) return;
+    if (!(await confirmDialog({ title: 'Ignore receipt?', message: `Ignore "${rec.fileName || 'this receipt'}"? The file stays stored — it just leaves the inbox.`, confirmLabel: 'Ignore' }))) return;
     try {
       await axios.put(`${base}/receipts/${rec._id}`, { status: 'ignored' }, authHdr);
       await load();
@@ -326,7 +327,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const ignoreAllReceipts = async () => {
     const n = receiptInbox.filter((r) => r.status === 'review').length;
     if (!n) return;
-    if (!window.confirm(`Ignore all ${n} waiting receipt${n === 1 ? '' : 's'}? Files stay stored — they just leave the inbox. Book the real ones first.`)) return;
+    if (!(await confirmDialog({ title: 'Ignore all waiting receipts?', message: `Ignore all ${n} waiting receipt${n === 1 ? '' : 's'}? Files stay stored — they just leave the inbox. Book the real ones first.`, confirmLabel: 'Ignore all' }))) return;
     try {
       await axios.post(`${base}/receipts/archive-rest`, {}, authHdr);
       setBusy(`Cleared ${n} receipt${n === 1 ? '' : 's'} from the inbox ✓`);

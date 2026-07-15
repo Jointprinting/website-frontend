@@ -26,6 +26,7 @@ import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import LaunchOutlinedIcon from '@mui/icons-material/LaunchOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import { confirmDialog } from './_dialog';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import MoveUpOutlinedIcon from '@mui/icons-material/MoveUpOutlined';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
@@ -282,7 +283,7 @@ export function buildTransactionMenu(t, handlers = {}) {
     handlers.onDelete && { divider: true },
     handlers.onDelete && {
       key: 'delete', label: 'Delete transaction', icon: DeleteOutlineIcon, danger: true,
-      onClick: () => { if (window.confirm('Delete this transaction? This cannot be undone.')) handlers.onDelete(t); },
+      onClick: async () => { if (await confirmDialog({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) handlers.onDelete(t); },
     },
   ];
   return items;
