@@ -811,13 +811,13 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
               <Metric
                 label="Profit"
                 value={fmt(finance.profit)}
-                accent={finance.profit < 0 ? D.amber : D.green}
+                accent={finance.profit < 0 ? '#f87171' : D.green}
                 hint={financeCogsHint(finance)}
               />
               <Metric
                 label="Margin"
                 value={`${finance.margin}%`}
-                accent={finance.margin < 0 ? D.amber : D.text}
+                accent={finance.margin < 0 ? '#f87171' : D.text}
               />
               <Metric
                 label="Outstanding"
