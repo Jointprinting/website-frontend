@@ -17,6 +17,49 @@ import { TOKENS, sxCard, sxEyebrow, mono } from './ApprovalView';
 
 const keyOf = (itemId, size) => `${itemId}|${size || ''}`;
 
+// Live countdown to the drop's close — the urgency clock on both links. Pure.
+function timeLeft(expiresAt, now) {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - now;
+  if (ms <= 0) return 'closing…';
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  if (d > 0) return `${d}d ${h}h left`;
+  if (h > 0) return `${h}h ${m}m left`;
+  if (m > 0) return `${m}m ${s}s left`;
+  return `${s}s left`;
+}
+
+// A short, self-contained confetti burst on commit — the dopamine moment on the
+// customer link. No library (CSP/bundle): index-seeded pieces, CSS-animated,
+// pointer-transparent, and skipped entirely under prefers-reduced-motion.
+const CONFETTI_COLORS = ['#4ade80', '#fbbf24', '#60a5fa', '#f87171', '#a78bfa', '#2dd4bf'];
+function Confetti() {
+  const reduce = typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return null;
+  return (
+    <Box aria-hidden sx={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 60,
+      '@keyframes jpConfFall': {
+        '0%':   { transform: 'translateY(-12vh) rotate(0deg)', opacity: 1 },
+        '100%': { transform: 'translateY(112vh) rotate(700deg)', opacity: 0 } } }}>
+      {Array.from({ length: 30 }).map((_, i) => {
+        const left = (i * 34 + (i % 3) * 9) % 100;
+        const delay = (i % 8) * 0.09;
+        const dur = 2.3 + (i % 5) * 0.4;
+        const w = 6 + (i % 4) * 2;
+        return (
+          <Box key={i} sx={{ position: 'absolute', top: 0, left: `${left}%`, width: w, height: w * 1.6,
+            bgcolor: CONFETTI_COLORS[i % CONFETTI_COLORS.length], borderRadius: '1px',
+            animation: `jpConfFall ${dur}s ${delay}s ease-in forwards` }} />
+        );
+      })}
+    </Box>
+  );
+}
+
 // One qty cell — tap +/− or type. Zero means "not this one".
 function QtyCell({ label, value, onChange, T }) {
   const v = Number(value) || 0;
@@ -47,6 +90,8 @@ export default function PreorderView() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);   // { units } after a successful commit
   const [formErr, setFormErr] = useState('');
+  const [confetti, setConfetti] = useState(false);
+  const [now, setNow] = useState(() => Date.now());   // ticks the countdown
 
   // Same theme choice (and storage key) as the approval page/portal.
   const [mode, setMode] = useState(() => {
@@ -75,6 +120,20 @@ export default function PreorderView() {
 
   useEffect(() => { document.title = data ? `${data.title} — preorder` : 'Preorder | Joint Printing'; }, [data]);
 
+  // Tick the countdown once a second, but only while the drop is open and dated.
+  useEffect(() => {
+    if (!(data && data.open && data.expiresAt)) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [data]);
+
+  // Confetti auto-clears so the DOM doesn't keep 30 nodes around forever.
+  useEffect(() => {
+    if (!confetti) return undefined;
+    const id = setTimeout(() => setConfetti(false), 4200);
+    return () => clearTimeout(id);
+  }, [confetti]);
+
   const entries = useMemo(() => Object.entries(qtys)
     .map(([k, q]) => {
       const [itemId, size] = k.split('|');
@@ -92,7 +151,10 @@ export default function PreorderView() {
       const r = await axios.post(`${config.backendUrl}/api/preorder/${encodeURIComponent(token || '')}/commit`,
         { name, contact, note, entries });
       setDone({ units });
-      setData((d) => (d ? { ...d, tally: r.data.tally } : d));
+      // Reflect the (gated) progress the server returns — reveals the FOMO bar
+      // the moment this commit tips the drop past its MOQ.
+      setData((d) => (d ? { ...d, tally: r.data.tally, moq: r.data.moq, moqReached: r.data.moqReached } : d));
+      setConfetti(true);
       setQtys({}); setNote('');
     } catch (e) {
       setFormErr(e.response?.data?.message || 'That didn’t go through — please try again.');
@@ -107,6 +169,7 @@ export default function PreorderView() {
     <Box sx={{ minHeight: '100vh', bgcolor: T.bg, position: 'relative',
       '&::before': { content: '""', position: 'fixed', top: -220, left: '50%', transform: 'translateX(-50%)',
         width: 900, height: 440, borderRadius: '50%', background: T.aura, filter: 'blur(90px)', pointerEvents: 'none' } }}>
+      {confetti && <Confetti />}
       <Box sx={{ maxWidth: 620, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 3, sm: 5 }, position: 'relative' }}>
 
         {/* Header */}
@@ -141,18 +204,45 @@ export default function PreorderView() {
           </Box>
         ) : (
           <Stack gap={2}>
-            {/* Status strip */}
+            {/* Status strip — state + live countdown (the urgency clock) */}
             <Box sx={{ ...sxCard(T), px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
               <Typography sx={{ fontSize: 12.5, fontWeight: 800, color: data.open ? T.green : T.muted }}>
                 {data.open ? '● ' : '○ '}{expiryLine}
               </Typography>
               <Box sx={{ flex: 1 }} />
-              {data.tally.people > 0 && (
+              {data.open && data.expiresAt ? (
+                <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: T.amber }}>
+                  ⏳ {timeLeft(data.expiresAt, now)}
+                </Typography>
+              ) : (!data.moqReached && data.tally.totalQty > 0 && (
                 <Typography sx={{ ...mono, fontSize: 12, color: T.muted }}>
                   {data.tally.people} in · {data.tally.totalQty} units so far
                 </Typography>
-              )}
+              ))}
             </Box>
+
+            {/* FOMO reveal — only once the drop has passed its MOQ (owner's rule:
+                hide an empty bar, show a full one as social proof). */}
+            {data.moqReached && (
+              <Box sx={{ ...sxCard(T), px: 2.5, py: 1.75, borderColor: T.lineHi,
+                background: 'linear-gradient(90deg, rgba(74,222,128,0.14), transparent 80%)' }}>
+                <Stack direction="row" alignItems="center" gap={1.25}>
+                  <Typography sx={{ fontSize: 22, lineHeight: 1 }}>🔥</Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ color: T.green, fontWeight: 900, fontSize: 14.5, lineHeight: 1.3 }}>
+                      It’s happening — {data.tally.totalQty} units in{data.moq ? `, past the ${data.moq} goal` : ''}
+                    </Typography>
+                    <Typography sx={{ color: T.muted, fontSize: 12.5 }}>
+                      {data.tally.people} {data.tally.people === 1 ? 'person’s' : 'people are'} in. Lock yours before it closes.
+                    </Typography>
+                    <Box sx={{ mt: 1, height: 7, borderRadius: 4, bgcolor: T.inset, overflow: 'hidden' }}>
+                      <Box sx={{ height: '100%', width: '100%', borderRadius: 4,
+                        background: `linear-gradient(90deg, ${T.green}, #2dd4bf)` }} />
+                    </Box>
+                  </Box>
+                </Stack>
+              </Box>
+            )}
 
             {data.note && (
               <Typography sx={{ color: T.muted, fontSize: 14, px: 0.5, lineHeight: 1.6 }}>{data.note}</Typography>
@@ -160,9 +250,13 @@ export default function PreorderView() {
 
             {done && (
               <Box sx={{ ...sxCard(T), p: 2.5, borderColor: T.lineHi, textAlign: 'center' }}>
-                <Typography sx={{ color: T.green, fontWeight: 900, fontSize: 17 }}>You’re in ✓</Typography>
+                <Typography sx={{ color: T.green, fontWeight: 900, fontSize: 17 }}>You’re in 🎉</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.5 }}>
-                  {done.units} unit{done.units === 1 ? '' : 's'} down for {name.trim()}. Committing for someone else too? Just fill it in again.
+                  {done.units} unit{done.units === 1 ? '' : 's'} down for {name.trim()}. When the drop closes and hits its goal,
+                  you’ll get a payment link to lock it in — then pick up from {data.title.split('—')[0].trim() || 'the store'}.
+                </Typography>
+                <Typography sx={{ color: T.faint, fontSize: 11.5, mt: 0.75 }}>
+                  Ordering for someone else too? Just fill it in again.
                 </Typography>
               </Box>
             )}
