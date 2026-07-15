@@ -56,6 +56,35 @@ test('N/A tier and >12 colors refuse with reasons instead of guessing', () => {
   expect(over.error).toBe('over-max-colors');
 });
 
+test('the string "6000+" top tier must NOT swallow small quantities (regression)', () => {
+  // Real-catalog shape: the 500-dozen tier carries pieces as the STRING "6000+".
+  // Before the fix, Number("6000+")→NaN→0 made every qty match this row, so every
+  // Heritage quote snapped to the cheapest tier (then got floored by the $20/color
+  // minimum) — under-pricing the job. Values are the real light-ink-on-dark grid.
+  const SP2 = {
+    screenFees: { perScreen: 20 }, minimums: { perPrintPerColor: 20 },
+    priceGrids: { lightInkOnDarkGarments: { rows: [
+      { quantityDozens: 4, pieces: 48, prices: { '4-5': 4.15 } },
+      { quantityDozens: 6, pieces: 72, prices: { '4-5': 3.35 } },
+      { quantityDozens: 200, pieces: 2400, prices: { '4-5': 1.0 } },
+      { quantityDozens: '500+', pieces: '6000+', prices: { '4-5': 0.9 } },
+    ] } },
+  };
+  // 50 pcs, dark, 4c (+1 underbase = 5 → '4-5'): the 4-dozen tier, $4.15/u — NOT
+  // the 500+ tier's $2.00/u floor the bug produced.
+  const a = screenPrintQuote(SP2, { qty: 50, shade: 'dark', locations: [{ label: 'front', colors: 4 }] });
+  expect(a.tier.dozens).toBe(4);
+  expect(a.printPerUnit).toBe(4.15);
+  // 100 pcs → the 6-dozen tier, $3.35/u (was $1.00/u).
+  const b = screenPrintQuote(SP2, { qty: 100, shade: 'dark', locations: [{ label: 'front', colors: 4 }] });
+  expect(b.tier.dozens).toBe(6);
+  expect(b.printPerUnit).toBe(3.35);
+  // A genuine 6,000-piece run still lands on the 500+ tier.
+  const big = screenPrintQuote(SP2, { qty: 6000, shade: 'dark', locations: [{ label: 'front', colors: 4 }] });
+  expect(big.tier.dozens).toBe('500+');
+  expect(big.printPerUnit).toBe(0.9);
+});
+
 test('specDetails composes the printDetails string', () => {
   expect(specDetails({ shade: 'dark', locations: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }] }))
     .toBe('3c front + 1c back · dark garment');

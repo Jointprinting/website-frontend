@@ -34,12 +34,21 @@ const COLUMN_FOR = (effColors) => {
   return null;
 };
 
+// The tier's piece FLOOR as an integer. The catalog's top row carries this as a
+// STRING — `pieces: "6000+"` (the 500-dozen tier). Number("6000+") is NaN, and
+// the old `num()` collapsed that to 0 — so `qty >= 0` matched EVERY quantity and
+// the top (cheapest) tier silently won every quote, under-pricing the whole job.
+// parseInt reads the leading number and stops at the "+", so "6000+" → 6000 and a
+// plain number passes through. NaN (missing/garbage) → the row is skipped.
+const piecesFloor = (r) => parseInt(String(r && r.pieces), 10);
+
 // Largest tier whose pieces floor the quantity reaches (see tier table in the
 // catalog: 1dz=12+, 2dz=24+, … 500dz=6000+). Below 12 pieces → the 1-dz row.
 function tierRowFor(rows, qty) {
   let best = rows[0] || null;
   for (const r of rows) {
-    if (qty >= num(r.pieces)) best = r;
+    const floor = piecesFloor(r);
+    if (Number.isFinite(floor) && qty >= floor) best = r;
   }
   return best;
 }
