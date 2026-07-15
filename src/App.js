@@ -45,6 +45,9 @@ const PortalView = lazy(() => import('./screens/PortalView'));
 // Preorder page (/preorder/:token) — expiring public link where a client's
 // people commit to quantities (not payments). Bare chrome, approval-page kin.
 const PreorderView = lazy(() => import('./screens/PreorderView'));
+// Preorder CLIENT/organizer view (/preorder/c/:clientToken) — the professional
+// half of the two-door drop: full progress + the customer link to share.
+const PreorderClientView = lazy(() => import('./screens/PreorderClientView'));
 // JP ATOM (/atom + /atom/demo) — the studio productized, its own violet brand.
 // Bare chrome: it pitches OTHER merch shops, so Joint Printing's marketing
 // nav/footer would muddle whose product it is (same reasoning as Webworks).
@@ -161,6 +164,7 @@ function AppShell() {
           {/* Client portal — one magic link per company; token-gated by the backend. */}
           <Route exact path="/portal/:token" element={<PortalView />} />
           {/* Preorder commitments — expiring public link, token-gated by the backend. */}
+          <Route exact path="/preorder/c/:clientToken" element={<PreorderClientView />} />
           <Route exact path="/preorder/:token" element={<PreorderView />} />
           {/* JP Atom — the studio as a product: landing + guided live demo. */}
           <Route exact path="/atom" element={<AtomLanding />} />

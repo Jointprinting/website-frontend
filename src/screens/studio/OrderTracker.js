@@ -1783,18 +1783,24 @@ function PreorderSection({ order, authHdr, onToast }) {
     try {
       const r = await axios.post(`${base}/preorders`,
         { title: title.trim(), note: note.trim(), items, orderId: order._id, expiresDays: Number(days) || 0, moq: Number(moq) || 0 }, authHdr);
-      const url = `${window.location.origin}/preorder/${r.data.preorder.token}`;
+      // Send the CLIENT link — the store owner shares the customer link from there.
+      const url = `${window.location.origin}/preorder/c/${r.data.preorder.clientToken}`;
       try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — link still copyable from the row */ }
-      onToast('Preorder link created + copied — send it to the client.', 'success');
+      onToast('Client link created + copied — send it to your client; they share the customer link from there.', 'success');
       setCreating(false); load();
     } catch (e) {
       onToast(e?.response?.data?.message || 'Could not create the link.', 'error');
     } finally { setBusy(false); }
   };
 
-  const copy = async (l) => {
+  const copyClient = async (l) => {
+    const url = `${window.location.origin}/preorder/c/${l.clientToken}`;
+    try { await navigator.clipboard.writeText(url); onToast('Client link copied — send it to your client.', 'success'); }
+    catch { onToast(url, 'success'); }
+  };
+  const copyCustomer = async (l) => {
     const url = `${window.location.origin}/preorder/${l.token}`;
-    try { await navigator.clipboard.writeText(url); onToast('Preorder link copied.', 'success'); }
+    try { await navigator.clipboard.writeText(url); onToast('Customer link copied — the one your client shares with their people.', 'success'); }
     catch { onToast(url, 'success'); }
   };
   const toggleClosed = async (l) => {
@@ -1883,7 +1889,10 @@ function PreorderSection({ order, authHdr, onToast }) {
                     )}
                     {isOpen && l.expiresAt ? ` · until ${new Date(l.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : (isOpen ? '' : ' · closed')}
                   </Typography>
-                  <Button size="small" onClick={() => copy(l)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Copy</Button>
+                  <Button size="small" onClick={() => copyClient(l)} title="The professional link you send your client (organizer view + the customer link to share)"
+                    sx={{ color: B.green, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Client link</Button>
+                  <Button size="small" onClick={() => copyCustomer(l)} title="The fun commit page your client shares with their customers"
+                    sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Customer link</Button>
                   <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? B.green : B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
                     {l.revokedAt ? 'Reopen' : 'Close'}
                   </Button>
