@@ -72,6 +72,7 @@ import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, matchesSource, visibleSubmissions } from './studio/_submissions';
+import { StudioDialogHost } from './studio/_dialog';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
 import RoadTripTab from './studio/RoadTripTab';
@@ -3468,9 +3469,9 @@ export default function Studio() {
   // they never load the owner's hub or tools. The PendingSyncBadge is fixed-
   // position and global, so it floats over whatever tool/view is open.
   if (role === 'agent') {
-    return (<><AgentHome token={token} onLogout={handleLogout} /><PendingSyncBadge /></>);
+    return (<><AgentHome token={token} onLogout={handleLogout} /><PendingSyncBadge /><StudioDialogHost /></>);
   }
-  return (<><StudioBody token={token} onLogout={handleLogout} /><PendingSyncBadge /></>);
+  return (<><StudioBody token={token} onLogout={handleLogout} /><PendingSyncBadge /><StudioDialogHost /></>);
 }
 
 // ── Backup nudge state ───────────────────────────────────────────────────────
