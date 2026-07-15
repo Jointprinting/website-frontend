@@ -25,6 +25,10 @@ import React from 'react';
 import { Box, Stack, Typography } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
+// Sales-tax math is the ONE canonical implementation shared with the Studio
+// (see common/confTax.js) — so the tax the client sees on this document and the
+// tax the owner sees in the Studio are computed by the exact same code.
+import { roundCents, isTaxCustomLine, confLocationTax } from '../common/confTax';
 
 // ── Brand tokens (dark) — kept in lockstep with ApprovalView's T set. ─────────
 export const DOC = {
@@ -55,42 +59,11 @@ export function money(n) {
   return `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Round-half-up to cents — mirrors backend models/Order.js roundCents.
-export const roundCents = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
-
-// Is this add-on customLine a sales-tax line? Mirrors backend isTaxCustomLine.
-export const isTaxCustomLine = (line) =>
-  !!line && (line.isTax === true || /tax/i.test(String(line.label || '')));
-
-// Per-location sales tax for a multi-ship-to confirmation. Mirrors backend
-// models/Order.js computeLocationTax and studio/_shared.js confLocationTax:
-// active only when a shipTo carries taxRate > 0; each item's merchandise revenue
-// is allocated proportionally by its unit share (clamped to [0,1] of the item),
-// summed, then × taxRate%, rounded to cents. Tax is on merchandise only.
-export function confLocationTax(conf) {
-  const n = (v) => Number(v) || 0;
-  const shipTos = Array.isArray(conf?.shipTos) ? conf.shipTos : [];
-  const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
-  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
-  const items = Array.isArray(conf?.items) ? conf.items : [];
-  const lines = taxed.map((st) => {
-    const subtotal = items.reduce((sum, it) => {
-      // NJ clothing exemption — mirrors _shared.js:confLocationTax and backend
-      // Order.js:computeLocationTax: an item flagged taxExempt contributes nothing
-      // to the taxable base, so a mixed apparel+promo order taxes only the promos.
-      if (it && it.taxExempt) return sum;
-      const itemRevenue = (it.sizes || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0);
-      const itemQty = (it.sizes || []).reduce((q, sz) => q + n(sz.qty), 0);
-      if (itemQty <= 0) return sum;
-      const allocQty = ((it && it.allocations) || []).reduce((q, a) => q + (a && a.key === st.key ? n(a.qty) : 0), 0);
-      const share = allocQty <= 0 ? 0 : (allocQty >= itemQty ? 1 : allocQty / itemQty);
-      return sum + itemRevenue * share;
-    }, 0);
-    const rate = n(st.taxRate);
-    return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, key: st.key, value: roundCents(subtotal * rate / 100) };
-  });
-  return { active: true, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
-}
+// roundCents / isTaxCustomLine / confLocationTax now come from common/confTax.js
+// (imported at the top) — one shared implementation for the client doc and the
+// Studio. Re-exported so existing importers of these from ConfirmationDocument
+// (e.g. ApprovalView) keep working unchanged.
+export { roundCents, isTaxCustomLine, confLocationTax };
 
 // Confirmation totals: percent custom-lines apply to the running subtotal, in
 // order; then per-location sales tax is added last. With no taxed shipTos this
