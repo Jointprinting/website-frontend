@@ -1805,7 +1805,7 @@ function PreorderSection({ order, authHdr, onToast }) {
                     {isOpen && l.expiresAt ? ` · until ${new Date(l.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : (isOpen ? '' : ' · closed')}
                   </Typography>
                   <Button size="small" onClick={() => copy(l)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Copy</Button>
-                  <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? B.green : '#f87171', fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
+                  <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? B.green : B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
                     {l.revokedAt ? 'Reopen' : 'Close'}
                   </Button>
                   <Button size="small" onClick={() => setExpanded(expanded === l._id ? '' : l._id)}
@@ -2848,13 +2848,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
           POs
         </Button>
-        {/* Reorder — clone this job into a fresh quote (same items + mockups). For
-            repeat clients who order the same promos again and again. */}
-        <Button startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
-          onClick={() => onReorder && onReorder()}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
-          Reorder
-        </Button>
+        {/* Reorder — clone this job into a fresh quote (same items + mockups). Only
+            offered once the job is COMPLETE (delivered): you re-order a finished
+            job for a repeat client, not one still in flight. */}
+        {project.status === 'delivered' && (
+          <Button startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
+            onClick={() => onReorder && onReorder()}
+            sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+            Reorder
+          </Button>
+        )}
         {/* "Share for approval" lives on the Approval tab (and in the
             confirmation builder's header) — not in this footer. */}
         <Button startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}

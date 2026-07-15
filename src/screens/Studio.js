@@ -1723,16 +1723,6 @@ const HUB_GROUPS = [
         ],
       },
     ],
-    foundation: {
-      blurb: 'A premium studio that builds custom operating systems for other businesses. Your Studio is the showpiece and the starting skeleton — you fork it, tailor it to a client, and charge a build fee plus a flat monthly. Fewer clients, bigger tickets, all run from here.',
-      steps: [
-        { done: true,  label: 'Name it: JP Atom' },
-        { done: true,  label: 'Publish the plan, pricing & positioning (/atom — founding $995 + $295/mo)' },
-        { done: true,  label: 'Stand up a click-around demo (/atom/demo — fake shop, real behavior)' },
-        { done: false, label: 'Record the walkthrough video for marketing' },
-        { done: false, label: 'Land the first paid build' },
-      ],
-    },
   },
 ];
 
