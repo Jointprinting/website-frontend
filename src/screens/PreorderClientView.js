@@ -153,6 +153,12 @@ export default function PreorderClientView() {
                   <Typography sx={{ ...mono, fontSize: 26, fontWeight: 900, color: T.text, lineHeight: 1 }}>{data.tally.people}</Typography>
                   <Typography sx={{ color: T.muted, fontSize: 11 }}>{data.tally.people === 1 ? 'person' : 'people'} in</Typography>
                 </Box>
+                {data.tally.revenue > 0 && (
+                  <Box>
+                    <Typography sx={{ ...mono, fontSize: 26, fontWeight: 900, color: T.green, lineHeight: 1 }}>${Math.round(data.tally.revenue).toLocaleString()}</Typography>
+                    <Typography sx={{ color: T.muted, fontSize: 11 }}>committed</Typography>
+                  </Box>
+                )}
                 {data.moq > 0 && (
                   <Box sx={{ ml: 'auto', textAlign: 'right' }}>
                     <Typography sx={{ ...mono, fontSize: 15, fontWeight: 800, color: data.moqReached ? T.green : T.amber }}>

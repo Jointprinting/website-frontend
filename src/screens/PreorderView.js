@@ -84,6 +84,7 @@ export default function PreorderView() {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
   const [qtys, setQtys] = useState({});
+  const [sel, setSel] = useState({});   // itemId → { variantId, color } (priced drops)
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [note, setNote] = useState('');
@@ -134,23 +135,40 @@ export default function PreorderView() {
     return () => clearTimeout(id);
   }, [confetti]);
 
+  // itemId → item, and the customer's per-item brand/color choice.
+  const itemById = useMemo(() => {
+    const m = {};
+    (data?.items || []).forEach((it) => { m[it.id] = it; });
+    return m;
+  }, [data]);
+
   const entries = useMemo(() => Object.entries(qtys)
     .map(([k, q]) => {
       const [itemId, size] = k.split('|');
-      return { itemId, size, qty: Number(q) || 0 };
+      const s = sel[itemId] || {};
+      return { itemId, size, qty: Number(q) || 0, variantId: s.variantId || '', color: s.color || '' };
     })
-    .filter((e) => e.qty > 0), [qtys]);
+    .filter((e) => e.qty > 0), [qtys, sel]);
   const units = entries.reduce((t, e) => t + e.qty, 0);
+  // Running $ total using each chosen brand's price (0 for un-priced drops).
+  const total = useMemo(() => entries.reduce((t, e) => {
+    const v = (itemById[e.itemId]?.variants || []).find((x) => x.id === e.variantId);
+    return t + e.qty * (v ? Number(v.price) || 0 : 0);
+  }, 0), [entries, itemById]);
 
   const submit = async () => {
     setFormErr('');
     if (!name.trim()) { setFormErr('Add your name so the order knows who this is for.'); return; }
     if (!entries.length) { setFormErr('Pick at least one quantity above.'); return; }
+    // A priced item with a qty but no brand chosen can't be priced — nudge them.
+    if (entries.some((e) => (itemById[e.itemId]?.variants || []).length > 0 && !e.variantId)) {
+      setFormErr('Pick a brand for each item you’re ordering.'); return;
+    }
     setSending(true);
     try {
       const r = await axios.post(`${config.backendUrl}/api/preorder/${encodeURIComponent(token || '')}/commit`,
         { name, contact, note, entries });
-      setDone({ units });
+      setDone({ units, total });
       // Reflect the (gated) progress the server returns — reveals the FOMO bar
       // the moment this commit tips the drop past its MOQ.
       setData((d) => (d ? { ...d, tally: r.data.tally, moq: r.data.moq, moqReached: r.data.moqReached } : d));
@@ -258,7 +276,7 @@ export default function PreorderView() {
               <Box sx={{ ...sxCard(T), p: 2.5, borderColor: T.lineHi, textAlign: 'center' }}>
                 <Typography sx={{ color: T.green, fontWeight: 900, fontSize: 17 }}>You’re in 🎉</Typography>
                 <Typography sx={{ color: T.muted, fontSize: 13, mt: 0.5 }}>
-                  {done.units} unit{done.units === 1 ? '' : 's'} down for {name.trim()}. When the drop closes and hits its goal,
+                  {done.units} unit{done.units === 1 ? '' : 's'}{done.total > 0 ? ` · $${done.total.toFixed(2)}` : ''} down for {name.trim()}. When the drop closes and hits its goal,
                   you’ll get a payment link to lock it in{data.pickupLocation ? `, then pick up at ${data.pickupLocation}` : ' — pickup details to follow'}.
                 </Typography>
                 <Typography sx={{ color: T.faint, fontSize: 11.5, mt: 0.75 }}>
@@ -275,24 +293,76 @@ export default function PreorderView() {
             ) : (
               <>
                 {/* Items */}
-                {data.items.map((it) => (
-                  <Box key={it.id} sx={{ ...sxCard(T), p: 2.5 }}>
-                    <Typography sx={{ color: T.text, fontWeight: 800, fontSize: 15, mb: 1.25 }}>{it.label}</Typography>
-                    {it.sizes && it.sizes.length ? (
-                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
-                        {it.sizes.map((s) => (
-                          <QtyCell key={s} label={s} T={T} value={qtys[keyOf(it.id, s)]}
-                            onChange={(v) => setQtys((q) => ({ ...q, [keyOf(it.id, s)]: v }))} />
-                        ))}
-                      </Box>
-                    ) : (
-                      <Box sx={{ maxWidth: 220 }}>
-                        <QtyCell label="Qty" T={T} value={qtys[keyOf(it.id, '')]}
-                          onChange={(v) => setQtys((q) => ({ ...q, [keyOf(it.id, '')]: v }))} />
-                      </Box>
-                    )}
-                  </Box>
-                ))}
+                {data.items.map((it) => {
+                  const hasVariants = (it.variants || []).length > 0;
+                  const s = sel[it.id] || {};
+                  const chosen = hasVariants ? (it.variants.find((v) => v.id === s.variantId) || null) : null;
+                  return (
+                    <Box key={it.id} sx={{ ...sxCard(T), p: 2.5 }}>
+                      <Stack direction="row" alignItems="baseline" gap={1} sx={{ mb: hasVariants ? 1.25 : 1.25 }}>
+                        <Typography sx={{ color: T.text, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }}>{it.label}</Typography>
+                        {chosen && (
+                          <Typography sx={{ ...mono, color: T.green, fontWeight: 800, fontSize: 15, whiteSpace: 'nowrap' }}>
+                            ${Number(chosen.price).toFixed(2)}<Box component="span" sx={{ color: T.faint, fontSize: 11, fontWeight: 600 }}> /ea</Box>
+                          </Typography>
+                        )}
+                      </Stack>
+
+                      {hasVariants && (
+                        <>
+                          <Typography sx={{ ...sxEyebrow(T), display: 'block', fontSize: 9.5, mb: 0.75 }}>Brand</Typography>
+                          <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1.25 }}>
+                            {it.variants.map((v) => {
+                              const on = s.variantId === v.id;
+                              return (
+                                <Button key={v.id} disableRipple
+                                  onClick={() => setSel((m) => ({ ...m, [it.id]: { variantId: v.id, color: (v.colors || [])[0] || '' } }))}
+                                  sx={{ textTransform: 'none', fontSize: 12.5, fontWeight: 700, px: 1.25, py: 0.5, borderRadius: 2, minWidth: 0,
+                                    border: `1px solid ${on ? T.lineHi : T.line}`, bgcolor: on ? 'rgba(74,222,128,0.10)' : 'transparent',
+                                    color: on ? T.green : T.muted, '&:hover': { borderColor: T.lineHi } }}>
+                                  {v.name} · ${Number(v.price).toFixed(2)}
+                                </Button>
+                              );
+                            })}
+                          </Stack>
+                          {chosen && (chosen.colors || []).length > 0 && (
+                            <>
+                              <Typography sx={{ ...sxEyebrow(T), display: 'block', fontSize: 9.5, mb: 0.75 }}>Color</Typography>
+                              <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1.25 }}>
+                                {chosen.colors.map((c) => {
+                                  const on = s.color === c;
+                                  return (
+                                    <Button key={c} disableRipple
+                                      onClick={() => setSel((m) => ({ ...m, [it.id]: { ...m[it.id], color: c } }))}
+                                      sx={{ textTransform: 'none', fontSize: 12, fontWeight: 700, px: 1.1, py: 0.4, borderRadius: 2, minWidth: 0,
+                                        border: `1px solid ${on ? T.lineHi : T.line}`, bgcolor: on ? 'rgba(74,222,128,0.10)' : 'transparent',
+                                        color: on ? T.green : T.muted, '&:hover': { borderColor: T.lineHi } }}>
+                                      {c}
+                                    </Button>
+                                  );
+                                })}
+                              </Stack>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {it.sizes && it.sizes.length ? (
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
+                          {it.sizes.map((sz) => (
+                            <QtyCell key={sz} label={sz} T={T} value={qtys[keyOf(it.id, sz)]}
+                              onChange={(v) => setQtys((q) => ({ ...q, [keyOf(it.id, sz)]: v }))} />
+                          ))}
+                        </Box>
+                      ) : (
+                        <Box sx={{ maxWidth: 220 }}>
+                          <QtyCell label="Qty" T={T} value={qtys[keyOf(it.id, '')]}
+                            onChange={(v) => setQtys((q) => ({ ...q, [keyOf(it.id, '')]: v }))} />
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })}
 
                 {/* Who this is for */}
                 <Box sx={{ ...sxCard(T), p: 2.5 }}>
@@ -312,10 +382,15 @@ export default function PreorderView() {
                       sx={{ bgcolor: T.green, color: T.onAccent, fontWeight: 900, fontSize: 14.5, py: 1.1,
                         borderRadius: 2.5, textTransform: 'none', '&:hover': { bgcolor: T.green, filter: 'brightness(1.08)' },
                         '&.Mui-disabled': { bgcolor: T.inset, color: T.faint } }}>
-                      {sending ? 'Sending…' : units > 0 ? `Commit ${units} unit${units === 1 ? '' : 's'} →` : 'Commit →'}
+                      {sending ? 'Sending…'
+                        : units > 0
+                          ? `Commit ${units} unit${units === 1 ? '' : 's'}${total > 0 ? ` · $${total.toFixed(2)}` : ''} →`
+                          : 'Commit →'}
                     </Button>
                     <Typography sx={{ color: T.faint, fontSize: 11.5, textAlign: 'center' }}>
-                      A commitment, not a payment — nothing is charged here.
+                      {total > 0
+                        ? 'A commitment, not a payment — nothing is charged now. You’ll get a payment link when the drop closes and hits its goal.'
+                        : 'A commitment, not a payment — nothing is charged here.'}
                     </Typography>
                   </Stack>
                 </Box>
