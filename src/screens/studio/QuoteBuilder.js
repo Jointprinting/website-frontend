@@ -810,7 +810,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // Methods any printer in the network can actually price, in menu order.
   const netMethods = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery']
     .filter(m => printers.some(p => sectionFor(p, m)));
-  const capablePrinters = printers.filter(p => sectionFor(p, specMethod));
+  const capablePrinters = printers.filter(p => sectionFor(p, specMethod))
+    // Eligible (out-of-state) printers first; same-state sink to the end (still
+    // shown, greyed with the nexus reason). shipToState-aware, stable otherwise.
+    .sort((a, b) => {
+      const st = String(shipToState || '').trim().toUpperCase();
+      return (st && String(a.state).toUpperCase() === st ? 1 : 0) - (st && String(b.state).toUpperCase() === st ? 1 : 0);
+    });
   const [specPrinterKey, setSpecPrinterKey] = useState('');
   const specPrinter = capablePrinters.find(p => p.key === specPrinterKey) || capablePrinters[0] || null;
   const specSection = sectionFor(specPrinter, specMethod);
@@ -1638,12 +1644,16 @@ function PrinterSuggest({ shipToState, printerName, onPick, authHdr }) {
   }, []);
   if (!printers || !printers.length) return <Box sx={{ mb: 1.5 }} />;
   const st = String(shipToState || '').trim().toUpperCase();
+  // Eligible (out-of-state) printers lead; same-state ones sink to the end but
+  // stay visible + greyed with the reason — never hidden. Stable otherwise.
+  const ordered = [...printers].sort((a, b) =>
+    (!!st && String(a.state).toUpperCase() === st ? 1 : 0) - (!!st && String(b.state).toUpperCase() === st ? 1 : 0));
   return (
     <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" sx={{ mb: 2.5 }}>
       <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
         Your network
       </Typography>
-      {printers.map(p => {
+      {ordered.map(p => {
         const blocked = !!st && String(p.state).toUpperCase() === st;
         const picked = (printerName || '').toLowerCase().includes(String(p.name || '').split(' ')[0].toLowerCase());
         return (
