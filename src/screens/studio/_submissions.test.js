@@ -5,6 +5,7 @@
 import {
   SOURCE_FILTERS, SOURCE_META, matchesSource, effectiveSource, visibleSubmissions,
   submissionSource, countsBySource,
+  statusValuesFor, STATUS_VALUES_BY_SOURCE, STATUS_VALUES_ALL,
 } from './_submissions';
 
 const webworksLead = { _id: 'w1', source: 'webworks' };
@@ -98,5 +99,24 @@ describe('countsBySource (the source chips)', () => {
 
   test('tolerates a missing list', () => {
     expect(countsBySource(undefined)).toEqual({ all: 0, webworks: 0, atom: 0, contact: 0 });
+  });
+});
+
+describe('statusValuesFor (per-brand pipelines — mirrors backend STATUSES_BY_SOURCE)', () => {
+  test('each brand inbox offers ITS pipeline, not the merch one', () => {
+    expect(statusValuesFor('contact')).toEqual(['new', 'contacted', 'quoted', 'won', 'lost', 'spam']);
+    expect(statusValuesFor('webworks')).toContain('preview-sent');
+    expect(statusValuesFor('webworks')).not.toContain('quoted');
+    expect(statusValuesFor('atom')).toContain('onboarding');
+    expect(statusValuesFor('atom')).not.toContain('won');
+  });
+
+  test('mixed/unknown views get the union so any row status is representable', () => {
+    expect(statusValuesFor('all')).toEqual(STATUS_VALUES_ALL);
+    expect(statusValuesFor(undefined)).toEqual(STATUS_VALUES_ALL);
+    const union = new Set(STATUS_VALUES_ALL);
+    Object.values(STATUS_VALUES_BY_SOURCE).flat().forEach((v) => {
+      expect(union.has(v)).toBe(true);
+    });
   });
 });

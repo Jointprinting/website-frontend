@@ -105,7 +105,8 @@ export default function AtomContact() {
             <Typography sx={{ fontWeight: 900, fontSize: 26, letterSpacing: -0.5, mt: 1 }}>You're in the queue.</Typography>
             <Typography sx={{ color: A.muted, fontSize: 14.5, mt: 1, maxWidth: 420, mx: 'auto' }}>
               Expect a reply within one business day — a quick walkthrough with <b>your</b> shop's
-              numbers in it, not demo data. Founding pricing is locked from this moment.
+              numbers in it, not demo data. Check your inbox: you can reply to the
+              confirmation with exports or screenshots of what you run on today.
             </Typography>
             <Button component={RouterLink} to="/atom/demo" sx={{ ...atomPrimaryBtn, mt: 3 }}>
               Keep driving the demo
@@ -118,7 +119,7 @@ export default function AtomContact() {
             </Typography>
             <Typography sx={{ color: A.muted, fontSize: 14.5, mt: 1, mb: 3.5 }}>
               Two minutes of questions so the walkthrough lands with your shop's reality in it.
-              Founding pricing: <b style={{ color: A.text }}>$995 setup + $295/mo</b>.
+              No card, no commitment — this books a walkthrough, nothing else.
             </Typography>
 
             <Stack gap={2.5}>
@@ -165,10 +166,10 @@ export default function AtomContact() {
 
               {err && <Typography sx={{ color: A.amber, fontSize: 13, fontWeight: 700 }}>{err}</Typography>}
               <Button onClick={submit} disabled={busy} sx={{ ...atomPrimaryBtn, alignSelf: 'flex-start' }}>
-                {busy ? 'Sending…' : 'Claim founding pricing →'}
+                {busy ? 'Sending…' : 'Book a walkthrough →'}
               </Button>
               <Typography sx={{ color: A.faint, fontSize: 11.5 }}>
-                No card, no commitment — this books a walkthrough, nothing else.
+                Free, and yours to say no to — you'll see it working before any talk of price.
               </Typography>
             </Stack>
           </>

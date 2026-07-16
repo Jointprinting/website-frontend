@@ -58,5 +58,24 @@ export const matchesSource = (item, filter) =>
 export const effectiveSource = (sourceFilter, lockedSource) =>
   lockedSource || sourceFilter || 'all';
 
+// Per-brand lead pipelines — which lifecycle statuses each brand's inbox offers.
+// Mirrors backend models/ContactSubmission.js STATUSES_BY_SOURCE (keep in sync):
+//   contact  (JP merch):  new → contacted → quoted → won / lost
+//   webworks (sites):     new → contacted → preview-built → preview-sent → live / churned / lost
+//   atom     (studio):    new → contacted → demo-booked → scoped → onboarding → live / churned / lost
+// 'all' (the unlocked mixed inbox) shows the union so any row's status is
+// representable. statusValuesFor never returns undefined — unknown → union.
+export const STATUS_VALUES_BY_SOURCE = {
+  contact:  ['new', 'contacted', 'quoted', 'won', 'lost', 'spam'],
+  webworks: ['new', 'contacted', 'preview-built', 'preview-sent', 'live', 'churned', 'lost', 'spam'],
+  atom:     ['new', 'contacted', 'demo-booked', 'scoped', 'onboarding', 'live', 'churned', 'lost', 'spam'],
+};
+export const STATUS_VALUES_ALL = [
+  'new', 'contacted', 'quoted', 'preview-built', 'preview-sent', 'demo-booked',
+  'scoped', 'onboarding', 'won', 'live', 'lost', 'churned', 'spam',
+];
+export const statusValuesFor = (source) =>
+  STATUS_VALUES_BY_SOURCE[source] || STATUS_VALUES_ALL;
+
 export const visibleSubmissions = (items, { sourceFilter = 'all', lockedSource = null } = {}) =>
   (items || []).filter((it) => matchesSource(it, effectiveSource(sourceFilter, lockedSource)));

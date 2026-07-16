@@ -71,7 +71,7 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
-import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, countsBySource } from './studio/_submissions';
+import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, countsBySource, effectiveSource, statusValuesFor } from './studio/_submissions';
 import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
@@ -112,13 +112,24 @@ const ROLE_KEY = 'jpStudioRole';
 // Mirrors backend (controllers/auth.js) — display-only.
 const MAX_ATTEMPTS_BEFORE_LOCKOUT = 5;
 
+// The UNION of every brand's lead lifecycle (labels + chip colors). Which subset
+// an inbox actually offers comes from statusValuesFor(source) in _submissions.js
+// (mirrors backend STATUSES_BY_SOURCE): merch quotes, webworks previews→live,
+// atom demo→onboarding→live. statusMeta falls back to 'new' for unknowns.
 const STATUS_OPTIONS = [
-  { value: 'new',          label: 'New',          color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
-  { value: 'contacted',    label: 'Contacted',    color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
-  { value: 'quoted',       label: 'Quoted',       color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
-  { value: 'won',          label: 'Won',          color: '#4ade80', bg: 'rgba(74,222,128,0.14)' },
-  { value: 'lost',         label: 'Lost',         color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' },
-  { value: 'spam',         label: 'Spam',         color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+  { value: 'new',           label: 'New',           color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+  { value: 'contacted',     label: 'Contacted',     color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+  { value: 'quoted',        label: 'Quoted',        color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  { value: 'preview-built', label: 'Preview built', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },
+  { value: 'preview-sent',  label: 'Preview sent',  color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  { value: 'demo-booked',   label: 'Demo booked',   color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },
+  { value: 'scoped',        label: 'Scoped',        color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+  { value: 'onboarding',    label: 'Onboarding',    color: '#34d399', bg: 'rgba(52,211,153,0.12)' },
+  { value: 'won',           label: 'Won',           color: '#4ade80', bg: 'rgba(74,222,128,0.14)' },
+  { value: 'live',          label: 'Live',          color: '#4ade80', bg: 'rgba(74,222,128,0.14)' },
+  { value: 'lost',          label: 'Lost',          color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' },
+  { value: 'churned',       label: 'Churned',       color: '#fb923c', bg: 'rgba(251,146,60,0.12)' },
+  { value: 'spam',          label: 'Spam',          color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
 ];
 
 const statusMeta = (s) => STATUS_OPTIONS.find((x) => x.value === s) || STATUS_OPTIONS[0];
@@ -532,12 +543,29 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
   // dropped so the JP Atom chip always read 0).
   const sourceCounts = React.useMemo(() => countsBySource(items), [items]);
 
+  // Each brand's inbox shows ITS pipeline's pills (merch quotes, webworks
+  // previews→live, atom demo→onboarding→live); the mixed 'all' view shows the
+  // union. Values come from _submissions.js (mirrors the backend).
+  const statusOpts = React.useMemo(() => {
+    const allowed = statusValuesFor(effectiveSource(sourceFilter, lockedSource));
+    return STATUS_OPTIONS.filter((s) => allowed.includes(s.value));
+  }, [sourceFilter, lockedSource]);
+
+  // Switching brand slice can strand an active pill on a status the new
+  // pipeline doesn't have (e.g. 'quoted' → the webworks inbox) — fall back to
+  // All so the list never silently filters on an invisible status.
+  React.useEffect(() => {
+    if (statusFilter !== 'all' && !statusOpts.some((s) => s.value === statusFilter)) {
+      setStatusFilter('all');
+    }
+  }, [statusOpts, statusFilter]);
+
   const statusCounts = React.useMemo(() => {
     const counts = { all: visible.length };
-    STATUS_OPTIONS.forEach((s) => { counts[s.value] = 0; });
+    statusOpts.forEach((s) => { counts[s.value] = 0; });
     visible.forEach((it) => { counts[it.status || 'new'] = (counts[it.status || 'new'] || 0) + 1; });
     return counts;
-  }, [visible]);
+  }, [visible, statusOpts]);
 
   return (
     <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
@@ -575,7 +603,7 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
           active={statusFilter === 'all'} label="All" count={statusCounts.all}
           onClick={() => setStatusFilter('all')} color={BRAND.green}
         />
-        {STATUS_OPTIONS.map((s) => (
+        {statusOpts.map((s) => (
           <FilterPill
             key={s.value}
             active={statusFilter === s.value} label={s.label} count={statusCounts[s.value] || 0}
@@ -683,7 +711,13 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
                       '& .MuiSelect-select': { color: BRAND.white },
                     }}
                   >
-                    {STATUS_OPTIONS.map((s) => (
+                    {/* This lead's OWN brand pipeline (merch / webworks / atom);
+                        a legacy status outside it stays selectable so an old
+                        row never renders an out-of-range Select. */}
+                    {STATUS_OPTIONS.filter((s) =>
+                      statusValuesFor(submissionSource(selected)).includes(s.value)
+                      || s.value === (selected.status || 'new')
+                    ).map((s) => (
                       <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
                     ))}
                   </Select>
@@ -703,6 +737,12 @@ function SubmissionsTab({ token, onOpenClients, lockedSource }) {
                     <Detail label="Plan interest">{selected.webworks?.planInterest || '-'}</Detail>
                     <Detail label="Current site">{selected.webworks?.currentWebsite || '-'}</Detail>
                     <Detail label="Service area">{selected.webworks?.serviceArea || '-'}</Detail>
+                  </>
+                ) : selected.source === 'atom' ? (
+                  <>
+                    <Detail label="Runs the shop on">{selected.atom?.runsOn || '-'}</Detail>
+                    <Detail label="Orders / month">{selected.atom?.monthlyVolume || '-'}</Detail>
+                    <Detail label="Wants handled first">{selected.atom?.interests || '-'}</Detail>
                   </>
                 ) : (
                   <>
@@ -2139,7 +2179,7 @@ const TIER_COLS = {
 // records. A new-site-inquiry row (from the hub's unseen-inquiry count) leads the
 // list, and the backup nudge (client-gated by localStorage) trails it; the whole
 // section still vanishes on a clean day.
-function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage }) {
+function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
   const [open, setOpen] = React.useState({});
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
@@ -2188,52 +2228,37 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage })
   // Tone per severity, from palette D (critical red, warning amber, info green).
   const TONE = { critical: '#f87171', warning: D.amber, info: D.green };
 
-  // Deep-link one expanded item to its exact record, by the group's kind.
-  const itemNav = (kind, it) => {
-    if (kind === 'order') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
-    else if (kind === 'crm') onNavigate && onNavigate({ view: 'crm', companyKey: it.companyKey || null });
-    else if (kind === 'lookbook') onNavigate && onNavigate({ view: 'lookbooks', companyKey: it.companyKey || null });
+  // Deep-link one expanded item to its exact record, by the row's kind. An
+  // inquiry item opens its brand's OWN inbox (the row carries the view — same
+  // per-source mark-seen behavior as the hub tiles).
+  const itemNav = (r, it) => {
+    if (r.kind === 'order') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
+    else if (r.kind === 'crm') onNavigate && onNavigate({ view: 'crm', companyKey: it.companyKey || null });
+    else if (r.kind === 'lookbook') onNavigate && onNavigate({ view: 'lookbooks', companyKey: it.companyKey || null });
+    else if (r.kind === 'inquiry') onPick && onPick(r.view);
   };
 
-  // Flatten the server groups into rows (critical → warning → info). Order/CRM
-  // groups expand to their records; the reply group jumps to the Outreach worklist.
+  // Flatten the server groups into rows (critical → warning → info). Order/CRM/
+  // lookbook/inquiry groups expand to their records; the reply group jumps to the
+  // Outreach worklist. Inquiry groups (server-composed per brand: un-actioned
+  // leads awaiting a reply, stale → critical) are filtered to THIS page's brand —
+  // the amber hub banner covers the other brands' pipes on every page.
   const rows = [];
   for (const sev of ['critical', 'warning', 'info']) {
     for (const g of (groups[sev] || [])) {
       if (!g || !g.count) continue;
+      if (g.kind === 'inquiry' && brandFilter && g.brand && g.brand !== brandFilter) continue;
       const items = Array.isArray(g.items) ? g.items : [];
-      const expandable = (g.kind === 'order' || g.kind === 'crm' || g.kind === 'lookbook') && items.length > 0;
+      const expandable = (g.kind === 'order' || g.kind === 'crm' || g.kind === 'lookbook' || g.kind === 'inquiry') && items.length > 0;
       rows.push({
-        key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, items, expandable,
+        key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, view: g.view, items, expandable,
         onClick: expandable ? null
           : g.kind === 'triage' ? () => onPick && onPick({ target: 'outreach', view: 'replies' })
           : g.kind === 'crm' ? () => onPick && onPick({ target: 'crm', view: 'today' })
+          : g.kind === 'inquiry' ? () => onPick && onPick(g.view)
           : null,
       });
     }
-  }
-
-  // A new inquiry is a live inbound lead — surface it FIRST, one row per lead
-  // pipe. Each row opens ITS OWN inbox (which marks only that source seen),
-  // same as the hub tiles: contact-form leads → the Joint Printing Inquiries
-  // inbox; /webworks/start leads → the JP Webworks one.
-  const unseenWebworks = unseenInquiries?.webworks || 0;
-  const unseenContact  = unseenInquiries?.contact || 0;
-  if (unseenWebworks > 0) {
-    rows.unshift({
-      key: 'inquiry-webworks',
-      tone: '#17b878',
-      label: `${unseenWebworks} new JP Webworks lead${unseenWebworks === 1 ? '' : 's'}`,
-      onClick: () => onPick && onPick('jpwinquiries'),
-    });
-  }
-  if (unseenContact > 0) {
-    rows.unshift({
-      key: 'inquiry-contact',
-      tone: D.green,
-      label: `${unseenContact} new inquir${unseenContact === 1 ? 'y' : 'ies'} from the site`,
-      onClick: () => onPick && onPick('submissions'),
-    });
   }
 
   // AI-copywriting budget row. Blocked is urgent → lead the list (red);
@@ -2317,8 +2342,8 @@ function SignalsPanel({ signals, onNavigate, onPick, unseenInquiries, aiUsage })
                   const idTxt = it.projectNumber || it.orderNumber || '';
                   return (
                     <Box key={it._id || it.companyKey || idTxt || idx}
-                      onClick={() => itemNav(r.kind, it)} role="button" tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') itemNav(r.kind, it); }}
+                      onClick={() => itemNav(r, it)} role="button" tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') itemNav(r, it); }}
                       sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4.75, pr: 1.75, py: 0.85, cursor: 'pointer',
                         '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}>
                       {idTxt
@@ -2831,7 +2856,7 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
       {/* Command center — what needs attention, on arrival. Hidden entirely (header
           and all) when nothing needs attention — no dead placeholder. */}
       {showJpVitals && (
-        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} unseenInquiries={unseenInquiries} aiUsage={aiUsage} />
+        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} brandFilter={activeBiz} aiUsage={aiUsage} />
       )}
 
       {visibleGroups.map((group) => (
@@ -2990,10 +3015,10 @@ function StudioBody({ token, onLogout }) {
   // nudge dot. nextResetAt is the server-reported UTC midnight ISO string.
   const [sweepBlocked, setSweepBlocked] = React.useState(false);
   const [nextResetAt, setNextResetAt]   = React.useState(null);
-  // Unseen inquiry counts, one per lead pipe — the Joint Printing Inquiries
-  // tile wears `contact`, the JP Webworks tile wears `webworks`. Fetched as
-  // two source-scoped counts so each badge clears only when ITS view opens.
-  const [unseenInquiries, setUnseenInquiries] = React.useState({ contact: 0, webworks: 0 });
+  // Unseen inquiry counts, one per lead pipe — each brand's Inquiries tile
+  // wears its own badge. Fetched as source-scoped counts so a badge clears
+  // only when ITS view opens.
+  const [unseenInquiries, setUnseenInquiries] = React.useState({ contact: 0, webworks: 0, atom: 0 });
   // AI-copywriting budget snapshot (GET /api/jpw/ai-usage) — powers the hub's
   // low-credit Signal row so the owner isn't surprised by a drained Anthropic
   // balance. Null until the fetch lands (or if it fails — then no row shows).
