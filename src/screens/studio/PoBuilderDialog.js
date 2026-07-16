@@ -140,10 +140,15 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
     setSaving(true);
     try {
       const r = await axios.put(`${base}/orders/pos/${editing._id}`, editing, authHdr);
-      setPos(prev => prev.map(p => p._id === r.data._id ? r.data : p));
-      setEditing({ ...r.data });
+      // Strip the advisory `warning` (e.g. a hand-typed PO # that collides with an
+      // existing one for this vendor) off the stored PO so it isn't re-sent on the
+      // next save, but surface it once — non-blocking, the save still succeeded.
+      const { warning, ...saved } = r.data;
+      setPos(prev => prev.map(p => p._id === saved._id ? saved : p));
+      setEditing({ ...saved });
       setDirty(false);
-      return r.data;
+      if (warning) alertDialog(warning);
+      return saved;
     } catch (e) {
       alertDialog(`Save failed: ${e.response?.data?.message || e.message}`);
       return null;
