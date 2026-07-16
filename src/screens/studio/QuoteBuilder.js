@@ -50,7 +50,7 @@ import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } fr
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
-import { priceMethod, specDetails } from '../../common/printerPricing';
+import { priceMethod, specDetails, METHOD_SECTION } from '../../common/printerPricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -800,10 +800,45 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const [specOpen, setSpecOpen] = useState(false);
   const [specShade, setSpecShade] = useState('light');
   const [specLocs, setSpecLocs] = useState([{ label: 'front', colors: 1 }]);
-  const spScreen = (p) => p && p.catalog && p.catalog.screenPrinting;
-  const screenPrinters = printers.filter(spScreen);
+  // Which print method this design is priced as — drives which catalog section
+  // the engine reads, which printers can run it, and which inputs show.
+  const [specMethod, setSpecMethod] = useState('Screen Print');
+  const [specSize, setSpecSize] = useState('');      // DTG / DTF: the print size the printer prices on
+  const [specStitches, setSpecStitches] = useState(''); // embroidery
+  // A printer's price-book section for the chosen method (null → can't run it).
+  const sectionFor = (p, method) => (p && p.catalog && METHOD_SECTION[method]) ? p.catalog[METHOD_SECTION[method]] : null;
+  // Methods any printer in the network can actually price, in menu order.
+  const netMethods = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery']
+    .filter(m => printers.some(p => sectionFor(p, m)));
+  const capablePrinters = printers.filter(p => sectionFor(p, specMethod));
   const [specPrinterKey, setSpecPrinterKey] = useState('');
-  const specPrinter = screenPrinters.find(p => p.key === specPrinterKey) || screenPrinters[0] || null;
+  const specPrinter = capablePrinters.find(p => p.key === specPrinterKey) || capablePrinters[0] || null;
+  const specSection = sectionFor(specPrinter, specMethod);
+  // Size options for size-priced methods (DTG sizes, DTF size/sqin bands).
+  const sizeOptions = specSection ? (specSection.sizes || specSection.sizeBands || []) : [];
+  const needsSize = sizeOptions.length > 0;
+  const needsStitches = specMethod === 'Embroidery';
+  const needsLocations = specMethod === 'Screen Print';
+  const usesShade = specMethod === 'Screen Print' || specMethod === 'DTG';
+  // Build the priceMethod() spec for a given quantity, in the shape this method
+  // needs (screen wants locations+shade; DTG size+shade; DTF a size or a flat
+  // sheet; embroidery a stitch count; squeegee just the quantity).
+  const specFor = (qty) => {
+    const q = num(qty);
+    const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
+    if (specMethod === 'Screen Print') return { qty: q, shade: specShade, locations };
+    if (specMethod === 'DTG') return { qty: q, size: specSize, shade: specShade };
+    if (specMethod === 'DTF') return needsSize ? { qty: q, size: specSize } : { qty: q, sheets: 1 };
+    if (specMethod === 'Embroidery') return { qty: q, stitches: num(specStitches) };
+    return { qty: q }; // Digital Squeegee — full color, qty only
+  };
+  const detailsFor = () => {
+    if (specMethod === 'Screen Print') return specDetails({ shade: specShade, locations: specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0) });
+    if (specMethod === 'DTG') return `DTG ${specSize}${specShade === 'dark' ? ' · dark' : ''}`.trim();
+    if (specMethod === 'DTF') return needsSize && specSize ? `DTF ${specSize}` : 'DTF';
+    if (specMethod === 'Embroidery') return `Embroidery · ${num(specStitches)} st`;
+    return 'Digital Squeegee';
+  };
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -1088,7 +1123,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             placeholder={numMixedOver(all, 'turnaroundWeeks') ? 'varies' : 'wks'}
             onChange={e => onPatchIdxs(all, { turnaroundWeeks: e.target.value })} sx={tf} />
         </QF>
-        {specPrinter && (
+        {netMethods.length > 0 && (
           <Button size="small" onClick={() => setSpecOpen(o => !o)}
             sx={{ color: specOpen ? D.green : D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none',
               border: `1px ${specOpen ? 'solid' : 'dashed'} ${specOpen ? D.green : D.line}`, borderRadius: 999, px: 1.5, mb: 0.3,
@@ -1103,15 +1138,25 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
           cell fills its print $/u + setup straight from that printer's grid:
           dozens-tier lookup, +1 underbase color on darks, $20/color minimums,
           $20/screen setup. Each design can price off a DIFFERENT printer. */}
-      {specOpen && specPrinter && (
+      {specOpen && (
         <Box sx={{ mx: { xs: 1.5, md: 2 }, mb: 1.25, p: 1.5, borderRadius: 2.5,
           bgcolor: 'rgba(74,222,128,0.04)', border: `1px solid ${D.lineHi}` }}>
           <Stack direction="row" gap={1} alignItems="flex-end" flexWrap="wrap">
-            <QF label="Printer (this design)" sx={{ width: 200 }}>
+            <QF label="Method" sx={{ width: 148 }}>
               <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
-                <Select value={specPrinter.key} onChange={e => setSpecPrinterKey(e.target.value)}
+                <Select value={specMethod} onChange={e => { setSpecMethod(e.target.value); setSpecPrinterKey(''); setSpecSize(''); }}
                   sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
-                  {screenPrinters.map(p => {
+                  {netMethods.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </QF>
+            <QF label="Printer (this design)" sx={{ width: 190 }}>
+              <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                <Select value={specPrinter ? specPrinter.key : ''} displayEmpty onChange={e => setSpecPrinterKey(e.target.value)}
+                  sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                  {capablePrinters.length === 0 && <MenuItem value="" disabled><em>no printer runs {specMethod}</em></MenuItem>}
+                  {capablePrinters.map(p => {
+                    // Nexus: same-state printers are GREYED with the reason, never hidden.
                     const blocked = shipToState && String(p.state).toUpperCase() === String(shipToState).toUpperCase();
                     return (
                       <MenuItem key={p.key} value={p.key} disabled={blocked}>
@@ -1122,16 +1167,35 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                 </Select>
               </FormControl>
             </QF>
-            <QF label="Garment" sx={{ width: 110 }}>
-              <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
-                <Select value={specShade} onChange={e => setSpecShade(e.target.value)}
-                  sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
-                  <MenuItem value="light">Light</MenuItem>
-                  <MenuItem value="dark">Dark (+underbase)</MenuItem>
-                </Select>
-              </FormControl>
-            </QF>
-            {specLocs.map((loc, i) => (
+            {usesShade && (
+              <QF label="Garment" sx={{ width: 110 }}>
+                <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                  <Select value={specShade} onChange={e => setSpecShade(e.target.value)}
+                    sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                    <MenuItem value="light">Light</MenuItem>
+                    <MenuItem value="dark">Dark{specMethod === 'Screen Print' ? ' (+underbase)' : ''}</MenuItem>
+                  </Select>
+                </FormControl>
+              </QF>
+            )}
+            {needsSize && (
+              <QF label="Print size" sx={{ width: 120 }}>
+                <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                  <Select value={specSize} displayEmpty onChange={e => setSpecSize(e.target.value)}
+                    sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                    <MenuItem value="" disabled><em>size</em></MenuItem>
+                    {sizeOptions.map(s => <MenuItem key={s} value={s}>{s}{/^\d/.test(s) && !/x/i.test(s) ? ' sq"' : ''}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </QF>
+            )}
+            {needsStitches && (
+              <QF label="Stitches" sx={{ width: 100 }}>
+                <TextField size="small" fullWidth type="number" value={specStitches} placeholder="8000"
+                  onChange={e => setSpecStitches(e.target.value)} sx={tf} />
+              </QF>
+            )}
+            {needsLocations && specLocs.map((loc, i) => (
               <Stack key={i} direction="row" gap={0.5} alignItems="flex-end">
                 <QF label={`Location ${i + 1}`} sx={{ width: 110 }}>
                   <TextField size="small" fullWidth value={loc.label} placeholder="front"
@@ -1149,39 +1213,44 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                 )}
               </Stack>
             ))}
-            <Button size="small" onClick={() => setSpecLocs(ls => [...ls, { label: ls.length === 1 ? 'back' : 'sleeve', colors: 1 }])}
-              sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4 }}>+ location</Button>
+            {needsLocations && (
+              <Button size="small" onClick={() => setSpecLocs(ls => [...ls, { label: ls.length === 1 ? 'back' : 'sleeve', colors: 1 }])}
+                sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4 }}>+ location</Button>
+            )}
             <Box sx={{ flex: 1 }} />
-            <Button size="small" onClick={() => {
-              const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
-              onPatchIdxs(all, (l) => {
-                const r = priceMethod(specPrinter.catalog.screenPrinting, { qty: num(l.qty), shade: specShade, locations });
-                if (!r || r.error) return {};
-                return { printCost: r.printPerUnit, setupCost: r.setup,
-                  printType: 'Screen Print', printDetails: specDetails({ shade: specShade, locations }) };
-              });
-            }}
+            <Button size="small" disabled={!specSection}
+              onClick={() => {
+                onPatchIdxs(all, (l) => {
+                  const r = priceMethod(specSection, specFor(l.qty));
+                  if (!r || r.error) return {};
+                  return { printCost: r.printPerUnit, setupCost: r.setup || 0,
+                    printType: specMethod, printDetails: detailsFor() };
+                });
+              }}
               sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, fontSize: 11.5, textTransform: 'none', px: 2,
-                borderRadius: 999, mb: 0.3, '&:hover': { bgcolor: '#3bd070' } }}>
-              Fill costs from {String(specPrinter.name || 'printer').split(' ')[0]}
+                borderRadius: 999, mb: 0.3, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.25)', color: D.faint },
+                '&:hover': { bgcolor: '#3bd070' } }}>
+              {specPrinter ? `Fill costs from ${String(specPrinter.name || 'printer').replace(/,? Inc\.?$/i, '').split(' ')[0]}` : 'Pick a printer'}
             </Button>
           </Stack>
-          {/* Live preview per run size, so he sees the tier math before applying. */}
-          <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
-            {grid.qtys.map(q => {
-              const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
-              const r = priceMethod(specPrinter.catalog.screenPrinting, { qty: q, shade: specShade, locations });
-              return (
-                <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
-                  {q}u → {r && !r.error
-                    ? `${fmt(r.printPerUnit)}/u print · ${fmt(r.setup)} setup (${r.screens} screens, ${r.tier.dozens != null ? `${r.tier.dozens}dz` : r.tier.label} tier)`
-                    : (r && r.warnings && r.warnings[0]) || 'no price'}
-                </Typography>
-              );
-            })}
-          </Stack>
+          {/* Live preview per run size, so he sees the price before applying. */}
+          {specSection && (
+            <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
+              {grid.qtys.map(q => {
+                const r = priceMethod(specSection, specFor(q));
+                const tier = r && r.tier ? (r.tier.label || (r.tier.dozens != null ? `${r.tier.dozens}dz` : '')) : '';
+                return (
+                  <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
+                    {q}u → {r && !r.error
+                      ? `${fmt(r.printPerUnit)}/u${r.setup ? ` · ${fmt(r.setup)} setup` : ''}${tier ? ` (${tier})` : ''}`
+                      : (r && r.warnings && r.warnings[0]) || 'enter the spec'}
+                  </Typography>
+                );
+              })}
+            </Stack>
+          )}
           <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.75 }}>
-            Exact reorder within 14 days: the printer waives screens — clear the setup fields manually when that applies.
+            Fills print $/u + setup into every run-size cell from the printer's price book. Setup is one-time — clear it on exact reorders.
           </Typography>
         </Box>
       )}
