@@ -21,6 +21,7 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import CloseIcon from '@mui/icons-material/Close';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
@@ -450,6 +451,34 @@ export default function ApprovalView() {
         ? 'legacy'   // terminal decision already made — read-only table + status panel
         : ((alreadyPicked && !repicking) ? 'picked' : 'picker');
 
+  // Quote-validity countdown the client sees. Two windows (server-computed, absolute
+  // timestamps): while picking, the quote is good until quoteExpiresAt; once they've
+  // picked and are confirming, a fresh window runs to confirmExpiresAt ("an extra
+  // week to confirm"). Approved/terminal → nothing to count down. Informational: it
+  // creates gentle urgency, it doesn't block anything.
+  const expiryTs = approvalStatus === 'approved' ? null
+    : stage === 'picker' ? p.quoteExpiresAt
+    : (stage === 'picked' || stage === 'confirmation') ? p.confirmExpiresAt
+    : null;
+  const countdown = (() => {
+    if (!expiryTs) return null;
+    const ms = new Date(expiryTs).getTime() - Date.now();
+    const days = Math.ceil(ms / 86400000);
+    const picking = stage === 'picker';
+    const noun = picking ? 'This quote' : 'Your confirmation';
+    if (ms <= 0) {
+      return { urgent: true, expired: true,
+        text: picking
+          ? 'This quote has expired — reach out and we\'ll gladly refresh it for you.'
+          : 'This confirmation window has closed — reach out and we\'ll reopen it.' };
+    }
+    const when = days <= 1 ? 'today' : `in ${days} days`;
+    return { urgent: days <= 2, expired: false,
+      text: picking
+        ? `${noun} is valid ${days <= 1 ? 'through today' : `for ${days} more days`} — pick your options to lock it in.`
+        : `Please approve ${when} — ${noun.toLowerCase()} is held for you until then.` };
+  })();
+
   // Current selection for a group. Explicit picks state wins (null = the client
   // deselected/skipped it); otherwise fall back to any server-accepted line so a
   // re-pick opens on what they had. undefined = nothing chosen for this group.
@@ -730,6 +759,19 @@ export default function ApprovalView() {
         <Box sx={{ mt: 2.5, mb: 0.5, animation: 'rise 500ms ease both', animationDelay: '60ms' }}>
           <ProgressRail states={railStates} T={T} />
         </Box>
+
+        {/* Quote-validity countdown — client-facing, gentle urgency. Neutral green
+            while there's runway, amber in the last 2 days or once expired. */}
+        {countdown && (
+          <Box sx={{ ...card, mt: 2, p: 1.75, display: 'flex', alignItems: 'center', gap: 1.25,
+            borderLeft: `3px solid ${countdown.urgent ? T.amber : T.green}`,
+            animation: 'rise 500ms ease both', animationDelay: '90ms' }}>
+            <AccessTimeIcon sx={{ fontSize: 20, color: countdown.urgent ? T.amber : T.green, flexShrink: 0 }} />
+            <Typography sx={{ color: T.text, fontSize: 13.5, fontWeight: 600, lineHeight: 1.5 }}>
+              {countdown.text}
+            </Typography>
+          </Box>
+        )}
 
         {stage !== 'confirmation' && p.confirmationMessage && (
           <Box sx={{ ...card, mt: 2, p: 2, borderLeft: `3px solid ${T.green}` }}>
