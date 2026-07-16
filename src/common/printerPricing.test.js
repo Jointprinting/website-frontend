@@ -162,6 +162,26 @@ test('gang_sheet_flat (Print Hybrid DTF): flat per sheet', () => {
   expect(priceMethod(sp, {}).printPerUnit).toBe(6.5);
 });
 
+test('qty_x_size_sqin (A+ DTF): sqin band × qty tier + placement apply fee', () => {
+  const sp = { model: 'qty_x_size_sqin',
+    qtyTiers: ['1-11', '12-24', '250+'],
+    sizeBandsSqin: [5, 10, 15, 20],
+    grid: { '1-11': [0.50, 0.50, 0.75, 1.05], '12-24': [0.50, 0.50, 0.69, 0.96], '250+': [0.50, 0.50, 0.50, 0.53] },
+    applyToFlat: 2.5, applyToNonFlat: 3.5, maxRecommendedSqin: 18 };
+  // 12 pieces (tier 12-24), 13 sq in → band 15 = 0.69, + flat apply 2.5 = 3.19
+  expect(priceMethod(sp, { qty: 12, sqin: 13 }).printPerUnit).toBe(3.19);
+  // non-flat placement swaps the apply fee: 0.69 + 3.5 = 4.19
+  expect(priceMethod(sp, { qty: 12, sqin: 13, placement: 'nonflat' }).printPerUnit).toBe(4.19);
+  // exact band edge (sqin === upper bound) stays in that band: 5 sq in → band 5 = 0.50 + 2.5
+  expect(priceMethod(sp, { qty: 1, sqin: 5 }).printPerUnit).toBe(3.0);
+  // 250+ tier, biggest band; over the recommended max → warns but still prices
+  const big = priceMethod(sp, { qty: 300, sqin: 20 });
+  expect(big.printPerUnit).toBe(3.03);             // 0.53 + 2.5
+  expect(big.warnings.some((w) => /max print size/.test(w))).toBe(true);
+  // no size entered → prompt, not a crash
+  expect(priceMethod(sp, { qty: 12 }).error).toBe('pick-size');
+});
+
 test('dispatcher falls back to Heritage priceGrids, and flags a pending grid', () => {
   expect(priceMethod(SP, { qty: 100, shade: 'light', locations: [{ label: 'front', colors: 1 }] }).printPerUnit).toBe(1.3);
   expect(priceMethod({ _needsFullGrid: true }, {}).error).toBe('grid-pending');
