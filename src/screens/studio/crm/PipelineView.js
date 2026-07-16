@@ -393,6 +393,14 @@ export default function PipelineView({
         <Metric label="Open pipeline" value={fmtMoney0(summary?.totalOpenValue || 0)} tone={D.text} />
         <Box sx={{ width: 1, alignSelf: 'stretch', bgcolor: D.line, display: { xs: 'none', sm: 'block' } }} />
         <Metric label="Weighted forecast" value={fmtMoney0(summary?.weightedValue || 0)} tone={D.green} />
+        {summary?.coldPool > 0 && (
+          <>
+            <Box sx={{ width: 1, alignSelf: 'stretch', bgcolor: D.line, display: { xs: 'none', sm: 'block' } }} />
+            <Box title="Cold-outreach prospects the lead engine is finding + emailing on autopilot. They stay OFF the board until a real reply flips them warm — the pipeline filling behind the scenes, not work waiting on you.">
+              <Metric label="🤖 Engine pool" value={`${(summary.coldPool || 0).toLocaleString()} cold`} tone={D.faint} />
+            </Box>
+          </>
+        )}
         <Box sx={{ flexGrow: 1 }} />
         {loading && <CircularProgress size={18} sx={{ color: D.green }} />}
       </Box>
