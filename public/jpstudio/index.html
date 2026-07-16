@@ -1399,6 +1399,7 @@ select:focus-visible{
         <div class="psec-hdr"><span class="psec-lbl">Save</span></div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-primary" id="save-mockup-btn" onclick="saveMockupToLibrary()" style="flex:1">↑ Save to Library</button>
+          <button class="btn btn-ghost" id="save-version-btn" onclick="saveMockupToLibrary({asEditFrom:true})" title="Save as a new edit version (e.g. #000150A → #000150A2), grouped under the original — the original is left untouched" style="display:none;white-space:nowrap">＋ New version</button>
           <button class="btn btn-ghost btn-icon" onclick="openHistory()" title="Version history">🕘</button>
           <button class="btn btn-ghost btn-icon" onclick="resetCurrentPage()" title="Reset page">↺</button>
         </div>
@@ -2880,6 +2881,24 @@ async function assignMockupNumber(projectId) {
     const res = await fetch(`${BACKEND}/api/orders/${projectId}/mockups/assign`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.mockupNum) ? data.mockupNum : null;
+  } catch(_) { return null; }
+}
+// "Save as edit": reserve the NEXT VERSION of the current colour lane (#150A →
+// #150A2), grouped under the original by the shared base+letter. Mirrors
+// assignMockupNumber but hits /version with the source number (the server reserves
+// + links it to the order atomically). Returns the new number, or null on failure.
+async function reserveMockupVersion(projectId, sourceNum) {
+  const token = getStudioToken();
+  if (!token || !projectId || !sourceNum) return null;
+  try {
+    const res = await fetch(`${BACKEND}/api/orders/${projectId}/mockups/version`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({ sourceNum }),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -4518,9 +4537,16 @@ function _refreshSaveGate() {
   const hasProject = !!(sel && sel.value);
   if (err) err.style.display = hasProject ? 'none' : 'block';
   if (btn) { btn.disabled = !hasProject; btn.style.opacity = hasProject ? '1' : '0.5'; btn.style.cursor = hasProject ? 'pointer' : 'not-allowed'; }
+  // "New version" (save-as-edit) only applies to an ALREADY-SAVED, numbered mockup
+  // linked to a project — it mints the next edit version (#150A → #150A2).
+  const vbtn = document.getElementById('save-version-btn');
+  if (vbtn) {
+    const pg = (typeof state !== 'undefined' && state.pages) ? state.pages[state.currentPage] : null;
+    vbtn.style.display = (hasProject && pg && pg._savedRemoteId && pg.mockupNum) ? '' : 'none';
+  }
 }
 
-async function saveMockupToLibrary() {
+async function saveMockupToLibrary(opts) {
   if (!db){toast('Database not ready','error');return;}
   // In-flight guard: a double-click (or Ctrl+S + click) used to fire two
   // saves, and both raced the server letter-assign — one design, two
@@ -4543,9 +4569,22 @@ async function saveMockupToLibrary() {
   // double-"A"). An existing mockup (opened from a tile/deep-link, or already
   // saved this session) keeps its number and just updates in place: no new
   // letter, no duplicate.
-  const isExisting = !!pg._savedRemoteId;
+  // "Save as edit" (opts.asEditFrom, current mockup has a #number): mint the NEXT
+  // VERSION of this colour (#150A → #150A2), grouped under the original, and write it
+  // as a NEW library item — the original stays untouched. Falls back to a normal save
+  // if there's no number to version from.
+  const asEditFrom = (opts && opts.asEditFrom && pg.mockupNum) ? String(pg.mockupNum) : '';
+  const isExisting = !asEditFrom && !!pg._savedRemoteId;
   let assignedViaServer = false;
-  if (!isExisting) {
+  if (asEditFrom) {
+    const versioned = await reserveMockupVersion(pg.projectId, asEditFrom);
+    if (!versioned) { toast('Could not create a new version — try again.','error'); return; }
+    pg.mockupNum = versioned;
+    assignedViaServer = true;   // /version already reserved + linked it to the order
+    // Fresh identity so this saves as a NEW mockup doc (the original #150A is untouched).
+    for (const p of state.pages) { p._savedRemoteId = undefined; p._savedDbId = undefined; }
+    const numEl = document.getElementById('f-mockupnum'); if (numEl) numEl.value = pg.mockupNum;
+  } else if (!isExisting) {
     const assigned = pg.projectId ? await assignMockupNumber(pg.projectId) : null;
     if (assigned) {
       pg.mockupNum = assigned;          // server already pushed it onto the order
@@ -4894,7 +4933,9 @@ async function loadMockup(id,e) {
     state.pages[state.currentPage]=ps;
   }
   saveMockupVersion(item.remoteId, item.name, ps, 'open');  // snapshot the as-opened state
-  loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab')); toast(`"${item.name}" loaded ✓`,'success');
+  loadPageIntoForm(); scheduleUpdate(); switchTab('studio',document.querySelector('.nav-tab'));
+  try { _refreshSaveGate(); } catch(_) {}  // reveal "New version" now that a saved, numbered mockup is open
+  toast(`"${item.name}" loaded ✓`,'success');
 }
 
 // Deep-link entry from the OrderTracker drawer: open jpstudio with
