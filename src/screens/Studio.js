@@ -1702,7 +1702,8 @@ const HUB_GROUPS = [
         id: 'secondary',
         label: 'More tools',
         tools: [
-          { id: 'finances',    label: 'Finances',     desc: 'P&L, margins, expenses',        Icon: PaidOutlinedIcon },
+          // Finances lifted to the cross-brand "All business" strip (money spans
+          // every business, not just Joint Printing) — see CROSS_BRAND_TOOLS.
           { id: 'mockup',      label: 'Mockup Lab',   desc: 'Build mockups, export PDFs',   Icon: DesignServicesIcon },
           // Lookbooks sit right beside the Mockup Lab: the library feeds
           // the pages, the share link feeds the client, feedback feeds Signals.
@@ -1716,7 +1717,8 @@ const HUB_GROUPS = [
         label: 'Maintenance',
         tools: [
           { id: 'vendors', label: 'Printers · Vendors', desc: 'Supplier directory — POs, spend',  Icon: LocalShippingOutlinedIcon },
-          { id: 'backup',  label: 'Backup',             desc: 'Snapshots of projects + mockups',  Icon: BackupIcon },
+          // Backup lifted to the cross-brand "All business" strip (it snapshots the
+          // whole system's data across every business) — see CROSS_BRAND_TOOLS.
           // Owner-only: onboard sales agents, set goals, watch access. Gated by
           // `ownerOnly` so it never renders for an agent (they get a separate
           // shell entirely, but this keeps the hub honest either way).
@@ -1783,6 +1785,16 @@ const groupTools = (g) => [
   ...((g.held && g.held.tools) || []),
 ];
 
+// Cross-brand tools — they belong to no single business, so they ride a
+// persistent "All business" strip at the top of EVERY brand's hub instead of
+// living inside Joint Printing's tiles: the money (one ledger across all three
+// brands) and the data backup (snapshots the whole system). Reachable no matter
+// which business is in focus.
+const CROSS_BRAND_TOOLS = [
+  { id: 'finances', label: 'Finances', desc: 'P&L across all brands',      Icon: PaidOutlinedIcon },
+  { id: 'backup',   label: 'Backup',   desc: 'Snapshot the whole system',  Icon: BackupIcon,     ownerOnly: true },
+];
+
 // Flat list of all tools, with brand attached, for header lookups. De-dupes by
 // the StudioBody view id (`target` || `id`) so the two CRM entry points (Today /
 // Clients) resolve to a single header label without colliding. The CANONICAL
@@ -1798,6 +1810,12 @@ const HUB_TOOLS = (() => {
       const isCanonical = t.id === viewId;
       if (!byView.has(viewId) || isCanonical) byView.set(viewId, entry);
     }
+  }
+  // Cross-brand tools resolve their header label the same way (they live outside
+  // the brand groups but still open a StudioBody view).
+  for (const t of CROSS_BRAND_TOOLS) {
+    const viewId = t.target || t.id;
+    if (!byView.has(viewId)) byView.set(viewId, { ...t, id: viewId, brand: 'All business' });
   }
   return [...byView.values()];
 })();
@@ -2074,6 +2092,47 @@ function TierLabel({ children }) {
     }}>
       {children}
     </MuiTypography>
+  );
+}
+
+// The persistent "All business" strip — cross-brand tools (Finances, Backup) that
+// stay reachable at the top of every brand's hub, so switching to Webworks/Atom
+// never hides the money or the backup. Compact + NEUTRAL (they belong to no one
+// brand → no brand accent), visually quieter than the brand tiles below.
+function CrossBrandStrip({ tools, onPick, isOwner }) {
+  const visible = (tools || []).filter((t) => !t.ownerOnly || isOwner);
+  if (!visible.length) return null;
+  return (
+    <Box>
+      <TierLabel>All business</TierLabel>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {visible.map((t) => {
+          const Icon = t.Icon;
+          return (
+            <Box key={t.id} onClick={() => onPick(t)} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(t); } }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer',
+                px: 1.75, py: 1.1, borderRadius: 2.5, minWidth: 160,
+                bgcolor: D.panel, border: `1px solid ${D.line}`,
+                transition: 'border-color 0.18s ease, background 0.18s ease, transform 0.18s ease',
+                '&:hover': { borderColor: D.lineHi, bgcolor: 'rgba(255,255,255,0.03)', transform: 'translateY(-1px)' },
+                '&:focus-visible': { outline: `2px solid ${D.muted}`, outlineOffset: 2 },
+              }}>
+              <Box sx={{ width: 34, height: 34, borderRadius: 1.75, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                bgcolor: 'rgba(255,255,255,0.05)', color: D.muted }}>
+                <Icon sx={{ fontSize: 19 }} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <MuiTypography sx={{ color: D.text, fontWeight: 750, fontSize: 13.5, lineHeight: 1.15 }}>{t.label}</MuiTypography>
+                <MuiTypography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.25 }}>{t.desc}</MuiTypography>
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
   );
 }
 
@@ -2867,6 +2926,11 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
     <Stack spacing={3.5}>
       {/* Command-center header: focus one business, or 'All' for the roll-up. */}
       <BizSwitcher value={activeBiz} onChange={changeBiz} brands={brands} />
+
+      {/* Persistent "All business" strip — Finances + Backup stay reachable no
+          matter which business is in focus (switching to Atom never hides the
+          money). Neutral, quiet, above the brand-specific tiles. */}
+      <CrossBrandStrip tools={CROSS_BRAND_TOOLS} onPick={onPick} isOwner={isOwner} />
 
       {inquiryBanner && (
         <Box sx={{ border: '1px solid rgba(251,191,36,0.45)', bgcolor: 'rgba(251,191,36,0.08)',
