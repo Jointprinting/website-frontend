@@ -27,6 +27,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
@@ -438,6 +439,96 @@ function OrderRow({ o, onOpen }) {
   );
 }
 
+// One mockup tile in the Design Library — front thumbnail, number caption, and a
+// deep-link to the order it lives on (reuses onOpenOrder, the same path the Orders
+// rows use). Unlinked art (saved in the Studio, not yet on an order) still shows;
+// it just isn't clickable.
+function MockupTile({ m, onOpenOrder }) {
+  const canOpen = !!onOpenOrder && !!(m.projectNumber || m.orderNumber);
+  const open = canOpen ? () => onOpenOrder({ projectNumber: m.projectNumber, orderNumber: m.orderNumber }) : undefined;
+  return (
+    <Box
+      onClick={open}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } : undefined}
+      title={canOpen ? `Open order for ${m.mockupNum || 'this mockup'}` : (m.mockupNum || m.name || 'Mockup')}
+      sx={{
+        position: 'relative', borderRadius: 1.5, overflow: 'hidden',
+        border: `1px solid ${D.line}`, bgcolor: D.inset, aspectRatio: '1 / 1',
+        cursor: canOpen ? 'pointer' : 'default',
+        transition: 'border-color 0.15s ease, transform 0.15s ease',
+        '&:hover': canOpen ? { borderColor: D.green, transform: 'translateY(-1px)' } : undefined,
+        '&:focus-visible': canOpen ? { outline: `2px solid ${D.green}`, outlineOffset: 1 } : undefined,
+      }}>
+      {m.thumbnail ? (
+        <Box component="img" src={m.thumbnail} alt={m.mockupNum || m.name || 'Mockup'} loading="lazy"
+          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <PaletteOutlinedIcon sx={{ color: D.faint, fontSize: 22 }} />
+        </Box>
+      )}
+      {(m.mockupNum || !canOpen) && (
+        <Box sx={{ position: 'absolute', left: 0, right: 0, bottom: 0, px: 0.75, py: 0.4,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5,
+          bgcolor: 'rgba(0,0,0,0.62)' }}>
+          <Typography sx={{ ...mono, color: '#fff', fontSize: 10.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {m.mockupNum || m.name || '—'}
+          </Typography>
+          {!canOpen && (
+            <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', flexShrink: 0 }}>
+              unlinked
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// The company's whole visual footprint in one panel: its logo(s) + every mockup
+// made for it, each deep-linked to its order. Hidden entirely when there's nothing
+// yet (no empty box).
+function DesignLibraryPanel({ designLibrary, onOpenOrder }) {
+  const logos   = (designLibrary && designLibrary.logos)   || [];
+  const mockups = (designLibrary && designLibrary.mockups) || [];
+  if (!logos.length && !mockups.length) return null;
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
+        <Stack direction="row" alignItems="center" spacing={0.75}>
+          <PaletteOutlinedIcon sx={{ color: D.green, fontSize: 16 }} />
+          <Eyebrow>Design library</Eyebrow>
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>
+          {mockups.length ? `${mockups.length} mockup${mockups.length === 1 ? '' : 's'}` : ''}
+        </Typography>
+      </Stack>
+
+      {logos.length > 0 && (
+        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: mockups.length ? 1.5 : 0 }}>
+          {logos.map((lg) => (
+            <Box key={lg._id} sx={{ width: 52, height: 52, borderRadius: 1.5, border: `1px solid ${D.line}`,
+              bgcolor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              {lg.imageDataUrl
+                ? <Box component="img" src={lg.imageDataUrl} alt="Logo" sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                : <PaletteOutlinedIcon sx={{ color: D.faint, fontSize: 18 }} />}
+            </Box>
+          ))}
+          <Typography sx={{ color: D.faint, fontSize: 11.5 }}>Brand logo on file</Typography>
+        </Stack>
+      )}
+
+      {mockups.length > 0 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 1 }}>
+          {mockups.map((m) => <MockupTile key={m._id} m={m} onOpenOrder={onOpenOrder} />)}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // One figure in the finance metric row — tiny uppercase label over a big
 // monospace number, optional sub-hint. Mirrors DashboardView's MetricCard so the
 // company page reads the same as the dashboard.
@@ -550,6 +641,9 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   // This business's deals (loaded alongside the record). The deal model is now the
   // client-making authority: ≥1 won deal ⇒ a client, even before an order lands.
   const deals = data?.deals || [];
+  // Every visual asset tied to this company — logo(s) + mockups — server-gathered
+  // and deep-linked to the order each mockup lives on. { logos, mockups }.
+  const designLibrary = data?.designLibrary || null;
   // Authoritative "is a client": order reality (≥1 linked order) OR a won deal.
   const isCustomer = (data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0)) || isClientFromDeals(deals);
 
@@ -945,6 +1039,12 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
               )}
             </Box>
           )}
+
+          {/* Design library — the company's whole visual footprint: its logo(s)
+              and every mockup made for it, each deep-linked to the order it lives
+              on. Shown for leads too (art often precedes the first order). Renders
+              nothing until there's an asset. */}
+          <DesignLibraryPanel designLibrary={designLibrary} onOpenOrder={onOpenOrder} />
 
           {/* Lookbooks — this company's curated, shareable mockup galleries
               (the Lookbooks tab, prefiltered to this companyKey). Deliberately
