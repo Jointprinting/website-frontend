@@ -428,7 +428,11 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     if (it.customMockupDataUrl) return [it.customMockupDataUrl];
     const m = it.mockupNum ? (mockupMap[it.mockupNum] || mockupMap[normMockupKey(it.mockupNum)]) : null;
     if (!m) return [];
-    return [m.thumbnail, it.showBack ? m.data : null].filter(Boolean);
+    // Front + (back only when showBack) + every additional view (sleeve, extra
+    // designs, alternate angles). extraViews are R2 URLs the summary feed now
+    // carries; mirrors ApprovalView.confItemImages exactly so the builder
+    // preview and the live client page stay pixel-identical (invariant H1).
+    return [m.thumbnail, it.showBack ? m.data : null, ...(m.extraViews || [])].filter(Boolean);
   };
 
   return (
