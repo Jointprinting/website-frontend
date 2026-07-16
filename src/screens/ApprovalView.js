@@ -786,14 +786,33 @@ export default function ApprovalView() {
         {!hasConf && mockups.length > 0 && (
           <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '120ms' }}>
             <Typography sx={{ ...eyebrow, mb: 1.5 }}>Your mockups</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {mockups.flatMap((m, i) => [m.thumbnail, ...(m.extraViews || [])].filter(Boolean).map((src, j) => ({ m, src, key: `${i}-${j}` }))).map(({ m, src, key }) => (
-                <ZoomImg key={key} src={src} alt={m.name} onZoom={openLightbox}
-                  sx={{ aspectRatio: '4/3', bgcolor: T.inset, borderRadius: 2, border: `1px solid ${T.line}`,
-                    objectFit: 'cover', transition: 'box-shadow 200ms ease, border-color 200ms ease',
-                    '&:hover': { boxShadow: `0 10px 30px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
-              ))}
-            </Box>
+            {/* Grouped PER MOCKUP so every design keeps all of its views together
+                — front, back, and every extra angle (sleeves, page-2 prints).
+                A flat grid interleaved views across designs, so a garment's
+                sleeves drifted away from it and pages read out of order. */}
+            <Stack spacing={{ xs: 2.5, md: 3 }}>
+              {mockups.map((m, i) => {
+                const views = [m.thumbnail, m.back, ...(m.extraViews || [])].filter(Boolean);
+                if (!views.length) return null;
+                return (
+                  <Box key={i}>
+                    {(m.name || m.mockupNum) && (
+                      <Typography sx={{ color: T.muted, fontSize: 12.5, fontWeight: 700, mb: 0.9 }}>
+                        {m.name || 'Design'}{m.mockupNum ? <Box component="span" sx={{ ...mono, color: T.faint, fontWeight: 600, ml: 0.75 }}>#{m.mockupNum}</Box> : null}
+                      </Typography>
+                    )}
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                      {views.map((src, j) => (
+                        <ZoomImg key={j} src={src} alt={m.name} onZoom={openLightbox}
+                          sx={{ aspectRatio: '4/3', bgcolor: T.inset, borderRadius: 2, border: `1px solid ${T.line}`,
+                            objectFit: 'cover', transition: 'box-shadow 200ms ease, border-color 200ms ease',
+                            '&:hover': { boxShadow: `0 10px 30px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
+                      ))}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
           </Box>
         )}
 
