@@ -17,6 +17,7 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import PictureAsPdfIcon        from '@mui/icons-material/PictureAsPdf';
+import SendOutlinedIcon        from '@mui/icons-material/SendOutlined';
 import ArrowBackIcon           from '@mui/icons-material/ArrowBack';
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline';
 import BoltIcon                from '@mui/icons-material/Bolt';
@@ -32,7 +33,14 @@ const base = `${config.backendUrl}/api`;
 export default function PoBuilderDialog({ open, project, authHdr, onClose, onNavigate }) {
   const [pos, setPos] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [printers, setPrinters] = useState([]);   // the pricing network — carries contact cards
   const [loading, setLoading] = useState(false);
+  // "Send PO" flow
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendTo, setSendTo] = useState('');
+  const [sendMsg, setSendMsg] = useState('');
+  const [sendMocks, setSendMocks] = useState(true);
+  const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState(null);   // the PO being edited (local copy)
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -48,16 +56,32 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
     Promise.allSettled([
       axios.get(`${base}/orders/${project._id}/pos`, authHdr),
       axios.get(`${base}/orders/vendors`, authHdr),
-    ]).then(([p, v]) => {
+      axios.get(`${base}/printers`, authHdr),
+    ]).then(([p, v, pr]) => {
       if (cancelled) return;
       if (p.status === 'fulfilled') setPos(p.value.data.pos || []);
       if (v.status === 'fulfilled') setVendors(v.value.data.vendors || []);
+      if (pr.status === 'fulfilled') setPrinters(pr.value.data.printers || []);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, project?._id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const grandTotal = useMemo(() =>
     (editing?.charges || []).reduce((s, c) => s + (Number(c.amount) || 0), 0), [editing]);
+
+  // Match this PO's vendor to a printer in the pricing network (by name, the
+  // same fuzzy approach the quoter's picker uses) so we can offer its contact
+  // cards as PO recipients. Free-text vendors with no network match still work —
+  // the owner just types the email. Kept above the early return for hook order.
+  const matchedPrinter = useMemo(() => {
+    const norm = (s) => String(s || '').toLowerCase().replace(/,?\s*inc\.?$/i, '').trim();
+    const vn = norm(editing?.vendorName);
+    if (!vn || !printers.length) return null;
+    return printers.find((p) => {
+      const pn = norm(p.name);
+      return pn && (vn === pn || vn.includes(pn.split(' ')[0]) || pn.includes(vn.split(' ')[0]));
+    }) || null;
+  }, [editing?.vendorName, printers]);
 
   // Append a charge from the "recent costs" panel to the PO being edited. Copies
   // only label + amount (the shape the schema stores) so a past line can be
@@ -189,6 +213,41 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
     }
   };
 
+  const printerContacts = (matchedPrinter && matchedPrinter.contacts) || [];
+
+  const openSend = () => {
+    const primary = printerContacts.find((c) => c.primary && c.email) || printerContacts.find((c) => c.email);
+    setSendTo(primary ? primary.email : '');
+    setSendMsg('');
+    setSendMocks(true);
+    setSendOpen(true);
+  };
+
+  // Owner-triggered send: the recipient is whatever the owner picked/typed — the
+  // server never guesses. Saves any pending edits first so the emailed PDF is current.
+  const sendPoEmail = async () => {
+    const to = String(sendTo || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { alertDialog('Enter a valid recipient email.'); return; }
+    setSending(true);
+    try {
+      if (dirty) { const ok = await savePo(); if (!ok) { setSending(false); return; } }
+      const contact = printerContacts.find((c) => (c.email || '').toLowerCase() === to.toLowerCase());
+      const r = await axios.post(`${base}/orders/pos/${editing._id}/send`, {
+        to,
+        contactName: (contact && contact.name) || editing.contactName || '',
+        message: String(sendMsg || '').trim(),
+        includeMockups: sendMocks,
+      }, authHdr);
+      const d = r.data || {};
+      setSendOpen(false);
+      alertDialog(`PO emailed to ${to}${d.mockupCount ? ` with ${d.mockupCount} approved mockup${d.mockupCount === 1 ? '' : 's'} attached` : ''}.`);
+    } catch (e) {
+      alertDialog(`Send failed: ${e.response?.data?.message || e.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Resolve a typed/selected printer name to a known vendor and pre-fill their
   // contact card — but never over something already typed by hand (correcting a
   // contact then re-touching the vendor name must not wipe the correction).
@@ -280,6 +339,12 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
                 transition: 'color 0.18s ease', '&:hover': { color: '#5cec8e' } }}>
               PDF
             </Button>
+            <Button size="small" onClick={() => (sendOpen ? setSendOpen(false) : openSend())}
+              startIcon={<SendOutlinedIcon sx={{ fontSize: 15 }} />}
+              sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: sendOpen ? '#5cec8e' : D.green, borderRadius: 999,
+                transition: 'color 0.18s ease', '&:hover': { color: '#5cec8e' } }}>
+              Send
+            </Button>
             <Button size="small" disabled={saving || !dirty} onClick={savePo}
               sx={{ fontSize: 12, textTransform: 'none', fontWeight: 800, px: 1.75, py: 0.5, borderRadius: 999,
                 bgcolor: dirty ? D.green : 'transparent', color: dirty ? D.ink : D.muted,
@@ -294,6 +359,49 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
       </Box>
 
       <DialogContent sx={{ p: { xs: 1.5, md: 2.5 }, ...scrollbar }}>
+        <Collapse in={!!(editing && sendOpen)} unmountOnExit>
+          <Box sx={{ mb: 2, p: 2, borderRadius: 2.5, border: `1px solid ${D.lineHi}`, bgcolor: 'rgba(74,222,128,0.05)' }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 800, color: D.green, mb: 1 }}>
+              Email this PO{matchedPrinter ? ` to ${matchedPrinter.name.replace(/,? Inc\.?$/i, '')}` : ''}
+            </Typography>
+            {printerContacts.filter(c => c.email).length > 0 && (
+              <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mb: 1.25 }}>
+                {printerContacts.filter(c => c.email).map((c, i) => {
+                  const on = (sendTo || '').toLowerCase() === c.email.toLowerCase();
+                  return (
+                    <Button key={i} size="small" onClick={() => setSendTo(c.email)}
+                      sx={{ textTransform: 'none', fontSize: 11, fontWeight: 700, borderRadius: 999, px: 1.25, py: 0.25,
+                        border: `1px solid ${on ? D.green : D.line}`, color: on ? D.ink : D.muted,
+                        bgcolor: on ? D.green : 'transparent', '&:hover': { borderColor: D.green, color: on ? D.ink : D.text } }}>
+                      {c.name || c.email}{c.primary ? ' ★' : ''}
+                    </Button>
+                  );
+                })}
+              </Stack>
+            )}
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} sx={{ mb: 1.25 }}>
+              <TextField size="small" fullWidth label="Recipient email" value={sendTo}
+                onChange={e => setSendTo(e.target.value)} sx={{ ...dropInput, flex: 1 }} />
+              <FormControlLabel sx={{ m: 0, whiteSpace: 'nowrap' }}
+                control={<Switch size="small" checked={sendMocks} onChange={e => setSendMocks(e.target.checked)} />}
+                label={<Typography sx={{ fontSize: 12, color: D.text }}>Attach approved mockups</Typography>} />
+            </Stack>
+            <TextField size="small" fullWidth multiline minRows={2} placeholder="Optional note to the printer…"
+              value={sendMsg} onChange={e => setSendMsg(e.target.value)} sx={{ ...dropInput, mb: 1.25 }} />
+            <Stack direction="row" gap={1} alignItems="center">
+              <Button onClick={sendPoEmail} disabled={sending}
+                startIcon={sending ? <CircularProgress size={12} sx={{ color: D.ink }} /> : <SendOutlinedIcon sx={{ fontSize: 15 }} />}
+                sx={{ ...dropPrimaryBtn, fontSize: 12, px: 2 }}>
+                {sending ? 'Sending…' : 'Send PO'}
+              </Button>
+              <Button size="small" onClick={() => setSendOpen(false)}
+                sx={{ fontSize: 12, textTransform: 'none', color: D.muted, '&:hover': { color: D.text } }}>Cancel</Button>
+              {!matchedPrinter && (
+                <Typography sx={{ fontSize: 10.5, color: D.faint }}>No network printer matched — type the email.</Typography>
+              )}
+            </Stack>
+          </Box>
+        </Collapse>
         {loading ? (
           <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={24} sx={{ color: D.green }} /></Box>
         ) : !editing ? (
