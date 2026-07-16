@@ -519,6 +519,11 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
         name: m.name || '',
         mockupNum: m.pageState?.mockupNum ? String(m.pageState.mockupNum) : '',
         front: m.thumbnail || '',
+        // Seed the extra views straight off the summary (URL-backed) so the
+        // page's side-view strip renders instantly; the PATCH response's
+        // server-resolved tile then takes over. Back rides as a URL only.
+        back: /^https?:\/\//i.test(m.data || '') ? m.data : '',
+        extraViews: Array.isArray(m.extraViews) ? m.extraViews : [],
       },
     }));
     setPages([...draftRef.current.pages, { remoteId: m.remoteId, caption: '' }]);
@@ -763,6 +768,15 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                     {draft.pages.map((p, i) => {
                       const t = byRid[p.remoteId] || {};
                       const missing = t.missing || (!t.front && !t.libraryId);
+                      // Additional views for this page: the back (only when the
+                      // "Back sides" toggle is on — so the toggle now visibly
+                      // does something in the builder, not just on the client
+                      // page) plus every extra view (sleeve, extra designs,
+                      // alternate angles). Empty → the card stays front-only.
+                      const sideViews = [
+                        ...(draft.showBack && t.back ? [{ src: t.back, label: 'Back' }] : []),
+                        ...((Array.isArray(t.extraViews) ? t.extraViews : []).map((src, k) => ({ src, label: `View ${k + 2}` }))),
+                      ].filter((v) => v.src);
                       return (
                         <Box key={p.remoteId} sx={{
                           borderRadius: 2, border: `1px solid ${D.line}`, bgcolor: D.inset,
@@ -789,6 +803,12 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                                 Missing from library
                               </Typography>
                             )}
+                            {sideViews.length > 0 && (
+                              <Typography sx={{ position: 'absolute', bottom: 6, right: 6, ...mono, px: 0.8, py: 0.2,
+                                borderRadius: 1, bgcolor: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 800 }}>
+                                +{sideViews.length} {sideViews.length === 1 ? 'view' : 'views'}
+                              </Typography>
+                            )}
                           </Box>
                           <Box sx={{ p: 1.25, display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
                             <Box sx={{ minWidth: 0 }}>
@@ -800,6 +820,18 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                                 <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5 }}>#{t.mockupNum}</Typography>
                               )}
                             </Box>
+                            {sideViews.length > 0 && (
+                              <Stack direction="row" gap={0.5} sx={{ flexWrap: 'wrap' }}>
+                                {sideViews.map((v, k) => (
+                                  <Box key={k} title={v.label} sx={{ width: 30, height: 30, borderRadius: 0.75,
+                                    overflow: 'hidden', flex: '0 0 auto', border: `1px solid ${D.line}`, bgcolor: 'rgba(0,0,0,0.25)' }}>
+                                    <Box component="img" src={v.src} alt={v.label} loading="lazy"
+                                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  </Box>
+                                ))}
+                              </Stack>
+                            )}
                             <TextField value={p.caption} onChange={(e) => setCaption(i, e.target.value)}
                               size="small" fullWidth placeholder="Caption (optional)"
                               sx={{ ...dropInput, '& .MuiInputBase-input': { fontSize: 12.5, color: D.text } }} />

@@ -535,13 +535,21 @@ export default function LookbookView() {
     <Stack spacing={{ xs: 6, sm: 9 }} sx={{ mt: { xs: 4, sm: 6 } }}>
       {mockups.map((m, i) => {
         const rid = m.remoteId || '';
-        const back = showBack && !!m.back;
+        // Every angle of this design: front, the back (only when the lookbook
+        // shows backs), then each extra view (sleeve, extra designs, alternate
+        // angles). One or many — the grid goes two-up once there's more than one.
+        const extraViews = Array.isArray(m.extraViews) ? m.extraViews.filter(Boolean) : [];
+        const imgs = [
+          { src: m.front, alt: m.name },
+          ...(showBack && m.back ? [{ src: m.back, alt: `${m.name} back` }] : []),
+          ...extraViews.map((src, k) => ({ src, alt: `${m.name} view ${k + 2}` })),
+        ].filter((im) => im.src);
+        const multi = imgs.length > 1;
         return (
           <Box key={rid || i} component="section" sx={{ textAlign: 'center' }}>
             <Labels m={m} i={i} />
-            <Box sx={{ display: 'grid', gap: { xs: 1.5, sm: 2 }, gridTemplateColumns: { xs: '1fr', sm: back ? '1fr 1fr' : '1fr' } }}>
-              <ProductImage src={m.front} alt={m.name} clean={false} theme={theme} />
-              {back && <ProductImage src={m.back} alt={`${m.name} back`} clean={false} theme={theme} />}
+            <Box sx={{ display: 'grid', gap: { xs: 1.5, sm: 2 }, gridTemplateColumns: { xs: '1fr', sm: multi ? '1fr 1fr' : '1fr' } }}>
+              {imgs.map((im, k) => <ProductImage key={k} src={im.src} alt={im.alt} clean={false} theme={theme} />)}
             </Box>
             {m.caption && <Typography sx={{ color: theme.muted, fontSize: 14.5, lineHeight: 1.6, mt: 2, maxWidth: 560, mx: 'auto' }}>{m.caption}</Typography>}
             <Box sx={{ mt: 2.5 }}><ReactRow rid={rid} latestByPerson={latestByPerson} me={me} busyKey={busyKey} post={post} theme={theme} /></Box>
@@ -716,6 +724,9 @@ export default function LookbookView() {
             <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
               <ProductImage src={focusM.front} alt={focusM.name} clean theme={theme} radius={3} />
               {showBack && focusM.back && <Box sx={{ mt: 1.5 }}><ProductImage src={focusM.back} alt={`${focusM.name} back`} clean theme={theme} radius={3} /></Box>}
+              {(Array.isArray(focusM.extraViews) ? focusM.extraViews.filter(Boolean) : []).map((src, k) => (
+                <Box key={k} sx={{ mt: 1.5 }}><ProductImage src={src} alt={`${focusM.name} view ${k + 2}`} clean theme={theme} radius={3} /></Box>
+              ))}
               <Box sx={{ textAlign: 'center', mt: 2 }}>
                 {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{focusM.name || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>#{focusM.mockupNum}</Box>}</Typography>}
                 {focusM.caption && <Typography sx={{ color: theme.muted, fontSize: 14, mt: 0.75, lineHeight: 1.6, maxWidth: 440, mx: 'auto' }}>{focusM.caption}</Typography>}
