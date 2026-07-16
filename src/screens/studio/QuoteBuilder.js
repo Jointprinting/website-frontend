@@ -680,6 +680,27 @@ function BufferedTF({ value, onCommit, sx, ...rest }) {
   );
 }
 
+// Money / decimal input. A native type="number" can't hold a mid-typing value
+// like "6." — the browser drops the trailing dot the moment the next digit
+// arrives (the "typing the 0 in 6.07 eats the decimal point" bug). So this is a
+// plain text field with a decimal keypad that keeps the raw string and only
+// strips characters that can't belong in a number. num() still parses it for
+// every calculation, so the stored value is the same numeric string as before —
+// nothing downstream changes. Drop-in for the cost cells: same value + onChange
+// (e.target.value) contract as the TextField it replaces.
+function DecimalField({ value, onChange, ...rest }) {
+  const clean = (s) => {
+    let t = String(s ?? '').replace(/[^\d.]/g, '');            // digits + dots only
+    const dot = t.indexOf('.');
+    if (dot !== -1) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, ''); // at most one dot
+    return t;
+  };
+  return (
+    <TextField {...rest} type="text" inputMode="decimal" value={value ?? ''}
+      onChange={(e) => onChange && onChange({ target: { value: clean(e.target.value) } })} />
+  );
+}
+
 // The design the client signs off when picking this line: a studio mockup #
 // and/or an uploaded vendor render (ashtrays etc. have no mockup number).
 function DesignAttach({ line, onPatch, tf, label = 'Design (mockup # or image)', sx }) {
@@ -821,7 +842,12 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // column that's actually uniform.
   const numValOver = (idxs, key) => {
     const vals = [...new Set(idxs.map(i => num(lines[i]?.[key])))];
-    return vals.length === 1 ? String(vals[0]) : '';
+    if (vals.length !== 1) return '';
+    // Uniform value: show the RAW typed string of the first cell so a mid-type
+    // "6." survives (num() would flatten it to "6" and eat the decimal point);
+    // fall back to the numeric string when nothing raw is stored yet.
+    const raw = lines[idxs[0]]?.[key];
+    return raw === '' || raw == null ? String(vals[0]) : String(raw);
   };
   const numMixedOver = (idxs, key) => [...new Set(idxs.map(i => num(lines[i]?.[key])))].length > 1;
   const sharedVal   = (key) => valOver(all, key);
@@ -1046,12 +1072,12 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             onChange={e => onPatchIdxs(all, { printDetails: e.target.value })} sx={tf} />
         </QF>
         <QF label="Setup $ (all)" sx={{ width: { xs: '31%', sm: 96 } }}>
-          <TextField size="small" fullWidth type="number" value={numValOver(all, 'setupCost')}
+          <DecimalField size="small" fullWidth value={numValOver(all, 'setupCost')}
             placeholder={numMixedOver(all, 'setupCost') ? 'varies' : '0'}
             onChange={e => onPatchIdxs(all, { setupCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="Ship $ (fill all)" sx={{ width: { xs: '31%', sm: 96 } }}>
-          <TextField size="small" fullWidth type="number" value={numValOver(all, 'shippingCost')}
+          <DecimalField size="small" fullWidth value={numValOver(all, 'shippingCost')}
             placeholder={numMixedOver(all, 'shippingCost') ? 'per-qty' : '0'}
             title="Fills shipping on every cell — set it per quantity in each row's ⌄ drawer for run-size shipping"
             onChange={e => onPatchIdxs(all, { shippingCost: e.target.value })} sx={tf} />
@@ -1237,7 +1263,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                     onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
                   {/* The number next to the style # is the BLANK COST — always labeled
                       so it's never mistaken for anything else. */}
-                  <TextField size="small" type="number" value={numValOver(b.idxs, 'blankCost')}
+                  <DecimalField size="small" value={numValOver(b.idxs, 'blankCost')}
                     placeholder={numMixedOver(b.idxs, 'blankCost') ? 'varies' : '0.00'}
                     title="Blank cost per unit for this option"
                     onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
@@ -1288,7 +1314,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                       {/* Show the field EMPTY when the price is auto (0/blank) so the
                           computed auto price shows through as the placeholder — a stored
                           0 used to render a literal "0" over the real auto number. */}
-                      <TextField size="small" type="number" value={num(l.unitPrice) > 0 ? l.unitPrice : ''}
+                      <DecimalField size="small" value={num(l.unitPrice) > 0 ? l.unitPrice : ''}
                         placeholder={eff > 0 ? eff.toFixed(2) : '—'}
                         onChange={e => onSetLine(cell.idx, { unitPrice: e.target.value })}
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
@@ -1345,13 +1371,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                     bgcolor: 'rgba(255,255,255,0.02)', border: `1px dashed ${D.line}` }}>
                     <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                       <QF label="Print $/u (fill all)" sx={{ width: 130 }}>
-                        <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'printCost')}
+                        <DecimalField size="small" fullWidth value={numValOver(b.idxs, 'printCost')}
                           placeholder={numMixedOver(b.idxs, 'printCost') ? 'per-qty' : '0'}
                           title="Fills print $/u on every quantity of this option — override a single run size below when it differs (e.g. grinders cheaper at 480)"
                           onChange={e => onPatchIdxs(b.idxs, { printCost: e.target.value })} sx={tf} />
                       </QF>
                       <QF label="Setup $ (fill all)" sx={{ width: 130 }}>
-                        <TextField size="small" fullWidth type="number" value={numValOver(b.idxs, 'setupCost')}
+                        <DecimalField size="small" fullWidth value={numValOver(b.idxs, 'setupCost')}
                           placeholder={numMixedOver(b.idxs, 'setupCost') ? 'per-qty' : '0'}
                           title="Fills one-time setup on every quantity of this option — override per run size below when it differs"
                           onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
@@ -1433,15 +1459,15 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                               bgcolor: 'rgba(255,255,255,0.02)', border: `1px solid ${D.line}` }}>
                               <Typography sx={{ ...headCellSx, mb: 0.6, color: D.text }}>{q} units</Typography>
                               <Stack gap={0.6}>
-                                <TextField size="small" fullWidth type="number" value={num(cl.printCost) > 0 ? cl.printCost : ''}
+                                <DecimalField size="small" fullWidth value={num(cl.printCost) > 0 ? cl.printCost : ''}
                                   placeholder="print $/u" title={`Print cost per unit at ${q} units`}
                                   InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>print</Typography> }}
                                   onChange={e => onSetLine(cell.idx, { printCost: e.target.value })} sx={tf} />
-                                <TextField size="small" fullWidth type="number" value={num(cl.setupCost) > 0 ? cl.setupCost : ''}
+                                <DecimalField size="small" fullWidth value={num(cl.setupCost) > 0 ? cl.setupCost : ''}
                                   placeholder="setup $" title={`One-time setup at ${q} units`}
                                   InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>setup</Typography> }}
                                   onChange={e => onSetLine(cell.idx, { setupCost: e.target.value })} sx={tf} />
-                                <TextField size="small" fullWidth type="number" value={num(cl.shippingCost) > 0 ? cl.shippingCost : ''}
+                                <DecimalField size="small" fullWidth value={num(cl.shippingCost) > 0 ? cl.shippingCost : ''}
                                   placeholder="ship $" title={`Total shipping for ${q} units of this option`}
                                   InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9.5, mr: 0.5, whiteSpace: 'nowrap' }}>ship</Typography> }}
                                   onChange={e => onSetLine(cell.idx, { shippingCost: e.target.value })} sx={tf} />
@@ -1713,19 +1739,19 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
             onChange={e => onPatch({ printDetails: e.target.value })} sx={tf} />
         </QF>
         <QF label="Blank $">
-          <TextField size="small" fullWidth type="number" value={line.blankCost ?? ''}
+          <DecimalField size="small" fullWidth value={line.blankCost ?? ''}
             onChange={e => onPatch({ blankCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="Print $">
-          <TextField size="small" fullWidth type="number" value={line.printCost ?? ''}
+          <DecimalField size="small" fullWidth value={line.printCost ?? ''}
             onChange={e => onPatch({ printCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="Setup $ (total)">
-          <TextField size="small" fullWidth type="number" value={line.setupCost ?? ''}
+          <DecimalField size="small" fullWidth value={line.setupCost ?? ''}
             onChange={e => onPatch({ setupCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="Ship $ (total)">
-          <TextField size="small" fullWidth type="number" value={line.shippingCost ?? ''}
+          <DecimalField size="small" fullWidth value={line.shippingCost ?? ''}
             onChange={e => onPatch({ shippingCost: e.target.value })} sx={tf} />
         </QF>
         <QF label="COGS / unit">
@@ -1817,7 +1843,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
         bgcolor: D.inset,
         display: 'flex', alignItems: 'flex-end', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap' }}>
         <QF label={committed ? 'Unit price' : 'Unit price (auto)'}>
-          <TextField size="small" type="number" value={num(line.unitPrice) > 0 ? line.unitPrice : ''}
+          <DecimalField size="small" value={num(line.unitPrice) > 0 ? line.unitPrice : ''}
             placeholder={cogsPerUnit > 0 ? unitPrice.toFixed(2) : ''}
             onChange={e => onPatch({ unitPrice: e.target.value })}
             onBlur={e => { if (num(e.target.value) <= 0) onPatch({ unitPrice: '' }); }}
