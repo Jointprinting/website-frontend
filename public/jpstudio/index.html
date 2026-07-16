@@ -1399,10 +1399,10 @@ select:focus-visible{
         <div class="psec-hdr"><span class="psec-lbl">Save</span></div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-primary" id="save-mockup-btn" onclick="saveMockupToLibrary()" style="flex:1">↑ Save to Library</button>
-          <button class="btn btn-ghost" id="save-version-btn" onclick="saveMockupToLibrary({asEditFrom:true})" title="Save as a new edit version (e.g. #000150A → #000150A2), grouped under the original — the original is left untouched" style="display:none;white-space:nowrap">＋ New version</button>
           <button class="btn btn-ghost btn-icon" onclick="openHistory()" title="Version history">🕘</button>
           <button class="btn btn-ghost btn-icon" onclick="resetCurrentPage()" title="Reset page">↺</button>
         </div>
+        <button class="btn btn-ghost" id="save-version-btn" onclick="saveMockupToLibrary({asEditFrom:true})" title="Save as a new edit version (e.g. #000150A → #000150A2), grouped under the original — the original is left untouched" style="display:none;width:100%;margin-top:6px">＋ Save as a new version (#…A → #…A2)</button>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span class="kbd">Ctrl+S</span><span style="font-size:10px;color:var(--tx3)">save</span>
           <span class="kbd">← →</span><span style="font-size:10px;color:var(--tx3)">pages</span>
