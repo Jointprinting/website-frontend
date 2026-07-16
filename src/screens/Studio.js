@@ -43,6 +43,7 @@ import {
   Snackbar,
   Collapse,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -1804,7 +1805,10 @@ const HUB_TOOLS = (() => {
 // size: 'large' (primary tier), 'normal' (secondary), or muted (paused).
 // `large` cards get more height, a bigger icon, and a brighter label so the
 // daily-core tier reads as the headline; muted cards (paused) read quietest.
-function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large, stat }) {
+// `accent` is the active BUSINESS's color (JP green / Webworks blue / Atom
+// violet) — every green treatment on the card derives from it, so switching
+// business re-paints the whole grid in that brand's vibe.
+function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large, stat, accent = D.green }) {
   const { label, desc, Icon } = tool;
   const badgeText = badge > 99 ? '99+' : String(badge || '');
   const iconSize = large ? 54 : (muted ? 42 : 48);
@@ -1833,35 +1837,35 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large,
           justifyContent: 'flex-start',
           gap: large ? 1.75 : (muted ? 1.25 : 1.5),
           p: { xs: 2, sm: large ? 3 : (muted ? 2.25 : 2.5) },
-          // Muted (paused) cards drop the green wash so they read quieter; live
+          // Muted (paused) cards drop the accent wash so they read quieter; live
           // cards get the soft top-left brand glow — brighter on the primary tier.
           opacity: muted ? 0.78 : 1,
           backgroundImage: muted
             ? 'none'
-            : `linear-gradient(155deg, rgba(74,222,128,${large ? 0.1 : 0.06}) 0%, rgba(255,255,255,0.012) 55%, transparent 100%)`,
+            : `linear-gradient(155deg, ${alpha(accent, large ? 0.1 : 0.06)} 0%, rgba(255,255,255,0.012) 55%, transparent 100%)`,
           '&:hover': {
             borderColor: D.lineHi,
             transform: 'translateY(-3px)',
             opacity: 1,
-            boxShadow: `0 16px 38px -18px ${D.glow}`,
+            boxShadow: `0 16px 38px -18px ${alpha(accent, 0.45)}`,
             '& .hub-accent': { opacity: 1 },
-            '& .hub-icon': { color: D.ink, bgcolor: D.green, boxShadow: `0 0 0 5px rgba(74,222,128,0.12)` },
-            '& .hub-label': { color: D.green },
-            '& .hub-chev': { transform: 'translateX(3px)', color: D.green },
+            '& .hub-icon': { color: D.ink, bgcolor: accent, boxShadow: `0 0 0 5px ${alpha(accent, 0.12)}` },
+            '& .hub-label': { color: accent },
+            '& .hub-chev': { transform: 'translateX(3px)', color: accent },
           },
-          '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+          '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
         }}
       >
         {/* Top accent hairline — invisible until hover (visible on the primary
             tier from the start, so the daily core glows). */}
-        <Box className="hub-accent" sx={{ ...accentBar, opacity: large ? 0.9 : 0, transition: 'opacity 0.2s ease' }} />
+        <Box className="hub-accent" sx={{ ...accentBar, background: accent, opacity: large ? 0.9 : 0, transition: 'opacity 0.2s ease' }} />
         <Box
           className="hub-icon"
           sx={{
             width: iconSize, height: iconSize, borderRadius: 2.5,
-            background: `linear-gradient(150deg, ${D.greenDk} 0%, rgba(74,222,128,0.05) 100%)`,
-            color: D.green,
-            boxShadow: 'inset 0 0 0 1px rgba(74,222,128,0.16)',
+            background: `linear-gradient(150deg, ${alpha(accent, 0.2)} 0%, ${alpha(accent, 0.05)} 100%)`,
+            color: accent,
+            boxShadow: `inset 0 0 0 1px ${alpha(accent, 0.16)}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s ease',
             position: 'relative',
@@ -1872,8 +1876,8 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large,
             <Box sx={{
               position: 'absolute', top: -3, right: -3,
               width: 10, height: 10, borderRadius: '50%',
-              bgcolor: D.green,
-              boxShadow: `0 0 6px ${D.glow}`,
+              bgcolor: accent,
+              boxShadow: `0 0 6px ${alpha(accent, 0.55)}`,
             }} />
           )}
           {badge > 0 && (
@@ -1909,7 +1913,7 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large,
               as a live cockpit instead of a static menu. */}
           {stat && (
             <MuiTypography sx={{
-              color: D.green, fontSize: 10.5, fontWeight: 700,
+              color: accent, fontSize: 10.5, fontWeight: 700,
               letterSpacing: 0.3, mt: 0.6, ...mono,
             }}>
               {stat}
@@ -1917,7 +1921,7 @@ function HubCard({ tool, onClick, delay, notice, countdown, badge, muted, large,
           )}
           {countdown && (
             <MuiTypography sx={{
-              color: D.green, fontSize: 10.5, fontWeight: 700,
+              color: accent, fontSize: 10.5, fontWeight: 700,
               letterSpacing: 0.3, mt: 0.6, ...mono,
             }}>
               {countdown}
@@ -1952,13 +1956,14 @@ function _fmtCountdown(iso) {
 // on a hairline rule. Shared by the live and paused groups so the two read as
 // the same family, just at different volumes. `right` slots optional trailing
 // content (the Paused chip / collapse affordance).
-function SectionHeader({ brand, tagline, dim, right }) {
+function SectionHeader({ brand, tagline, dim, right, accent: accentOverride }) {
   // Real businesses wear their cube mark; utility headers (e.g. "Signals") and
   // dimmed sections keep the plain accent bar. The label + bar take the business's
-  // own accent color so each section reads in that business's vibe.
+  // own accent color so each section reads in that business's vibe. A utility
+  // header hosted on a brand's page can pass `accent` to wear that brand's color.
   const isBrand = !!BRAND_MARKS[brand];
   const showMark = !dim && isBrand;
-  const accent = isBrand ? brandAccent(brand) : D.green;
+  const accent = accentOverride || (isBrand ? brandAccent(brand) : D.green);
   return (
     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
       {showMark ? (
@@ -2015,7 +2020,7 @@ function statFor(t, pulse) {
   return null;
 }
 
-function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse }) {
+function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse, accent }) {
   return (
     <Box sx={{
       display: 'grid',
@@ -2032,6 +2037,12 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
           : t.id === 'jpwinquiries' ? (unseenInquiries?.webworks || 0)
           : t.id === 'atominquiries' ? (unseenInquiries?.atom || 0)
           : 0;
+        // The owner's daily routine, one tap shorter: with calls due, the CRM
+        // tile opens straight onto the Today list (its pulse line says exactly
+        // that); with none due it opens Companies as always.
+        const pick = (t.id === 'crm' && pulse && pulse.followUpsToday > 0)
+          ? () => onPick({ ...t, target: 'crm', view: 'today' })
+          : () => onPick(t);
         return (
           <HubCard
             key={t.id}
@@ -2039,11 +2050,12 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
             muted={muted}
             large={large}
             delay={(startIdx + i) * 50}
-            onClick={() => onPick(t)}
+            onClick={pick}
             notice={showNotice ? "Today's sweep not run yet" : null}
             countdown={showResetCountdown ? `Next sweep in ${_fmtCountdown(nextResetAt)}` : null}
             badge={badge}
             stat={statFor(t, pulse)}
+            accent={accent}
           />
         );
       })}
@@ -2179,7 +2191,7 @@ const TIER_COLS = {
 // records. A new-site-inquiry row (from the hub's unseen-inquiry count) leads the
 // list, and the backup nudge (client-gated by localStorage) trails it; the whole
 // section still vanishes on a clean day.
-function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
+function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.green, aiUsage }) {
   const [open, setOpen] = React.useState({});
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
@@ -2225,8 +2237,9 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
 
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
-  // Tone per severity, from palette D (critical red, warning amber, info green).
-  const TONE = { critical: '#f87171', warning: D.amber, info: D.green };
+  // Tone per severity (critical red, warning amber); info wears the hosting
+  // brand's accent so each page's feed reads in its own vibe.
+  const TONE = { critical: '#f87171', warning: D.amber, info: accent };
 
   // Deep-link one expanded item to its exact record, by the row's kind. An
   // inquiry item opens its brand's OWN inbox (the row carries the view — same
@@ -2240,14 +2253,16 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
 
   // Flatten the server groups into rows (critical → warning → info). Order/CRM/
   // lookbook/inquiry groups expand to their records; the reply group jumps to the
-  // Outreach worklist. Inquiry groups (server-composed per brand: un-actioned
-  // leads awaiting a reply, stale → critical) are filtered to THIS page's brand —
-  // the amber hub banner covers the other brands' pipes on every page.
+  // Outreach worklist. Every row is scoped to THIS page's brand: inquiry groups
+  // carry their brand from the server; the orders/CRM/outreach/lookbook sources
+  // are all Joint-Printing businesses, so an untagged group is JP's — the
+  // Webworks/Atom pages show only their own rows. (The amber hub banner still
+  // covers every brand's inquiry pipe on every page.)
   const rows = [];
   for (const sev of ['critical', 'warning', 'info']) {
     for (const g of (groups[sev] || [])) {
       if (!g || !g.count) continue;
-      if (g.kind === 'inquiry' && brandFilter && g.brand && g.brand !== brandFilter) continue;
+      if (brandFilter && (g.brand || 'Joint Printing') !== brandFilter) continue;
       const items = Array.isArray(g.items) ? g.items : [];
       const expandable = (g.kind === 'order' || g.kind === 'crm' || g.kind === 'lookbook' || g.kind === 'inquiry') && items.length > 0;
       rows.push({
@@ -2261,10 +2276,11 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
     }
   }
 
-  // AI-copywriting budget row. Blocked is urgent → lead the list (red);
+  // AI-copywriting budget row — a JP WEBWORKS cost (the site copywriter), so it
+  // lives on the Webworks page's feed. Blocked is urgent → lead the list (red);
   // warn is a heads-up → sit with the other nudges (amber). Body opens the
   // JP Webworks Websites tab (where the spend happens); ✕ snoozes.
-  if (showAi) {
+  if (showAi && (!brandFilter || brandFilter === 'JP Webworks')) {
     const pct = Math.round((Number(aiUsage.pct) || 0) * 100);
     const budget = Number(aiUsage.budgetUsd) || 0;
     const used = (Number(aiUsage.estCostUsd) || 0).toFixed(2);
@@ -2285,8 +2301,10 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
     else rows.push(aiRow);
   }
 
-  // Backup nudge rows (client-gated), appended after the data signals.
-  if (showOverdue) rows.push({
+  // Backup nudge rows (client-gated), appended after the data signals. The
+  // backup covers the whole system's data → it nags on the home (JP) page only.
+  const showBackupRows = !brandFilter || brandFilter === 'Joint Printing';
+  if (showBackupRows && showOverdue) rows.push({
     key: 'backup', tone: D.amber,
     label: backup.lastBackupAt
       ? `Backup is ${backup.lastBackupDays} day${s(backup.lastBackupDays)} old — back it up`
@@ -2294,7 +2312,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
     onClick: () => onPick && onPick('backup'),
     onDismiss: dismiss(K_OVERDUE_SNOOZE, setOverdueSnoozedAt),
   });
-  else if (showHdd) rows.push({
+  else if (showBackupRows && showHdd) rows.push({
     key: 'backup', tone: '#60a5fa',
     label: 'Monthly: copy the latest backup to an external drive',
     onClick: () => onPick && onPick('backup'),
@@ -2307,7 +2325,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
 
   return (
     <Box>
-      <SectionHeader brand="Signals" tagline="What needs your attention" />
+      <SectionHeader brand="Signals" tagline="What needs your attention" accent={accent} />
       <Box sx={{ borderRadius: 3, border: `1px solid ${D.line}`, bgcolor: D.inset, overflow: 'hidden' }}>
       {rows.map((r, i) => {
         const expanded = !!open[r.key];
@@ -2347,7 +2365,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, aiUsage }) {
                       sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4.75, pr: 1.75, py: 0.85, cursor: 'pointer',
                         '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}>
                       {idTxt
-                        ? <MuiTypography sx={{ ...mono, color: D.green, fontSize: 12, minWidth: 50 }}>#{idTxt}</MuiTypography>
+                        ? <MuiTypography sx={{ ...mono, color: accent, fontSize: 12, minWidth: 50 }}>#{idTxt}</MuiTypography>
                         : null}
                       <MuiTypography sx={{ color: D.muted, fontSize: 12.5, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name || '—'}</MuiTypography>
                       {it.metric
@@ -2785,9 +2803,6 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   let cardIdx = 0;
   const pulse = (signals && signals.pulse) || null;
 
-  // Shared props every ToolGrid needs (badges / sweep nudges / live pulse).
-  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse };
-
   // Which business is in focus — one at a time, each its own clean context (no
   // blended "all" view). Persisted so the hub reopens where the owner left it.
   // Brands come straight off HUB_GROUPS, so onboarding a future business needs no
@@ -2802,9 +2817,17 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   }, []);
   const activeBiz = brands.includes(biz) ? biz : brands[0];
   const visibleGroups = HUB_GROUPS.filter((g) => g.brand === activeBiz);
-  // Joint Printing's live vitals (pulse, tax window, signals) are JP-specific, so
-  // they show only when Joint Printing is the focused business.
+  // The focused business's accent (JP green / Webworks blue / Atom violet) —
+  // threaded through the tiles + command center so switching business re-paints
+  // the whole hub in that brand's vibe.
+  const hubAccent = brandAccent(activeBiz) || D.green;
+  // Joint Printing's live vitals (pulse, tax window, reminders) are JP-specific,
+  // so they show only when Joint Printing is the focused business. (The Signals
+  // command center is per-brand now — it renders on every page, brand-scoped.)
   const showJpVitals = activeBiz === 'Joint Printing';
+
+  // Shared props every ToolGrid needs (badges / sweep nudges / live pulse / accent).
+  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse, accent: hubAccent };
 
   // UNANSWERED INQUIRIES — owner rule: a waiting lead banners on ALL THREE
   // brand pages (not just its own) until he's reached out. Counts are the
@@ -2853,11 +2876,12 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
       {/* Merch-season nudge — 4/20 & 7/10, the two dispensary dates worth prepping for. */}
       {showJpVitals && <MerchSeasonReminder onPick={onPick} />}
 
-      {/* Command center — what needs attention, on arrival. Hidden entirely (header
-          and all) when nothing needs attention — no dead placeholder. */}
-      {showJpVitals && (
-        <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} brandFilter={activeBiz} aiUsage={aiUsage} />
-      )}
+      {/* Command center — what needs attention, on arrival. Per-brand: every
+          business page gets its own feed (JP the orders/CRM/outreach signals,
+          Webworks its inquiries + AI budget, Atom its inquiries), each row
+          scoped by the server's brand tag. Hidden entirely (header and all)
+          when nothing needs attention — no dead placeholder. */}
+      <SignalsPanel signals={signals} onNavigate={onNavigate} onPick={onPick} brandFilter={activeBiz} accent={hubAccent} aiUsage={aiUsage} />
 
       {visibleGroups.map((group) => (
         <Box key={group.brand}>
