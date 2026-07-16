@@ -2020,7 +2020,7 @@ function statFor(t, pulse) {
   return null;
 }
 
-function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse, accent }) {
+function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, actionBadges, pulse, accent }) {
   return (
     <Box sx={{
       display: 'grid',
@@ -2036,7 +2036,9 @@ function ToolGrid({ tools, cols, muted, large, startIdx, onPick, sweepNeeded, sw
         const badge = t.id === 'submissions' ? (unseenInquiries?.contact || 0)
           : t.id === 'jpwinquiries' ? (unseenInquiries?.webworks || 0)
           : t.id === 'atominquiries' ? (unseenInquiries?.atom || 0)
-          : 0;
+          // App-style action badges: CRM = calls due today, Order Tracker =
+          // orders needing action. A red count bubble like a phone-app icon.
+          : (actionBadges && actionBadges[t.id]) || 0;
         // The owner's daily routine, one tap shorter: with calls due, the CRM
         // tile opens straight onto the Today list (its pulse line says exactly
         // that); with none due it opens Companies as always.
@@ -2821,13 +2823,31 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   // threaded through the tiles + command center so switching business re-paints
   // the whole hub in that brand's vibe.
   const hubAccent = brandAccent(activeBiz) || D.green;
+
+  // App-style action badges on the two daily-driver tiles — a red count bubble
+  // like a phone-app icon, so the hub tells you what needs doing at a glance:
+  //   CRM           → calls due today (from the pulse)
+  //   Order Tracker → orders needing action (aging past turnaround; the order
+  //                   signal groups the feed already carries).
+  // Both are JP tools (they only appear on the Joint Printing page), so the
+  // badges naturally scope to JP.
+  const ordersNeedingAction = (() => {
+    const g = (signals && signals.groups) || {};
+    return [...(g.critical || []), ...(g.warning || []), ...(g.info || [])]
+      .filter((x) => x && x.kind === 'order')
+      .reduce((n, x) => n + (Number(x.count) || 0), 0);
+  })();
+  const actionBadges = {
+    crm: (pulse && pulse.followUpsToday) || 0,
+    clients: ordersNeedingAction,
+  };
   // Joint Printing's live vitals (pulse, tax window, reminders) are JP-specific,
   // so they show only when Joint Printing is the focused business. (The Signals
   // command center is per-brand now — it renders on every page, brand-scoped.)
   const showJpVitals = activeBiz === 'Joint Printing';
 
   // Shared props every ToolGrid needs (badges / sweep nudges / live pulse / accent).
-  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, pulse, accent: hubAccent };
+  const gridProps = { onPick, sweepNeeded, sweepBlocked, nextResetAt, unseenInquiries, actionBadges, pulse, accent: hubAccent };
 
   // UNANSWERED INQUIRIES — owner rule: a waiting lead banners on ALL THREE
   // brand pages (not just its own) until he's reached out. Counts are the
