@@ -45,6 +45,7 @@ import axios from 'axios';
 import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { sortMockupTiles, mockupBadge } from './_mockupNumbers';
+import { SOURCE_META } from './_submissions';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
@@ -2339,6 +2340,37 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
               >
                 {displayName}
               </Typography>
+            );
+          })()}
+          {(() => {
+            // Cohesion: if this project was started from an inquiry, show which
+            // brand it came from (JP contact / Webworks / Atom) and jump back to
+            // the Inquiries inbox. inquirySource rides over from the submission
+            // (see buildOrderFromSubmission); older orders fall back to 'contact'
+            // when they merely carry a contactSubmissionId.
+            if (!local.inquirySource && !local.contactSubmissionId) return null;
+            const src = local.inquirySource || 'contact';
+            const meta = SOURCE_META[src] || SOURCE_META.contact;
+            const brand = src === 'webworks' ? 'Webworks' : src === 'atom' ? 'Atom' : 'JP';
+            const canOpen = !!onNavigate;
+            const go = () => onNavigate && onNavigate({ view: 'submissions' });
+            return (
+              <Box
+                onClick={canOpen ? go : undefined}
+                role={canOpen ? 'button' : undefined} tabIndex={canOpen ? 0 : undefined}
+                onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } : undefined}
+                title={canOpen ? 'Open the Inquiries inbox' : undefined}
+                sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.4, mt: 0.6, width: 'fit-content',
+                  px: 0.9, py: 0.25, borderRadius: 999, fontSize: 10.5, fontWeight: 700, fontFamily: 'monospace',
+                  bgcolor: meta.bg, color: meta.color, border: `1px solid ${meta.color}33`,
+                  cursor: canOpen ? 'pointer' : 'default',
+                  '&:hover': canOpen ? { filter: 'brightness(1.12)' } : undefined,
+                  '&:focus-visible': { outline: `2px solid ${meta.color}`, outlineOffset: 2 },
+                }}
+              >
+                ↳ From {brand} inquiry
+              </Box>
             );
           })()}
         </Box>
