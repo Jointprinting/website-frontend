@@ -50,7 +50,7 @@ import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } fr
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
-import { screenPrintQuote, specDetails } from '../../common/printerPricing';
+import { priceMethod, specDetails } from '../../common/printerPricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -1155,7 +1155,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             <Button size="small" onClick={() => {
               const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
               onPatchIdxs(all, (l) => {
-                const r = screenPrintQuote(specPrinter.catalog.screenPrinting, { qty: num(l.qty), shade: specShade, locations });
+                const r = priceMethod(specPrinter.catalog.screenPrinting, { qty: num(l.qty), shade: specShade, locations });
                 if (!r || r.error) return {};
                 return { printCost: r.printPerUnit, setupCost: r.setup,
                   printType: 'Screen Print', printDetails: specDetails({ shade: specShade, locations }) };
@@ -1170,11 +1170,11 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
           <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
             {grid.qtys.map(q => {
               const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
-              const r = screenPrintQuote(specPrinter.catalog.screenPrinting, { qty: q, shade: specShade, locations });
+              const r = priceMethod(specPrinter.catalog.screenPrinting, { qty: q, shade: specShade, locations });
               return (
                 <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
                   {q}u → {r && !r.error
-                    ? `${fmt(r.printPerUnit)}/u print · ${fmt(r.setup)} setup (${r.screens} screens, ${r.tier.dozens}dz tier)`
+                    ? `${fmt(r.printPerUnit)}/u print · ${fmt(r.setup)} setup (${r.screens} screens, ${r.tier.dozens != null ? `${r.tier.dozens}dz` : r.tier.label} tier)`
                     : (r && r.warnings && r.warnings[0]) || 'no price'}
                 </Typography>
               );
