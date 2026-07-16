@@ -89,3 +89,81 @@ test('specDetails composes the printDetails string', () => {
   expect(specDetails({ shade: 'dark', locations: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }] }))
     .toBe('3c front + 1c back · dark garment');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-method engine (Print Hybrid / A+ / Contract-DTG / Branded shapes).
+import { priceMethod } from './printerPricing';
+
+test('qty_x_colors, setup included (Print Hybrid screen): floor tier + summed locations, no setup', () => {
+  const sp = { model: 'qty_x_colors', setup: 'included', darkAddsUnderbaseColor: true,
+    colorColumns: ['1','2','3','4','5','6','7','8'],
+    tiers: [{ minQty: 48, label: '48-72', prices: [4,4.5,5.1,5.7,7,7.8,12,16] },
+            { minQty: 72, label: '72-144', prices: [2,2.25,2.55,2.85,3.5,3.9,6,8] }] };
+  const r = priceMethod(sp, { qty: 100, shade: 'light', locations: [{ label: 'front', colors: 3 }] });
+  expect(r.tier.label).toBe('72-144');   // 100 ≥ 72
+  expect(r.printPerUnit).toBe(2.55);      // 3-color column
+  expect(r.setup).toBe(0);
+});
+
+test('qty_x_colors dark garment adds an underbase color', () => {
+  const sp = { model: 'qty_x_colors', setup: 'included', darkAddsUnderbaseColor: true,
+    colorColumns: ['1','2','3','4','5','6','7','8'],
+    tiers: [{ minQty: 72, label: '72-144', prices: [2,2.25,2.55,2.85,3.5,3.9,6,8] }] };
+  const r = priceMethod(sp, { qty: 100, shade: 'dark', locations: [{ label: 'front', colors: 2 }] });
+  expect(r.printPerUnit).toBe(2.55);      // 2c + underbase = 3c column
+  expect(r.screens).toBe(3);
+});
+
+test('qty_x_colors with separate screen fees (Branded): setup sums the per-color ladder', () => {
+  const sp = { model: 'qty_x_colors', setup: 'per_color', darkAddsUnderbaseColor: true,
+    screenFees: { '1':25,'2':30,'3':35,'4':40,'5':45,'6':50,'7':55,'8':60 },
+    colorColumns: ['1','2','3','4','5','6','7','8'],
+    tiers: [{ minQty: 48, label: '48-71', prices: [1.9,2.55,3.15,3.75,4.35,5,5.65,6.2] }] };
+  const r = priceMethod(sp, { qty: 50, shade: 'light', locations: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }] });
+  expect(r.printPerUnit).toBe(5.05);      // 3c $3.15 + 1c $1.90
+  expect(r.setup).toBe(60);               // $35 (3c) + $25 (1c)
+});
+
+test('qty_only (Digital Squeegee): one price by quantity floor', () => {
+  const sp = { model: 'qty_only', tiers: [{ minQty: 48, price: 8 }, { minQty: 72, price: 6 }, { minQty: 144, price: 4 }] };
+  expect(priceMethod(sp, { qty: 200 }).printPerUnit).toBe(4);
+  expect(priceMethod(sp, { qty: 60 }).printPerUnit).toBe(8);
+});
+
+test('qty_x_size_x_shade (Contract-DTG DTG): size + shade select the price', () => {
+  const sp = { model: 'qty_x_size_x_shade', sizes: ['4x4','10x10'], includesGarment: false,
+    tiers: [{ minQty: 4, label: '4-10', prices: { '4x4':[6.6,5.5], '10x10':[7.7,6.6] } },
+            { minQty: 22, label: '22-36', prices: { '4x4':[5.25,4.4], '10x10':[6.9,5.8] } }] };
+  expect(priceMethod(sp, { qty: 30, size: '10x10', shade: 'dark' }).printPerUnit).toBe(6.9);
+  expect(priceMethod(sp, { qty: 5, size: '4x4', shade: 'light' }).printPerUnit).toBe(5.5); // white column
+  expect(priceMethod(sp, { qty: 30, size: '' }).error).toBe('pick-size');
+});
+
+test('qty_x_stitches (embroidery): qty tier × stitch band + digitizing setup', () => {
+  const sp = { model: 'qty_x_stitches',
+    qtyTiers: [{ label: '1-5', minQty: 1 }, { label: '12-23', minQty: 12 }],
+    stitchBands: ['4000','6000','8000'],
+    grid: { '1-5':[9.9,13.2,13.2], '12-23':[5.15,5.9,7.4] },
+    fees: { digitizingUpTo15k: 30, digitizingPer1kOver15k: 1 } };
+  const r = priceMethod(sp, { qty: 15, stitches: 6000 });
+  expect(r.printPerUnit).toBe(5.9);   // 12-23 tier, 6000 band
+  expect(r.setup).toBe(30);           // digitizing ≤15k
+});
+
+test('gang_qty_x_size (Contract-DTG DTF): size row, qty column floor', () => {
+  const sp = { model: 'gang_qty_x_size', sizes: ['4x4','15x20'],
+    qtyCols: [{ minQty: 1, label: '1-10' }, { minQty: 11, label: '11-25' }],
+    grid: { '4x4':[2.7,2], '15x20':[13.1,9.5] } };
+  expect(priceMethod(sp, { qty: 20, size: '15x20' }).printPerUnit).toBe(9.5);
+});
+
+test('gang_sheet_flat (Print Hybrid DTF): flat per sheet', () => {
+  const sp = { model: 'gang_sheet_flat', sheetSize: '22x12in', pricePerSheet: 6.5 };
+  expect(priceMethod(sp, {}).printPerUnit).toBe(6.5);
+});
+
+test('dispatcher falls back to Heritage priceGrids, and flags a pending grid', () => {
+  expect(priceMethod(SP, { qty: 100, shade: 'light', locations: [{ label: 'front', colors: 1 }] }).printPerUnit).toBe(1.3);
+  expect(priceMethod({ _needsFullGrid: true }, {}).error).toBe('grid-pending');
+  expect(priceMethod(null, {})).toBeNull();
+});
