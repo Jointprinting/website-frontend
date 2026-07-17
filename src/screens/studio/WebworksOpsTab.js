@@ -65,6 +65,10 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
     const t = setTimeout(() => setBusy(''), 5000);
     return () => clearTimeout(t);
   }, [busy]);
+  // An in-flight request shows an ellipsis-suffixed status ('Updating…'). Disable the
+  // mutating buttons while it runs so two quick clicks can't fire overlapping writes
+  // to the same site's edits (belt-and-suspenders with the backend's atomic update).
+  const working = String(busy).endsWith('…');
 
   // Patch a single site in place from an API response, so the expanded card
   // updates without a full reload flicker.
@@ -197,7 +201,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                           sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open company →</Button>
                       )}
                       {s.status === 'live' && (
-                        <Button onClick={() => runHealth(s._id)} size="small" startIcon={<FavoriteBorderOutlinedIcon sx={{ fontSize: 14 }} />}
+                        <Button onClick={() => runHealth(s._id)} disabled={working} size="small" startIcon={<FavoriteBorderOutlinedIcon sx={{ fontSize: 14 }} />}
                           sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>
                           Health check
                         </Button>
@@ -217,7 +221,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                         <TextField size="small" placeholder="Link to CRM company key…" value={draftKey[s._id] || ''}
                           onChange={(e) => setDraftKey((p) => ({ ...p, [s._id]: e.target.value }))}
                           sx={{ ...dropInput, flex: 1 }} InputLabelProps={{ sx: { color: D.muted } }} />
-                        <Button onClick={() => linkCompany(s._id)} disabled={!(draftKey[s._id] || '').trim()} size="small"
+                        <Button onClick={() => linkCompany(s._id)} disabled={working || !(draftKey[s._id] || '').trim()} size="small"
                           sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Link</Button>
                       </Stack>
                     )}
@@ -242,7 +246,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                                 {' · '}{e.source}{' · '}{fmtDate(e.createdAt)}
                               </Typography>
                             </Box>
-                            <Button onClick={() => advanceEdit(s._id, e)} size="small"
+                            <Button onClick={() => advanceEdit(s._id, e)} disabled={working} size="small"
                               sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 10.5, minWidth: 0, px: 0.75, flexShrink: 0, '&:hover': { color: D.green } }}>
                               {NEXT_LABEL[e.status]}
                             </Button>
@@ -255,7 +259,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                         onChange={(e) => setDraftEdit((p) => ({ ...p, [s._id]: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === 'Enter') addEdit(s._id); }}
                         sx={{ ...dropInput, flex: 1 }} InputLabelProps={{ sx: { color: D.muted } }} />
-                      <Button onClick={() => addEdit(s._id)} disabled={!(draftEdit[s._id] || '').trim()} size="small"
+                      <Button onClick={() => addEdit(s._id)} disabled={working || !(draftEdit[s._id] || '').trim()} size="small"
                         startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
                         sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5 }}>Add</Button>
                     </Stack>

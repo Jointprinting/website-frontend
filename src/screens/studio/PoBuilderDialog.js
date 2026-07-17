@@ -207,7 +207,16 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alertDialog(`PDF failed: ${e.response?.data?.message || e.message}`);
+      // responseType:'blob' means an error body comes back as a Blob, so the server's
+      // JSON { message } was being dropped for a generic axios message. Read it back.
+      let msg = e.message;
+      const data = e.response?.data;
+      if (data instanceof Blob) {
+        try { msg = JSON.parse(await data.text())?.message || msg; } catch { /* not JSON — keep the axios message */ }
+      } else if (data?.message) {
+        msg = data.message;
+      }
+      alertDialog(`PDF failed: ${msg}`);
     } finally {
       setPdfBusy(false);
     }

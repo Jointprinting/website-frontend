@@ -232,16 +232,29 @@ export const SEGMENT_META = {
 // the server's isCustomer (order reality) OR a won/customer stage.
 export const isClient = (c) => !!(c && (c.isCustomer || isWonStage(c.stage)));
 
-// A cold-email / outreach-pool record: an automated blast target from the
-// lead-finder / mail-merge, not a hand-worked lead. Mirrors the backend
-// isOutreachPool (controllers/crm.js) — the cold-email / dispensary / cold tags or
-// the 'Cold Outreach' lead source.
-export const isOutreachPool = (c) => {
+/// Mirrors the backend isEngineManagedCold (controllers/crm.js): an engine-managed
+// COLD-OUTREACH prospect the owner hasn't personally engaged. Produced by the
+// lead-finder / mail-merge (a cold-email / dispensary / cold / meta-ad tag, or a
+// 'Cold Outreach' lead source), NOT yet replied (a reply adds the 'warm' tag) and
+// NOT owner-touched (a logged call/text/visit — an automated cold email doesn't
+// count). It lives in the CRM only so the outreach engine can drip it, so it's kept
+// off the owner's board. Keep in lockstep with the backend.
+export const isEngineManagedCold = (c) => {
   if (!c) return false;
   const tags = (c.tags || []).map((t) => String(t || '').toLowerCase());
-  return c.leadSource === 'Cold Outreach'
-    || tags.includes('cold-email') || tags.includes('dispensary') || tags.includes('cold');
+  const outreachProspect = !tags.includes('warm')
+    && (tags.includes('cold-email') || tags.includes('dispensary') || tags.includes('cold')
+      || tags.includes('meta-ad') || c.leadSource === 'Cold Outreach');
+  const ownerTouched = (c.log || []).some((l) => ['call', 'text', 'visit'].includes(l && l.kind));
+  return outreachProspect && !ownerTouched && c.stage !== 'customer' && c.stage !== 'won';
 };
+
+// The cold-outreach POOL: engine-managed cold AND nothing scheduled. Mirrors the
+// backend isOutreachPool (controllers/crm.js). The moment the owner schedules a
+// follow-up (nextFollowUp set), the lead replies ('warm'), or the owner works it
+// (a call/text/visit log), it LEAVES the pool and rejoins the board as an active
+// lead — the promotion that was silently broken when this ignored nextFollowUp/warm.
+export const isOutreachPool = (c) => isEngineManagedCold(c) && c.nextFollowUp == null;
 
 // "Active leads" = the leads the owner is actually working — NOT the automated
 // cold-email pool, and either with a scheduled next follow-up (the owner's own
@@ -253,6 +266,9 @@ export const isOutreachPool = (c) => {
 const LIVE_QUOTE_STAGES = ['awaiting_details', 'quoting'];
 export const isActiveLead = (c) => {
   if (!c || isClient(c)) return false;
+  // A lost/dormant card is parked off the active ladder — it stays in "everyone
+  // else" even if it carries an old (never-cleared) follow-up date.
+  if (isClosedStage(c.stage)) return false;
   if (isOutreachPool(c)) return false;
   return !!c.nextFollowUp || LIVE_QUOTE_STAGES.includes(c.stage);
 };

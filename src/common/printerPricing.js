@@ -162,6 +162,13 @@ function qtyColorsQuote(sp, { qty, shade = 'light', locations = [] }) {
   const maxColors = numericCols.length;
   const underbase = shade === 'dark' && sp.darkAddsUnderbaseColor ? 1 : 0;
   const warnings = [];
+  // Below the smallest tier's minimum the printer won't run the job at grid price
+  // (Blue Moon min 12, Garment Gear min 24). floorTier snaps up to the smallest tier,
+  // so warn rather than silently quote under-minimum — mirrors screenPrintQuote.
+  const tierMin = num(tier.minQty);
+  if (tierMin > 0 && q < tierMin) {
+    warnings.push(`Under ${tierMin} pieces is below ${sp.label || 'this printer'}'s minimum — priced at the smallest tier; confirm with the printer.`);
+  }
   let perUnit = 0;
   let setup = 0;      // per-color screen fees when the printer bills them separately
   let screens = 0;
@@ -227,9 +234,19 @@ function qtySizeQuote(sp, { qty, size }) {
   const row = sp.grid && sp.grid[size];
   const price = row && idx >= 0 ? row[idx] : null;
   if (price == null) return { error: 'na', warnings: ['No price at this quantity/size — request a quote.'] };
-  return { printPerUnit: +num(price).toFixed(2), setup: 0, screens: 0,
-    tier: { label: `${size} · ${tier.label}` }, warnings: [],
-    notes: [`${sp.label || 'Print'} ${size} — per piece, all-in.`] };
+  const warnings = [];
+  const notes = [`${sp.label || 'Print'} ${size} — per piece, all-in.`];
+  let perUnit = num(price);
+  // Honor a catalog order minimum (e.g. Blue Moon DTG's $30 non-program floor): if
+  // the whole run prices under it, lift the per-piece so the order totals the floor.
+  const minimum = num(sp.minimum);
+  if (minimum > 0 && perUnit * q < minimum) {
+    perUnit = minimum / q;
+    warnings.push(`Under the $${minimum.toFixed(2)} order minimum — priced up to the $${minimum.toFixed(2)} floor at ${q} pc.`);
+    notes.push(`$${minimum.toFixed(2)} order minimum applied.`);
+  }
+  return { printPerUnit: +perUnit.toFixed(2), setup: 0, screens: 0,
+    tier: { label: `${size} · ${tier.label}` }, warnings, notes };
 }
 
 // qty × stitches — A+ embroidery. Piece price by qty tier × stitch band, plus a
@@ -265,9 +282,23 @@ function qtyStitchesQuote(sp, { qty, stitches }) {
 function gangFlatQuote(sp, { sheets = 1 }) {
   const n = Math.max(1, Math.round(num(sheets)));
   if (sp.pricePerSheet == null) return null;
-  return { printPerUnit: +num(sp.pricePerSheet).toFixed(2), setup: 0, screens: 0,
-    tier: { label: `${n} × ${sp.sheetSize || 'sheet'}` }, warnings: [],
-    notes: [`DTF gang sheet ${sp.sheetSize || ''} — priced per sheet, not per garment.`] };
+  const per = num(sp.pricePerSheet);
+  const warnings = [];
+  const notes = [`DTF gang sheet ${sp.sheetSize || ''} — priced per sheet, not per garment.`];
+  // Heat press is billed per pressed garment LOCATION, which a per-sheet quote can't
+  // know (one sheet gangs many transfers across garments) — surface it so the fee is
+  // added by hand, not silently dropped.
+  const press = num(sp.heatPressPerLocation);
+  if (press > 0) notes.push(`Heat press $${press.toFixed(2)} per location — add once per pressed garment location (not in the sheet price).`);
+  // Order minimum: can't floor a per-sheet price without over-charging multi-sheet
+  // orders, so warn when this sheet count is under the floor instead of mutating it.
+  const minimum = num(sp.minimum);
+  if (minimum > 0) {
+    notes.push(`$${minimum.toFixed(2)} order minimum.`);
+    if (per * n < minimum) warnings.push(`${n} sheet${n === 1 ? '' : 's'} is under the $${minimum.toFixed(2)} order minimum — the printer bills the $${minimum.toFixed(2)} floor.`);
+  }
+  return { printPerUnit: +per.toFixed(2), setup: 0, screens: 0,
+    tier: { label: `${n} × ${sp.sheetSize || 'sheet'}` }, warnings, notes };
 }
 
 // gang sheet, qty × size — Contract-DTG DTF (per transfer).
