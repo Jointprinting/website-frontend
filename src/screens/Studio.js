@@ -2252,6 +2252,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
           : g.kind === 'triage' ? () => onPick && onPick({ target: 'outreach', view: 'replies' })
           : g.kind === 'crm' ? () => onPick && onPick({ target: 'crm', view: 'today' })
           : g.kind === 'inquiry' ? () => onPick && onPick(g.view)
+          : g.kind === 'webworks' ? () => onPick && onPick('webworksops')
           : null,
       });
     }
