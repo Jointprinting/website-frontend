@@ -122,6 +122,7 @@ function emptyLine() {
     qty: 1, styleCode: '', description: '',
     blankCost: 0, supplierUrl: '',
     printType: '', printDetails: '', printCost: 0,
+    printerKey: '', printerName: '',
     setupCost: 0, shippingCost: 0,
     markup: 1.4, unitPrice: 0,
   };
@@ -1265,8 +1266,12 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                 onPatchIdxs(all, (l) => {
                   const r = priceAt(l.qty);
                   if (!r || r.error) return {};
+                  // Stamp the chosen printer onto the line (internal) so it flows
+                  // Quoter → confirmation item → per-supplier PO with no re-typing.
                   return { printCost: r.printPerUnit, setupCost: r.setup || 0,
-                    printType: specMethod, printDetails: detailsFor() };
+                    printType: specMethod, printDetails: detailsFor(),
+                    printerKey: specPrinter ? specPrinter.key : '',
+                    printerName: specPrinter ? specPrinter.name : '' };
                 });
               }}
               sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, fontSize: 11.5, textTransform: 'none', px: 2,
