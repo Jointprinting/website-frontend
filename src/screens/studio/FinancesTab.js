@@ -127,9 +127,10 @@ function BrandPnlPanel({ byBrand }) {
 // Recurring revenue snapshot — the subscription-finance view. MRR/ARR headline +
 // a per-brand split, read from /api/subscriptions/summary. Hidden until there's a
 // plan, so the finance tab is unchanged for a shop with no subscriptions yet.
-function RecurringRevenuePanel({ mrr }) {
+function RecurringRevenuePanel({ mrr, onRecordPlan, onSkipPlan }) {
   if (!mrr || !mrr.count) return null;
   const brands = (mrr.byBrand || []).filter((b) => b.mrr > 0 || b.active > 0);
+  const due = mrr.dueThisPeriod || [];
   return (
     <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
@@ -157,7 +158,97 @@ function RecurringRevenuePanel({ mrr }) {
           <Typography sx={{ ...mono, color: D.text, fontSize: 12.5, fontWeight: 800, minWidth: 72, textAlign: 'right' }}>{money(b.mrr)}/mo</Typography>
         </Stack>
       ))}
+
+      {/* Record this month's plans — active plans not yet booked for the current
+          period. One tap records the client's payment (income) with the invoice
+          attached, turning expected MRR into recorded revenue. */}
+      {due.length > 0 && onRecordPlan && (
+        <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${D.line}` }}>
+          <Typography sx={{ color: D.amber || '#fbbf24', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 0.75 }}>
+            Record this month&rsquo;s plans · {due.length}
+          </Typography>
+          {due.map((p) => (
+            <Stack key={p.id} direction="row" alignItems="center" spacing={1} sx={{ py: 0.6, borderTop: `1px solid ${D.line}`, '&:first-of-type': { borderTop: 'none' } }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: FIN_BRAND_ACCENT[p.brand] || D.muted, flexShrink: 0 }} />
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {p.companyName || p.plan || (p.brand === 'atom' ? 'JP Atom' : 'JP Webworks')}
+                </Typography>
+                <Typography sx={{ color: D.faint, fontSize: 10.5 }}>{p.plan ? `${p.plan} · ` : ''}{money(p.amount)}{p.cadence === 'annual' ? '/yr' : '/mo'}</Typography>
+              </Box>
+              <Button onClick={() => onRecordPlan(p)} size="small"
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, minWidth: 0, px: 1 }}>Record</Button>
+              {onSkipPlan && (
+                <Button onClick={() => onSkipPlan(p)} size="small"
+                  sx={{ color: D.faint, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 0.5, '&:hover': { color: D.muted } }}>Skip</Button>
+              )}
+            </Stack>
+          ))}
+        </Box>
+      )}
     </Box>
+  );
+}
+
+// Record a recurring-REVENUE plan for the current period: confirm the amount, attach
+// the invoice sent to the client (optional), and book it as income. Mirror of the
+// expense-side RecordInvoiceDialog, income-side.
+function RecordPlanDialog({ plan, onClose, onRecord }) {
+  const [amount, setAmount] = useState(plan.amount != null ? String(plan.amount) : '');
+  const [date, setDate] = useState(ymd(new Date()));
+  const [fileName, setFileName] = useState('');
+  const [fileDataUrl, setFileDataUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setFileName(f.name);
+    const r = new FileReader();
+    r.onload = () => setFileDataUrl(r.result);
+    r.readAsDataURL(f);
+  };
+  const canSave = Number(amount) > 0 && !saving;
+  const submit = () => {
+    setSaving(true);
+    onRecord({ period: plan.period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+  };
+  const who = plan.companyName || plan.plan || (plan.brand === 'atom' ? 'JP Atom' : 'JP Webworks');
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, backgroundImage: 'none' } }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <AutorenewIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>Record {who} — {periodLabel(plan.period)}</Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Stack gap={1.5}>
+          <Stack direction="row" gap={1}>
+            <TextField size="small" label="Amount billed" type="number" value={amount} autoFocus
+              onChange={(e) => setAmount(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+            <TextField size="small" label="Date" type="date" value={date}
+              onChange={(e) => setDate(e.target.value)} sx={dropInput} InputLabelProps={{ shrink: true, sx: { color: D.muted } }} />
+          </Stack>
+          <Button component="label" startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ color: fileName ? D.green : D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, justifyContent: 'flex-start',
+              border: `1px dashed ${D.line}`, borderRadius: 1.5, py: 1, '&:hover': { color: D.green, borderColor: D.green } }}>
+            {fileName || 'Attach the invoice you sent (optional)'}
+            <input type="file" hidden accept="image/*,application/pdf" onChange={onFile} />
+          </Button>
+          <TextField size="small" label="Note (optional)" value={note} multiline minRows={1}
+            onChange={(e) => setNote(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <Stack direction="row" gap={1} justifyContent="flex-end">
+            <Button onClick={onClose} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={submit} disabled={!canSave} startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
+              sx={{ bgcolor: canSave ? D.green : 'rgba(255,255,255,0.08)', color: canSave ? '#08130c' : D.muted,
+                textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: D.green, opacity: 0.9 } }}>
+              {saving ? 'Recording…' : 'Record income'}
+            </Button>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -461,6 +552,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [recurring, setRecurring] = useState(null);  // operating-subscription tracker
   const [recSub, setRecSub]   = useState(null);      // subscription being recorded (dialog)
   const [editSub, setEditSub] = useState(null);      // subscription being edited/added (dialog)
+  const [recPlan, setRecPlan] = useState(null);      // recurring-REVENUE plan being recorded (dialog)
   const [orders, setOrders]   = useState([]);
   const [txns, setTxns]       = useState([]);
   const [months, setMonths]   = useState([]);
@@ -628,6 +720,25 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
     try { await axios.delete(`${base}/recurring-expenses/${id}`, authHdr); setEditSub(null); await reloadRecurring(); }
     catch (e) { setBusy(e.response?.data?.message || e.message); }
   }, [authHdr, reloadRecurring]);
+
+  // Record this month's recurring-REVENUE plan (Webworks/Atom): books an income
+  // Transaction (brand-tagged, Client Sales), optionally with the invoice sent to the
+  // client, and marks the period. Full reload — the ledger + MRR view change.
+  const recordPlanInvoice = useCallback(async (id, payload) => {
+    setBusy('Recording plan…');
+    try {
+      await axios.post(`${base}/subscriptions/${id}/record`, payload, authHdr);
+      setRecPlan(null);
+      await load();
+      setBusy('Plan recorded ✓');
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, load]);
+
+  const skipPlanPeriod = useCallback(async (id, period) => {
+    if (!(await confirmDialog({ title: 'Skip this month?', message: 'Mark this plan as not billed this period — it drops off the to-record list and books no income.', confirmLabel: 'Skip month' }))) return;
+    try { await axios.post(`${base}/subscriptions/${id}/skip`, { period }, authHdr); await load(); }
+    catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, load]);
 
   // Status lines auto-clear — "Cleared 46 receipts ✓" must not live in the
   // header forever. In-flight messages (ending in …) stay until replaced.
@@ -1015,7 +1126,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             {/* Recurring revenue — the subscription-finance view (Webworks/Atom
                 MRR/ARR + a per-brand split). Additive: hidden until a plan exists,
                 so a shop with no subscriptions sees the finance tab unchanged. */}
-            <RecurringRevenuePanel mrr={mrr} />
+            <RecurringRevenuePanel mrr={mrr}
+              onRecordPlan={(row) => setRecPlan(row)}
+              onSkipPlan={(row) => skipPlanPeriod(row.id, row.period)} />
 
             {/* Operating subscriptions the shop PAYS (Workspace, Render, ChatGPT,
                 Claude, gym, backup domain). Totals the monthly outflow and — on each
@@ -1272,6 +1385,11 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
           onClose={() => setEditSub(null)}
           onSave={(payload) => saveSub(editSub._id || null, payload)}
           onDelete={editSub._id ? () => deleteSub(editSub._id) : undefined} />
+      )}
+      {recPlan && (
+        <RecordPlanDialog plan={recPlan}
+          onClose={() => setRecPlan(null)}
+          onRecord={(payload) => recordPlanInvoice(recPlan.id, payload)} />
       )}
     </Box>
   );
