@@ -26,7 +26,6 @@ import axios from 'axios';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
 import { D, accentBar, dropInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
-import QuickbooksCard from './QuickbooksCard';
 import { confirmDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
 import { buildTransactionMenu, buildFallbackMenu } from './contextMenuActions';
@@ -585,8 +584,6 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       </Box>
 
       <Box data-ctx-chrome sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
-        {/* QuickBooks connection — the connector for invoices/payments + pay-at-close. */}
-        <Box sx={{ mb: 2.5 }}><QuickbooksCard token={token} /></Box>
         {loading ? (
           <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>
         ) : empty ? (

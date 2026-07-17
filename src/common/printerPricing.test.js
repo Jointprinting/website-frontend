@@ -162,6 +162,31 @@ test('gang_sheet_flat (Print Hybrid DTF): flat per sheet', () => {
   expect(priceMethod(sp, {}).printPerUnit).toBe(6.5);
 });
 
+test('qty_x_size (Garment Gear DTG/DTF): size column × qty tier, per piece', () => {
+  const sp = { model: 'qty_x_size', label: 'DTG',
+    sizes: ['up to 5x5', 'up to 10x10', 'up to 12x14'],
+    qtyTiers: [{ minQty: 1, label: '1-8' }, { minQty: 24, label: '24-47' }, { minQty: 144, label: '144-287' }],
+    grid: { 'up to 5x5': [6.55, 4.75, 3.35], 'up to 10x10': [8.55, 6.20, 4.35], 'up to 12x14': [10.25, 7.45, 5.25] } };
+  expect(priceMethod(sp, { qty: 30, size: 'up to 10x10' }).printPerUnit).toBe(6.20); // 24-47 tier
+  expect(priceMethod(sp, { qty: 5, size: 'up to 5x5' }).printPerUnit).toBe(6.55);    // 1-8 tier
+  expect(priceMethod(sp, { qty: 500, size: 'up to 12x14' }).printPerUnit).toBe(5.25); // floors to top tier
+  expect(priceMethod(sp, { qty: 30 }).error).toBe('pick-size');                       // no size
+  expect(priceMethod(sp, { qty: 30, size: 'bogus' }).error).toBe('pick-size');
+});
+
+test('qty_x_colors underbaseFreeScreen: underbase prints but adds no screen fee', () => {
+  const sp = { model: 'qty_x_colors', setup: 'per_color', darkAddsUnderbaseColor: true, underbaseFreeScreen: true,
+    colorColumns: ['1', '2', '3', '4'],
+    screenFees: { '1': 25, '2': 50, '3': 75, '4': 100 },
+    tiers: [{ minQty: 24, label: '24-47', prices: [3.05, 3.65, 4.35, 5.0] }] };
+  // dark 2-color front → effective 3 colors on the PRICE ($4.35) + 3 screens, but the
+  // screen FEE is for the 2 real colors ($50), not 3 ($75) — underbase screen is free.
+  const r = priceMethod(sp, { qty: 30, shade: 'dark', locations: [{ label: 'front', colors: 2 }] });
+  expect(r.printPerUnit).toBe(4.35);
+  expect(r.screens).toBe(3);
+  expect(r.setup).toBe(50);
+});
+
 test('qty_x_size_sqin (A+ DTF): sqin band × qty tier + placement apply fee', () => {
   const sp = { model: 'qty_x_size_sqin',
     qtyTiers: ['1-11', '12-24', '250+'],

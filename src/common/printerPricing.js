@@ -177,7 +177,13 @@ function qtyColorsQuote(sp, { qty, shade = 'light', locations = [] }) {
     screens += effColors;
     // Setup: 'included' → nothing; a screenFees map (e.g. {"1":25,…}) → the
     // fee for this location's color count. Per screen/location, like the sheet.
-    if (sp.screenFees) setup += num(sp.screenFees[String(effColors)]);
+    // `underbaseFreeScreen`: the underbase color prints (counts toward the piece
+    // price + screen count) but carries NO screen setup fee (Garment Gear's rule),
+    // so the fee is looked up on the real colors only.
+    if (sp.screenFees) {
+      const feeColors = sp.underbaseFreeScreen ? effColors - underbase : effColors;
+      setup += num(sp.screenFees[String(feeColors)]);
+    }
   }
   const notes = [];
   if (underbase) notes.push('Dark garment: +1 white underbase color per location.');
@@ -207,6 +213,23 @@ function qtySizeShadeQuote(sp, { qty, size, shade = 'light' }) {
   const price = shade === 'dark' ? pair[0] : pair[1]; // [dark, white]
   return { printPerUnit: +num(price).toFixed(2), setup: 0, screens: 0, tier: { label: tier.label },
     warnings: [], notes: [`DTG ${size}, ${shade === 'dark' ? 'dark' : 'white'} garment — print only.`] };
+}
+
+// qty × size — Garment Gear DTG / DTF. Per-piece price from a size × quantity-tier
+// grid (imprint size picks the column, qty floors the row). No shade split, no
+// setup — the sheet's price is all-in per piece.
+function qtySizeQuote(sp, { qty, size }) {
+  const q = Math.max(0, Math.round(num(qty)));
+  if (!q || !Array.isArray(sp.qtyTiers) || !sp.qtyTiers.length) return null;
+  if (!size || !(sp.sizes || []).includes(size)) return { error: 'pick-size', warnings: ['Pick a print size.'] };
+  const tier = floorTier(sp.qtyTiers, q);
+  const idx = sp.qtyTiers.indexOf(tier);
+  const row = sp.grid && sp.grid[size];
+  const price = row && idx >= 0 ? row[idx] : null;
+  if (price == null) return { error: 'na', warnings: ['No price at this quantity/size — request a quote.'] };
+  return { printPerUnit: +num(price).toFixed(2), setup: 0, screens: 0,
+    tier: { label: `${size} · ${tier.label}` }, warnings: [],
+    notes: [`${sp.label || 'Print'} ${size} — per piece, all-in.`] };
 }
 
 // qty × stitches — A+ embroidery. Piece price by qty tier × stitch band, plus a
@@ -309,6 +332,7 @@ export function priceMethod(section, spec = {}) {
     case 'qty_x_colors': return qtyColorsQuote(section, spec);
     case 'qty_only': return qtyOnlyQuote(section, spec);
     case 'qty_x_size_x_shade': return qtySizeShadeQuote(section, spec);
+    case 'qty_x_size': return qtySizeQuote(section, spec);
     case 'qty_x_stitches': return qtyStitchesQuote(section, spec);
     case 'qty_x_size_sqin': return qtySizeSqinQuote(section, spec);
     case 'gang_sheet_flat': return gangFlatQuote(section, spec);
