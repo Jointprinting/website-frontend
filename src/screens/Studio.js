@@ -103,6 +103,8 @@ import { setAuthProvider, startAutoFlush } from '../common/offlineSync';
 // JP Webworks Websites tool — lazy so the template registry + editor stay out
 // of the Studio's main chunk until the owner actually opens the tool.
 const JpwSitesTab = React.lazy(() => import('./studio/JpwSitesTab'));
+// JP Webworks Client Manager — run the live sites (edits queue + health + spine link).
+const WebworksOpsTab = React.lazy(() => import('./studio/WebworksOpsTab'));
 
 const TOKEN_KEY = 'jpStudioToken';
 // The signed-in account's role ('owner' | 'agent'), stored alongside the token so
@@ -1740,6 +1742,7 @@ const HUB_GROUPS = [
         id: 'jpw',
         tools: [
           { id: 'jpwsites', label: 'Websites', desc: 'Build & preview client sites', Icon: LanguageOutlinedIcon },
+          { id: 'webworksops', label: 'Client Manager', desc: 'Sites, edits & health', Icon: LanguageOutlinedIcon },
           // JP Webworks' OWN inbox — its own view id (no target redirect), so
           // it's fully separate from the Joint Printing Inquiries tile: the
           // SubmissionsTab renders hard-locked to webworks leads, and the tile
@@ -3548,6 +3551,15 @@ function StudioBody({ token, onLogout }) {
                       </Box>
                     }>
                       <JpwSitesTab token={token} />
+                    </React.Suspense>
+                  )}
+                  {view === 'webworksops' && (
+                    <React.Suspense fallback={
+                      <Box display="flex" justifyContent="center" py={8}>
+                        <JpLoader size={56} label="Loading Client Manager…" />
+                      </Box>
+                    }>
+                      <WebworksOpsTab token={token} onBack={() => setView('hub')} onNavigate={navigate} />
                     </React.Suspense>
                   )}
                 </Box>
