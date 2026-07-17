@@ -18,10 +18,12 @@ import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FlipOutlinedIcon from '@mui/icons-material/FlipOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar } from '../_shared';
 import { mockupFromLibraryItem, sidePreview } from './mockupModel';
+import MockupEditor from './MockupEditor';
 
 const base = `${config.backendUrl}/api`;
 // The legacy editor still owns interactive editing; deep-link into it by remoteId.
@@ -35,6 +37,7 @@ export default function MockupLab({ token, onBack, onNavigate }) {
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [q, setQ] = useState('');
+  const [editing, setEditing] = useState(false);   // in the interactive placement editor
 
   const load = useCallback(async () => {
     try {
@@ -73,6 +76,15 @@ export default function MockupLab({ token, onBack, onNavigate }) {
     return items.filter((m) => `${m.pageState?.mockupNum || ''} ${m.name || ''} ${m.client || ''}`.toLowerCase().includes(s));
   }, [list, q]);
 
+  // ── Interactive placement editor ─────────────────────────────────────────────
+  if (editing && sel) {
+    return (
+      <MockupEditor token={token} mockup={sel.model} item={sel.item}
+        onClose={() => setEditing(false)}
+        onSaved={async () => { setEditing(false); await load(); await openMockup(sel.item); }} />
+    );
+  }
+
   // ── Detail view ─────────────────────────────────────────────────────────────
   if (sel) {
     const m = sel.model;
@@ -97,6 +109,8 @@ export default function MockupLab({ token, onBack, onNavigate }) {
             <Button onClick={() => onNavigate({ view: 'clients', projectNumber })} size="small"
               sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open order →</Button>
           )}
+          <Button onClick={() => setEditing(true)} size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5 }}>Edit</Button>
           <Button component="a" href={classicHref(sel.item.remoteId)} target="_blank" rel="noreferrer" size="small"
             endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
             sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>Edit in classic</Button>
