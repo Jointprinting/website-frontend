@@ -28,6 +28,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StarRateRoundedIcon from '@mui/icons-material/StarRateRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
@@ -529,6 +533,143 @@ function DesignLibraryPanel({ designLibrary, onOpenOrder }) {
   );
 }
 
+// Mirror of backend utils/brands.js SUBSCRIPTION_BRAND_KEYS + accents (keep in
+// sync). The two recurring brands; Joint Printing bills per order, not on a plan.
+const SUB_BRANDS = {
+  webworks: { label: 'JP Webworks', accent: '#54a6ff' },
+  atom:     { label: 'JP Atom',     accent: '#9e82ff' },
+};
+const SUB_STATUS_META = {
+  active:   { label: 'Active',   color: D.green },
+  paused:   { label: 'Paused',   color: D.amber },
+  canceled: { label: 'Canceled', color: D.faint },
+};
+// A plan's monthly-equivalent revenue (annual ÷ 12), for the card's "/mo" readout.
+const subMonthly = (s) => {
+  const amt = Number(s.amount) || 0;
+  return s.cadence === 'annual' ? amt / 12 : amt;
+};
+
+// One recurring plan row + its pause/resume/cancel actions.
+function SubscriptionRow({ s, onSetStatus }) {
+  const brand = SUB_BRANDS[s.brand] || { label: s.brand, accent: D.muted };
+  const st = SUB_STATUS_META[s.status] || { label: s.status, color: D.muted };
+  const live = s.status === 'active';
+  return (
+    <Box sx={{ py: 1, borderBottom: `1px solid ${D.line}`, '&:last-of-type': { borderBottom: 'none' } }}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: brand.accent, flexShrink: 0 }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {s.plan || brand.label}
+          </Typography>
+          <Typography sx={{ color: D.faint, fontSize: 11 }}>
+            {brand.label}{s.nextBillDate && live ? ` · next ${fmtDate(s.nextBillDate)}` : ''}
+          </Typography>
+        </Box>
+        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+          <Typography sx={{ ...mono, color: D.text, fontWeight: 800, fontSize: 13 }}>
+            {fmtMoney0(subMonthly(s))}<Typography component="span" sx={{ color: D.faint, fontSize: 10, fontWeight: 600 }}>/mo</Typography>
+          </Typography>
+          <Typography sx={{ color: st.color, fontSize: 10, fontWeight: 800, letterSpacing: 0.3, textTransform: 'uppercase' }}>{st.label}</Typography>
+        </Box>
+        {s.status !== 'canceled' && (
+          <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0 }}>
+            <Tooltip title={live ? 'Pause' : 'Resume'}>
+              <IconButton size="small" onClick={() => onSetStatus(s._id, live ? 'paused' : 'active')}
+                sx={{ color: D.faint, '&:hover': { color: D.green } }}>
+                {live ? <PauseCircleOutlineIcon sx={{ fontSize: 17 }} /> : <PlayCircleOutlineIcon sx={{ fontSize: 17 }} />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Cancel plan">
+              <IconButton size="small" onClick={() => onSetStatus(s._id, 'canceled')}
+                sx={{ color: D.faint, '&:hover': { color: '#f87171' } }}>
+                <CancelOutlinedIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        )}
+      </Stack>
+    </Box>
+  );
+}
+
+// Recurring plans on the company card — the per-client slice of the money layer.
+// Lists the company's Webworks/Atom subscriptions, sums active MRR, and lets the
+// owner add a plan or pause/resume/cancel one. Always shown (adding the first plan
+// is how a print client becomes a subscription client).
+function SubscriptionsPanel({ subscriptions, onAdd, onSetStatus }) {
+  const subs = subscriptions || [];
+  const [adding, setAdding] = React.useState(false);
+  const [brand, setBrand] = React.useState('webworks');
+  const [plan, setPlan] = React.useState('');
+  const [amount, setAmount] = React.useState('');
+  const [cadence, setCadence] = React.useState('monthly');
+  const [busy, setBusy] = React.useState(false);
+
+  const mrr = subs.filter((s) => s.status === 'active').reduce((sum, s) => sum + subMonthly(s), 0);
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onAdd({ brand, plan: plan.trim(), amount: Number(amount) || 0, cadence });
+      setAdding(false); setPlan(''); setAmount(''); setBrand('webworks'); setCadence('monthly');
+    } catch { /* parent flashed */ }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: subs.length || adding ? 1.25 : 0 }}>
+        <Stack direction="row" alignItems="center" spacing={0.75}>
+          <AutorenewIcon sx={{ color: D.green, fontSize: 16 }} />
+          <Eyebrow>Recurring plans</Eyebrow>
+        </Stack>
+        {mrr > 0
+          ? <Typography sx={{ ...mono, color: D.green, fontSize: 12, fontWeight: 800 }}>{fmtMoney0(mrr)}/mo</Typography>
+          : <Typography sx={{ color: D.faint, fontSize: 11 }}>none yet</Typography>}
+      </Stack>
+
+      {subs.length > 0 && (
+        <Box sx={{ mx: -0.5 }}>
+          {subs.map((s) => <SubscriptionRow key={s._id} s={s} onSetStatus={onSetStatus} />)}
+        </Box>
+      )}
+
+      {adding ? (
+        <Box sx={{ mt: 1.25, p: 1.25, bgcolor: D.inset, border: `1px solid ${D.line}`, borderRadius: 1.5 }}>
+          <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+            <TextField select size="small" label="Brand" value={brand} onChange={(e) => setBrand(e.target.value)} sx={{ ...dropInput, flex: 1 }}>
+              {Object.entries(SUB_BRANDS).map(([k, b]) => <MenuItem key={k} value={k}>{b.label}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" label="Cadence" value={cadence} onChange={(e) => setCadence(e.target.value)} sx={{ ...dropInput, width: 120 }}>
+              <MenuItem value="monthly">Monthly</MenuItem>
+              <MenuItem value="annual">Annual</MenuItem>
+            </TextField>
+          </Stack>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField size="small" label="Plan" placeholder="Care Plan" value={plan} onChange={(e) => setPlan(e.target.value)} sx={{ ...dropInput, flex: 1 }} />
+            <TextField size="small" label="Amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Typography sx={{ color: D.faint, fontSize: 13 }}>$</Typography></InputAdornment> }}
+              sx={{ ...dropInput, width: 110 }} />
+            <Button onClick={submit} disabled={busy} variant="contained"
+              sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, textTransform: 'none', minWidth: 0, px: 1.75,
+                '&:hover': { bgcolor: '#5cec8e' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)', color: D.ink } }}>Add</Button>
+            <Button onClick={() => setAdding(false)} sx={{ color: D.faint, textTransform: 'none', fontSize: 12, minWidth: 0 }}>Cancel</Button>
+          </Stack>
+        </Box>
+      ) : (
+        <Button onClick={() => setAdding(true)} startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+          sx={{ mt: subs.length ? 1 : 0, textTransform: 'none', color: D.green, fontWeight: 700, fontSize: 12.5, px: 0.5,
+            '&:hover': { bgcolor: 'transparent', color: '#5cec8e' } }}>
+          Add a plan
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 // One figure in the finance metric row — tiny uppercase label over a big
 // monospace number, optional sub-hint. Mirrors DashboardView's MetricCard so the
 // company page reads the same as the dashboard.
@@ -629,7 +770,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage, onOpenPortal, onRevokePortal }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onAddSubscription, onSetSubStatus, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage, onOpenPortal, onRevokePortal }) {
   // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -644,6 +785,8 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
   // Every visual asset tied to this company — logo(s) + mockups — server-gathered
   // and deep-linked to the order each mockup lives on. { logos, mockups }.
   const designLibrary = data?.designLibrary || null;
+  // Recurring plans (Webworks/Atom) this company is on — the per-client money layer.
+  const subscriptions = data?.subscriptions || [];
   // Authoritative "is a client": order reality (≥1 linked order) OR a won deal.
   const isCustomer = (data?.isCustomer ?? client?.isCustomer ?? (orders.length > 0)) || isClientFromDeals(deals);
 
@@ -1045,6 +1188,18 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
               on. Shown for leads too (art often precedes the first order). Renders
               nothing until there's an asset. */}
           <DesignLibraryPanel designLibrary={designLibrary} onOpenOrder={onOpenOrder} />
+
+          {/* Recurring plans — the per-client slice of the Webworks/Atom money
+              layer. Add a plan / pause / resume / cancel; active MRR sums in the
+              header. Shown for everyone (the first plan turns a print client into a
+              subscription client). Only wired when the parent passes the handlers. */}
+          {onAddSubscription && onSetSubStatus && (
+            <SubscriptionsPanel
+              subscriptions={subscriptions}
+              onAdd={onAddSubscription}
+              onSetStatus={onSetSubStatus}
+            />
+          )}
 
           {/* Lookbooks — this company's curated, shareable mockup galleries
               (the Lookbooks tab, prefiltered to this companyKey). Deliberately
