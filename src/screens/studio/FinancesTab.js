@@ -21,6 +21,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import axios from 'axios';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
@@ -99,11 +100,55 @@ const CAT_COLOR = {
 // (supplier credit) is money IN. Drives the +/− sign and colour in the ledger.
 const isInflow = (t) => (t.type === 'income') !== !!t.isCredit;
 
+// Brand accents for the recurring-revenue split (mirror of utils/brands.js /
+// BrandCube — the two subscription brands). Keep the hexes in sync.
+const FIN_BRAND_ACCENT = { webworks: '#54a6ff', atom: '#9e82ff' };
+
+// Recurring revenue snapshot — the subscription-finance view. MRR/ARR headline +
+// a per-brand split, read from /api/subscriptions/summary. Hidden until there's a
+// plan, so the finance tab is unchanged for a shop with no subscriptions yet.
+function RecurringRevenuePanel({ mrr }) {
+  if (!mrr || !mrr.count) return null;
+  const brands = (mrr.byBrand || []).filter((b) => b.mrr > 0 || b.active > 0);
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
+        <Stack direction="row" alignItems="center" spacing={0.75}>
+          <AutorenewIcon sx={{ color: D.green, fontSize: 16 }} />
+          <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase' }}>Recurring revenue</Typography>
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11 }}>{mrr.active} active · {mrr.count} total</Typography>
+      </Stack>
+      <Stack direction="row" spacing={4} alignItems="flex-end" sx={{ mb: brands.length ? 1.5 : 0 }}>
+        <Box>
+          <Typography sx={{ ...mono, color: D.green, fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{money(mrr.mrr)}</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mt: 0.3 }}>MRR</Typography>
+        </Box>
+        <Box>
+          <Typography sx={{ ...mono, color: D.muted, fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{money(mrr.arr)}</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mt: 0.3 }}>ARR</Typography>
+        </Box>
+      </Stack>
+      {brands.map((b) => (
+        <Stack key={b.brand} direction="row" alignItems="center" spacing={1} sx={{ py: 0.6, borderTop: `1px solid ${D.line}` }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: FIN_BRAND_ACCENT[b.brand] || D.muted, flexShrink: 0 }} />
+          <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, flex: 1 }}>{b.label || b.brand}</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 11 }}>{b.active} active</Typography>
+          <Typography sx={{ ...mono, color: D.text, fontSize: 12.5, fontWeight: 800, minWidth: 72, textAlign: 'right' }}>{money(b.mrr)}/mo</Typography>
+        </Stack>
+      ))}
+    </Box>
+  );
+}
+
 export default function FinancesTab({ token, onBack, onNavigate }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
   const [year, setYear]       = useState(new Date().getFullYear());
   const [summary, setSummary] = useState(null);
+  // Recurring revenue snapshot (MRR/ARR + per-brand) from the subscription spine.
+  // A current-state figure, not year-scoped — the plans that are live right now.
+  const [mrr, setMrr] = useState(null);
   const [orders, setOrders]   = useState([]);
   const [txns, setTxns]       = useState([]);
   const [months, setMonths]   = useState([]);
@@ -174,7 +219,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t, m, c, g, nr, rc] = await Promise.all([
+      const [s, o, t, m, c, g, nr, rc, sub] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
@@ -187,6 +232,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         axios.get(`${base}/finances/missing-receipts`, authHdr).catch(() => ({ data: null })),
         // Uploaded receipts awaiting review/booking — same guard.
         axios.get(`${base}/receipts`, authHdr).catch(() => ({ data: null })),
+        // Recurring revenue snapshot (Webworks/Atom MRR) — current state, not
+        // year-scoped. Guarded so a missing spine never blanks the finance tab.
+        axios.get(`${base}/subscriptions/summary`, authHdr).catch(() => ({ data: null })),
       ]);
       // Coerce every list to an array of non-null rows at the boundary, so no
       // downstream .map can hit a null row and white-screen the tab regardless of
@@ -202,6 +250,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setNeedsReceipts(nr.data || null);
       setReceiptInbox(arr(rc.data && rc.data.receipts)
         .filter((r) => ['pending', 'processing', 'review', 'failed'].includes(r.status)));
+      setMrr(sub.data || null);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -594,6 +643,11 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                 {' '}— net profit above is what you earned, whether or not you took it out.
               </Typography>
             )}
+
+            {/* Recurring revenue — the subscription-finance view (Webworks/Atom
+                MRR/ARR + a per-brand split). Additive: hidden until a plan exists,
+                so a shop with no subscriptions sees the finance tab unchanged. */}
+            <RecurringRevenuePanel mrr={mrr} />
 
             {/* Money owed to you / Unrecorded payments — the additive lens that
                 EXPLAINS a low net: vendor costs entered without the matching
