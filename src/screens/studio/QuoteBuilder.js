@@ -50,7 +50,7 @@ import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } fr
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
-import { priceMethod, specDetails, METHOD_SECTION } from '../../common/printerPricing';
+import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -798,15 +798,15 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // The "price the print" spec: which printer, locations + colors + garment
   // shade, priced off that printer's grids (src/common/printerPricing.js).
   const [specOpen, setSpecOpen] = useState(false);
-  const [specShade, setSpecShade] = useState('light');
-  const [specLocs, setSpecLocs] = useState([{ label: 'front', colors: 1 }]);
+  const [specShade, setSpecShade] = useState('light');  // garment shade — shared by every area (one garment)
   // Which print method this design is priced as — drives which catalog section
   // the engine reads, which printers can run it, and which inputs show.
   const [specMethod, setSpecMethod] = useState('Screen Print');
-  const [specSize, setSpecSize] = useState('');      // DTG / DTF: the print size the printer prices on
-  const [specStitches, setSpecStitches] = useState(''); // embroidery
-  const [specSqin, setSpecSqin] = useState('');      // DTF (A+): design area in square inches
-  const [specPlacement, setSpecPlacement] = useState('flat'); // DTF apply fee: flat vs non-flat
+  // Print AREAS — first-class for EVERY method (front + back + sleeve…), not just
+  // screen. Each area carries only the field(s) its method needs; priceAreas()
+  // prices each and sums. `colors` for screen, `size` for DTG/DTF, `sqin`+
+  // `placement` for A+ DTF, `stitches` for embroidery, label-only for squeegee.
+  const [specAreas, setSpecAreas] = useState([{ label: 'front', colors: 1 }]);
   // A printer's price-book section for the chosen method (null → can't run it).
   const sectionFor = (p, method) => (p && p.catalog && METHOD_SECTION[method]) ? p.catalog[METHOD_SECTION[method]] : null;
   // Methods any printer in the network can actually price, in menu order.
@@ -829,33 +829,33 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // a flat/non-flat placement that swaps the apply fee.
   const usesSqin = !!(specSection && specSection.model === 'qty_x_size_sqin');
   const needsStitches = specMethod === 'Embroidery';
-  const needsLocations = specMethod === 'Screen Print';
+  const needsColors = specMethod === 'Screen Print';
   const usesShade = specMethod === 'Screen Print' || specMethod === 'DTG';
-  // Build the priceMethod() spec for a given quantity, in the shape this method
-  // needs (screen wants locations+shade; DTG size+shade; DTF a size or a flat
-  // sheet; embroidery a stitch count; squeegee just the quantity).
-  const specFor = (qty) => {
-    const q = num(qty);
-    const locations = specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0);
-    if (specMethod === 'Screen Print') return { qty: q, shade: specShade, locations };
-    if (specMethod === 'DTG') return { qty: q, size: specSize, shade: specShade };
-    if (specMethod === 'DTF') {
-      if (usesSqin) return { qty: q, sqin: num(specSqin), placement: specPlacement };
-      return needsSize ? { qty: q, size: specSize } : { qty: q, sheets: 1 };
-    }
-    if (specMethod === 'Embroidery') return { qty: q, stitches: num(specStitches) };
-    return { qty: q }; // Digital Squeegee — full color, qty only
+
+  // A fresh area seeded with the field(s) the method prices on, and the next
+  // sensible label (front → back → sleeve…).
+  const areaLabelFor = (n) => (n === 0 ? 'front' : n === 1 ? 'back' : 'sleeve');
+  const freshArea = (method, n = 0) => {
+    const base = { label: areaLabelFor(n) };
+    if (method === 'Screen Print') return { ...base, colors: 1 };
+    if (method === 'Embroidery') return { ...base, stitches: '' };
+    if (method === 'DTG' || method === 'DTF') return { ...base, size: '', sqin: '', placement: 'flat' };
+    return base; // Digital Squeegee — label only
   };
-  const detailsFor = () => {
-    if (specMethod === 'Screen Print') return specDetails({ shade: specShade, locations: specLocs.map(l => ({ label: l.label, colors: num(l.colors) })).filter(l => l.colors > 0) });
-    if (specMethod === 'DTG') return `DTG ${specSize}${specShade === 'dark' ? ' · dark' : ''}`.trim();
-    if (specMethod === 'DTF') {
-      if (usesSqin) return `DTF · ${num(specSqin)} sq in${specPlacement === 'nonflat' ? ' · non-flat' : ''}`.trim();
-      return needsSize && specSize ? `DTF ${specSize}` : 'DTF';
-    }
-    if (specMethod === 'Embroidery') return `Embroidery · ${num(specStitches)} st`;
-    return 'Digital Squeegee';
+  const setArea = (i, patch) => setSpecAreas(a => a.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const addArea = () => setSpecAreas(a => [...a, freshArea(specMethod, a.length)]);
+  const removeArea = (i) => setSpecAreas(a => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
+  // Switching method reshapes the areas to that method's fields (keeping labels).
+  const changeMethod = (m) => {
+    setSpecMethod(m);
+    setSpecPrinterKey('');
+    setSpecAreas(a => (a.length ? a : [{}]).map((x, i) => ({ ...freshArea(m, i), label: x.label || areaLabelFor(i) })));
   };
+
+  // Price the whole design (every area, summed) at a quantity, and compose the
+  // print-details label — both delegate to the pure engine (unit-tested).
+  const priceAt = (qty) => priceAreas(specSection, specMethod, { areas: specAreas, shade: specShade }, num(qty));
+  const detailsFor = () => composeAreaDetails(specMethod, { shade: specShade, areas: specAreas });
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
     '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
@@ -1152,17 +1152,19 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
       </Box>
 
       {/* PRINT SPEC — describe the job the way the printer prices it (which
-          printer, locations × ink colors, garment shade) and every quantity
-          cell fills its print $/u + setup straight from that printer's grid:
-          dozens-tier lookup, +1 underbase color on darks, $20/color minimums,
-          $20/screen setup. Each design can price off a DIFFERENT printer. */}
+          printer + method, one or more print AREAS each with the field it prices
+          on — ink colors for screen, size for DTG/DTF, a square-inch area for
+          A+ DTF, stitches for embroidery — and garment shade). priceAreas() sums
+          every area, and each quantity cell fills its print $/u + setup straight
+          from that printer's price book. Each design can price off a DIFFERENT
+          printer. */}
       {specOpen && (
         <Box sx={{ mx: { xs: 1.5, md: 2 }, mb: 1.25, p: 1.5, borderRadius: 2.5,
           bgcolor: 'rgba(74,222,128,0.04)', border: `1px solid ${D.lineHi}` }}>
           <Stack direction="row" gap={1} alignItems="flex-end" flexWrap="wrap">
             <QF label="Method" sx={{ width: 148 }}>
               <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
-                <Select value={specMethod} onChange={e => { setSpecMethod(e.target.value); setSpecPrinterKey(''); setSpecSize(''); }}
+                <Select value={specMethod} onChange={e => changeMethod(e.target.value)}
                   sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
                   {netMethods.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
                 </Select>
@@ -1196,68 +1198,72 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                 </FormControl>
               </QF>
             )}
-            {needsSize && (
-              <QF label="Print size" sx={{ width: 120 }}>
-                <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
-                  <Select value={specSize} displayEmpty onChange={e => setSpecSize(e.target.value)}
-                    sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
-                    <MenuItem value="" disabled><em>size</em></MenuItem>
-                    {sizeOptions.map(s => <MenuItem key={s} value={s}>{s}{/^\d/.test(s) && !/x/i.test(s) ? ' sq"' : ''}</MenuItem>)}
-                  </Select>
-                </FormControl>
-              </QF>
-            )}
-            {usesSqin && (
-              <>
-                <QF label="Design size" sx={{ width: 104 }}>
-                  <TextField size="small" fullWidth type="number" value={specSqin} placeholder="sq in"
-                    onChange={e => setSpecSqin(e.target.value)} sx={tf}
-                    InputProps={{ endAdornment: <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>in²</Typography> }} />
-                </QF>
-                <QF label="Placement" sx={{ width: 116 }}>
-                  <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
-                    <Select value={specPlacement} onChange={e => setSpecPlacement(e.target.value)}
-                      sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
-                      <MenuItem value="flat">Flat (front/back)</MenuItem>
-                      <MenuItem value="nonflat">Non-flat (sleeve…)</MenuItem>
-                    </Select>
-                  </FormControl>
-                </QF>
-              </>
-            )}
-            {needsStitches && (
-              <QF label="Stitches" sx={{ width: 100 }}>
-                <TextField size="small" fullWidth type="number" value={specStitches} placeholder="8000"
-                  onChange={e => setSpecStitches(e.target.value)} sx={tf} />
-              </QF>
-            )}
-            {needsLocations && specLocs.map((loc, i) => (
+            {/* PRINT AREAS — one row per area, each showing only the field(s)
+                its method prices on. First-class for every method now: add a
+                second (or third) area to ANY method, and priceAreas() sums them. */}
+            {specAreas.map((a, i) => (
               <Stack key={i} direction="row" gap={0.5} alignItems="flex-end">
-                <QF label={`Location ${i + 1}`} sx={{ width: 110 }}>
-                  <TextField size="small" fullWidth value={loc.label} placeholder="front"
-                    onChange={e => setSpecLocs(ls => ls.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} sx={tf} />
+                <QF label={`Area ${i + 1}`} sx={{ width: 108 }}>
+                  <TextField size="small" fullWidth value={a.label} placeholder={areaLabelFor(i)}
+                    onChange={e => setArea(i, { label: e.target.value })} sx={tf} />
                 </QF>
-                <QF label="Colors" sx={{ width: 70 }}>
-                  <TextField size="small" fullWidth type="number" value={loc.colors}
-                    onChange={e => setSpecLocs(ls => ls.map((x, j) => j === i ? { ...x, colors: e.target.value } : x))} sx={tf} />
-                </QF>
-                {specLocs.length > 1 && (
-                  <IconButton size="small" onClick={() => setSpecLocs(ls => ls.filter((_, j) => j !== i))}
+                {needsColors && (
+                  <QF label="Colors" sx={{ width: 70 }}>
+                    <TextField size="small" fullWidth type="number" value={a.colors}
+                      onChange={e => setArea(i, { colors: e.target.value })} sx={tf} />
+                  </QF>
+                )}
+                {needsSize && (
+                  <QF label="Print size" sx={{ width: 118 }}>
+                    <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                      <Select value={a.size || ''} displayEmpty onChange={e => setArea(i, { size: e.target.value })}
+                        sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                        <MenuItem value="" disabled><em>size</em></MenuItem>
+                        {sizeOptions.map(s => <MenuItem key={s} value={s}>{s}{/^\d/.test(s) && !/x/i.test(s) ? ' sq"' : ''}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </QF>
+                )}
+                {usesSqin && (
+                  <>
+                    <QF label="Design size" sx={{ width: 100 }}>
+                      <TextField size="small" fullWidth type="number" value={a.sqin || ''} placeholder="sq in"
+                        onChange={e => setArea(i, { sqin: e.target.value })} sx={tf}
+                        InputProps={{ endAdornment: <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>in²</Typography> }} />
+                    </QF>
+                    <QF label="Placement" sx={{ width: 116 }}>
+                      <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                        <Select value={a.placement || 'flat'} onChange={e => setArea(i, { placement: e.target.value })}
+                          sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
+                          <MenuItem value="flat">Flat (front/back)</MenuItem>
+                          <MenuItem value="nonflat">Non-flat (sleeve…)</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </QF>
+                  </>
+                )}
+                {needsStitches && (
+                  <QF label="Stitches" sx={{ width: 92 }}>
+                    <TextField size="small" fullWidth type="number" value={a.stitches || ''} placeholder="8000"
+                      onChange={e => setArea(i, { stitches: e.target.value })} sx={tf} />
+                  </QF>
+                )}
+                {specAreas.length > 1 && (
+                  <IconButton size="small" onClick={() => removeArea(i)} title={`Remove the ${a.label || areaLabelFor(i)} area`}
                     sx={{ color: D.muted, mb: 0.4, '&:hover': { color: '#f87171' } }}>
                     <CloseIcon sx={{ fontSize: 14 }} />
                   </IconButton>
                 )}
               </Stack>
             ))}
-            {needsLocations && (
-              <Button size="small" onClick={() => setSpecLocs(ls => [...ls, { label: ls.length === 1 ? 'back' : 'sleeve', colors: 1 }])}
-                sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4 }}>+ location</Button>
-            )}
+            <Button size="small" onClick={addArea} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
+              sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4,
+                '&:hover': { color: D.green } }}>area</Button>
             <Box sx={{ flex: 1 }} />
             <Button size="small" disabled={!specSection}
               onClick={() => {
                 onPatchIdxs(all, (l) => {
-                  const r = priceMethod(specSection, specFor(l.qty));
+                  const r = priceAt(l.qty);
                   if (!r || r.error) return {};
                   return { printCost: r.printPerUnit, setupCost: r.setup || 0,
                     printType: specMethod, printDetails: detailsFor() };
@@ -1273,7 +1279,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
           {specSection && (
             <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
               {grid.qtys.map(q => {
-                const r = priceMethod(specSection, specFor(q));
+                const r = priceAt(q);
                 const tier = r && r.tier ? (r.tier.label || (r.tier.dozens != null ? `${r.tier.dozens}dz` : '')) : '';
                 return (
                   <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>

@@ -261,3 +261,70 @@ test('dispatcher falls back to Heritage priceGrids, and flags a pending grid', (
   expect(priceMethod({ _needsFullGrid: true }, {}).error).toBe('grid-pending');
   expect(priceMethod(null, {})).toBeNull();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-area (priceAreas): print areas are first-class for EVERY method, not
+// just screen. The Quoter prices each area and sums — this pins that wiring,
+// which had no test before (the "can't add another DTG print area" fix).
+import { priceAreas, composeAreaDetails } from './printerPricing';
+
+const DTG = { model: 'qty_x_size_x_shade', sizes: ['4x4', '10x10', '12x16'],
+  tiers: [{ minQty: 4, label: '4-10', prices: { '4x4': [6.6, 5.5], '10x10': [7.7, 6.6], '12x16': [13.2, 12.15] } },
+          { minQty: 22, label: '22-36', prices: { '4x4': [5.25, 4.4], '10x10': [6.9, 5.8], '12x16': [9.9, 7.7] } }] };
+
+test('priceAreas: DTG can price two print areas and sums the per-unit print', () => {
+  // 30 pcs, dark: front 12x16 ($9.90) + left-chest 4x4 ($5.25) = $15.15/u.
+  const r = priceAreas(DTG, 'DTG',
+    { shade: 'dark', areas: [{ label: 'front', size: '12x16' }, { label: 'left-chest', size: '4x4' }] }, 30);
+  expect(r.printPerUnit).toBe(15.15);
+  expect(r.setup).toBe(0);
+});
+
+test('priceAreas: a Screen Print job priced one-area-at-a-time equals the single multi-location call', () => {
+  // Same 150-pc job as the engine's multi-location test: 3c front + 1c back.
+  const spec = { shade: 'light', areas: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }] };
+  const summed = priceAreas(SP, 'Screen Print', spec, 150);
+  const single = screenPrintQuote(SP, { qty: 150, shade: 'light',
+    locations: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }] });
+  expect(summed.printPerUnit).toBe(single.printPerUnit);   // 2.60/u
+  expect(summed.setup).toBe(single.setup);                 // $80, 4 screens
+  expect(summed.screens).toBe(single.screens);
+});
+
+test('priceAreas: embroidery sums per-area piece price AND the per-area digitizing setup', () => {
+  const EMB = { model: 'qty_x_stitches',
+    qtyTiers: [{ label: '12-23', minQty: 12 }],
+    stitchBands: ['4000', '6000', '8000'],
+    grid: { '12-23': [5.15, 5.9, 7.4] },
+    fees: { digitizingUpTo15k: 30, digitizingPer1kOver15k: 1 } };
+  const r = priceAreas(EMB, 'Embroidery',
+    { areas: [{ label: 'front', stitches: 6000 }, { label: 'back', stitches: 8000 }] }, 15);
+  expect(r.printPerUnit).toBe(13.3);   // 5.90 + 7.40
+  expect(r.setup).toBe(60);            // $30 digitizing × 2 areas
+});
+
+test('priceAreas: an unfilled area surfaces its guide error (e.g. DTG with no size)', () => {
+  const r = priceAreas(DTG, 'DTG', { areas: [{ label: 'front', size: '' }] }, 30);
+  expect(r.error).toBe('pick-size');
+});
+
+test('priceAreas: a Screen Print area with 0 colors is skipped, not an error', () => {
+  const r = priceAreas(SP, 'Screen Print',
+    { shade: 'light', areas: [{ label: 'front', colors: 1 }, { label: 'back', colors: 0 }] }, 100);
+  expect(r.printPerUnit).toBe(1.3);    // only the 1c front priced
+  expect(r.screens).toBe(1);
+});
+
+test('composeAreaDetails: screen output still matches the specDetails format (regression)', () => {
+  const areas = [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }];
+  expect(composeAreaDetails('Screen Print', { shade: 'dark', areas }))
+    .toBe(specDetails({ shade: 'dark', locations: areas }));
+  expect(composeAreaDetails('Screen Print', { shade: 'dark', areas }))
+    .toBe('3c front + 1c back · dark garment');
+});
+
+test('composeAreaDetails: multi-area DTG names every area', () => {
+  expect(composeAreaDetails('DTG', { shade: 'dark',
+    areas: [{ label: 'front', size: '12x16' }, { label: 'left-chest', size: '4x4' }] }))
+    .toBe('DTG front 12x16 + left-chest 4x4 · dark garment');
+});
