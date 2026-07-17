@@ -2397,6 +2397,9 @@ async function apiSyncSave(store, item) {
         // show every view without a 16MB doc.
         pages:      Array.isArray(item.pages) ? item.pages.map(_trimPageStateForSync) : null,
         extraViews: await Promise.all((item.extraViews || []).map(v => _shrinkBase64ForSync(v))),
+        // Pages 2+ BACKS — shrunk like the fronts, but '' placeholders pass through
+        // untouched so the array stays index-aligned to pages[1..].
+        extraBackViews: await Promise.all((item.extraBackViews || []).map(v => (v ? _shrinkBase64ForSync(v) : ''))),
         savedAt:   item.savedAt || Date.now(),
         remoteId:  item.remoteId,
       }),
@@ -2571,7 +2574,7 @@ async function syncFromBackend() {
         // CONSTRUCTION even when the pushing device's clock runs ahead of ours;
         // otherwise the row wedges — it never accepts another pull, and the
         // badge auto-push re-shrinks and re-uploads it in a loop.
-        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, pages:ri.pages||null, extraViews:ri.extraViews||[], savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0) };
+        const local = { name:ri.name||'', data:ri.data||'', thumbnail:ri.thumbnail||'', client:ri.client||'', pageState:ri.pageState||null, pages:ri.pages||null, extraViews:ri.extraViews||[], extraBackViews:ri.extraBackViews||[], savedAt:ri.savedAt||Date.now(), remoteId:ri.remoteId||'', cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0) };
         // Blanks/logos render from a local `base64` field; the cloud stores the image in `data`, so map it back on hydration.
         if (store === 'blanks' || store === 'logos') local.base64 = local.data || '';
         // Mockups: the cloud copy of pageState has its base64s stripped (see
@@ -4648,6 +4651,11 @@ async function saveMockupToLibrary(opts) {
     // rehydrate the extra pages and the confirmation/approval can show them.
     pages: state.pages.length > 1 ? state.pages.map(stripLayers) : null,
     extraViews: state.pages.slice(1).map(p => p.frontCompositeBase64 || p.frontBlankBase64 || null).filter(Boolean),
+    // extraBackViews = pages 2+'s BACK composites. Kept index-aligned to pages[1..]
+    // (NO filter — an '' placeholder for a front-only page) so a later page's back
+    // never shifts onto an earlier one. Previously the back of every extra page was
+    // dropped on sync, so page-2+ backs vanished on any cloud-pulled reload.
+    extraBackViews: state.pages.slice(1).map(p => p.backCompositeBase64 || p.backBlankBase64 || ''),
   };
   try{
     const localId = await dbSave('mockups',snapshot);
@@ -4915,6 +4923,12 @@ async function loadMockup(id,e) {
     // skips (never grafts the wrong image onto a page).
     const extra = Array.isArray(item.extraViews) ? item.extraViews : [];
     const aligned = extra.length === restRaw.length;
+    // Pages 2+ BACKS restore the same way from `extraBackViews`. This array is
+    // index-aligned to the extra pages ('' placeholders for front-only pages), so
+    // it lines up 1:1; an old doc without it simply skips (the back was never
+    // stored, so there's nothing to lose — this is the page-2-back-drop fix).
+    const backExtra = Array.isArray(item.extraBackViews) ? item.extraBackViews : [];
+    const backAligned = backExtra.length === restRaw.length;
     const rest = restRaw.map((raw, i) => {
       const pg2 = raw ? JSON.parse(JSON.stringify(raw)) : {};
       if (!pg2.printFront) pg2.printFront = { type:'', dims:'', loc:'' };
@@ -4922,6 +4936,10 @@ async function loadMockup(id,e) {
       if (aligned && !pg2.frontCompositeBase64 && extra[i]) {
         pg2.frontCompositeBase64 = extra[i];
         if (!pg2.frontBlankBase64) pg2.frontBlankBase64 = extra[i];
+      }
+      if (backAligned && !pg2.backCompositeBase64 && backExtra[i]) {
+        pg2.backCompositeBase64 = backExtra[i];
+        if (!pg2.backBlankBase64) pg2.backBlankBase64 = backExtra[i];
       }
       pg2._savedRemoteId = item.remoteId || '';
       pg2._savedDbId = item.id;
@@ -4976,7 +4994,7 @@ async function fetchMockupRowFromCloud(remoteId) {
     if (!ri) return null;
     return {
       name: ri.name||'', data: ri.data||'', thumbnail: ri.thumbnail||'', client: ri.client||'',
-      pageState: ri.pageState||null, pages: ri.pages||null, extraViews: ri.extraViews||[],
+      pageState: ri.pageState||null, pages: ri.pages||null, extraViews: ri.extraViews||[], extraBackViews: ri.extraBackViews||[],
       savedAt: ri.savedAt||Date.now(), remoteId: ri.remoteId||remoteId,
       cloudSyncedAt: Math.max(Date.now(), ri.savedAt||0),
     };
