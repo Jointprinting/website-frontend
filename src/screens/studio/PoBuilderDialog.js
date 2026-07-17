@@ -394,6 +394,13 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
                 sx={{ ...dropPrimaryBtn, fontSize: 12, px: 2 }}>
                 {sending ? 'Sending…' : 'Send PO'}
               </Button>
+              {/* Backup path: grab the PDF right here so a failed/declined email never
+                  blocks getting the PO to the printer. Same server-rendered PDF. */}
+              <Button size="small" disabled={pdfBusy} onClick={downloadPdf}
+                startIcon={pdfBusy ? <CircularProgress size={12} sx={{ color: D.green }} /> : <PictureAsPdfIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: 12, textTransform: 'none', fontWeight: 700, color: D.green, borderRadius: 999, '&:hover': { color: '#5cec8e' } }}>
+                Download PDF
+              </Button>
               <Button size="small" onClick={() => setSendOpen(false)}
                 sx={{ fontSize: 12, textTransform: 'none', color: D.muted, '&:hover': { color: D.text } }}>Cancel</Button>
               {!matchedPrinter && (

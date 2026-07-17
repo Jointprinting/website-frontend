@@ -1079,6 +1079,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
           sx={{ width: { xs: '100%', sm: 230 } }} />
         <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
           <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
+            tabIndex={-1}
             title="Open this design's options as individual line cards (full per-option control)"
             sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
               '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
@@ -1325,7 +1326,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             </Box>
           ))}
           <Box sx={{ alignSelf: 'end', pb: 0.5, textAlign: 'center' }}>
-            <IconButton size="small" onClick={addColumn} title="Add a quantity column"
+            <IconButton size="small" onClick={addColumn} title="Add a quantity column" tabIndex={-1}
               sx={{ color: D.muted, border: `1px dashed ${D.line}`, borderRadius: 1.5,
                 '&:hover': { color: D.green, borderColor: D.green } }}>
               <AddCircleOutlineIcon sx={{ fontSize: 16 }} />
@@ -1587,7 +1588,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             );
           })}
         </Box>
-        <Button onClick={addRow} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
+        <Button onClick={addRow} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} tabIndex={-1}
           sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5, mt: 0.75,
             borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
           Add option
