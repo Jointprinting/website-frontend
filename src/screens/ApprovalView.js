@@ -210,6 +210,7 @@ export default function ApprovalView() {
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
   const [lightbox, setLightbox] = useState(null);    // enlarged image src, or null when closed
   const [detailsOpen, setDetailsOpen] = useState(false); // paid state: the "Order details" disclosure
+  const [showAllMockups, setShowAllMockups] = useState(false); // gallery: expand past the first few designs
 
   // Light / dark — the owner found the dark "murky", so the client can flip it.
   // Persisted per browser; first visit follows the OS preference, defaulting to
@@ -782,39 +783,59 @@ export default function ApprovalView() {
         )}
 
         {/* Mockups — only when there's no full confirmation; otherwise each
-            item below shows its own photo (one per colorway), matching the PDF. */}
-        {!hasConf && mockups.length > 0 && (
-          <Box sx={{ ...card, p: { xs: 2.5, md: 3.5 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '120ms' }}>
-            <Typography sx={{ ...eyebrow, mb: 1.5 }}>Your mockups</Typography>
-            {/* Grouped PER MOCKUP so every design keeps all of its views together
-                — front, back, and every extra angle (sleeves, page-2 prints).
-                A flat grid interleaved views across designs, so a garment's
-                sleeves drifted away from it and pages read out of order. */}
-            <Stack spacing={{ xs: 2.5, md: 3 }}>
-              {mockups.map((m, i) => {
-                const views = [m.thumbnail, m.back, ...(m.extraViews || [])].filter(Boolean);
-                if (!views.length) return null;
-                return (
+            item below shows its own photo (one per colorway), matching the PDF.
+            COMPACT GALLERY: designs used to stack full-width, so 4+ mockups
+            buried the quote below a long scroll. Now each design is a short row
+            of small click-to-zoom thumbnails, and past the first few we collapse
+            behind a "show all" toggle — the quote stays near the top. Views stay
+            grouped per design (front/back/extra angles never interleave). */}
+        {!hasConf && mockups.length > 0 && (() => {
+          const withViews = mockups
+            .map((m) => ({ m, views: [m.thumbnail, m.back, ...(m.extraViews || [])].filter(Boolean) }))
+            .filter((x) => x.views.length);
+          if (!withViews.length) return null;
+          const COLLAPSE_AT = 3;                       // show this many designs before collapsing
+          const overflow = withViews.length - COLLAPSE_AT;
+          const shown = showAllMockups ? withViews : withViews.slice(0, COLLAPSE_AT);
+          return (
+            <Box sx={{ ...card, p: { xs: 2, md: 2.75 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '120ms' }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Typography sx={eyebrow}>Your mockups{withViews.length > 1 ? ` · ${withViews.length}` : ''}</Typography>
+                <Typography sx={{ color: T.faint, fontSize: 11.5 }}>Tap any image to enlarge</Typography>
+              </Stack>
+              <Stack spacing={1.75}>
+                {shown.map(({ m, views }, i) => (
                   <Box key={i}>
                     {(m.name || m.mockupNum) && (
-                      <Typography sx={{ color: T.muted, fontSize: 12.5, fontWeight: 700, mb: 0.9 }}>
+                      <Typography sx={{ color: T.muted, fontSize: 12, fontWeight: 700, mb: 0.6 }}>
                         {m.name || 'Design'}{m.mockupNum ? <Box component="span" sx={{ ...mono, color: T.faint, fontWeight: 600, ml: 0.75 }}>#{m.mockupNum}</Box> : null}
                       </Typography>
                     )}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                    {/* Dense wrap row of small thumbnails — a whole design collapses
+                        from two big columns to one short strip. */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                       {views.map((src, j) => (
                         <ZoomImg key={j} src={src} alt={m.name} onZoom={openLightbox}
-                          sx={{ aspectRatio: '4/3', bgcolor: T.inset, borderRadius: 2, border: `1px solid ${T.line}`,
-                            objectFit: 'cover', transition: 'box-shadow 200ms ease, border-color 200ms ease',
-                            '&:hover': { boxShadow: `0 10px 30px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
+                          sx={{ width: { xs: 84, sm: 104 }, height: { xs: 84, sm: 104 }, flexShrink: 0,
+                            bgcolor: '#fff', borderRadius: 1.5, border: `1px solid ${T.line}`,
+                            objectFit: 'contain', p: 0.5, transition: 'box-shadow 200ms ease, border-color 200ms ease',
+                            '&:hover': { boxShadow: `0 8px 22px rgba(0,0,0,0.4)`, borderColor: T.lineHi } }} />
                       ))}
                     </Box>
                   </Box>
-                );
-              })}
-            </Stack>
-          </Box>
-        )}
+                ))}
+              </Stack>
+              {overflow > 0 && (
+                <Box sx={{ mt: 1.5, textAlign: 'center' }}>
+                  <Button onClick={() => setShowAllMockups((v) => !v)} size="small"
+                    sx={{ color: T.green, textTransform: 'none', fontWeight: 700, fontSize: 12.5 }}>
+                    {showAllMockups ? 'Show fewer' : `Show all ${withViews.length} designs`}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          );
+        })()}
 
         {/* ── Stage body ─────────────────────────────────────────────────── */}
         {stage === 'picker' ? (
