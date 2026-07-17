@@ -209,7 +209,12 @@ function qtyOnlyQuote(sp, { qty }) {
     tier: { label: String(tier.minQty) + '+' }, warnings: [], notes: ['Full-color digital — no per-color charge.'] };
 }
 
-// qty × size × shade — Contract-DTG DTG (print only, not the garment).
+// qty × size × shade — Contract-DTG / A+ DTG (print only, not the garment). Price
+// cells are [dark, light, whiteInkOnly?]: dark = colored shirt (color+white ink),
+// light = white shirt (color ink) or black ink, whiteInkOnly = the white-ink-only
+// lane (A+ only — a 2-element catalog like Contract-DTG has no white-ink lane, so
+// asking for it returns a request-a-quote rather than a wrong price).
+const DTG_SHADE_IDX = { dark: 0, light: 1, whiteInkOnly: 2 };
 function qtySizeShadeQuote(sp, { qty, size, shade = 'light' }) {
   const q = Math.max(0, Math.round(num(qty)));
   if (!q || !Array.isArray(sp.tiers) || !sp.tiers.length) return null;
@@ -217,9 +222,12 @@ function qtySizeShadeQuote(sp, { qty, size, shade = 'light' }) {
   const tier = floorTier(sp.tiers, q);
   const pair = tier && tier.prices && tier.prices[size];
   if (!pair) return { error: 'na', warnings: ['No price at this quantity — request a quote.'] };
-  const price = shade === 'dark' ? pair[0] : pair[1]; // [dark, white]
+  const idx = DTG_SHADE_IDX[shade] != null ? DTG_SHADE_IDX[shade] : 1;
+  const price = pair[idx];
+  if (price == null) return { error: 'na', warnings: [`No ${shade === 'whiteInkOnly' ? 'white-ink-only' : shade} price at this size/quantity — request a quote.`] };
+  const label = shade === 'dark' ? 'dark' : shade === 'whiteInkOnly' ? 'white-ink only' : 'white';
   return { printPerUnit: +num(price).toFixed(2), setup: 0, screens: 0, tier: { label: tier.label },
-    warnings: [], notes: [`DTG ${size}, ${shade === 'dark' ? 'dark' : 'white'} garment — print only.`] };
+    warnings: [], notes: [`DTG ${size}, ${label} garment — print only.`] };
 }
 
 // qty × size — Garment Gear DTG / DTF. Per-piece price from a size × quantity-tier
