@@ -51,7 +51,6 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import InboxIcon from '@mui/icons-material/Inbox';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
@@ -105,6 +104,8 @@ import { setAuthProvider, startAutoFlush } from '../common/offlineSync';
 const JpwSitesTab = React.lazy(() => import('./studio/JpwSitesTab'));
 // JP Webworks Client Manager — run the live sites (edits queue + health + spine link).
 const WebworksOpsTab = React.lazy(() => import('./studio/WebworksOpsTab'));
+// Mockup Lab v2 — the in-Studio surface (browse + render mockups natively, no new tab).
+const MockupLab = React.lazy(() => import('./studio/mockup/MockupLab'));
 
 const TOKEN_KEY = 'jpStudioToken';
 // The signed-in account's role ('owner' | 'agent'), stored alongside the token so
@@ -360,100 +361,6 @@ function Login({ onAuthed }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Mockup Lab launcher — opens /jpstudio/ in a new tab (no inline preview)
-//  (the /jpstudio route + storage keys keep their names; only the display does)
-// ─────────────────────────────────────────────────────────────────────────────
-function MockupLauncherTab() {
-  // The studio token is NOT put in the URL — Mockup Lab (/jpstudio, same origin)
-  // reads the saved session from localStorage. Keeping the token out of the URL
-  // avoids leaking it via server access logs / browser history.
-  const [opened, setOpened] = React.useState(false);
-
-  const launch = () => {
-    window.open('/jpstudio/', '_blank', 'noopener,noreferrer');
-    setOpened(true);
-    setTimeout(() => setOpened(false), 2200);
-  };
-
-  return (
-    <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
-      <Stack spacing={3} alignItems="flex-start">
-        <MuiTypography variant="body2" sx={{ color: BRAND.muted }}>
-          Mockup Lab opens in a new tab. Your studio session carries over —
-          no extra login needed.
-        </MuiTypography>
-
-        <Paper elevation={0} sx={{
-          width: '100%',
-          bgcolor: 'rgba(74,222,128,0.04)',
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 3,
-          p: { xs: 3, sm: 4 },
-          display: 'flex',
-          alignItems: 'center',
-          gap: { xs: 2, sm: 3 },
-          flexDirection: { xs: 'column', sm: 'row' },
-          textAlign: { xs: 'center', sm: 'left' },
-        }}>
-          <Box sx={{
-            bgcolor: BRAND.greenDk, color: BRAND.green,
-            width: 64, height: 64, borderRadius: 2.5,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 0 6px rgba(74,222,128,0.06)',
-            flexShrink: 0,
-          }}>
-            <DesignServicesIcon sx={{ fontSize: 32 }} />
-          </Box>
-          <Box sx={{ flexGrow: 1 }}>
-            <MuiTypography variant="h6" fontWeight={800} sx={{ color: BRAND.white, mb: 0.5 }}>
-              Mockup Lab
-            </MuiTypography>
-            <MuiTypography variant="body2" sx={{ color: BRAND.muted }}>
-              Build apparel mockups, export PDFs, send to clients.
-            </MuiTypography>
-          </Box>
-          <Button
-            onClick={launch}
-            variant="contained"
-            size="large"
-            endIcon={<OpenInNewIcon />}
-            sx={{
-              borderRadius: 2, fontWeight: 800, textTransform: 'none', px: 3, py: 1.4,
-              bgcolor: BRAND.green, color: BRAND.greenDk,
-              '&:hover': { bgcolor: '#22c55e', transform: 'translateY(-1px)' },
-              transition: 'all 0.15s',
-              flexShrink: 0,
-            }}
-          >
-            Open Mockup Lab
-          </Button>
-        </Paper>
-
-        <Fade in={opened}>
-          <Alert
-            severity="success"
-            icon={<OpenInNewIcon fontSize="inherit" />}
-            sx={{
-              borderRadius: 2,
-              bgcolor: 'rgba(74,222,128,0.08)',
-              color: BRAND.green,
-              border: `1px solid ${BRAND.border}`,
-              '& .MuiAlert-icon': { color: BRAND.green },
-            }}
-          >
-            Opened in a new tab. If nothing happened, your browser may have
-            blocked the popup — check the address bar.
-          </Alert>
-        </Fade>
-
-        <MuiTypography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)' }}>
-          Tip: bookmark the studio URL after opening for one-click access next time.
-        </MuiTypography>
-      </Stack>
-    </Box>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Submissions tab (mini-CRM)
@@ -3212,16 +3119,9 @@ function StudioBody({ token, onLogout }) {
   const handlePick = (tool) => {
     const id = typeof tool === 'string' ? tool : (tool && (tool.target || tool.id));
     const innerView = typeof tool === 'object' && tool ? tool.view : null;
-    // 'mockup' opens the standalone /jpstudio canvas builder. Open it DIRECTLY on
-    // this single hub click — the window.open runs inside the click gesture, so it
-    // isn't pop-up-blocked — instead of making the owner click again on the launcher
-    // screen. The launcher view still renders behind it as a fallback / re-open
-    // button in case a browser blocks the pop-up.
-    if (id === 'mockup') {
-      // No token in the URL — /jpstudio reads the studio session from localStorage
-      // (same origin), so the token never lands in server logs or browser history.
-      try { window.open('/jpstudio/', '_blank', 'noopener,noreferrer'); } catch (_) {}
-    }
+    // 'mockup' now opens the in-Studio Mockup Lab (v2) view — no new-tab hand-off.
+    // The Lab keeps a one-click "Classic editor" link to /jpstudio/ for the
+    // interactive canvas until the v2 editor lands, so no capability is lost.
     // Opening an Inquiries surface clears ITS badge and marks seen ONLY its
     // source: the Joint Printing inbox owns the contact-form leads, the JP
     // Webworks inbox the /webworks/start leads — so opening one never wipes
@@ -3541,7 +3441,15 @@ function StudioBody({ token, onLogout }) {
                   {view === 'jpwinquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="webworks" />}
                   {view === 'atominquiries' && <SubmissionsTab token={token} onOpenClients={() => setView('clients')} lockedSource="atom" />}
                   {view === 'catalogs'    && <CatalogManagerTab token={token} />}
-                  {view === 'mockup'      && <MockupLauncherTab />}
+                  {view === 'mockup'      && (
+                    <React.Suspense fallback={
+                      <Box display="flex" justifyContent="center" py={8}>
+                        <JpLoader size={56} label="Loading Mockup Lab…" />
+                      </Box>
+                    }>
+                      <MockupLab token={token} onBack={() => setView('hub')} onNavigate={navigate} />
+                    </React.Suspense>
+                  )}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
                   {view === 'jpwrecon'    && <JpwReconTab token={token} onOpenColdCall={() => setView('coldcall')} />}
                   {view === 'jpwsites'    && (
