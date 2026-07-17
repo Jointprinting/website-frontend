@@ -261,6 +261,45 @@ function gangQtySizeQuote(sp, { qty, size }) {
     warnings: [], notes: ['DTF transfer, per piece.'] };
 }
 
+// Which qty tier ("1-11", "150-249", "250+") a quantity falls into. Pure.
+function qtyInTier(tier, q) {
+  const s = String(tier || '').trim();
+  if (s.endsWith('+')) return q >= parseInt(s, 10);
+  const m = s.match(/^(\d+)\s*-\s*(\d+)$/);
+  return m ? q >= +m[1] && q <= +m[2] : false;
+}
+
+// qty × transfer-size (sq in) — A+ DTF. Per-transfer price from a sqin-band × qty
+// grid, plus a per-print apply fee that depends on placement (flat front/back vs
+// non-flat sleeves/pockets/hats). Distinct from Contract-DTG's gang_qty_x_size
+// (fixed size categories); here the size is a real square-inch area the user types.
+function qtySizeSqinQuote(sp, { qty, sqin, placement = 'flat' }) {
+  const q = Math.max(0, Math.round(num(qty)));
+  if (!q) return null;
+  const area = num(sqin);
+  if (!area) return { error: 'pick-size', warnings: ['Enter the design size in square inches.'] };
+  const bands = sp.sizeBandsSqin || [];
+  const tiers = sp.qtyTiers || [];
+  const warnings = [];
+  // smallest band whose upper bound covers the design; cap at the largest band.
+  let bandIdx = bands.findIndex((b) => area <= b);
+  if (bandIdx === -1) { bandIdx = bands.length - 1; warnings.push('Over the largest size band — confirm with the printer.'); }
+  const tier = tiers.find((t) => qtyInTier(t, q)) || tiers[tiers.length - 1];
+  const row = sp.grid && sp.grid[tier];
+  const base = row ? row[bandIdx] : null;
+  if (base == null) return { error: 'na', warnings: [...warnings, 'No price at this size/quantity.'] };
+  const flat = placement !== 'nonflat';
+  const apply = flat ? num(sp.applyToFlat) : num(sp.applyToNonFlat);
+  if (sp.maxRecommendedSqin && area > sp.maxRecommendedSqin) {
+    warnings.push(`Over the recommended ${sp.maxRecommendedSqin} sq in max print size.`);
+  }
+  return {
+    printPerUnit: +(num(base) + apply).toFixed(2), setup: 0, screens: 0,
+    tier: { label: `${bands[bandIdx]} sq in · ${tier}` }, warnings,
+    notes: [`DTF transfer $${num(base).toFixed(2)}/pc + $${apply.toFixed(2)} ${flat ? 'flat' : 'non-flat'} apply.`],
+  };
+}
+
 // The dispatcher. `section` is one method block off a printer's catalog
 // (catalog.screenPrinting, catalog.dtg, …). Reads the block's `model` tag;
 // falls back to Heritage's legacy priceGrids screen-print shape.
@@ -271,6 +310,7 @@ export function priceMethod(section, spec = {}) {
     case 'qty_only': return qtyOnlyQuote(section, spec);
     case 'qty_x_size_x_shade': return qtySizeShadeQuote(section, spec);
     case 'qty_x_stitches': return qtyStitchesQuote(section, spec);
+    case 'qty_x_size_sqin': return qtySizeSqinQuote(section, spec);
     case 'gang_sheet_flat': return gangFlatQuote(section, spec);
     case 'gang_qty_x_size': return gangQtySizeQuote(section, spec);
     default:
