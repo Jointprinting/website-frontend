@@ -353,3 +353,105 @@ export const METHOD_SECTION = {
   DTF: 'dtf',
   Embroidery: 'embroidery',
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-AREA (every method, not just screen)
+//
+// A real job often prints in more than one place — front + back, a left chest +
+// a sleeve. Screen Print always summed its `locations[]` INSIDE the engine; the
+// other methods each priced exactly ONE print, so the Quoter could only add a
+// second area for screen (the "can't add another DTG print area" complaint).
+//
+// priceAreas() lifts that summing into ONE place for EVERY method: it prices
+// each area on its own clean priceMethod() primitive, then SUMS the per-unit
+// print + one-time setup (and screens) — exactly how a shop bills a two-location
+// job. For Screen Print this is numerically identical to the old single-call
+// path, because each location is independent (per-location run charge + $20/color
+// floor + underbase, screens summed, setup = screens × perScreen). So multi-area
+// generalizes to DTG / DTF / embroidery / squeegee WITHOUT touching the tested
+// engine.
+//
+// Each area carries only the field(s) its method needs:
+//   Screen Print → { label, colors }        (garment shade is shared, per design)
+//   DTG          → { label, size }           (shade shared)
+//   DTF (A+)     → { label, sqin, placement } (a real square-inch area + flat/non-flat)
+//   DTF (sized)  → { label, size }           (Contract-DTG discrete size bands)
+//   Embroidery   → { label, stitches }
+//   Digital Squeegee → { label }             (full-color, qty only — a 2nd area = a 2nd print)
+//
+// Returns { printPerUnit, setup, screens, tier, tiers[], warnings[], notes[] },
+// or { error, warnings } when an area is out of the guide / not filled in yet,
+// or null when the section can't price the job at all.
+export function priceAreas(section, method, { areas = [], shade = 'light' } = {}, qty) {
+  if (!section) return null;
+  const list = Array.isArray(areas) && areas.length ? areas : [{}];
+  const specForArea = (a) => {
+    if (method === 'Screen Print') {
+      const colors = num(a.colors);
+      return { qty, shade, locations: colors > 0 ? [{ label: a.label, colors }] : [] };
+    }
+    if (method === 'DTG') return { qty, size: a.size, shade };
+    if (method === 'DTF') {
+      if (section.model === 'qty_x_size_sqin') return { qty, sqin: num(a.sqin), placement: a.placement || 'flat' };
+      const hasSizes = ((section.sizes || section.sizeBands || []).length) > 0;
+      return hasSizes ? { qty, size: a.size } : { qty, sheets: 1 };
+    }
+    if (method === 'Embroidery') return { qty, stitches: num(a.stitches) };
+    return { qty }; // Digital Squeegee — full-color, one price by quantity
+  };
+
+  let printPerUnit = 0;
+  let setup = 0;
+  let screens = 0;
+  let priced = 0;
+  const warnings = [];
+  const notes = [];
+  const tiers = [];
+  for (const a of list) {
+    const r = priceMethod(section, specForArea(a));
+    if (r == null) continue;                 // an empty / unfilled area (e.g. 0 colors) — skip it
+    if (r.error) return { error: r.error, warnings: r.warnings || [] };
+    printPerUnit += num(r.printPerUnit);
+    setup += num(r.setup);
+    screens += num(r.screens);
+    priced += 1;
+    (r.warnings || []).forEach((w) => warnings.push(w));
+    (r.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
+    if (r.tier) tiers.push(r.tier);
+  }
+  if (!priced) return null;                  // nothing filled in yet
+  return {
+    printPerUnit: +printPerUnit.toFixed(2),
+    setup: +setup.toFixed(2),
+    screens,
+    tier: tiers[0] || null,
+    tiers,
+    warnings,
+    notes,
+  };
+}
+
+// Compose the human print-details label across every area, e.g.
+// "3c front + 1c back · dark garment" (screen — mirrors specDetails),
+// "DTG front 12x16 + left-chest 4x4", "Embroidery front 8000 st". The dark-garment
+// suffix only applies to the shade-priced methods (screen, DTG).
+export function composeAreaDetails(method, { shade = 'light', areas = [] } = {}) {
+  const label = (a) => String(a.label || 'front').trim();
+  const parts = (areas || []).map((a) => {
+    if (method === 'Screen Print') {
+      const c = Math.round(num(a.colors));
+      return c > 0 ? `${c}c ${label(a)}` : '';
+    }
+    if (method === 'Embroidery') {
+      const st = Math.round(num(a.stitches));
+      return st > 0 ? `${label(a)} ${st} st` : label(a);
+    }
+    if (num(a.sqin) > 0) return `${label(a)} ${Math.round(num(a.sqin))} sq in${a.placement === 'nonflat' ? ' non-flat' : ''}`;
+    if (a.size) return `${label(a)} ${a.size}`;
+    return label(a);
+  }).filter(Boolean);
+  const dark = shade === 'dark' && (method === 'Screen Print' || method === 'DTG');
+  const head = method === 'Screen Print' ? '' : `${method} `;
+  const body = (head + parts.join(' + ')).trim();
+  return dark ? `${body} · dark garment` : body;
+}
