@@ -56,6 +56,7 @@ import ReconcileView from './ReconcileView';
 
 const base = `${config.backendUrl}/api/crm`;
 const dealsBase = `${config.backendUrl}/api/deals`;
+const subsBase = `${config.backendUrl}/api/subscriptions`;
 
 // Primary tab bar — ordered by daily importance. The segmented company book
 // (Clients / Active leads / Everyone else) leads as the CRM's home, with the
@@ -459,6 +460,30 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
       throw e;
     }
   }, [authHdr, flash]);
+
+  // ── Subscriptions (recurring plans on the company card) ─────────────────────
+  // All subscription transport in one place (mirrors patchCompany). Each mutation
+  // hits /api/subscriptions then re-pulls the open company so its card re-renders
+  // from the same source of truth.
+  const addSubscription = React.useCallback(async (companyKey, companyName, body) => {
+    try {
+      await axios.post(subsBase, { companyKey, companyName, ...body }, authHdr);
+      await loadDetail(companyKey);
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not add that plan.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, loadDetail]);
+
+  const setSubStatus = React.useCallback(async (companyKey, id, status, reason) => {
+    try {
+      await axios.post(`${subsBase}/${id}/status`, { status, reason }, authHdr);
+      await loadDetail(companyKey);
+    } catch (e) {
+      flash(e?.response?.data?.message || 'Could not update that plan.', 'error');
+      throw e;
+    }
+  }, [authHdr, flash, loadDetail]);
 
   // ── LEAD -> QUOTE handoff ──────────────────────────────────────────────────
   // The deal only earns a project # when the owner moves it to "quoting". After
@@ -1189,6 +1214,14 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             });
           } : undefined}
           onOpenVendor={onNavigate ? (vendorName) => onNavigate({ view: 'vendors', vendorName }) : undefined}
+          // Recurring plans (Webworks/Atom) on the company card — add / pause /
+          // resume / cancel, each re-pulling the company from /api/subscriptions.
+          onAddSubscription={(body) => detail?.client && addSubscription(
+            detail.client.companyKey,
+            detail.client.companyName || detail.client.clientName || '',
+            body,
+          )}
+          onSetSubStatus={(id, status, reason) => detail?.client && setSubStatus(detail.client.companyKey, id, status, reason)}
           // This company's lookbooks — the Lookbooks tab prefiltered by companyKey
           // (the same deep link Signals uses), so CRM ⇄ Lookbooks closes the loop.
           onOpenLookbooks={onNavigate && detail?.client?.companyKey
