@@ -161,6 +161,295 @@ function RecurringRevenuePanel({ mrr }) {
   );
 }
 
+// Brand picker options for a subscription (mirrors utils/brands.js server-side).
+const SUB_BRAND_OPTS = [
+  { key: 'contact', label: 'Joint Printing' },
+  { key: 'webworks', label: 'JP Webworks' },
+  { key: 'atom', label: 'JP Atom' },
+];
+
+// 'YYYY-MM' → "Jul 2026" · 'YYYY' → "2026". UTC so a month never drifts a day.
+function periodLabel(p) {
+  const m = String(p || '').match(/^(\d{4})-(\d{2})$/);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, 1)).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return String(p || '');
+}
+// A due/next Date → "Jul 1".
+const dayLabel = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '');
+const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+// Operating subscriptions the shop PAYS — the outflow tracker + this-month invoice
+// reminders. Reads /api/recurring-expenses (config + decorated status + reminders).
+// Finances-page-only by design (these reminders never leak to the Today strip/CRM).
+function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdit, onAdd }) {
+  if (!data) return null; // route missing / not loaded yet → render nothing (guarded)
+  const rows = ((data.expenses) || []).filter((e) => e && !e.archived);
+  const reminders = (data.reminders) || [];
+  const sum = data.summary || {};
+
+  const statusChip = (e) => {
+    const st = e.status || {};
+    if (!e.active) return { text: 'Paused', color: D.faint, bg: 'rgba(255,255,255,0.05)' };
+    if (st.state === 'not_started') return { text: `Starts ${dayLabel(st.nextDue)}`, color: D.faint, bg: 'rgba(255,255,255,0.05)' };
+    if (st.state === 'awaiting') {
+      const a = st.awaiting[0];
+      const extra = st.awaiting.length > 1 ? ` +${st.awaiting.length - 1}` : '';
+      return { text: `Awaiting ${periodLabel(a.period)}${extra}`, color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' };
+    }
+    if (st.recordedThisPeriod) return { text: `Recorded ${periodLabel(st.currentPeriod)}`, color: D.green, bg: 'rgba(74,222,128,0.10)' };
+    return { text: `Bills ${dayLabel(st.nextDue)}`, color: D.muted, bg: 'rgba(255,255,255,0.05)' };
+  };
+
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
+        <Stack direction="row" alignItems="center" spacing={0.75}>
+          <ReceiptLongOutlinedIcon sx={{ color: D.green, fontSize: 16 }} />
+          <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase' }}>Operating subscriptions</Typography>
+        </Stack>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography sx={{ ...mono, color: D.text, fontSize: 12.5, fontWeight: 800 }}>{money(sum.monthlyTotal)}/mo</Typography>
+          <Button onClick={onAdd} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} size="small"
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, minWidth: 0, '&:hover': { color: D.green } }}>Add</Button>
+        </Stack>
+      </Stack>
+
+      {/* The nag: any subscription whose invoice for an elapsed due date hasn't been
+          uploaded yet. Amber, only here on the Finances page. */}
+      {reminders.length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25, p: 1, borderRadius: 1.5,
+          bgcolor: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.3)' }}>
+          <ErrorOutlineIcon sx={{ color: '#fbbf24', fontSize: 16, flexShrink: 0 }} />
+          <Typography sx={{ color: '#fde68a', fontSize: 12, fontWeight: 600, lineHeight: 1.35 }}>
+            {reminders.length} invoice{reminders.length === 1 ? '' : 's'} to upload —{' '}
+            {reminders.slice(0, 4).map((r) => r.name).join(', ')}{reminders.length > 4 ? '…' : ''}
+          </Typography>
+        </Box>
+      )}
+
+      <Stack>
+        {rows.map((e) => {
+          const chip = statusChip(e);
+          const st = e.status || {};
+          const canRecord = e.active && (st.state === 'awaiting' || (st.state === 'upcoming' && !st.recordedThisPeriod));
+          return (
+            <Stack key={e._id} direction="row" alignItems="center" spacing={1}
+              sx={{ py: 0.85, borderTop: `1px solid ${D.line}`, '&:first-of-type': { borderTop: 'none' } }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: FIN_BRAND_ACCENT[e.brand] || D.muted, flexShrink: 0 }} />
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {e.name}
+                  {e.remindersOn === false && <Box component="span" sx={{ color: D.faint, fontSize: 10, fontWeight: 600, ml: 0.75 }}>· reminders off</Box>}
+                </Typography>
+                <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+                  {money(e.amount)}{e.cadence === 'annual' ? '/yr' : '/mo'} · bills the {ordinal(e.dueDay)}
+                </Typography>
+              </Box>
+              <Box sx={{ px: 1, py: 0.35, borderRadius: 1, bgcolor: chip.bg, flexShrink: 0 }}>
+                <Typography sx={{ color: chip.color, fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{chip.text}</Typography>
+              </Box>
+              <Stack direction="row" alignItems="center" spacing={0.25} sx={{ flexShrink: 0 }}>
+                {canRecord && (
+                  <Button onClick={() => onRecord(e)} size="small"
+                    sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, minWidth: 0, px: 1 }}>Record</Button>
+                )}
+                {st.state === 'awaiting' && (
+                  <Button onClick={() => onSkip(e)} size="small"
+                    sx={{ color: D.faint, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 0.5, '&:hover': { color: D.muted } }}>Skip</Button>
+                )}
+                {st.recordedThisPeriod && (
+                  <Button onClick={() => onUnrecord(e)} size="small"
+                    sx={{ color: D.faint, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 0.5, '&:hover': { color: D.muted } }}>Undo</Button>
+                )}
+                <IconButton onClick={() => onEdit(e)} size="small" sx={{ color: D.faint, '&:hover': { color: D.text } }}>
+                  <CreditCardOutlinedIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Stack>
+            </Stack>
+          );
+        })}
+        {rows.length === 0 && (
+          <Typography sx={{ color: D.faint, fontSize: 12, py: 1 }}>No subscriptions tracked yet — add your recurring bills to get invoice reminders.</Typography>
+        )}
+      </Stack>
+    </Box>
+  );
+}
+
+// Record a month's invoice for a subscription: pick the period, confirm the amount,
+// optionally attach the invoice file, and book it. The reminder clears on save.
+function RecordInvoiceDialog({ sub, onClose, onRecord }) {
+  const st = sub.status || {};
+  const awaiting = st.awaiting || [];
+  const first = awaiting[0] || null;
+  const [period, setPeriod] = useState(first ? first.period : (st.currentPeriod || periodLabel(new Date())));
+  const [amount, setAmount] = useState(sub.amount != null ? String(sub.amount) : '');
+  const [date, setDate] = useState(() => ymd(first ? new Date(first.due) : (st.nextDue ? new Date(st.nextDue) : new Date())));
+  const [fileName, setFileName] = useState('');
+  const [fileDataUrl, setFileDataUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Period options: every still-awaiting month, plus the current period as a fallback.
+  const opts = [];
+  awaiting.forEach((a) => { if (!opts.find((o) => o.value === a.period)) opts.push({ value: a.period, label: periodLabel(a.period) }); });
+  if (st.currentPeriod && !opts.find((o) => o.value === st.currentPeriod)) opts.push({ value: st.currentPeriod, label: periodLabel(st.currentPeriod) });
+
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setFileName(f.name);
+    const r = new FileReader();
+    r.onload = () => setFileDataUrl(r.result);
+    r.readAsDataURL(f);
+  };
+  const canSave = Number(amount) > 0 && !saving;
+  const submit = () => {
+    setSaving(true);
+    onRecord({ period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, backgroundImage: 'none' } }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <ReceiptLongOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>Record {sub.name} invoice</Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Stack gap={1.5}>
+          <FormControl size="small" fullWidth>
+            <Select value={period} onChange={(e) => setPeriod(e.target.value)} sx={dropInput}>
+              {opts.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Stack direction="row" gap={1}>
+            <TextField size="small" label="Amount billed" type="number" value={amount} autoFocus
+              onChange={(e) => setAmount(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+            <TextField size="small" label="Date" type="date" value={date}
+              onChange={(e) => setDate(e.target.value)} sx={dropInput} InputLabelProps={{ shrink: true, sx: { color: D.muted } }} />
+          </Stack>
+          <Button component="label" startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ color: fileName ? D.green : D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, justifyContent: 'flex-start',
+              border: `1px dashed ${D.line}`, borderRadius: 1.5, py: 1, '&:hover': { color: D.green, borderColor: D.green } }}>
+            {fileName || 'Attach the invoice / receipt (optional)'}
+            <input type="file" hidden accept="image/*,application/pdf" onChange={onFile} />
+          </Button>
+          <TextField size="small" label="Note (optional)" value={note} multiline minRows={1}
+            onChange={(e) => setNote(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <Stack direction="row" gap={1} justifyContent="flex-end">
+            <Button onClick={onClose} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={submit} disabled={!canSave} startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
+              sx={{ bgcolor: canSave ? D.green : 'rgba(255,255,255,0.08)', color: canSave ? '#08130c' : D.muted,
+                textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: D.green, opacity: 0.9 } }}>
+              {saving ? 'Recording…' : 'Record it'}
+            </Button>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Add / edit a subscription — the owner's control over the amount, the billing day,
+// the brand it's tagged to, and whether it reminds him. Delete soft-removes it.
+function EditSubscriptionDialog({ sub, categories = CATEGORIES, onClose, onSave, onDelete }) {
+  const isNew = !sub._id;
+  const [name, setName] = useState(sub.name || '');
+  const [vendor, setVendor] = useState(sub.vendor || '');
+  const [amount, setAmount] = useState(sub.amount != null ? String(sub.amount) : '');
+  const [dueDay, setDueDay] = useState(String(sub.dueDay || 1));
+  const [cadence, setCadence] = useState(sub.cadence || 'monthly');
+  const [category, setCategory] = useState(sub.category || 'Software');
+  const [brand, setBrand] = useState(sub.brand || 'contact');
+  const [startDate, setStartDate] = useState(sub.startDate ? ymd(new Date(sub.startDate)) : ymd(new Date()));
+  const [remindersOn, setRemindersOn] = useState(sub.remindersOn !== false);
+  const [active, setActive] = useState(sub.active !== false);
+  const [notes, setNotes] = useState(sub.notes || '');
+  const [saving, setSaving] = useState(false);
+
+  const canSave = name.trim() && Number(amount) >= 0 && !saving;
+  const submit = () => {
+    setSaving(true);
+    onSave({
+      name: name.trim(), vendor: vendor.trim(), amount: Number(amount) || 0,
+      dueDay: Math.min(31, Math.max(1, Number(dueDay) || 1)), cadence, category, brand,
+      startDate, remindersOn, active, notes,
+    });
+  };
+  const toggleSx = (on) => ({ px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+    border: `1px solid ${on ? D.green : D.line}`, color: on ? D.green : D.muted, bgcolor: on ? 'rgba(74,222,128,0.10)' : 'transparent', userSelect: 'none' });
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, backgroundImage: 'none' } }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <AutorenewIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>{isNew ? 'Add subscription' : 'Edit subscription'}</Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Stack gap={1.5}>
+          <TextField size="small" label="Name" value={name} autoFocus={isNew}
+            onChange={(e) => setName(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <TextField size="small" label="Vendor (who's paid)" value={vendor}
+            onChange={(e) => setVendor(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <Stack direction="row" gap={1}>
+            <TextField size="small" label="Amount" type="number" value={amount}
+              onChange={(e) => setAmount(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+            <TextField size="small" label="Bills on day" type="number" value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)} inputProps={{ min: 1, max: 31 }}
+              sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          </Stack>
+          <Stack direction="row" gap={1}>
+            <FormControl size="small" fullWidth>
+              <Select value={cadence} onChange={(e) => setCadence(e.target.value)} sx={dropInput}>
+                <MenuItem value="monthly">Monthly</MenuItem>
+                <MenuItem value="annual">Annual</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" fullWidth>
+              <Select value={categories.includes(category) ? category : 'Other'}
+                onChange={(e) => setCategory(e.target.value)} sx={dropInput}>
+                {categories.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Stack>
+          <Stack direction="row" gap={1} alignItems="center">
+            <FormControl size="small" fullWidth>
+              <Select value={brand} onChange={(e) => setBrand(e.target.value)} sx={dropInput}>
+                {SUB_BRAND_OPTS.map((b) => <MenuItem key={b.key} value={b.key}>{b.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField size="small" label="Started" type="date" value={startDate}
+              onChange={(e) => setStartDate(e.target.value)} sx={dropInput} InputLabelProps={{ shrink: true, sx: { color: D.muted } }} />
+          </Stack>
+          <Stack direction="row" gap={1}>
+            <Box onClick={() => setRemindersOn((v) => !v)} sx={toggleSx(remindersOn)}>{remindersOn ? 'Reminders on' : 'Reminders off'}</Box>
+            <Box onClick={() => setActive((v) => !v)} sx={toggleSx(active)}>{active ? 'Active' : 'Paused'}</Box>
+          </Stack>
+          <TextField size="small" label="Notes" value={notes} multiline minRows={1}
+            onChange={(e) => setNotes(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+          <Stack direction="row" gap={1} justifyContent="space-between" alignItems="center">
+            {onDelete
+              ? <Button onClick={onDelete} sx={{ color: '#f87171', textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Remove</Button>
+              : <Box />}
+            <Stack direction="row" gap={1}>
+              <Button onClick={onClose} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
+              <Button onClick={submit} disabled={!canSave} startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
+                sx={{ bgcolor: canSave ? D.green : 'rgba(255,255,255,0.08)', color: canSave ? '#08130c' : D.muted,
+                  textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: D.green, opacity: 0.9 } }}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function FinancesTab({ token, onBack, onNavigate }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const { bind: bindMenu, registerFallback } = useContextMenu();
@@ -169,6 +458,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // Recurring revenue snapshot (MRR/ARR + per-brand) from the subscription spine.
   // A current-state figure, not year-scoped — the plans that are live right now.
   const [mrr, setMrr] = useState(null);
+  const [recurring, setRecurring] = useState(null);  // operating-subscription tracker
+  const [recSub, setRecSub]   = useState(null);      // subscription being recorded (dialog)
+  const [editSub, setEditSub] = useState(null);      // subscription being edited/added (dialog)
   const [orders, setOrders]   = useState([]);
   const [txns, setTxns]       = useState([]);
   const [months, setMonths]   = useState([]);
@@ -239,7 +531,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const load = useMemo(() => async () => {
     setLoading(true);
     try {
-      const [s, o, t, m, c, g, nr, rc, sub] = await Promise.all([
+      const [s, o, t, m, c, g, nr, rc, sub, rex] = await Promise.all([
         axios.get(`${base}/finances/summary`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/by-order`, { ...authHdr, params: { year } }),
         axios.get(`${base}/finances/transactions`, { ...authHdr, params: { year } }),
@@ -255,6 +547,10 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         // Recurring revenue snapshot (Webworks/Atom MRR) — current state, not
         // year-scoped. Guarded so a missing spine never blanks the finance tab.
         axios.get(`${base}/subscriptions/summary`, authHdr).catch(() => ({ data: null })),
+        // Recurring OPERATING subscriptions the shop pays (the outflow tracker +
+        // this-month invoice reminders). Current state, not year-scoped. Guarded so
+        // a missing route (e.g. right after a deploy) never blanks the finance tab.
+        axios.get(`${base}/recurring-expenses`, authHdr).catch(() => ({ data: null })),
       ]);
       // Coerce every list to an array of non-null rows at the boundary, so no
       // downstream .map can hit a null row and white-screen the tab regardless of
@@ -271,6 +567,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setReceiptInbox(arr(rc.data && rc.data.receipts)
         .filter((r) => ['pending', 'processing', 'review', 'failed'].includes(r.status)));
       setMrr(sub.data || null);
+      setRecurring(rex.data || null);
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
     finally { setLoading(false); }
   }, [authHdr, year]);
@@ -278,6 +575,59 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   useEffect(() => { load(); }, [load]);
     useEffect(() => { loadDedupeCount(); }, [loadDedupeCount]);
   useEffect(() => { loadReconcileCount(); }, [loadReconcileCount]);
+
+  // Refresh just the operating-subscription tracker after an action, so the panel
+  // updates without a full finance reload. Its /record also touches the ledger, so
+  // when a record books a cost we do a full load() to reflect the new expense too.
+  const reloadRecurring = useCallback(async () => {
+    try {
+      const r = await axios.get(`${base}/recurring-expenses`, authHdr);
+      setRecurring(r.data || null);
+    } catch (_) { /* leave the last-known state on a transient failure */ }
+  }, [authHdr]);
+
+  // Record a month's invoice: books a brand-tagged expense (optionally with the
+  // uploaded file) and clears that period's reminder. Full reload — the ledger changed.
+  const recordSubInvoice = useCallback(async (id, payload) => {
+    setBusy('Recording invoice…');
+    try {
+      await axios.post(`${base}/recurring-expenses/${id}/record`, payload, authHdr);
+      setRecSub(null);
+      await load();
+      setBusy('Invoice recorded ✓');
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, load]);
+
+  const skipSubPeriod = useCallback(async (id, period) => {
+    if (!(await confirmDialog({ title: 'Skip this month?', message: 'Mark this billing period as not billed — it stops the reminder and books no cost.', confirmLabel: 'Skip month' }))) return;
+    try { await axios.post(`${base}/recurring-expenses/${id}/skip`, { period }, authHdr); await reloadRecurring(); }
+    catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, reloadRecurring]);
+
+  const unrecordSubPeriod = useCallback(async (id, period) => {
+    if (!(await confirmDialog({ title: 'Undo this record?', message: 'Removes the recorded invoice for this period and its ledger entry. The stored file is kept.', confirmLabel: 'Undo', danger: true }))) return;
+    setBusy('Undoing…');
+    try { await axios.post(`${base}/recurring-expenses/${id}/unrecord`, { period }, authHdr); await load(); setBusy('Record undone ✓'); }
+    catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, load]);
+
+  // Create or update a subscription. `id` null → create. Reload just the tracker.
+  const saveSub = useCallback(async (id, payload) => {
+    setBusy('Saving…');
+    try {
+      if (id) await axios.put(`${base}/recurring-expenses/${id}`, payload, authHdr);
+      else    await axios.post(`${base}/recurring-expenses`, payload, authHdr);
+      setEditSub(null);
+      await reloadRecurring();
+      setBusy('Saved ✓');
+    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, reloadRecurring]);
+
+  const deleteSub = useCallback(async (id) => {
+    if (!(await confirmDialog({ title: 'Remove subscription?', message: 'Stops tracking it and clears its reminders. Past ledger entries stay. (Soft-deleted — recoverable.)', confirmLabel: 'Remove', danger: true }))) return;
+    try { await axios.delete(`${base}/recurring-expenses/${id}`, authHdr); setEditSub(null); await reloadRecurring(); }
+    catch (e) { setBusy(e.response?.data?.message || e.message); }
+  }, [authHdr, reloadRecurring]);
 
   // Status lines auto-clear — "Cleared 46 receipts ✓" must not live in the
   // header forever. In-flight messages (ending in …) stay until replaced.
@@ -667,6 +1017,18 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                 so a shop with no subscriptions sees the finance tab unchanged. */}
             <RecurringRevenuePanel mrr={mrr} />
 
+            {/* Operating subscriptions the shop PAYS (Workspace, Render, ChatGPT,
+                Claude, gym, backup domain). Totals the monthly outflow and — on each
+                one's due day — nags if this month's invoice hasn't been uploaded yet.
+                Finances-page-only by design. */}
+            <OperatingSubscriptionsPanel
+              data={recurring}
+              onRecord={(exp) => setRecSub(exp)}
+              onSkip={(exp) => skipSubPeriod(exp._id, exp.status?.awaiting?.[0]?.period)}
+              onUnrecord={(exp) => unrecordSubPeriod(exp._id, exp.status?.currentPeriod)}
+              onEdit={(exp) => setEditSub(exp)}
+              onAdd={() => setEditSub({})} />
+
             {/* P&L split by brand (Joint Printing / Webworks / Atom) from the
                 brand-tagged ledger. Hidden until >1 brand has booked activity. */}
             <BrandPnlPanel byBrand={summary.byBrand} />
@@ -900,6 +1262,17 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
         onOpenOrderPage={onNavigate ? () => { setOpenOrder(null); goOrder(openOrder); } : undefined}
         onOpenClient={(onNavigate && ckByOrder[normOrderNo(openOrder)]) ? () => { setOpenOrder(null); goCompanyForOrder(openOrder); } : undefined}
         onOpenVendor={onNavigate ? (t) => { setOpenOrder(null); goVendor(t.vendorId); } : undefined} />}
+      {recSub && (
+        <RecordInvoiceDialog sub={recSub}
+          onClose={() => setRecSub(null)}
+          onRecord={(payload) => recordSubInvoice(recSub._id, payload)} />
+      )}
+      {editSub && (
+        <EditSubscriptionDialog sub={editSub} categories={finCfg.categories}
+          onClose={() => setEditSub(null)}
+          onSave={(payload) => saveSub(editSub._id || null, payload)}
+          onDelete={editSub._id ? () => deleteSub(editSub._id) : undefined} />
+      )}
     </Box>
   );
 }
