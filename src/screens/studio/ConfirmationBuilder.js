@@ -1394,10 +1394,12 @@ function seedItemFromQuote(line, projectPrinter) {
     // sharpens the PO cost-recovery match on the backend (utils/poCost lineKey).
     printDetails: line.printDetails || '',
     color:     line.color || '',
-    // The printer that decorates this item: the quote's chosen printer.
-    // (line.supplier is the BLANK vendor — mapping it here left the printer
-    // blank on every seeded item and forced a re-type at PO time.)
-    printerName: projectPrinter || line.supplier || '',
+    // The printer that decorates this item: the quote's chosen printer (stamped on
+    // the line by the Quoter's "Fill costs from …"), falling back to the order-level
+    // printer, then the blank vendor. This is what closes the loop — a per-design
+    // printer now flows straight to the confirmation and splits POs per supplier
+    // instead of forcing a re-type at PO time.
+    printerName: line.printerName || projectPrinter || line.supplier || '',
     unitCost:  +unitCost.toFixed(4),
     // Client-facing estimated turnaround, carried from the picked quote line.
     turnaroundWeeks: Number(line.turnaroundWeeks) || 0,
