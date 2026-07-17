@@ -2167,10 +2167,11 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
   const groups = (signals && signals.groups) || { critical: [], warning: [], info: [] };
   const backup = (signals && signals.backup) || null;
 
-  // Backup nudge, folded into Signals (unchanged): an overdue weekly-archive nudge
+  // Backup nudge, folded into Signals (unchanged): an overdue-archive nudge
   // (snooze a week) and a gentler monthly "copy it to an external drive" reminder,
-  // each remembering its last dismissal in localStorage so it doesn't re-nag. ✕
-  // snoozes; the row body opens the Backup tab.
+  // each remembering its last dismissal in localStorage so it doesn't re-nag. The
+  // monthly one also respects the real last-backup date so it can't false-fire on a
+  // fresh device. ✕ snoozes; the row body opens the Backup tab.
   const [overdueSnoozedAt, setOverdueSnoozedAt] = React.useState(() => readTs(K_OVERDUE_SNOOZE));
   const [hddDismissedAt, setHddDismissedAt] = React.useState(() => readTs(K_HDD_REMINDER));
   // AI-budget warning: same dismiss pattern, plus the dismissed level so a
@@ -2196,7 +2197,16 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
     setAiSnoozedLevel(level);
   };
   const showOverdue = !!(backup && backup.isDue) && (now - overdueSnoozedAt > SNOOZE_OVERDUE_MS);
-  const showHdd = !showOverdue && (now - hddDismissedAt > REMIND_HDD_MS);
+  // The monthly hard-drive reminder must anchor to the LAST ACTUAL BACKUP, not just
+  // this device's dismiss time. localStorage is per-device and defaults to 0, so a
+  // phone that's never dismissed it would read `now - 0 > 30d` and nag on every load
+  // even right after a fresh backup ("keep getting reminders but a month hasn't
+  // passed"). Anchor to whichever is later — the last dismissal on THIS device, or
+  // the last backup the server knows about (shared across devices) — and never nag
+  // from a cold start with neither (the overdue row already covers "never backed up").
+  const lastBackupMs = backup && backup.lastBackupAt ? new Date(backup.lastBackupAt).getTime() : 0;
+  const hddAnchor = Math.max(hddDismissedAt, lastBackupMs);
+  const showHdd = !showOverdue && hddAnchor > 0 && (now - hddAnchor > REMIND_HDD_MS);
   const s = (n) => (n === 1 ? '' : 's');
 
   // AI-copywriting budget: show a row at 'warn' (amber) / 'blocked' (red). It
@@ -3549,12 +3559,14 @@ export default function Studio() {
 // The backup nudge now lives as a row inside the hub's Signals panel (it used to
 // be a separate banner across the top). Two triggers, overdue first:
 //
-//   1. OVERDUE backup — backend-driven (/admin/backup/status isDue): the weekly
-//      archive hasn't been taken in a while. Dismiss (✕) snoozes it a week.
+//   1. OVERDUE backup — backend-driven (/admin/backup/status isDue): a full
+//      archive hasn't been taken in ~30 days. Dismiss (✕) snoozes it a week.
 //   2. MONTHLY hard-drive reminder — a gentler heads-up to copy the latest
 //      archive onto an external drive (the third, fully-offline basket beyond
-//      the site DB and Google Drive). Purely client-side: reappears ~30 days
-//      after it was last dismissed. Shown only when NOT overdue.
+//      the site DB and Google Drive). Reappears ~30 days after whichever is
+//      later: it was last dismissed on this device, OR the last real backup the
+//      server reports (so a fresh phone doesn't nag from an empty localStorage).
+//      Shown only when NOT overdue.
 //
 // Each stores its last-dismissed time in localStorage so it doesn't re-nag on
 // every load. See SignalsPanel for the row that consumes these.

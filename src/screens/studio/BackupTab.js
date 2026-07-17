@@ -1,6 +1,6 @@
 // src/screens/studio/BackupTab.js
 // Full-site backup / restore. Used both inline (as a Studio screen) and
-// surfaced as a banner-trigger when a weekly backup is overdue.
+// surfaced as a banner-trigger when a backup is overdue.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -298,7 +298,8 @@ export default function BackupTab({ token, onBack }) {
                 </Typography>
                 <Typography sx={{ color: B.muted, fontSize: 12, mt: 0.3 }}>
                   A full backup — ledger, projects, files, and receipt images — pushed to your Drive
-                  every week and on demand. Your second basket if the site or Cloudflare goes down.
+                  every day and on demand, keeping about a week of rolling copies. Your second basket
+                  if the site or Cloudflare goes down.
                 </Typography>
               </Box>
             </Stack>
@@ -332,7 +333,7 @@ export default function BackupTab({ token, onBack }) {
                   <Alert severity="warning" sx={{ mb: 1.5 }}>
                     Off-site auto-backups look stopped —{' '}
                     {drive.lastBackupAt
-                      ? `last successful push was ${fmtRelative(drive.lastBackupAt)} (over ${drive.staleAfterDays ?? 9}d ago).`
+                      ? `last successful push was ${fmtRelative(drive.lastBackupAt)} (over ${drive.staleAfterDays ?? 2}d ago).`
                       : 'none has run yet.'}{' '}
                     Run one now to confirm Drive is working before you leave.
                   </Alert>
@@ -365,7 +366,7 @@ export default function BackupTab({ token, onBack }) {
                   </Button>
                 </Stack>
                 <Typography sx={{ color: B.muted, fontSize: 11, mt: 1.2 }}>
-                  {`Auto-runs ${(drive.schedule || 'weekly').toLowerCase()}.`} Saved to a “Joint Printing Backups” folder in your Drive.
+                  {`Auto-runs ${(drive.schedule || 'nightly').toLowerCase()}.`} Keeps ~a week of rolling copies in a “Joint Printing Backups” folder in your Drive.
                 </Typography>
               </Box>
             )}
@@ -417,7 +418,8 @@ export default function BackupTab({ token, onBack }) {
 
           {/* Practice tips */}
           <Typography sx={{ color: B.muted, fontSize: 11, mt: 2.5, lineHeight: 1.6 }}>
-            <strong>Tip:</strong> Save your weekly backups to at least two places — an external hard
+            <strong>Tip:</strong> Google Drive already keeps a fresh copy every night. About once a
+            month, also save one backup to at least two places — an external hard
             drive and a cloud folder (Drive, Dropbox, S3). The ZIP is <em>every</em> collection in the
             database, so it's everything you need to rebuild from scratch. Restore <strong>merges</strong> a
             backup in by default (adds &amp; updates, never deletes) — safe to run anytime; a full
