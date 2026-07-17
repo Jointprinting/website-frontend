@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, Button, IconButton, FormControl, Select, MenuItem, CircularProgress,
-  Dialog, DialogContent, TextField, Autocomplete,
+  Dialog, DialogContent, TextField, Autocomplete, Collapse,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
@@ -22,6 +22,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import axios from 'axios';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
@@ -274,6 +275,10 @@ const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; 
 // reminders. Reads /api/recurring-expenses (config + decorated status + reminders).
 // Finances-page-only by design (these reminders never leak to the Today strip/CRM).
 function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdit, onAdd }) {
+  // Collapsed by default — the owner tracks these but doesn't want the full list
+  // front-and-center. The header stays (total + a "N due" nudge when an invoice is
+  // awaiting); the list expands on click. (Hook before the early return — rules-of-hooks.)
+  const [open, setOpen] = useState(false);
   if (!data) return null; // route missing / not loaded yet → render nothing (guarded)
   const rows = ((data.expenses) || []).filter((e) => e && !e.archived);
   const reminders = (data.reminders) || [];
@@ -294,18 +299,26 @@ function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdi
 
   return (
     <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.25 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between"
+        onClick={() => setOpen((o) => !o)} sx={{ mb: open ? 1.25 : 0, cursor: 'pointer', userSelect: 'none' }}>
         <Stack direction="row" alignItems="center" spacing={0.75}>
+          <ExpandMoreIcon sx={{ color: D.muted, fontSize: 18, transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.18s ease' }} />
           <ReceiptLongOutlinedIcon sx={{ color: D.green, fontSize: 16 }} />
           <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase' }}>Operating subscriptions</Typography>
+          {!open && reminders.length > 0 && (
+            <Box sx={{ px: 0.85, py: 0.15, borderRadius: 1, bgcolor: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.3)' }}>
+              <Typography sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>{reminders.length} to upload</Typography>
+            </Box>
+          )}
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography sx={{ ...mono, color: D.text, fontSize: 12.5, fontWeight: 800 }}>{money(sum.monthlyTotal)}/mo</Typography>
-          <Button onClick={onAdd} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} size="small"
+          <Button onClick={(e) => { e.stopPropagation(); onAdd(); }} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} size="small"
             sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, minWidth: 0, '&:hover': { color: D.green } }}>Add</Button>
         </Stack>
       </Stack>
 
+      <Collapse in={open}>
       {/* The nag: any subscription whose invoice for an elapsed due date hasn't been
           uploaded yet. Amber, only here on the Finances page. */}
       {reminders.length > 0 && (
@@ -367,6 +380,7 @@ function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdi
           <Typography sx={{ color: D.faint, fontSize: 12, py: 1 }}>No subscriptions tracked yet — add your recurring bills to get invoice reminders.</Typography>
         )}
       </Stack>
+      </Collapse>
     </Box>
   );
 }
