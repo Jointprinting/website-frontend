@@ -832,6 +832,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const needsStitches = specMethod === 'Embroidery';
   const needsColors = specMethod === 'Screen Print';
   const usesShade = specMethod === 'Screen Print' || specMethod === 'DTG';
+  // If the picked printer's DTG section doesn't offer the current shade lane (e.g.
+  // switching off A+'s white-ink-only to a printer without it), fall back to light so
+  // pricing stays valid and the Select never holds an out-of-range value.
+  useEffect(() => {
+    const shades = specSection && specSection.shades;
+    if (Array.isArray(shades) && !shades.includes(specShade)) setSpecShade('light');
+  }, [specSection, specShade]);
 
   // A fresh area seeded with the field(s) the method prices on, and the next
   // sensible label (front → back → sleeve…).
@@ -1195,6 +1202,9 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                     sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
                     <MenuItem value="light">Light</MenuItem>
                     <MenuItem value="dark">Dark{specMethod === 'Screen Print' ? ' (+underbase)' : ''}</MenuItem>
+                    {specMethod === 'DTG' && ((specSection && specSection.shades) || []).includes('whiteInkOnly') && (
+                      <MenuItem value="whiteInkOnly">White ink only</MenuItem>
+                    )}
                   </Select>
                 </FormControl>
               </QF>

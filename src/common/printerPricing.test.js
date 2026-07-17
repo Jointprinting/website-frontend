@@ -139,6 +139,23 @@ test('qty_x_size_x_shade (Contract-DTG DTG): size + shade select the price', () 
   expect(priceMethod(sp, { qty: 30, size: '' }).error).toBe('pick-size');
 });
 
+test('qty_x_size_x_shade white-ink-only lane (A+ DTG): the 3rd price index', () => {
+  // Cells are [dark, light, whiteInkOnly] — real A+ up-to-24-sqin values.
+  const sp = { model: 'qty_x_size_x_shade', sizes: ['up to 24 sqin'], shades: ['light', 'dark', 'whiteInkOnly'],
+    tiers: [{ minQty: 1, label: '1', prices: { 'up to 24 sqin': [8.13, 6.5, 7.31] } },
+            { minQty: 25, label: '25-36', prices: { 'up to 24 sqin': [4.88, 3.74, 4.39] } }] };
+  expect(priceMethod(sp, { qty: 1, size: 'up to 24 sqin', shade: 'dark' }).printPerUnit).toBe(8.13);
+  expect(priceMethod(sp, { qty: 1, size: 'up to 24 sqin', shade: 'light' }).printPerUnit).toBe(6.5);
+  expect(priceMethod(sp, { qty: 1, size: 'up to 24 sqin', shade: 'whiteInkOnly' }).printPerUnit).toBe(7.31);
+  expect(priceMethod(sp, { qty: 30, size: 'up to 24 sqin', shade: 'whiteInkOnly' }).printPerUnit).toBe(4.39); // 25-36 tier
+  expect(priceMethod(sp, { qty: 1, size: 'up to 24 sqin', shade: 'whiteInkOnly' }).notes[0]).toMatch(/white-ink only/);
+  // A 2-lane catalog (Contract-DTG) has NO white-ink lane → request a quote, not a wrong price.
+  const two = { model: 'qty_x_size_x_shade', sizes: ['4x4'], shades: ['light', 'dark'],
+    tiers: [{ minQty: 1, label: '1', prices: { '4x4': [6.6, 5.5] } }] };
+  expect(priceMethod(two, { qty: 1, size: '4x4', shade: 'whiteInkOnly' }).error).toBe('na');
+  expect(priceMethod(two, { qty: 1, size: '4x4', shade: 'dark' }).printPerUnit).toBe(6.6);
+});
+
 test('qty_x_stitches (embroidery): qty tier × stitch band + digitizing setup', () => {
   const sp = { model: 'qty_x_stitches',
     qtyTiers: [{ label: '1-5', minQty: 1 }, { label: '12-23', minQty: 12 }],
