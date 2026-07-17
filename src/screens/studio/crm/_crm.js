@@ -232,14 +232,29 @@ export const SEGMENT_META = {
 // the server's isCustomer (order reality) OR a won/customer stage.
 export const isClient = (c) => !!(c && (c.isCustomer || isWonStage(c.stage)));
 
-// Warm / in-pipeline lead (and NOT already a client).
-const ACTIVE_LEAD_STAGES = ['contacted', 'awaiting_details', 'quoting'];
+// A cold-email / outreach-pool record: an automated blast target from the
+// lead-finder / mail-merge, not a hand-worked lead. Mirrors the backend
+// isOutreachPool (controllers/crm.js) — the cold-email / dispensary / cold tags or
+// the 'Cold Outreach' lead source.
+export const isOutreachPool = (c) => {
+  if (!c) return false;
+  const tags = (c.tags || []).map((t) => String(t || '').toLowerCase());
+  return c.leadSource === 'Cold Outreach'
+    || tags.includes('cold-email') || tags.includes('dispensary') || tags.includes('cold');
+};
+
+// "Active leads" = the leads the owner is actually working — NOT the automated
+// cold-email pool, and either with a scheduled next follow-up (the owner's own
+// "I'm on this") or mid-quote. Owner ask (2026-07): active leads should be leads
+// with a follow-up date, not cold-email leads — so the blast (which used to land
+// here via its 'contacted' stage) now sits in "everyone else" until the owner
+// schedules a real next step. A live quote (quoting / awaiting-details) still
+// counts as active even before a follow-up is set.
+const LIVE_QUOTE_STAGES = ['awaiting_details', 'quoting'];
 export const isActiveLead = (c) => {
   if (!c || isClient(c)) return false;
-  if (ACTIVE_LEAD_STAGES.includes(c.stage)) return true;
-  // A brand-new lead the owner is actively working (has a next step) is warm too.
-  if (c.stage === 'lead' && c.nextFollowUp) return true;
-  return false;
+  if (isOutreachPool(c)) return false;
+  return !!c.nextFollowUp || LIVE_QUOTE_STAGES.includes(c.stage);
 };
 
 // The bucket a record belongs to — exactly one of CRM_SEGMENTS.
