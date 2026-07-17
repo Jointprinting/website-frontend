@@ -249,13 +249,13 @@ export default function AtomLanding() {
           <Stack direction="row" gap={3} justifyContent="center" alignItems="baseline" sx={{ mt: 2 }}>
             <Box>
               <Typography sx={{ ...atomMono, color: A.faint, fontSize: 14, textDecoration: 'line-through' }}>$2,495</Typography>
-              <Typography sx={{ ...atomMono, fontSize: 34, fontWeight: 800 }}>$995</Typography>
+              <Typography sx={{ ...atomMono, fontSize: 34, fontWeight: 800 }}>$999</Typography>
               <Typography sx={{ color: A.muted, fontSize: 12 }}>setup — yours, branded</Typography>
             </Box>
             <Typography sx={{ color: A.faint, fontSize: 22 }}>+</Typography>
             <Box>
               <Typography sx={{ ...atomMono, color: A.faint, fontSize: 14, textDecoration: 'line-through' }}>$495</Typography>
-              <Typography sx={{ ...atomMono, fontSize: 34, fontWeight: 800 }}>$295<Typography component="span" sx={{ fontSize: 14, color: A.muted }}>/mo</Typography></Typography>
+              <Typography sx={{ ...atomMono, fontSize: 34, fontWeight: 800 }}>$299<Typography component="span" sx={{ fontSize: 14, color: A.muted }}>/mo</Typography></Typography>
               <Typography sx={{ color: A.muted, fontSize: 12 }}>everything, hosted + updated</Typography>
             </Box>
           </Stack>
