@@ -42,7 +42,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { B, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, darkInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
+import { D, accentBar, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, dropInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { sortMockupTiles, mockupBadge } from './_mockupNumbers';
 import { SOURCE_META } from './_submissions';
@@ -794,14 +794,16 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white }}>
-      {/* Header */}
+    <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text }}>
+      {/* Header — shares the hub's green accent bar so every Studio tool reads as
+          one surface (matches CRM / Vendors / the shell). */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 5,
-        bgcolor: 'rgba(12,20,16,0.92)', backdropFilter: 'blur(10px)',
-        borderBottom: `1px solid ${B.border}`, px: { xs: 1.5, md: 3 }, py: 1.5,
+        bgcolor: 'rgba(11,20,16,0.92)', backdropFilter: 'blur(10px)',
+        borderBottom: `1px solid ${D.line}`, px: { xs: 1.5, md: 3 }, py: 1.5,
       }}>
+        <Box sx={accentBar} />
         <Stack direction="row" alignItems="center" gap={{ xs: 1, md: 1.5 }} flexWrap="wrap">
-          <IconButton onClick={onBack} sx={{ color: B.muted, '&:hover': { color: B.white } }}>
+          <IconButton onClick={onBack} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
             <ArrowBackIcon />
           </IconButton>
           <Box component="img" src={jpLogoWhite} alt="Joint Printing"
@@ -810,13 +812,13 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               display: { xs: 'none', sm: 'block' },
             }} />
           <Box sx={{
-            width: '1px', height: 20, bgcolor: B.border,
+            width: '1px', height: 20, bgcolor: D.line,
             display: { xs: 'none', sm: 'block' },
           }} />
-          <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 18, letterSpacing: -0.3 }}>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, letterSpacing: -0.3 }}>
             Order Tracker
           </Typography>
-          <Typography sx={{ color: B.muted, fontSize: 12, ml: 0.5 }}>
+          <Typography sx={{ color: D.muted, fontSize: 12, ml: 0.5 }}>
             {projects.length} projects
           </Typography>
 
@@ -828,21 +830,21 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             value={search}
             onChange={e => setSearch(e.target.value)}
             inputRef={searchInputRef}
-            sx={{ ...darkInput, width: { xs: '100%', sm: 220, md: 320 }, order: { xs: 5, md: 0 }, flex: { xs: '1 1 100%', sm: 'unset' } }}
+            sx={{ ...dropInput, width: { xs: '100%', sm: 220, md: 320 }, order: { xs: 5, md: 0 }, flex: { xs: '1 1 100%', sm: 'unset' } }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{ color: B.muted, fontSize: 18 }} />
+                  <SearchIcon sx={{ color: D.muted, fontSize: 18 }} />
                 </InputAdornment>
               ),
             }}
           />
 
           <Button
-            startIcon={creating ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <AddIcon />}
+            startIcon={creating ? <CircularProgress size={14} sx={{ color: D.greenDk }} /> : <AddIcon />}
             onClick={handleCreate}
             disabled={creating}
-            sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none',
+            sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, textTransform: 'none',
               px: { xs: 1.5, md: 2 }, minWidth: 0,
               '&:hover': { bgcolor: '#3bd070' },
               '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.7 } } }}>
@@ -854,8 +856,8 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           <Tooltip title={selectMode ? 'Exit multi-select' : 'Select multiple projects'}>
             <span>
               <IconButton onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))} size="small"
-                sx={{ color: selectMode ? B.green : B.muted, opacity: selectMode ? 1 : 0.55,
-                  '&:hover': { opacity: 1, color: B.green } }}>
+                sx={{ color: selectMode ? D.green : D.muted, opacity: selectMode ? 1 : 0.55,
+                  '&:hover': { opacity: 1, color: D.green } }}>
                 <ChecklistIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </span>
@@ -864,7 +866,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           <Tooltip title="Clients overview">
             <span>
               <IconButton onClick={handleOpenClients} size="small"
-                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
+                sx={{ color: D.muted, opacity: 0.55, '&:hover': { opacity: 1, color: D.green } }}>
                 <PeopleAltOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </span>
@@ -873,32 +875,32 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           <Tooltip title="More — analytics, mockup health, auto-link">
             <span>
               <IconButton onClick={(e) => setMoreAnchor(e.currentTarget)} size="small"
-                sx={{ color: B.muted, opacity: 0.55, '&:hover': { opacity: 1, color: B.green } }}>
+                sx={{ color: D.muted, opacity: 0.55, '&:hover': { opacity: 1, color: D.green } }}>
                 <MoreVertIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </span>
           </Tooltip>
           <Menu anchorEl={moreAnchor} open={!!moreAnchor} onClose={() => setMoreAnchor(null)}
-            PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, minWidth: 220 } }}>
+            PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, minWidth: 220 } }}>
             <MenuItem onClick={() => { setMoreAnchor(null); handleOpenAnalytics(); }}>
-              <ListItemIcon sx={{ color: B.muted }}><InsightsOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemIcon sx={{ color: D.muted }}><InsightsOutlinedIcon fontSize="small" /></ListItemIcon>
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}>Analytics</ListItemText>
             </MenuItem>
-            <Divider sx={{ borderColor: B.border }} />
+            <Divider sx={{ borderColor: D.line }} />
             {/* UPS runs itself hourly; this is the manual "check now". Mockup
                 health / auto-link retired — mockups aren't imported anymore. */}
             <MenuItem onClick={() => { setMoreAnchor(null); handleUpsCheck(); }}>
-              <ListItemIcon sx={{ color: B.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemIcon sx={{ color: D.muted }}><FactCheckOutlinedIcon fontSize="small" /></ListItemIcon>
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
-                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: D.muted } }}
                 secondary="Sweep UPS links → auto-deliver">Check UPS now</ListItemText>
             </MenuItem>
             {/* The rich cleanup: empty placeholders, name collisions, and the
                 revenue-twins (2+ collected orders on one company). */}
             <MenuItem onClick={() => { setMoreAnchor(null); handleOpenCleanup(); }}>
-              <ListItemIcon sx={{ color: B.muted }}><CleaningServicesOutlinedIcon fontSize="small" /></ListItemIcon>
+              <ListItemIcon sx={{ color: D.muted }}><CleaningServicesOutlinedIcon fontSize="small" /></ListItemIcon>
               <ListItemText primaryTypographyProps={{ sx: { fontSize: 13 } }}
-                secondaryTypographyProps={{ sx: { fontSize: 10, color: B.muted } }}
+                secondaryTypographyProps={{ sx: { fontSize: 10, color: D.muted } }}
                 secondary="Double-counts, empties, name variants">Clean up orders</ListItemText>
             </MenuItem>
           </Menu>
@@ -910,7 +912,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
               Delivered = value of orders shipped this year (accrual). They differ
               because you get paid up front — both are true, so both are shown. */}
           {collectedThisYear != null &&
-            <Stat label="Collected this year" value={fmt(collectedThisYear)} accent={B.green} />}
+            <Stat label="Collected this year" value={fmt(collectedThisYear)} accent={D.green} />}
           <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)} />
           <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} />
           <Stat label="Open orders"           value={String(stats.openOrders || 0)} />
@@ -931,16 +933,16 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                 label={`${f.label} · ${count}`}
                 onClick={() => setStatusFilter(f.value)}
                 sx={{
-                  bgcolor: active ? B.green : 'rgba(255,255,255,0.04)',
-                  color:   active ? B.greenDk : B.muted,
+                  bgcolor: active ? D.green : 'rgba(255,255,255,0.04)',
+                  color:   active ? D.greenDk : D.muted,
                   fontWeight: active ? 700 : 500,
                   fontSize: 11,
                   height: 24,
                   cursor: 'pointer',
-                  border: `1px solid ${active ? B.green : 'rgba(255,255,255,0.08)'}`,
+                  border: `1px solid ${active ? D.green : 'rgba(255,255,255,0.08)'}`,
                   transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
-                  '&:hover': { bgcolor: active ? B.green : 'rgba(255,255,255,0.08)' },
-                  '&.Mui-focusVisible': { outline: `2px solid ${B.green}`, outlineOffset: 1 },
+                  '&:hover': { bgcolor: active ? D.green : 'rgba(255,255,255,0.08)' },
+                  '&.Mui-focusVisible': { outline: `2px solid ${D.green}`, outlineOffset: 1 },
                 }}
               />
             );
@@ -959,11 +961,11 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             }}
             sx={{
               fontSize: 11, height: 24, ml: 0.5,
-              color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.greenDk : B.muted,
-              bgcolor: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.green : 'rgba(255,255,255,0.04)',
+              color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? D.greenDk : D.muted,
+              bgcolor: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? D.green : 'rgba(255,255,255,0.04)',
               borderRadius: 999,
               '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.08)' },
-              '& .MuiSelect-icon': { color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? B.greenDk : B.muted },
+              '& .MuiSelect-icon': { color: SECONDARY_FILTERS.some(s => s.value === statusFilter) ? D.greenDk : D.muted },
               '& .MuiSelect-select': { py: 0.4, pr: 3 },
             }}>
             {SECONDARY_FILTERS.map(s => {
@@ -973,15 +975,15 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           </Select>
           <Box sx={{ flex: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.5 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', mr: 0.5 }}>
               Sort
             </Typography>
             <Select value={sortMode} onChange={e => setSortMode(e.target.value)} size="small"
               sx={{
-                color: B.white, fontSize: 11, height: 26,
+                color: D.text, fontSize: 11, height: 26,
                 '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
-                '& .MuiSelect-icon': { color: B.muted },
-                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: B.green },
+                '& .MuiSelect-icon': { color: D.muted },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: D.green },
               }}>
               <MenuItem value="projectNumber">Project # (newest)</MenuItem>
               <MenuItem value="updatedAt">Recently updated</MenuItem>
@@ -999,11 +1001,11 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             <JpLoader size={60} label="Loading projects…" />
           </Box>
         ) : filtered.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 10, color: B.muted }}>
+          <Box sx={{ textAlign: 'center', py: 10, color: D.muted }}>
             <DesignServicesIcon sx={{ fontSize: 48, opacity: 0.3, mb: 1 }} />
             <Typography sx={{ fontSize: 14 }}>No projects match.</Typography>
             {search && (
-              <Button onClick={() => setSearch('')} sx={{ color: B.green, mt: 1, fontSize: 12, textTransform: 'none' }}>
+              <Button onClick={() => setSearch('')} sx={{ color: D.green, mt: 1, fontSize: 12, textTransform: 'none' }}>
                 Clear search
               </Button>
             )}
@@ -1094,40 +1096,40 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       {/* Duplicate-order cleanup: preview → keep/archive per group → apply (undo by batch). */}
       {dupOpen && (
         <Dialog open onClose={() => setDupOpen(false)} maxWidth="sm" fullWidth
-          PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, backgroundImage: 'none' } }}>
-          <Box sx={{ px: 2.5, pt: 2, pb: 1.25, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CleaningServicesOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-            <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Duplicate orders</Typography>
+          PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, backgroundImage: 'none' } }}>
+          <Box sx={{ px: 2.5, pt: 2, pb: 1.25, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CleaningServicesOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+            <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>Duplicate orders</Typography>
             <IconButton size="small" onClick={() => setDupOpen(false)}><CloseIcon fontSize="small" /></IconButton>
           </Box>
           <DialogContent sx={{ p: 2.5, ...scrollbar }}>
             {dupLoading ? (
-              <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
+              <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>
             ) : !dupData ? null : dupData.duplicateGroups === 0 ? (
-              <Typography sx={{ color: B.muted, fontSize: 13 }}>
+              <Typography sx={{ color: D.muted, fontSize: 13 }}>
                 No duplicates found — every job exists exactly once. ✨
                 {dupBatch && ' (A previous cleanup can still be undone below.)'}
               </Typography>
             ) : (
               <>
-                <Typography sx={{ color: B.muted, fontSize: 12.5, mb: 1.5 }}>
+                <Typography sx={{ color: D.muted, fontSize: 12.5, mb: 1.5 }}>
                   {dupData.duplicateGroups} job{dupData.duplicateGroups === 1 ? '' : 's'} exist{dupData.duplicateGroups === 1 ? 's' : ''} more
                   than once (same company, same amount). Cleaning keeps the best copy and archives {dupData.ordersToArchive} redundant
                   one{dupData.ordersToArchive === 1 ? '' : 's'} — they vanish from the board, dashboards, and finances, and stay recoverable via UNDO.
                 </Typography>
                 <Stack gap={1.25}>
                   {(dupData.groups || []).map((g, i) => (
-                    <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.25 }}>
-                      <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 12.5, mb: 0.5 }}>
+                    <Box key={i} sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, p: 1.25 }}>
+                      <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 12.5, mb: 0.5 }}>
                         {(g.keep && g.keep[0] && (g.keep[0].companyName || g.keep[0].clientName)) || g.companyKey} · {fmt(g.amount)}
                       </Typography>
                       {(g.keep || []).map((o) => (
-                        <Typography key={String(o._id)} sx={{ color: B.green, fontSize: 11.5, fontFamily: 'monospace' }}>
+                        <Typography key={String(o._id)} sx={{ color: D.green, fontSize: 11.5, fontFamily: 'monospace' }}>
                           ✓ keep — #{o.orderNumber || o.projectNumber || o._id} · {o.status}{o.importedFrom ? ` · ${o.importedFrom}` : ''}
                         </Typography>
                       ))}
                       {(g.archive || []).map((o) => (
-                        <Typography key={String(o._id)} sx={{ color: B.muted, fontSize: 11.5, fontFamily: 'monospace', textDecoration: 'line-through' }}>
+                        <Typography key={String(o._id)} sx={{ color: D.muted, fontSize: 11.5, fontFamily: 'monospace', textDecoration: 'line-through' }}>
                           ✕ archive — #{o.orderNumber || o.projectNumber || o._id} · {o.status}{o.importedFrom ? ` · ${o.importedFrom}` : ''}
                         </Typography>
                       ))}
@@ -1139,16 +1141,16 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             <Stack direction="row" gap={1} justifyContent="flex-end" sx={{ mt: 2 }}>
               {dupBatch && (
                 <Button onClick={revertDup} disabled={dupBusy} startIcon={<ReplayIcon sx={{ fontSize: 15 }} />}
-                  sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, '&:hover': { color: B.white } }}>
+                  sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, '&:hover': { color: D.text } }}>
                   Undo last cleanup
                 </Button>
               )}
               <Box sx={{ flex: 1 }} />
-              <Button onClick={() => setDupOpen(false)} sx={{ color: B.muted, textTransform: 'none', fontWeight: 700 }}>Close</Button>
+              <Button onClick={() => setDupOpen(false)} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700 }}>Close</Button>
               {dupData && dupData.duplicateGroups > 0 && (
                 <Button onClick={applyDup} disabled={dupBusy}
-                  sx={{ bgcolor: B.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2,
-                    '&:hover': { bgcolor: B.green, opacity: 0.9 } }}>
+                  sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2,
+                    '&:hover': { bgcolor: D.green, opacity: 0.9 } }}>
                   {dupBusy ? 'Cleaning…' : `Clean ${dupData.ordersToArchive} duplicate${dupData.ordersToArchive === 1 ? '' : 's'}`}
                 </Button>
               )}
@@ -1270,31 +1272,31 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       {selectMode && (
         <Box sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
           bgcolor: 'rgba(12,20,16,0.97)', backdropFilter: 'blur(10px)',
-          borderTop: `1px solid ${B.border}`, px: { xs: 1.5, md: 3 }, py: 1.2,
+          borderTop: `1px solid ${D.line}`, px: { xs: 1.5, md: 3 }, py: 1.2,
           display: 'flex', alignItems: 'center', gap: { xs: 1, md: 1.5 }, flexWrap: 'wrap' }}>
-          <Typography sx={{ color: B.white, fontWeight: 700, fontSize: 13 }}>
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13 }}>
             {selectedIds.length} selected
           </Typography>
           <Button size="small" onClick={() => setSelectedIds(filtered.map(p => p._id))}
-            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
+            sx={{ color: D.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
             Select all ({filtered.length})
           </Button>
           <Button size="small" onClick={() => setSelectedIds([])} disabled={selectedIds.length === 0}
-            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
+            sx={{ color: D.muted, fontSize: 11, textTransform: 'none', minWidth: 0 }}>
             Clear
           </Button>
           <Box sx={{ flex: 1 }} />
-          {bulkSaving && <CircularProgress size={16} sx={{ color: B.green }} />}
+          {bulkSaving && <CircularProgress size={16} sx={{ color: D.green }} />}
           <Button size="small" disabled={bulkSaving || selectedIds.length === 0}
             onClick={() => handleBulkUpdate({ paid: true }, 'Mark paid')}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700,
-              border: `1px solid ${B.green}40`, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } }}>
+            sx={{ color: D.green, fontSize: 11, textTransform: 'none', fontWeight: 700,
+              border: `1px solid ${D.green}40`, '&:hover': { bgcolor: 'rgba(74,222,128,0.1)' } }}>
             Mark paid
           </Button>
           <Button size="small" disabled={bulkSaving || selectedIds.length === 0}
             onClick={() => handleBulkUpdate({ paid: false }, 'Mark unpaid')}
-            sx={{ color: B.muted, fontSize: 11, textTransform: 'none', fontWeight: 700,
-              border: `1px solid rgba(255,255,255,0.12)`, '&:hover': { color: B.white } }}>
+            sx={{ color: D.muted, fontSize: 11, textTransform: 'none', fontWeight: 700,
+              border: `1px solid rgba(255,255,255,0.12)`, '&:hover': { color: D.text } }}>
             Mark unpaid
           </Button>
           <Select
@@ -1307,15 +1309,15 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             }}
             renderValue={() => 'Set status…'}
             size="small"
-            sx={{ fontSize: 11, height: 30, color: B.white,
+            sx={{ fontSize: 11, height: 30, color: D.text,
               '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.12)' },
-              '& .MuiSelect-icon': { color: B.muted } }}>
+              '& .MuiSelect-icon': { color: D.muted } }}>
             {STATUS_OPTIONS.map(s => (
               <MenuItem key={s.value} value={s.value} sx={{ fontSize: 12 }}>{s.label}</MenuItem>
             ))}
           </Select>
           <Button size="small" onClick={exitSelectMode}
-            sx={{ bgcolor: B.green, color: B.greenDk, fontSize: 11, textTransform: 'none',
+            sx={{ bgcolor: D.green, color: D.greenDk, fontSize: 11, textTransform: 'none',
               fontWeight: 700, px: 1.5, '&:hover': { bgcolor: '#3bd070' } }}>
             Done
           </Button>
@@ -1343,15 +1345,15 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
 function Stat({ label, value, accent, hint }) {
   return (
-    <Box sx={{ bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, px: 1.5, py: 1, minWidth: 116, flex: '0 0 auto' }}>
-      <Typography sx={{ color: B.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, px: 1.5, py: 1, minWidth: 116, flex: '0 0 auto' }}>
+      <Typography sx={{ color: D.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>
         {label}
       </Typography>
-      <Typography sx={{ color: accent || B.white, fontSize: 16, fontWeight: 700, fontFamily: 'monospace' }}>
+      <Typography sx={{ color: accent || D.text, fontSize: 16, fontWeight: 700, fontFamily: 'monospace' }}>
         {value}
       </Typography>
       {hint && (
-        <Typography sx={{ color: B.muted, fontSize: 8.5, mt: 0.1, lineHeight: 1.25, maxWidth: 150 }}>
+        <Typography sx={{ color: D.muted, fontSize: 8.5, mt: 0.1, lineHeight: 1.25, maxWidth: 150 }}>
           {hint}
         </Typography>
       )}
@@ -1386,15 +1388,15 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
 
   return (
     <Box onClick={onClick} {...(bindProps || {})} sx={{
-      bgcolor: B.panel,
-      border: `1px solid ${selected ? B.green : B.border}`,
+      bgcolor: D.panel,
+      border: `1px solid ${selected ? D.green : D.line}`,
       borderRadius: 2,
       overflow: 'hidden',
       cursor: 'pointer',
       transition: 'all 0.15s',
-      boxShadow: selected ? `0 0 0 1px ${B.green}` : 'none',
+      boxShadow: selected ? `0 0 0 1px ${D.green}` : 'none',
       '&:hover': {
-        borderColor: B.green,
+        borderColor: D.green,
         transform: 'translateY(-2px)',
         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
       },
@@ -1403,16 +1405,16 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
           shirt mockups (portrait) fit cleanly in a 1:1 cell — and in the 2x2
           grid each cell becomes 1:2 portrait which is exactly a shirt's
           shape, so no clipping anywhere. */}
-      <Box sx={{ position: 'relative', aspectRatio: '1/1', bgcolor: B.bg, overflow: 'hidden' }}>
+      <Box sx={{ position: 'relative', aspectRatio: '1/1', bgcolor: D.bg, overflow: 'hidden' }}>
         {selectMode && (
           <Box sx={{
             position: 'absolute', top: 8, left: 8, zIndex: 3,
             width: 22, height: 22, borderRadius: '50%',
-            border: `2px solid ${selected ? B.green : 'rgba(255,255,255,0.65)'}`,
-            bgcolor: selected ? B.green : 'rgba(0,0,0,0.55)',
+            border: `2px solid ${selected ? D.green : 'rgba(255,255,255,0.65)'}`,
+            bgcolor: selected ? D.green : 'rgba(0,0,0,0.55)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {selected && <CheckIcon sx={{ fontSize: 15, color: B.greenDk }} />}
+            {selected && <CheckIcon sx={{ fontSize: 15, color: D.greenDk }} />}
           </Box>
         )}
         {attention && (attention.flag === 'possibly_late' || attention.flag === 'running_long') && (
@@ -1432,7 +1434,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
         {usingFallback && (
           <Box sx={{
             position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 2, bgcolor: 'rgba(0,0,0,0.65)', color: B.muted,
+            zIndex: 2, bgcolor: 'rgba(0,0,0,0.65)', color: D.muted,
             px: 1, py: 0.2, borderRadius: 1, fontSize: 9, fontWeight: 700,
             letterSpacing: 0.6, textTransform: 'uppercase',
           }}>
@@ -1452,7 +1454,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
           }}>
             {mockupTiles.map((t, i) => (
               <Box key={i} sx={{
-                bgcolor: B.bg, position: 'relative',
+                bgcolor: D.bg, position: 'relative',
               }}>
                 {t.item && t.item.thumbnail ? (
                   <Box component="img" src={t.item.thumbnail} alt="" loading="lazy"
@@ -1460,12 +1462,12 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
                       // Keep the full mockup visible (shirts are tall, the
                       // hero cell is squat-ish). cover was cropping the
                       // garment bottom under the PAID badge / client logo.
-                      backgroundColor: B.bg }} />
+                      backgroundColor: D.bg }} />
                 ) : (
                   <Box sx={{ width: '100%', height: '100%',
-                    bgcolor: t.item ? B.panelHi : 'rgba(251,191,36,0.05)',
+                    bgcolor: t.item ? D.panelHi : 'rgba(251,191,36,0.05)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.3 }}>
-                    <DesignServicesIcon sx={{ color: t.item ? B.muted : '#fbbf24', opacity: 0.45, fontSize: 22 }} />
+                    <DesignServicesIcon sx={{ color: t.item ? D.muted : '#fbbf24', opacity: 0.45, fontSize: 22 }} />
                     {!t.item && (
                       <Typography sx={{ color: '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5 }}>
                         NOT IN STUDIO
@@ -1480,10 +1482,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
           <Box sx={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: `linear-gradient(135deg, ${B.panel} 0%, ${B.panelHi} 100%)`,
+            background: `linear-gradient(135deg, ${D.panel} 0%, ${D.panelHi} 100%)`,
           }}>
-            <DesignServicesIcon sx={{ color: B.muted, fontSize: 36, opacity: 0.2 }} />
-            <Typography sx={{ position: 'absolute', bottom: 12, color: B.muted, fontSize: 11 }}>
+            <DesignServicesIcon sx={{ color: D.muted, fontSize: 36, opacity: 0.2 }} />
+            <Typography sx={{ position: 'absolute', bottom: 12, color: D.muted, fontSize: 11 }}>
               No mockups yet
             </Typography>
           </Box>
@@ -1493,7 +1495,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
           position: 'absolute', top: 8, left: selectMode ? 36 : 8,
           bgcolor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
           px: 1, py: 0.3, borderRadius: 1,
-          color: B.white, fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
+          color: D.text, fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
         }}>
           #{project.projectNumber || '—'}
         </Box>
@@ -1512,10 +1514,10 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
         {project.status === 'quoted' && project.optionsPickedAt && !hasConfirmation(project.confirmation) && (
           <Box sx={{
             position: 'absolute', top: 34, right: 8,
-            bgcolor: 'rgba(74,222,128,0.18)', color: B.green,
+            bgcolor: 'rgba(74,222,128,0.18)', color: D.green,
             px: 1, py: 0.3, borderRadius: 1,
             fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-            border: `1px solid ${B.green}40`,
+            border: `1px solid ${D.green}40`,
           }}>
             PICKED ✓
           </Box>
@@ -1524,7 +1526,7 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
         {project.paid ? (
           <Box sx={{
             position: 'absolute', bottom: 8, right: 8,
-            bgcolor: 'rgba(74,222,128,0.18)', color: B.green,
+            bgcolor: 'rgba(74,222,128,0.18)', color: D.green,
             px: 1, py: 0.3, borderRadius: 1,
             fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
           }}>
@@ -1550,17 +1552,17 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
 
       {/* Body */}
       <Box sx={{ p: 1.5 }}>
-        <Typography sx={{ color: B.white, fontWeight: 700, fontSize: 14, lineHeight: 1.25,
+        <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 14, lineHeight: 1.25,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {project.companyName || project.clientName || 'Untitled project'}
         </Typography>
         {project.clientName && project.companyName && project.clientName !== project.companyName && (
-          <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.1,
+          <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.1,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {project.clientName}
           </Typography>
         )}
-        <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.6,
+        <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.6,
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           {itemSummary}
@@ -1572,20 +1574,20 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
               stored totalValue scalar, which can lag if the confirmation is
               edited after approval. */}
           {(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : (Number(project.totalValue) || 0)) > 0 ? (
-            <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
+            <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
               {fmt(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : project.totalValue)}
             </Typography>
           ) : (
             // A quote is worth $0 to the pipeline until the client actually
             // picks — so show its STATE, not a fake dollar figure. (Backend
             // computeQuoteTotals gates the money on selection; this mirrors it.)
-            <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 600, fontStyle: 'italic' }}>
+            <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 600, fontStyle: 'italic' }}>
               {(project.quoteLines || []).length > 0
                 ? (project.status === 'quoted' ? 'Quote — awaiting selection' : '—')
                 : 'No quote yet'}
             </Typography>
           )}
-          <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace' }}>
             {project.orderNumber ? `INV #${project.orderNumber}` : 'no invoice'}
           </Typography>
         </Stack>
@@ -1702,12 +1704,12 @@ function NextActionCard({ project, onRun }) {
     return (
       <Box sx={{ mx: 2.5, mt: 1, mb: 0.5, px: 2, py: 1.25, borderRadius: 1.5,
         bgcolor: done ? 'rgba(74,222,128,0.08)' : 'rgba(156,163,175,0.08)',
-        border: `1px solid ${done ? 'rgba(74,222,128,0.3)' : B.border}`,
+        border: `1px solid ${done ? 'rgba(74,222,128,0.3)' : D.line}`,
         display: 'flex', alignItems: 'center', gap: 1 }}>
         {done
-          ? <CheckCircleIcon sx={{ color: B.green, fontSize: 18 }} />
-          : <RadioButtonUncheckedIcon sx={{ color: B.muted, fontSize: 18 }} />}
-        <Typography sx={{ color: done ? B.green : B.muted, fontSize: 12, fontWeight: 700 }}>
+          ? <CheckCircleIcon sx={{ color: D.green, fontSize: 18 }} />
+          : <RadioButtonUncheckedIcon sx={{ color: D.muted, fontSize: 18 }} />}
+        <Typography sx={{ color: done ? D.green : D.muted, fontSize: 12, fontWeight: 700 }}>
           {done ? 'Delivered — this project is complete.' : 'Cancelled — no action needed.'}
         </Typography>
       </Box>
@@ -1721,10 +1723,10 @@ function NextActionCard({ project, onRun }) {
           <Typography sx={{ color: next.tone, fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>
             Next step · {meta.label}
           </Typography>
-          <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 800, mt: 0.2, lineHeight: 1.2 }}>
+          <Typography sx={{ color: D.text, fontSize: 14, fontWeight: 800, mt: 0.2, lineHeight: 1.2 }}>
             {next.verb}
           </Typography>
-          <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.3, lineHeight: 1.4 }}>
+          <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.3, lineHeight: 1.4 }}>
             {next.why}
           </Typography>
         </Box>
@@ -1830,23 +1832,23 @@ function PreorderSection({ order, authHdr, onToast }) {
   const updV = (i, vi, patch) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, variants: (x.variants || []).map((v, k) => (k === vi ? { ...v, ...patch } : v)) } : x)));
   const delV = (i, vi) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, variants: (x.variants || []).filter((_, k) => k !== vi) } : x)));
 
-  const tf = { '& .MuiInputBase-root': { color: B.white, fontSize: 12, bgcolor: B.bg }, '& fieldset': { borderColor: `${B.border} !important` } };
+  const tf = { '& .MuiInputBase-root': { color: D.text, fontSize: 12, bgcolor: D.bg }, '& fieldset': { borderColor: `${D.line} !important` } };
   return (
     <Box sx={{ px: 2.5, pb: 2 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+        <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
           Preorder commitments{links && links.length ? ` · ${links.length}` : ''}
         </Typography>
         {!creating && (
           <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={openCreate}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+            sx={{ color: D.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
             New preorder link
           </Button>
         )}
       </Stack>
 
       {creating && (
-        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.5, mb: 1 }}>
+        <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, p: 1.5, mb: 1 }}>
           <Stack gap={1}>
             <TextField size="small" fullWidth value={title} onChange={(e) => setTitle(e.target.value)}
               placeholder="Title the client's people will see" sx={tf} />
@@ -1855,14 +1857,14 @@ function PreorderSection({ order, authHdr, onToast }) {
             <TextField size="small" fullWidth value={pickup} onChange={(e) => setPickup(e.target.value)}
               placeholder="Pickup location (optional) — store name + address" sx={tf} />
             {rows.map((r, i) => (
-              <Box key={i} sx={{ border: `1px solid ${B.faint}`, borderRadius: 1, p: 1 }}>
+              <Box key={i} sx={{ border: `1px solid ${D.line}`, borderRadius: 1, p: 1 }}>
                 <Stack direction="row" gap={1}>
                   <TextField size="small" fullWidth value={r.label} placeholder="Item — e.g. Staff tee, 3-color front"
                     onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} sx={tf} />
                   <TextField size="small" value={r.sizes} placeholder="Sizes (blank = none)" sx={{ ...tf, width: 150, flexShrink: 0 }}
                     onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, sizes: e.target.value } : x)))} />
                   <Button size="small" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} disabled={rows.length === 1}
-                    sx={{ color: B.muted, minWidth: 30, fontSize: 14 }}>✕</Button>
+                    sx={{ color: D.muted, minWidth: 30, fontSize: 14 }}>✕</Button>
                 </Stack>
                 {/* Brands & pricing (optional) — each brand its own customer price + colors */}
                 <Box sx={{ pl: 0.5, mt: (r.variants || []).length ? 0.75 : 0.25 }}>
@@ -1874,29 +1876,29 @@ function PreorderSection({ order, authHdr, onToast }) {
                         inputProps={{ min: 0, step: '0.01' }} onChange={(e) => updV(i, vi, { price: e.target.value })} />
                       <TextField size="small" value={v.colors} placeholder="Colors (comma sep)" sx={{ ...tf, width: 150, flexShrink: 0 }}
                         onChange={(e) => updV(i, vi, { colors: e.target.value })} />
-                      <Button size="small" onClick={() => delV(i, vi)} sx={{ color: B.muted, minWidth: 24, fontSize: 13 }}>✕</Button>
+                      <Button size="small" onClick={() => delV(i, vi)} sx={{ color: D.muted, minWidth: 24, fontSize: 13 }}>✕</Button>
                     </Stack>
                   ))}
-                  <Button size="small" onClick={() => addV(i)} sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none' }}>+ brand / price</Button>
+                  <Button size="small" onClick={() => addV(i)} sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none' }}>+ brand / price</Button>
                 </Box>
               </Box>
             ))}
             <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
               <Button size="small" onClick={() => setRows((rs) => [...rs, { label: '', sizes: 'S, M, L, XL, 2XL', variants: [] }])}
-                sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>+ item</Button>
+                sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>+ item</Button>
               <Box sx={{ flex: 1 }} />
-              <Typography sx={{ color: B.muted, fontSize: 11 }} title="Minimum units for the drop to be a go. The public hype bar stays hidden until it's passed, then reveals as social proof. 0 = no minimum.">MOQ</Typography>
+              <Typography sx={{ color: D.muted, fontSize: 11 }} title="Minimum units for the drop to be a go. The public hype bar stays hidden until it's passed, then reveals as social proof. 0 = no minimum.">MOQ</Typography>
               <TextField size="small" type="number" value={moq} onChange={(e) => setMoq(e.target.value)}
                 sx={{ ...tf, width: 64 }} inputProps={{ min: 0 }} />
-              <Typography sx={{ color: B.muted, fontSize: 11 }}>Expires in</Typography>
+              <Typography sx={{ color: D.muted, fontSize: 11 }}>Expires in</Typography>
               <TextField size="small" type="number" value={days} onChange={(e) => setDays(e.target.value)}
                 sx={{ ...tf, width: 64 }} inputProps={{ min: 0 }} />
-              <Typography sx={{ color: B.muted, fontSize: 11 }}>days (0 = never)</Typography>
+              <Typography sx={{ color: D.muted, fontSize: 11 }}>days (0 = never)</Typography>
             </Stack>
             <Stack direction="row" gap={1} justifyContent="flex-end">
-              <Button size="small" onClick={() => setCreating(false)} sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>Cancel</Button>
+              <Button size="small" onClick={() => setCreating(false)} sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>Cancel</Button>
               <Button size="small" onClick={create} disabled={busy}
-                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, fontSize: 11, textTransform: 'none', px: 1.5,
+                sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, fontSize: 11, textTransform: 'none', px: 1.5,
                   '&:hover': { bgcolor: '#3bd070' } }}>
                 {busy ? 'Creating…' : 'Create + copy link'}
               </Button>
@@ -1906,7 +1908,7 @@ function PreorderSection({ order, authHdr, onToast }) {
       )}
 
       {links === null ? null : links.length === 0 && !creating ? (
-        <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
+        <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: D.muted, fontSize: 11 }}>
           No preorder links yet — mint one and the client's people commit to
           quantities (never payments) before you place the run.
         </Box>
@@ -1916,50 +1918,50 @@ function PreorderSection({ order, authHdr, onToast }) {
             const itemLabel = new Map((l.items || []).map((it) => [it.id, it.label]));
             const isOpen = l.open;
             return (
-              <Box key={l._id} sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.25 }}>
+              <Box key={l._id} sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, p: 1.25 }}>
                 <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                  <Typography sx={{ color: isOpen ? B.green : B.muted, fontSize: 13, lineHeight: 1 }}>●</Typography>
-                  <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 140 }} noWrap>{l.title}</Typography>
-                  <Typography sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                  <Typography sx={{ color: isOpen ? D.green : D.muted, fontSize: 13, lineHeight: 1 }}>●</Typography>
+                  <Typography sx={{ color: D.text, fontSize: 12, fontWeight: 700, flex: 1, minWidth: 140 }} noWrap>{l.title}</Typography>
+                  <Typography sx={{ color: D.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
                     {l.tally.people} in · {l.tally.totalQty} units
                     {l.tally.revenue > 0 && (
-                      <Box component="span" sx={{ color: B.green, fontWeight: 700 }}>{' · '}${Math.round(l.tally.revenue).toLocaleString()}</Box>
+                      <Box component="span" sx={{ color: D.green, fontWeight: 700 }}>{' · '}${Math.round(l.tally.revenue).toLocaleString()}</Box>
                     )}
                     {l.moq > 0 && (
                       <Box component="span" title="Minimum for the drop to be a go. The public hype bar reveals once this is passed."
-                        sx={{ color: l.tally.totalQty >= l.moq ? B.green : '#fbbf24', fontWeight: 700 }}>
+                        sx={{ color: l.tally.totalQty >= l.moq ? D.green : '#fbbf24', fontWeight: 700 }}>
                         {' · '}{l.tally.totalQty >= l.moq ? `MOQ ✓ (${l.moq})` : `${l.tally.totalQty}/${l.moq} to MOQ`}
                       </Box>
                     )}
                     {isOpen && l.expiresAt ? ` · until ${new Date(l.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : (isOpen ? '' : ' · closed')}
                   </Typography>
                   <Button size="small" onClick={() => copyClient(l)} title="The professional link you send your client (organizer view + the customer link to share)"
-                    sx={{ color: B.green, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Client link</Button>
+                    sx={{ color: D.green, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Client link</Button>
                   <Button size="small" onClick={() => copyCustomer(l)} title="The fun commit page your client shares with their customers"
-                    sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Customer link</Button>
-                  <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? B.green : B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
+                    sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Customer link</Button>
+                  <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? D.green : D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
                     {l.revokedAt ? 'Reopen' : 'Close'}
                   </Button>
                   <Button size="small" onClick={() => setExpanded(expanded === l._id ? '' : l._id)}
-                    sx={{ color: B.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
+                    sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
                     {expanded === l._id ? 'Hide' : 'Tally'}
                   </Button>
                 </Stack>
                 {expanded === l._id && (
-                  <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${B.faint}` }}>
+                  <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${D.line}` }}>
                     {l.tally.totalQty === 0 ? (
-                      <Typography sx={{ color: B.muted, fontSize: 11 }}>No commitments yet.</Typography>
+                      <Typography sx={{ color: D.muted, fontSize: 11 }}>No commitments yet.</Typography>
                     ) : (
                       <Stack gap={0.5}>
                         {Object.entries(l.tally.byItem).map(([itemId, t]) => (
-                          <Typography key={itemId} sx={{ color: B.white, fontSize: 11 }}>
+                          <Typography key={itemId} sx={{ color: D.text, fontSize: 11 }}>
                             <b>{itemLabel.get(itemId) || 'Item'}</b> — {t.qty} units
-                            <Box component="span" sx={{ color: B.muted }}>
+                            <Box component="span" sx={{ color: D.muted }}>
                               {' '}({Object.entries(t.bySize).map(([s, q]) => `${s} ${q}`).join(' · ')})
                             </Box>
                           </Typography>
                         ))}
-                        <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.25 }}>
+                        <Typography sx={{ color: D.muted, fontSize: 10.5, mt: 0.25 }}>
                           {(l.commitments || []).slice(-8).reverse().map((c) => `${c.name} (${c.qty}${c.size ? ` ${c.size}` : ''})`).join(' · ')}
                           {(l.commitments || []).length > 8 ? ' · …' : ''}
                         </Typography>
@@ -2306,14 +2308,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 
   return (
     <Drawer anchor="right" open={open} onClose={handleClose}
-      PaperProps={{ sx: { bgcolor: B.bg, color: B.white, width: { xs: '100%', md: 560 }, ...scrollbar } }}>
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, width: { xs: '100%', md: 560 }, ...scrollbar } }}>
       {/* Drawer header */}
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.bg, borderBottom: `1px solid ${B.border}`,
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.bg, borderBottom: `1px solid ${D.line}`,
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <ClientLogoSlot logo={logo} companyName={local.companyName || local.clientName}
           onUpload={onUploadLogo} onRemove={onRemoveLogo} />
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', letterSpacing: 0.4 }}>
+          <Typography sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace', letterSpacing: 0.4 }}>
             PROJECT #{local.projectNumber || '—'}
             {local.orderNumber && ` · INVOICE #${local.orderNumber}`}
           </Typography>
@@ -2332,10 +2334,10 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate({ view: 'crm', companyKey: ck }); } } : undefined}
                 title={canOpen ? `Open ${displayName} in CRM` : undefined}
                 sx={{
-                  color: B.white, fontSize: 18, fontWeight: 800, mt: 0.2,
+                  color: D.text, fontSize: 18, fontWeight: 800, mt: 0.2,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   cursor: canOpen ? 'pointer' : 'default', display: 'inline-block', maxWidth: '100%',
-                  '&:hover': canOpen ? { color: B.green, textDecoration: 'underline' } : undefined,
+                  '&:hover': canOpen ? { color: D.green, textDecoration: 'underline' } : undefined,
                 }}
               >
                 {displayName}
@@ -2399,12 +2401,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             : `Profit margin (ESTIMATE) · total ${fmt(total)} − est cost ${fmt(estCogs)} · no receipts linked yet`;
           return (
             <Box title={title} sx={{ textAlign: 'right', mr: 0.4 }}>
-              <Typography sx={{ color: hasActual ? B.green : '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              <Typography sx={{ color: hasActual ? D.green : '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                 Margin · {hasActual ? 'actual' : 'est'}
               </Typography>
-              <Typography sx={{ color: ok ? B.green : '#fbbf24', fontSize: 12, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
+              <Typography sx={{ color: ok ? D.green : '#fbbf24', fontSize: 12, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1 }}>
                 {fmt(margin)}
-                <Typography component="span" sx={{ color: B.muted, fontSize: 10, fontWeight: 600, ml: 0.5 }}>
+                <Typography component="span" sx={{ color: D.muted, fontSize: 10, fontWeight: 600, ml: 0.5 }}>
                   · {pct.toFixed(0)}%
                 </Typography>
               </Typography>
@@ -2416,7 +2418,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           px: 1.2, py: 0.4, borderRadius: 1, fontSize: 10, fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: 0.4,
         }}>{meta.label}</Box>
-        <IconButton onClick={handleClose} size="small" sx={{ color: B.muted }}>
+        <IconButton onClick={handleClose} size="small" sx={{ color: D.muted }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
@@ -2452,7 +2454,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           tabs on mobile, inline on desktop. */}
       <Box role="tablist" sx={{
         display: 'flex', alignItems: 'stretch', mt: 1.5,
-        borderBottom: `1px solid ${B.border}`,
+        borderBottom: `1px solid ${D.line}`,
         px: { xs: 0, md: 2.5 },
       }}>
         {[
@@ -2472,13 +2474,13 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 px: { xs: 0.5, md: 2 }, py: 1.1,
                 fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
                 textTransform: 'uppercase', whiteSpace: 'nowrap',
-                color: active ? B.green : B.muted,
+                color: active ? D.green : D.muted,
                 boxShadow: active
-                  ? `inset 0 -2px 0 0 ${B.green}`
+                  ? `inset 0 -2px 0 0 ${D.green}`
                   : 'inset 0 -2px 0 0 transparent',
                 transition: 'color 180ms ease, box-shadow 180ms ease',
-                '&:hover': { color: active ? B.green : B.white },
-                '&:focus-visible': { outline: `2px solid ${B.green}`, outlineOffset: -2 },
+                '&:hover': { color: active ? D.green : D.text },
+                '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: -2 },
               }}>
               {t.label}
             </Box>
@@ -2517,7 +2519,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                   Mockups · {tiles.length}
                 </Typography>
                 <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
@@ -2526,18 +2528,18 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       the picker to attach existing mockups. */}
                   <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                     onClick={goStudio}
-                    sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                    sx={{ color: D.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
                     New mockup
                   </Button>
                   <Button size="small" startIcon={uploadingPromo ? <JpLoader size={13} /> : <ImageOutlinedIcon sx={{ fontSize: 14 }} />}
                     onClick={() => promoInputRef.current?.click()} disabled={uploadingPromo}
                     title="Upload a promo/product mockup (grinder, lighter, ashtray) your printer made — it gets a mockup # and links here"
-                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
                     {uploadingPromo ? 'Uploading…' : 'Upload'}
                   </Button>
                   <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                     onClick={onOpenPicker}
-                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
                     {tiles.length === 0 ? 'Link' : 'Edit'}
                   </Button>
                   <input ref={promoInputRef} type="file" accept="image/*" hidden
@@ -2548,8 +2550,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                 /* One set of actions only — the header row above already has
                    "New mockup" (build in Studio) and "Upload" (promo/product
                    shot). Duplicating them here read as two different features. */
-                <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 3, px: 2,
-                  textAlign: 'center', color: B.muted, fontSize: 12 }}>
+                <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1.5, py: 3, px: 2,
+                  textAlign: 'center', color: D.muted, fontSize: 12 }}>
                   No mockups yet — <b>New mockup</b> builds one in the Mockup Lab (it auto-links here);
                   <b> Upload</b> takes a promo/product shot your printer made and files it as a numbered mockup.
                 </Box>
@@ -2571,12 +2573,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Lab` : ''}
                       sx={{
                       aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',
-                      border: `1px solid ${t.item ? B.border : 'rgba(251,191,36,0.35)'}`,
-                      bgcolor: B.panelHi, position: 'relative',
+                      border: `1px solid ${t.item ? D.line : 'rgba(251,191,36,0.35)'}`,
+                      bgcolor: D.panelHi, position: 'relative',
                       cursor: t.item ? 'pointer' : 'default',
                       transition: 'border-color 0.12s, transform 0.12s',
                       '&:hover .tile-x': { opacity: 1 },
-                      '&:hover': t.item ? { borderColor: B.green, transform: 'translateY(-1px)' } : {},
+                      '&:hover': t.item ? { borderColor: D.green, transform: 'translateY(-1px)' } : {},
                     }}>
                       {/* "Add a variation" — duplicate this mockup as a NEW one
                           (next letter, same art) linked to this project. */}
@@ -2588,9 +2590,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                           sx={{
                             position: 'absolute', top: 2, left: 2, zIndex: 1, p: 0.25,
                             opacity: 0, transition: 'opacity 0.12s',
-                            bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
-                            '&:hover': { bgcolor: B.green, color: '#06140c' },
-                            '&.Mui-disabled': { bgcolor: 'rgba(0,0,0,0.5)', color: B.muted },
+                            bgcolor: 'rgba(0,0,0,0.72)', color: D.text,
+                            '&:hover': { bgcolor: D.green, color: '#06140c' },
+                            '&.Mui-disabled': { bgcolor: 'rgba(0,0,0,0.5)', color: D.muted },
                           }}>
                           {duplicatingNum === t.num
                             ? <JpLoader size={12} />
@@ -2606,7 +2608,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                           sx={{
                             position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
                             opacity: 0, transition: 'opacity 0.12s',
-                            bgcolor: 'rgba(0,0,0,0.72)', color: B.white,
+                            bgcolor: 'rgba(0,0,0,0.72)', color: D.text,
                             '&:hover': { bgcolor: '#ef4444', color: '#fff' },
                           }}>
                           <CloseIcon sx={{ fontSize: 12 }} />
@@ -2626,8 +2628,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                       ) : (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
                           alignItems: 'center', justifyContent: 'center', gap: 0.5,
-                          bgcolor: t.item ? B.panelHi : 'rgba(251,191,36,0.04)' }}>
-                          <DesignServicesIcon sx={{ color: t.item ? B.muted : '#fbbf24', opacity: 0.5, fontSize: 22 }} />
+                          bgcolor: t.item ? D.panelHi : 'rgba(251,191,36,0.04)' }}>
+                          <DesignServicesIcon sx={{ color: t.item ? D.muted : '#fbbf24', opacity: 0.5, fontSize: 22 }} />
                           {!t.item && (
                             <Typography sx={{ color: '#fbbf24', fontSize: 8, fontWeight: 700, letterSpacing: 0.5 }}>
                               MISSING
@@ -2645,7 +2647,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                           <Box sx={{
                             position: 'absolute', bottom: 0, left: 0, right: 0,
                             bgcolor: isEdit ? 'rgba(74,222,128,0.88)' : 'rgba(0,0,0,0.7)',
-                            color: isEdit ? '#052012' : B.white,
+                            color: isEdit ? '#052012' : D.text,
                             fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
                             textAlign: 'center', py: 0.2,
                           }}
@@ -2744,7 +2746,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
             to OPEN the doc, not skim a mini-table. Each action shows a tiny
             "built / not yet" hint so the state is still legible at a glance. */}
         <Box sx={{ gridColumn: '1 / -1' }}>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.75 }}>
+          <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.75 }}>
             Documents
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
@@ -2788,21 +2790,21 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       /* Files */
       <Box sx={{ px: 2.5, pt: 2, pb: 2 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Files · {(local.files || []).length}
           </Typography>
           <Button component="label" size="small" startIcon={uploading
-            ? <CircularProgress size={12} sx={{ color: B.green }} />
+            ? <CircularProgress size={12} sx={{ color: D.green }} />
             : <AttachFileIcon sx={{ fontSize: 14 }} />}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+            sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
             Upload
             <input type="file" hidden onChange={handleUpload} />
           </Button>
         </Stack>
         {(local.files || []).map((f, i) => (
           <Stack key={i} direction="row" alignItems="center" gap={1}
-            sx={{ py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 12 }}>
-            <AttachFileIcon sx={{ fontSize: 13, color: B.muted }} />
+            sx={{ py: 0.5, borderBottom: `1px solid ${D.line}`, fontSize: 12 }}>
+            <AttachFileIcon sx={{ fontSize: 13, color: D.muted }} />
             {/* Fetched with the Authorization header, not a ?token= link —
                 the backend only reads the header (plain links always 401'd)
                 and this keeps the admin JWT out of URLs/history. */}
@@ -2825,12 +2827,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                   onToast(`Download failed: ${err.response?.data?.message || err.message}`, 'error');
                 }
               }}
-              sx={{ color: B.white, fontSize: 12, textDecoration: 'none', flex: 1,
+              sx={{ color: D.text, fontSize: 12, textDecoration: 'none', flex: 1,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                cursor: 'pointer', '&:hover': { color: B.green } }}>
+                cursor: 'pointer', '&:hover': { color: D.green } }}>
               {f.originalName || f.filename}
             </Typography>
-            <Typography sx={{ color: B.muted, fontSize: 10 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10 }}>
               {Math.round((f.size || 0) / 1024)} KB
             </Typography>
           </Stack>
@@ -2844,27 +2846,27 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           handles generating/copying the link, emailing recipients, and
           rotating the token; this panel is the drawer-side entry point. */}
       <Box sx={{ px: 2.5, pt: 2, pb: 2 }}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+        <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
           Client approval
         </Typography>
-        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, p: 1.5 }}>
-          <Typography sx={{ color: B.muted, fontSize: 11, lineHeight: 1.5, mb: 1 }}>
+        <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, p: 1.5 }}>
+          <Typography sx={{ color: D.muted, fontSize: 11, lineHeight: 1.5, mb: 1 }}>
             One shared link for everyone who needs to weigh in. Open the share
             dialog to generate or copy the link, email it to recipients, and
             see who already has it.
           </Typography>
           <Button startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
             onClick={() => onShareApproval()}
-            sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, fontSize: 11,
+            sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, fontSize: 11,
               textTransform: 'none', px: 1.5, '&:hover': { bgcolor: '#3bd070' } }}>
             Share approval link
           </Button>
           {/* How the client said they'll pay (chosen on the approval page). The
               fee is theirs; we surface it here so the owner sees it at a glance. */}
           {local.paymentMethod && (
-            <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <ReceiptLongOutlinedIcon sx={{ color: B.green, fontSize: 15 }} />
-              <Typography sx={{ color: B.white, fontSize: 11.5, fontWeight: 700 }}>
+            <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <ReceiptLongOutlinedIcon sx={{ color: D.green, fontSize: 15 }} />
+              <Typography sx={{ color: D.text, fontSize: 11.5, fontWeight: 700 }}>
                 Paying by {local.paymentMethod === 'cc' ? 'credit card (+2.99%)' : 'ACH transfer (+1%)'}
               </Typography>
             </Box>
@@ -2880,44 +2882,44 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           merged history (admin + client) lives under Files & Activity. */}
       {(() => {
         const EV_META = {
-          viewed:            { color: B.muted,   label: 'Viewed' },
-          approved:          { color: B.green,   label: 'Approved' },
+          viewed:            { color: D.muted,   label: 'Viewed' },
+          approved:          { color: D.green,   label: 'Approved' },
           requested_changes: { color: '#fbbf24', label: 'Requested changes' },
         };
         const events = [...(local.approvalEvents || [])]
           .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
         return (
           <Box sx={{ px: 2.5, pb: 2 }}>
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
               Approval events · {events.length}
             </Typography>
             {events.length === 0 ? (
-              <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5,
-                textAlign: 'center', color: B.muted, fontSize: 11 }}>
+              <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1, p: 1.5,
+                textAlign: 'center', color: D.muted, fontSize: 11 }}>
                 Nothing yet — events appear when the client opens, approves, or
                 requests changes on the shared link.
               </Box>
             ) : (
               <Stack gap={0.5}>
                 {events.slice(0, 15).map((e, i) => {
-                  const km = EV_META[e.kind] || { color: B.muted, label: e.kind || '—' };
+                  const km = EV_META[e.kind] || { color: D.muted, label: e.kind || '—' };
                   return (
                     <Box key={i} sx={{
                       display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 1, alignItems: 'start',
-                      py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 11,
+                      py: 0.5, borderBottom: `1px solid ${D.line}`, fontSize: 11,
                     }}>
                       <Box sx={{ color: km.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
                         {km.label}
                       </Box>
-                      <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                      <Box sx={{ color: D.text, fontSize: 11, whiteSpace: 'pre-wrap' }}>
                         {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
                         {(e.by || e.email) && (
-                          <Box component="span" sx={{ color: B.green, fontSize: 10, display: 'block', mt: 0.2 }}>
+                          <Box component="span" sx={{ color: D.green, fontSize: 10, display: 'block', mt: 0.2 }}>
                             {[e.by, e.email && `<${e.email}>`].filter(Boolean).join(' ')}
                           </Box>
                         )}
                       </Box>
-                      <Box sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
+                      <Box sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
                         {fmtRelative(e.at)}
                       </Box>
                     </Box>
@@ -2942,16 +2944,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       {tab === 'files' && (() => {
         const KIND_META = {
           // client-side approvalEvents
-          viewed:             { color: B.muted,   label: 'Viewed',             actor: 'client' },
-          approved:           { color: B.green,   label: 'Approved',           actor: 'client' },
+          viewed:             { color: D.muted,   label: 'Viewed',             actor: 'client' },
+          approved:           { color: D.green,   label: 'Approved',           actor: 'client' },
           requested_changes:  { color: '#fbbf24', label: 'Requested changes',  actor: 'client' },
           // admin / system activity
           created:            { color: '#60a5fa', label: 'Created',            actor: 'admin'  },
           status_changed:     { color: '#a78bfa', label: 'Status changed',     actor: 'admin'  },
-          paid_changed:       { color: B.green,   label: 'Paid changed',       actor: 'admin'  },
+          paid_changed:       { color: D.green,   label: 'Paid changed',       actor: 'admin'  },
           duplicated_from:    { color: '#60a5fa', label: 'Cloned',             actor: 'admin'  },
           file_uploaded:      { color: '#2dd4bf', label: 'File uploaded',      actor: 'admin'  },
-          mockups_linked:     { color: B.green,   label: 'Mockup linked',      actor: 'admin'  },
+          mockups_linked:     { color: D.green,   label: 'Mockup linked',      actor: 'admin'  },
         };
         const merged = [
           ...(local.activity || []).map(e => ({ ...e, source: 'activity' })),
@@ -2961,33 +2963,33 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         if (merged.length === 0) return null;
         return (
         <Box sx={{ px: 2.5, pb: 2 }}>
-          <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+          <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
             Activity · {merged.length}
           </Typography>
           <Stack gap={0.5}>
             {merged.slice(0, 15).map((e, i) => {
-              const km = KIND_META[e.kind] || { color: B.muted, label: e.kind || '—', actor: e.actor || 'admin' };
+              const km = KIND_META[e.kind] || { color: D.muted, label: e.kind || '—', actor: e.actor || 'admin' };
               const actorTag = (e.actor || km.actor) === 'client' ? '· client' : '';
               return (
                 <Box key={i} sx={{
                   display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 1, alignItems: 'start',
-                  py: 0.5, borderBottom: `1px solid ${B.faint}`, fontSize: 11,
+                  py: 0.5, borderBottom: `1px solid ${D.line}`, fontSize: 11,
                 }}>
                   <Box>
                     <Box sx={{ color: km.color, fontWeight: 700, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' }}>
                       {km.label}
                     </Box>
-                    {actorTag && <Box sx={{ color: B.muted, fontSize: 9, fontStyle: 'italic' }}>{actorTag}</Box>}
+                    {actorTag && <Box sx={{ color: D.muted, fontSize: 9, fontStyle: 'italic' }}>{actorTag}</Box>}
                   </Box>
-                  <Box sx={{ color: B.white, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                  <Box sx={{ color: D.text, fontSize: 11, whiteSpace: 'pre-wrap' }}>
                     {e.message || (e.kind === 'viewed' ? 'Client opened the approval page' : '—')}
                     {(e.by || e.email) && (
-                      <Box component="span" sx={{ color: B.green, fontSize: 10, display: 'block', mt: 0.2 }}>
+                      <Box component="span" sx={{ color: D.green, fontSize: 10, display: 'block', mt: 0.2 }}>
                         {[e.by, e.email && `<${e.email}>`].filter(Boolean).join(' ')}
                       </Box>
                     )}
                   </Box>
-                  <Box sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
+                  <Box sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace', textAlign: 'right' }}>
                     {fmtRelative(e.at)}
                   </Box>
                 </Box>
@@ -3003,26 +3005,26 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
       <Box sx={{ flex: 1 }} />
 
       {/* Footer actions — visible on every tab */}
-      <Box sx={{ position: 'sticky', bottom: 0, bgcolor: B.bg, borderTop: `1px solid ${B.border}`,
+      <Box sx={{ position: 'sticky', bottom: 0, bgcolor: D.bg, borderTop: `1px solid ${D.line}`,
         px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 1 }}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
+        <Typography sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
           Updated {fmtRelative(local.updatedAt)}
         </Typography>
         {/* Open Quote · Confirmation · POs — the three docs, reachable from every
             tab (the Overview tab also lists them inline under "Documents"). */}
         <Button startIcon={<RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={() => onOpenQuote()}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
           Quote
         </Button>
         <Button startIcon={<DescriptionOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={() => onOpenConfirmation()}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
           Confirmation
         </Button>
         <Button startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
           onClick={() => setPoOpen(true)}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
           POs
         </Button>
         {/* Reorder — clone this job into a fresh quote (same items + mockups). Only
@@ -3031,7 +3033,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
         {project.status === 'delivered' && (
           <Button startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
             onClick={() => onReorder && onReorder()}
-            sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+            sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
             Reorder
           </Button>
         )}
@@ -3053,14 +3055,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
 function DocAction({ icon, label, hint, ready, onClick }) {
   return (
     <Button onClick={onClick} startIcon={icon}
-      sx={{ flex: 1, justifyContent: 'flex-start', textTransform: 'none', color: B.white,
-        border: `1px solid ${B.border}`, borderRadius: 1.5, px: 1.5, py: 1, gap: 0.5,
-        '&:hover': { borderColor: B.green, bgcolor: B.panelHi } }}>
+      sx={{ flex: 1, justifyContent: 'flex-start', textTransform: 'none', color: D.text,
+        border: `1px solid ${D.line}`, borderRadius: 1.5, px: 1.5, py: 1, gap: 0.5,
+        '&:hover': { borderColor: D.green, bgcolor: D.panelHi } }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
         <Typography sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{label}</Typography>
         <Stack direction="row" alignItems="center" gap={0.5}>
-          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ready ? B.green : B.muted, flexShrink: 0 }} />
-          <Typography sx={{ fontSize: 10, color: B.muted, lineHeight: 1.2 }}>{hint}</Typography>
+          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ready ? D.green : D.muted, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: 10, color: D.muted, lineHeight: 1.2 }}>{hint}</Typography>
         </Stack>
       </Box>
     </Button>
@@ -3122,11 +3124,11 @@ function SuppliersStrip({ project, authHdr, onNavigate }) {
 
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+      <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
         {suppliers.length > 1 ? `Vendors · ${suppliers.length}` : 'Vendor'}
       </Typography>
       {suppliers.length === 0 ? (
-        <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic' }}>
+        <Typography sx={{ color: D.muted, fontSize: 11, fontStyle: 'italic' }}>
           None set yet — add a printer above, or build the confirmation / POs.
         </Typography>
       ) : (
@@ -3139,10 +3141,10 @@ function SuppliersStrip({ project, authHdr, onNavigate }) {
               <Chip key={i} size="small" label={s}
                 onClick={canOpen ? () => onNavigate({ view: 'vendors', vendorName: s }) : undefined}
                 title={canOpen ? `Open ${s}` : undefined}
-                sx={{ bgcolor: B.panelHi, color: B.white, border: `1px solid ${B.border}`,
+                sx={{ bgcolor: D.panelHi, color: D.text, border: `1px solid ${D.line}`,
                   fontSize: 11, maxWidth: 220, cursor: canOpen ? 'pointer' : 'default',
                   '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
-                  '&:hover': canOpen ? { borderColor: B.green, color: B.green } : undefined }} />
+                  '&:hover': canOpen ? { borderColor: D.green, color: D.green } : undefined }} />
             );
           })}
         </Stack>
@@ -3161,8 +3163,8 @@ function InlineField({ label, value, onChange, onBlur, type = 'text', multiline 
   } : {};
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
-        {label} {savingHint && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+      <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
+        {label} {savingHint && <CircularProgress size={9} sx={{ color: D.green, ml: 0.5 }} />}
       </Typography>
       <TextField
         size="small"
@@ -3173,7 +3175,7 @@ function InlineField({ label, value, onChange, onBlur, type = 'text', multiline 
         value={v}
         onChange={e => { setV(e.target.value); onChange?.(e.target.value); }}
         onBlur={e => onBlur?.(e.target.value)}
-        sx={{ ...darkInput, ...noSpinner }}
+        sx={{ ...dropInput, ...noSpinner }}
       />
     </Box>
   );
@@ -3182,14 +3184,14 @@ function InlineField({ label, value, onChange, onBlur, type = 'text', multiline 
 function InlineSelect({ label, value, options, onChange, savingHint }) {
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
-        {label} {savingHint && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+      <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
+        {label} {savingHint && <CircularProgress size={9} sx={{ color: D.green, ml: 0.5 }} />}
       </Typography>
       <FormControl size="small" fullWidth>
         <Select value={value} onChange={e => onChange(e.target.value)} sx={{
-          ...darkInput['& .MuiOutlinedInput-root'],
-          color: B.white,
-          '& .MuiSelect-icon': { color: B.muted },
+          ...dropInput['& .MuiOutlinedInput-root'],
+          color: D.text,
+          '& .MuiSelect-icon': { color: D.muted },
         }}>
           {options.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
         </Select>
@@ -3203,14 +3205,14 @@ function InlineSelect({ label, value, options, onChange, savingHint }) {
 function ReadonlyField({ label, value, hint }) {
   return (
     <Box>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
+      <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.3 }}>
         {label}
       </Typography>
       <Box sx={{ height: 40, display: 'flex', alignItems: 'center', px: 1.5, borderRadius: 1,
-        border: `1px solid ${B.faint}`, bgcolor: 'rgba(255,255,255,0.03)' }}>
-        <Typography sx={{ color: B.white, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{value}</Typography>
+        border: `1px solid ${D.line}`, bgcolor: 'rgba(255,255,255,0.03)' }}>
+        <Typography sx={{ color: D.text, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{value}</Typography>
       </Box>
-      {hint && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, fontStyle: 'italic' }}>{hint}</Typography>}
+      {hint && <Typography sx={{ color: D.muted, fontSize: 9, mt: 0.3, fontStyle: 'italic' }}>{hint}</Typography>}
     </Box>
   );
 }
@@ -3233,19 +3235,19 @@ function ActualCostStrip({ actual, estCogs, orderNumber, active = true }) {
   // No order number → can't link receipts at all; keep the strip quiet.
   if (!orderNumber) return null;
   return (
-    <Box sx={{ borderRadius: 1.5, px: 1.5, py: 1, border: `1px solid ${has ? 'rgba(74,222,128,0.35)' : B.faint}`,
+    <Box sx={{ borderRadius: 1.5, px: 1.5, py: 1, border: `1px solid ${has ? 'rgba(74,222,128,0.35)' : D.line}`,
       bgcolor: has ? 'rgba(74,222,128,0.05)' : 'rgba(255,255,255,0.02)' }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
         <Box>
-          <Typography sx={{ color: has ? B.green : B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          <Typography sx={{ color: has ? D.green : D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
             Actual cost · from receipts
           </Typography>
           {loading ? (
-            <Typography sx={{ color: B.muted, fontSize: 13, mt: 0.2 }}>Checking receipts…</Typography>
+            <Typography sx={{ color: D.muted, fontSize: 13, mt: 0.2 }}>Checking receipts…</Typography>
           ) : has ? (
-            <Typography sx={{ color: B.white, fontSize: 16, fontWeight: 800, fontFamily: 'monospace', mt: 0.1 }}>
+            <Typography sx={{ color: D.text, fontSize: 16, fontWeight: 800, fontFamily: 'monospace', mt: 0.1 }}>
               {fmt(actualCost)}
-              <Typography component="span" sx={{ color: B.muted, fontSize: 10.5, fontWeight: 600, ml: 0.6 }}>
+              <Typography component="span" sx={{ color: D.muted, fontSize: 10.5, fontWeight: 600, ml: 0.6 }}>
                 from {actual.receiptCount} receipt{actual.receiptCount === 1 ? '' : 's'}
               </Typography>
             </Typography>
@@ -3256,18 +3258,18 @@ function ActualCostStrip({ actual, estCogs, orderNumber, active = true }) {
           ) : (
             // Not started yet (still a quote) — the estimate is all there is, so
             // don't nag about a "missing" receipt that isn't due.
-            <Typography sx={{ color: B.muted, fontSize: 12.5, fontWeight: 600, mt: 0.1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 12.5, fontWeight: 600, mt: 0.1 }}>
               Estimate — receipts get entered once this order&apos;s underway
             </Typography>
           )}
         </Box>
         <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>Est</Typography>
-          <Typography sx={{ color: B.muted, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(est)}</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>Est</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(est)}</Typography>
         </Box>
       </Stack>
       {has && est > 0 && Math.abs(variance) >= 0.005 && (
-        <Typography sx={{ fontSize: 10.5, mt: 0.5, color: variance > 0 ? '#fbbf24' : B.green }}>
+        <Typography sx={{ fontSize: 10.5, mt: 0.5, color: variance > 0 ? '#fbbf24' : D.green }}>
           {variance > 0 ? `${fmt(variance)} over estimate` : `${fmt(-variance)} under estimate`}
         </Typography>
       )}
@@ -3318,24 +3320,24 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
   return (
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-          Items {saving && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+        <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Items {saving && <CircularProgress size={9} sx={{ color: D.green, ml: 0.5 }} />}
         </Typography>
         <Button size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
           onClick={add}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
           Add line
         </Button>
       </Stack>
       {list.length === 0 ? (
-        <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: B.muted, fontSize: 11 }}>
+        <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1, p: 1.5, textAlign: 'center', color: D.muted, fontSize: 11 }}>
           No items yet. Add one to describe what&apos;s in this project.
         </Box>
       ) : (
-        <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, overflow: 'hidden' }}>
+        <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 1, overflow: 'hidden' }}>
           <Box sx={{ display: 'grid', gridTemplateColumns: '68px 1fr 28px',
-            gap: 0.5, px: 0.8, py: 0.4, bgcolor: B.panelHi,
-            fontSize: 9, fontWeight: 700, color: B.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            gap: 0.5, px: 0.8, py: 0.4, bgcolor: D.panelHi,
+            fontSize: 9, fontWeight: 700, color: D.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             <Box>Qty</Box>
             <Box>Description</Box>
             <Box />
@@ -3343,18 +3345,18 @@ function ItemsEditor({ items, onChange, onCommit, saving }) {
           {list.map((it, i) => (
             <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '68px 1fr 28px',
               gap: 0.5, alignItems: 'center', px: 0.8, py: 0.4,
-              borderTop: `1px solid ${B.faint}` }}>
+              borderTop: `1px solid ${D.line}` }}>
               <TextField size="small" type="number" value={it.qty || ''}
                 onChange={e => update(i, { qty: e.target.value })}
                 onBlur={commit}
-                sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
+                sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { color: D.text, fontSize: 12, py: 0.4, textAlign: 'right' } }} />
               <TextField size="small" value={it.description || ''}
                 onChange={e => update(i, { description: e.target.value })}
                 onBlur={commit}
                 placeholder="50 Bella+Canvas 3001, Black, screen print"
-                sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.4 } }} />
+                sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 12, py: 0.4 } }} />
               <IconButton size="small" onClick={() => remove(i)}
-                sx={{ color: B.muted, '&:hover': { color: '#f87171' } }}>
+                sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
                 <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Box>
@@ -3381,12 +3383,12 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <FactCheckOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <FactCheckOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Mockup health
         </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -3394,18 +3396,18 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
       <DialogContent sx={{ p: 2.5 }}>
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: B.green }} />
+            <CircularProgress size={24} sx={{ color: D.green }} />
           </Box>
         ) : !data ? (
-          <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12 }}>No data.</Typography>
         ) : (
           <>
             {/* Summary tiles */}
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
               <HealthStat label="Projects"     value={summary.projects} />
               <HealthStat label="Studio items" value={summary.libraryItems} />
-              <HealthStat label="Linked"       value={summary.linked}      accent={B.green} />
-              <HealthStat label="Auto-matched" value={summary.autoMatched ?? 0} accent={(summary.autoMatched ?? 0) > 0 ? B.green : undefined} />
+              <HealthStat label="Linked"       value={summary.linked}      accent={D.green} />
+              <HealthStat label="Auto-matched" value={summary.autoMatched ?? 0} accent={(summary.autoMatched ?? 0) > 0 ? D.green : undefined} />
               <HealthStat label="Missing"      value={summary.missing}     accent={summary.missing > 0 ? '#fbbf24' : undefined} />
               <HealthStat label="Orphans"      value={summary.orphans}     accent={summary.orphans > 0 ? '#60a5fa' : undefined} />
             </Box>
@@ -3414,8 +3416,8 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
             <Stack direction="row" gap={0.5} mb={1.5} flexWrap="wrap">
               {[
                 { id: 'missing',     label: `Missing (${summary.missing})`,             color: '#fbbf24' },
-                { id: 'linked',      label: `Linked (${summary.linked})`,               color: B.green   },
-                { id: 'autoMatched', label: `Auto-matched (${summary.autoMatched ?? 0})`, color: B.green   },
+                { id: 'linked',      label: `Linked (${summary.linked})`,               color: D.green   },
+                { id: 'autoMatched', label: `Auto-matched (${summary.autoMatched ?? 0})`, color: D.green   },
                 { id: 'orphans',     label: `Orphans (${summary.orphans})`,             color: '#60a5fa' },
               ].map(t => {
                 const active = tab === (t.id === 'linked' ? 'matched' : t.id);
@@ -3425,9 +3427,9 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
                       px: 1.5, py: 0.6, borderRadius: 1, cursor: 'pointer',
                       fontSize: 11, fontWeight: 700,
                       bgcolor: active ? t.color : 'rgba(255,255,255,0.04)',
-                      color: active ? B.greenDk : B.muted,
+                      color: active ? D.greenDk : D.muted,
                       border: `1px solid ${active ? t.color : 'rgba(255,255,255,0.08)'}`,
-                      '&:hover': { color: active ? B.greenDk : B.white },
+                      '&:hover': { color: active ? D.greenDk : D.text },
                     }}>
                     {t.label}
                   </Box>
@@ -3436,7 +3438,7 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
             </Stack>
 
             {/* Hint */}
-            <Typography sx={{ color: B.muted, fontSize: 11, mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 11, mb: 1 }}>
               {tab === 'missing'     && 'These mockup #s are assigned to projects but don\'t exist in your jpstudio library. Open jpstudio, pick the project, and save a mockup with the matching #.'}
               {tab === 'matched'     && 'These project mockup #s are paired with a library item. Healthy state.'}
               {tab === 'autoMatched' && 'These library mockups aren\'t in any project\'s mockupNumbers list, but their client name matches a project — they auto-appear there with the green AUTO badge. Open the project drawer + hit Tidy to make the link permanent.'}
@@ -3445,26 +3447,26 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
 
             {/* List */}
             {list.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4, color: B.muted, fontSize: 12 }}>
+              <Box sx={{ textAlign: 'center', py: 4, color: D.muted, fontSize: 12 }}>
                 Nothing here. ✓
               </Box>
             ) : (
-              <Box sx={{ maxHeight: 360, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`, borderRadius: 1 }}>
+              <Box sx={{ maxHeight: 360, overflow: 'auto', ...scrollbar, border: `1px solid ${D.line}`, borderRadius: 1 }}>
                 {list.map((row, i) => (
                   <Box key={i} sx={{
                     px: 1.5, py: 0.8, display: 'flex', alignItems: 'center', gap: 1.5,
-                    fontSize: 12, borderBottom: `1px solid ${B.faint}`,
+                    fontSize: 12, borderBottom: `1px solid ${D.line}`,
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
                   }}>
-                    <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                    <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
                       {row.mockupNum || '—'}
                     </Typography>
-                    <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Typography sx={{ flex: 1, color: D.text, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {row.companyName || row.clientName || row.client || row.itemName || row.name || 'Untitled'}
                     </Typography>
                     {row.projectNumber && (
                       <Box onClick={() => onJumpToProject(row.projectNumber)}
-                        sx={{ cursor: 'pointer', color: B.green, fontSize: 10, fontWeight: 700,
+                        sx={{ cursor: 'pointer', color: D.green, fontSize: 10, fontWeight: 700,
                           fontFamily: 'monospace', '&:hover': { textDecoration: 'underline' } }}>
                         Open #{row.projectNumber}
                       </Box>
@@ -3482,11 +3484,11 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
 
 function HealthStat({ label, value, accent }) {
   return (
-    <Box sx={{ bgcolor: 'rgba(255,255,255,0.03)', border: `1px solid ${B.faint}`, borderRadius: 1, p: 1 }}>
-      <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+    <Box sx={{ bgcolor: 'rgba(255,255,255,0.03)', border: `1px solid ${D.line}`, borderRadius: 1, p: 1 }}>
+      <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
         {label}
       </Typography>
-      <Typography sx={{ color: accent || B.white, fontSize: 18, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1, mt: 0.2 }}>
+      <Typography sx={{ color: accent || D.text, fontSize: 18, fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.1, mt: 0.2 }}>
         {value}
       </Typography>
     </Box>
@@ -3505,12 +3507,12 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <AutoFixHighIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <AutoFixHighIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Auto-link library mockups
         </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -3518,44 +3520,44 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
       <DialogContent sx={{ p: 2.5 }}>
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: B.green }} />
+            <CircularProgress size={24} sx={{ color: D.green }} />
           </Box>
         ) : !data || !summary ? (
-          <Typography sx={{ color: B.muted, fontSize: 12 }}>No data.</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12 }}>No data.</Typography>
         ) : (
           <>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
               <HealthStat label="Library"        value={summary.libraryMockups} />
               <HealthStat label="Already linked" value={summary.alreadyLinked} />
-              <HealthStat label="To link"        value={summary.proposed}  accent={summary.proposed  > 0 ? B.green : undefined} />
+              <HealthStat label="To link"        value={summary.proposed}  accent={summary.proposed  > 0 ? D.green : undefined} />
               <HealthStat label="Ambiguous"      value={summary.ambiguous} accent={summary.ambiguous > 0 ? '#fbbf24' : undefined} />
               <HealthStat label="Unmatched"      value={summary.unmatched} accent={summary.unmatched > 0 ? '#60a5fa' : undefined} />
             </Box>
 
             {links.length > 0 && (
               <>
-                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
                   Will link {summary.proposed} mockup{summary.proposed === 1 ? '' : 's'} → {summary.projectsAffected} project{summary.projectsAffected === 1 ? '' : 's'}
                 </Typography>
-                <Box sx={{ maxHeight: 300, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`,
+                <Box sx={{ maxHeight: 300, overflow: 'auto', ...scrollbar, border: `1px solid ${D.line}`,
                   borderRadius: 1, mb: ambiguous.length ? 2 : 0 }}>
                   {links.map((l, i) => (
                     <Box key={i} sx={{ px: 1.5, py: 0.8, display: 'flex', alignItems: 'center', gap: 1.5,
-                      fontSize: 12, borderBottom: `1px solid ${B.faint}` }}>
-                      <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                      fontSize: 12, borderBottom: `1px solid ${D.line}` }}>
+                      <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
                         {l.mockupNum || '—'}
                       </Typography>
-                      <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Typography sx={{ flex: 1, color: D.text, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {l.itemName || 'Untitled'}
                       </Typography>
-                      <Typography sx={{ color: B.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis',
+                      <Typography sx={{ color: D.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'right' }}>
                         #{l.projectNumber} · {l.projectCompany || '—'}
                       </Typography>
                       <Box sx={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
-                        color: l.via === 'base' ? B.green : '#60a5fa',
-                        border: `1px solid ${l.via === 'base' ? B.green : '#60a5fa'}`,
+                        color: l.via === 'base' ? D.green : '#60a5fa',
+                        border: `1px solid ${l.via === 'base' ? D.green : '#60a5fa'}`,
                         borderRadius: 0.5, px: 0.5, py: 0.1, whiteSpace: 'nowrap' }}>
                         {l.via === 'base' ? 'batch #' : 'name'}
                       </Box>
@@ -3570,18 +3572,18 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
                 <Typography sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
                   {ambiguous.length} ambiguous — link these by hand
                 </Typography>
-                <Box sx={{ maxHeight: 160, overflow: 'auto', ...scrollbar, border: `1px solid ${B.border}`, borderRadius: 1 }}>
+                <Box sx={{ maxHeight: 160, overflow: 'auto', ...scrollbar, border: `1px solid ${D.line}`, borderRadius: 1 }}>
                   {ambiguous.map((a, i) => (
-                    <Box key={i} sx={{ px: 1.5, py: 0.8, fontSize: 12, borderBottom: `1px solid ${B.faint}` }}>
+                    <Box key={i} sx={{ px: 1.5, py: 0.8, fontSize: 12, borderBottom: `1px solid ${D.line}` }}>
                       <Stack direction="row" alignItems="center" gap={1.5}>
-                        <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
+                        <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
                           {a.mockupNum || '—'}
                         </Typography>
-                        <Typography sx={{ flex: 1, color: B.white, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography sx={{ flex: 1, color: D.text, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {a.itemName || 'Untitled'}
                         </Typography>
                       </Stack>
-                      <Typography sx={{ color: B.muted, fontSize: 10, mt: 0.3 }}>
+                      <Typography sx={{ color: D.muted, fontSize: 10, mt: 0.3 }}>
                         Matches: {(a.candidates || []).map(c => `#${c.projectNumber} ${c.companyName}`).join(' · ')}
                       </Typography>
                     </Box>
@@ -3591,7 +3593,7 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
             )}
 
             {links.length === 0 && ambiguous.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 4, color: B.muted, fontSize: 12 }}>
+              <Box sx={{ textAlign: 'center', py: 4, color: D.muted, fontSize: 12 }}>
                 Nothing to link — every library mockup is already attached. ✓
               </Box>
             )}
@@ -3599,11 +3601,11 @@ function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
         )}
       </DialogContent>
       <DialogActions sx={{ px: 2.5, pb: 2 }}>
-        <Button onClick={onClose} sx={{ color: B.muted }} disabled={applying}>Close</Button>
+        <Button onClick={onClose} sx={{ color: D.muted }} disabled={applying}>Close</Button>
         <Button onClick={onApply} variant="contained"
           disabled={applying || loading || !summary || summary.proposed === 0}
-          sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700 }}>
-          {applying ? <CircularProgress size={16} sx={{ color: B.greenDk }} />
+          sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700 }}>
+          {applying ? <CircularProgress size={16} sx={{ color: D.greenDk }} />
             : `Apply${summary && summary.proposed ? ` · ${summary.proposed}` : ''}`}
         </Button>
       </DialogActions>
@@ -3643,24 +3645,24 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
     : kind === 'requested_changes'
       ? `Changes requested${status.by ? ` by ${status.by}` : ''}`
       : 'Awaiting review';
-  const statusColor = kind === 'approved' ? B.green : kind === 'requested_changes' ? '#fbbf24' : B.muted;
+  const statusColor = kind === 'approved' ? D.green : kind === 'requested_changes' ? '#fbbf24' : D.muted;
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <LinkIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Share approval link</Typography>
+        <LinkIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>Share approval link</Typography>
         <IconButton size="small" onClick={onClose} disabled={busy}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>
         {loading ? (
-          <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
+          <Box sx={{ textAlign: 'center', py: 5 }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>
         ) : (
           <>
-            <Typography sx={{ color: B.muted, fontSize: 12, mb: 2 }}>
+            <Typography sx={{ color: D.muted, fontSize: 12, mb: 2 }}>
               One shared link for everyone who needs to weigh in — send it to as many people as you like.
               They all see the same page, and the first approval (or change request) locks it in.
             </Typography>
@@ -3672,14 +3674,14 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
 
             {url && (
               <>
-                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.5 }}>
+                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.5 }}>
                   Shared link
                 </Typography>
                 <Stack direction="row" gap={1} sx={{ mb: 0.5 }}>
                   <TextField fullWidth value={url} InputProps={{ readOnly: true }} onFocus={e => e.target.select()}
-                    sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, fontFamily: 'monospace', py: 0.7 } }} />
+                    sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 12, fontFamily: 'monospace', py: 0.7 } }} />
                   <Button variant="contained" onClick={copy}
-                    sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}>
+                    sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}>
                     {copied ? 'Copied ✓' : 'Copy'}
                   </Button>
                 </Stack>
@@ -3687,7 +3689,7 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
                     works even after they've approved. */}
                 <Button onClick={() => window.open(`${url}&preview=1`, '_blank', 'noopener')}
                   startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
-                  sx={{ color: B.green, fontSize: 12, textTransform: 'none', fontWeight: 700, px: 0.5, mb: 1 }}>
+                  sx={{ color: D.green, fontSize: 12, textTransform: 'none', fontWeight: 700, px: 0.5, mb: 1 }}>
                   Preview as client
                 </Button>
                 {/* Post-approval the link IS the client's tracking page — the
@@ -3695,57 +3697,57 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
                     7-day TTL copy would be a lie (and scare the owner into
                     rotating a link the client is actively tracking on). */}
                 {kind === 'approved' ? (
-                  <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
+                  <Typography sx={{ color: D.muted, fontSize: 11, mb: 2 }}>
                     Approved — this link is now the client's live tracking page. It stays
                     working until a week after you mark the order delivered; the day limit
                     no longer applies.
                   </Typography>
                 ) : expiresAt && (
-                  <Typography sx={{ color: B.muted, fontSize: 11, mb: 2 }}>
+                  <Typography sx={{ color: D.muted, fontSize: 11, mb: 2 }}>
                     Works until {new Date(expiresAt).toLocaleString()}.
                   </Typography>
                 )}
               </>
             )}
 
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 1, mb: 0.5 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 1, mb: 0.5 }}>
               Email it to one or more people
             </Typography>
             <TextField fullWidth multiline minRows={2} value={emails || ''}
               placeholder="client@company.com, partner@company.com"
               onChange={e => setEmails(e.target.value)}
-              sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13 } }} />
+              sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13 } }} />
             <Stack direction="row" alignItems="center" gap={1.5} sx={{ mt: 1.5, flexWrap: 'wrap' }}>
               <Button variant="contained" disabled={busy || !String(emails || '').trim()} onClick={onSend}
-                startIcon={busy ? <CircularProgress size={14} sx={{ color: B.greenDk }} /> : <SendIcon sx={{ fontSize: 16 }} />}
-                sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none' }}>
+                startIcon={busy ? <CircularProgress size={14} sx={{ color: D.greenDk }} /> : <SendIcon sx={{ fontSize: 16 }} />}
+                sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, textTransform: 'none' }}>
                 Send
               </Button>
               {/* TTL only matters pre-approval; after approval the tracking
                   grace governs and a day-count here would mislead. */}
               {kind !== 'approved' && (
                 <Stack direction="row" alignItems="center" gap={0.5}>
-                  <Typography sx={{ color: B.muted, fontSize: 12 }}>Live for</Typography>
+                  <Typography sx={{ color: D.muted, fontSize: 12 }}>Live for</Typography>
                   <TextField type="number" size="small" value={ttl} onChange={e => setTtl(e.target.value)}
                     inputProps={{ min: 1, max: 365 }}
-                    sx={{ width: 64, ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.5, textAlign: 'right' } }} />
-                  <Typography sx={{ color: B.muted, fontSize: 12 }}>days</Typography>
+                    sx={{ width: 64, ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.5, textAlign: 'right' } }} />
+                  <Typography sx={{ color: D.muted, fontSize: 12 }}>days</Typography>
                 </Stack>
               )}
             </Stack>
 
-            {notice && <Typography sx={{ color: B.green, fontSize: 12, mt: 1.5 }}>{notice}</Typography>}
+            {notice && <Typography sx={{ color: D.green, fontSize: 12, mt: 1.5 }}>{notice}</Typography>}
             {err && <Typography sx={{ color: '#f87171', fontSize: 12, mt: 1.5 }}>{err}</Typography>}
 
             {recipients.length > 0 && (
               <Box sx={{ mt: 2 }}>
-                <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
+                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
                   Already sent to ({recipients.length})
                 </Typography>
                 <Stack gap={0.3}>
                   {recipients.map((r, i) => (
                     <Stack key={i} direction="row" justifyContent="space-between" alignItems="center"
-                      sx={{ fontSize: 12, color: B.white, borderBottom: `1px solid ${B.faint}`, py: 0.35 }}>
+                      sx={{ fontSize: 12, color: D.text, borderBottom: `1px solid ${D.line}`, py: 0.35 }}>
                       <span>{r.email}</span>
                       <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
                         {r.sentAt ? new Date(r.sentAt).toLocaleDateString() : ''}
@@ -3756,13 +3758,13 @@ function ShareApprovalDialog({ state, setTtl, setEmails, onClose, onSend, onStar
               </Box>
             )}
 
-            <Box sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${B.faint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${D.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Button onClick={onStartFresh} disabled={busy}
-                sx={{ color: B.muted, fontSize: 11, textTransform: 'none', '&:hover': { color: '#f87171', bgcolor: 'transparent' } }}>
+                sx={{ color: D.muted, fontSize: 11, textTransform: 'none', '&:hover': { color: '#f87171', bgcolor: 'transparent' } }}>
                 Start a fresh link
               </Button>
               <Button onClick={onClose} disabled={busy}
-                sx={{ color: B.muted, textTransform: 'none', fontSize: 12 }}>
+                sx={{ color: D.muted, textTransform: 'none', fontSize: 12 }}>
                 Done
               </Button>
             </Box>
@@ -3794,7 +3796,7 @@ function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
         <Box onClick={trigger} title={`Replace ${companyName} logo`}
           sx={{
             width: 44, height: 44, p: 0.5, borderRadius: 1, cursor: 'pointer',
-            bgcolor: '#fff', border: `1px solid ${B.border}`,
+            bgcolor: '#fff', border: `1px solid ${D.line}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', position: 'relative',
             '&:hover .logo-overlay': { opacity: 1 },
@@ -3803,15 +3805,15 @@ function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
             sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           <Box className="logo-overlay" sx={{
             position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.55)',
-            color: B.white, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+            color: D.text, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: 0, transition: 'opacity 0.12s',
           }}>{busy ? '…' : 'REPLACE'}</Box>
           <IconButton size="small" onClick={(e) => { e.stopPropagation(); onRemove(); }}
             sx={{
-              position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: B.bg,
-              color: '#f87171', border: `1px solid ${B.border}`,
-              '&:hover': { bgcolor: B.bg, color: '#f87171' },
+              position: 'absolute', top: -8, right: -8, p: 0.2, bgcolor: D.bg,
+              color: '#f87171', border: `1px solid ${D.line}`,
+              '&:hover': { bgcolor: D.bg, color: '#f87171' },
             }}>
             <CloseIcon sx={{ fontSize: 11 }} />
           </IconButton>
@@ -3820,11 +3822,11 @@ function ClientLogoSlot({ logo, companyName, onUpload, onRemove }) {
         <Box onClick={trigger} title={`Add logo for ${companyName || 'this company'}`}
           sx={{
             width: 44, height: 44, borderRadius: 1, cursor: 'pointer',
-            border: `1px dashed ${B.border}`, bgcolor: 'rgba(255,255,255,0.02)',
+            border: `1px dashed ${D.line}`, bgcolor: 'rgba(255,255,255,0.02)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: B.muted, '&:hover': { borderColor: B.green, color: B.green },
+            color: D.muted, '&:hover': { borderColor: D.green, color: D.green },
           }}>
-          {busy ? <CircularProgress size={14} sx={{ color: B.green }} /> : <ImageOutlinedIcon sx={{ fontSize: 18 }} />}
+          {busy ? <CircularProgress size={14} sx={{ color: D.green }} /> : <ImageOutlinedIcon sx={{ fontSize: 18 }} />}
         </Box>
       )}
     </Box>
@@ -3844,12 +3846,12 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <InsightsOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <InsightsOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Analytics
         </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -3857,29 +3859,29 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
       <DialogContent sx={{ p: 2.5 }}>
         {loading || !data ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: B.green }} />
+            <CircularProgress size={24} sx={{ color: D.green }} />
           </Box>
         ) : (
           <>
             {/* Overall margin */}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(auto-fit, minmax(140px, 1fr))' }, gap: 1, mb: 2.5 }}>
-              <HealthStat label="Lifetime revenue" value={fmt(overall.revenue)} accent={B.green} />
+              <HealthStat label="Lifetime revenue" value={fmt(overall.revenue)} accent={D.green} />
               <HealthStat label="Lifetime COGS"    value={fmt(overall.cogs)} />
-              <HealthStat label="Profit"           value={fmt(overall.margin)} accent={overall.margin > 0 ? B.green : '#f87171'} />
-              <HealthStat label="Margin %"         value={`${overall.marginPct.toFixed(1)}%`} accent={overall.marginPct >= 30 ? B.green : '#fbbf24'} />
+              <HealthStat label="Profit"           value={fmt(overall.margin)} accent={overall.margin > 0 ? D.green : '#f87171'} />
+              <HealthStat label="Margin %"         value={`${overall.marginPct.toFixed(1)}%`} accent={overall.marginPct >= 30 ? D.green : '#fbbf24'} />
             </Box>
 
             {/* Revenue by month */}
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
               Delivered revenue · last 12 months
             </Typography>
             {maxRev === 0 ? (
-              <Box sx={{ border: `1px dashed ${B.border}`, borderRadius: 1, p: 2, textAlign: 'center', color: B.muted, fontSize: 12, mb: 2.5 }}>
+              <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1, p: 2, textAlign: 'center', color: D.muted, fontSize: 12, mb: 2.5 }}>
                 No delivered revenue in the last 12 months.
               </Box>
             ) : (
               <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.4, height: 140, mb: 0.5,
-                borderBottom: `1px solid ${B.faint}`, pb: 0.4 }}>
+                borderBottom: `1px solid ${D.line}`, pb: 0.4 }}>
                 {months.map((m, i) => {
                   const h = maxRev > 0 ? (m.revenue / maxRev) * 100 : 0;
                   return (
@@ -3891,7 +3893,7 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
                       }}>
                       {m.revenue > 0 && (
                         <Typography sx={{
-                          color: B.muted, fontSize: 8, fontWeight: 700, fontFamily: 'monospace',
+                          color: D.muted, fontSize: 8, fontWeight: 700, fontFamily: 'monospace',
                           textAlign: 'center', mb: 0.3,
                         }}>
                           {Math.round(m.revenue / 1000)}k
@@ -3899,7 +3901,7 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
                       )}
                       <Box sx={{
                         height: `${Math.max(h, m.revenue > 0 ? 2 : 0)}%`, width: '100%',
-                        bgcolor: m.revenue > 0 ? B.green : 'rgba(255,255,255,0.06)',
+                        bgcolor: m.revenue > 0 ? D.green : 'rgba(255,255,255,0.06)',
                         borderRadius: '2px 2px 0 0',
                         opacity: m.revenue > 0 ? 0.9 : 0.4,
                         transition: 'opacity 0.12s',
@@ -3912,37 +3914,37 @@ function AnalyticsDialog({ open, data, loading, onClose }) {
             )}
             <Box sx={{ display: 'flex', gap: 0.4, mb: 2.5 }}>
               {months.map((m, i) => (
-                <Box key={i} sx={{ flex: 1, textAlign: 'center', color: B.muted, fontSize: 8, fontFamily: 'monospace' }}>
+                <Box key={i} sx={{ flex: 1, textAlign: 'center', color: D.muted, fontSize: 8, fontFamily: 'monospace' }}>
                   {m.month.slice(5)}
                 </Box>
               ))}
             </Box>
 
             {/* Top clients */}
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
               Top clients · all-time delivered
             </Typography>
             {topClients.length === 0 ? (
-              <Box sx={{ color: B.muted, fontSize: 12, mb: 2.5 }}>No delivered revenue yet.</Box>
+              <Box sx={{ color: D.muted, fontSize: 12, mb: 2.5 }}>No delivered revenue yet.</Box>
             ) : (
               <Box sx={{ mb: 2.5 }}>
                 {topClients.map((c, i) => {
                   const max = topClients[0].revenue || 1;
                   const w = (c.revenue / max) * 100;
                   return (
-                    <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 90px', alignItems: 'center', gap: 1, py: 0.6, borderBottom: `1px solid ${B.faint}` }}>
+                    <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '1fr 90px', alignItems: 'center', gap: 1, py: 0.6, borderBottom: `1px solid ${D.line}` }}>
                       <Box sx={{ position: 'relative' }}>
                         <Box sx={{ position: 'absolute', inset: 0, width: `${w}%`, bgcolor: 'rgba(74,222,128,0.08)', borderRadius: 0.5 }} />
                         <Box sx={{ position: 'relative', px: 1, py: 0.4 }}>
-                          <Typography sx={{ color: B.white, fontSize: 12, fontWeight: 700 }}>
+                          <Typography sx={{ color: D.text, fontSize: 12, fontWeight: 700 }}>
                             {c.companyName || c.clientName || c.companyKey}
                           </Typography>
-                          <Typography sx={{ color: B.muted, fontSize: 10 }}>
+                          <Typography sx={{ color: D.muted, fontSize: 10 }}>
                             {c.orders} order{c.orders === 1 ? '' : 's'}
                           </Typography>
                         </Box>
                       </Box>
-                      <Box sx={{ color: B.green, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
+                      <Box sx={{ color: D.green, fontSize: 13, fontWeight: 800, fontFamily: 'monospace', textAlign: 'right' }}>
                         {fmt(c.revenue)}
                       </Box>
                     </Box>
@@ -3973,26 +3975,26 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <PeopleAltOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0,
+        <PeopleAltOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           Clients · {clients.length}
         </Typography>
         <TextField size="small" placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)}
-          sx={{ ...darkInput, width: { xs: 120, sm: 180 } }} />
+          sx={{ ...dropInput, width: { xs: 120, sm: 180 } }} />
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <DialogContent sx={{ p: 2.5 }}>
         {loading || !data ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: B.green }} />
+            <CircularProgress size={24} sx={{ color: D.green }} />
           </Box>
         ) : filtered.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 6, color: B.muted, fontSize: 12 }}>
+          <Box sx={{ textAlign: 'center', py: 6, color: D.muted, fontSize: 12 }}>
             {q ? 'No clients match.' : 'No clients yet.'}
           </Box>
         ) : (
@@ -4007,7 +4009,7 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
                     display: 'grid',
                     gridTemplateColumns: { xs: '44px 1fr', sm: '44px 1fr 80px 110px 110px 90px' },
                     alignItems: 'center', gap: 1.2, px: 1, py: 1,
-                    borderBottom: `1px solid ${B.faint}`, cursor: 'pointer',
+                    borderBottom: `1px solid ${D.line}`, cursor: 'pointer',
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
                     '& > *:nth-of-type(3)': { display: { xs: 'none', sm: 'block' } },
                     '& > *:nth-of-type(4)': { display: { xs: 'none', sm: 'block' } },
@@ -4016,54 +4018,54 @@ function ClientsDialog({ open, data, loading, logoMap, onClose, onPickClient }) 
                   }}>
                   <Box sx={{
                     width: 36, height: 36, p: 0.4, borderRadius: 1,
-                    bgcolor: logo ? '#fff' : B.panelHi, border: `1px solid ${B.faint}`,
+                    bgcolor: logo ? '#fff' : D.panelHi, border: `1px solid ${D.line}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
                   }}>
                     {logo ? (
                       <Box component="img" src={logo} alt=""
                         sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     ) : (
-                      <Typography sx={{ color: B.muted, fontSize: 14, fontWeight: 800 }}>
+                      <Typography sx={{ color: D.muted, fontSize: 14, fontWeight: 800 }}>
                         {name.charAt(0).toUpperCase()}
                       </Typography>
                     )}
                   </Box>
                   <Box>
-                    <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700,
+                    <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {name}
                     </Typography>
                     {c.clientName && c.companyName && c.clientName !== c.companyName && (
-                      <Typography sx={{ color: B.muted, fontSize: 11 }}>{c.clientName}</Typography>
+                      <Typography sx={{ color: D.muted, fontSize: 11 }}>{c.clientName}</Typography>
                     )}
                     {/* Mobile-only compact stats line */}
                     <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 1.2, mt: 0.3, fontSize: 10, fontFamily: 'monospace' }}>
-                      <Box sx={{ color: B.muted }}>{c.projectCount} proj</Box>
-                      <Box sx={{ color: B.green }}>{fmt(c.deliveredRevenue)}</Box>
+                      <Box sx={{ color: D.muted }}>{c.projectCount} proj</Box>
+                      <Box sx={{ color: D.green }}>{fmt(c.deliveredRevenue)}</Box>
                       {c.unpaidValue > 0 && <Box sx={{ color: '#fbbf24' }}>{fmt(c.unpaidValue)} unpaid</Box>}
                     </Box>
                   </Box>
                   <Box sx={{ textAlign: 'center' }}>
-                    <Typography sx={{ color: B.white, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
+                    <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
                       {c.projectCount}
                     </Typography>
-                    <Typography sx={{ color: B.muted, fontSize: 9 }}>projects</Typography>
+                    <Typography sx={{ color: D.muted, fontSize: 9 }}>projects</Typography>
                   </Box>
                   <Box sx={{ textAlign: 'right' }}>
-                    <Typography sx={{ color: B.green, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}>
+                    <Typography sx={{ color: D.green, fontSize: 12, fontWeight: 800, fontFamily: 'monospace' }}>
                       {fmt(c.deliveredRevenue)}
                     </Typography>
-                    <Typography sx={{ color: B.muted, fontSize: 9 }}>
+                    <Typography sx={{ color: D.muted, fontSize: 9 }}>
                       {c.deliveredCount} delivered
                     </Typography>
                   </Box>
                   <Box sx={{ textAlign: 'right' }}>
-                    <Typography sx={{ color: c.unpaidValue > 0 ? '#fbbf24' : B.muted, fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>
+                    <Typography sx={{ color: c.unpaidValue > 0 ? '#fbbf24' : D.muted, fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>
                       {fmt(c.unpaidValue)}
                     </Typography>
-                    <Typography sx={{ color: B.muted, fontSize: 9 }}>unpaid</Typography>
+                    <Typography sx={{ color: D.muted, fontSize: 9 }}>unpaid</Typography>
                   </Box>
-                  <Box sx={{ textAlign: 'right', color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+                  <Box sx={{ textAlign: 'right', color: D.muted, fontSize: 10, fontFamily: 'monospace' }}>
                     {fmtRelative(c.lastActivity)}
                   </Box>
                 </Box>
@@ -4103,12 +4105,12 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: B.panel,
-        borderBottom: `1px solid ${B.border}`, px: 2.5, py: 1.2,
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
+        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <CleaningServicesOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+        <CleaningServicesOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
           Cleanup
         </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -4116,19 +4118,19 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
       <DialogContent sx={{ p: 2.5 }}>
         {loading || !data ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: B.green }} />
+            <CircularProgress size={24} sx={{ color: D.green }} />
           </Box>
         ) : (
           <>
             {/* Empty projects */}
             <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-              <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+              <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
                 Empty projects · {empty.length}
               </Typography>
               {empty.length > 0 && (
                 <Stack direction="row" gap={1}>
                   <Button size="small" onClick={toggleAll}
-                    sx={{ color: B.muted, fontSize: 11, textTransform: 'none' }}>
+                    sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
                     {selectedCount === empty.length ? 'Deselect all' : 'Select all'}
                   </Button>
                   <Button size="small"
@@ -4141,11 +4143,11 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
               )}
             </Stack>
             {empty.length === 0 ? (
-              <Box sx={{ color: B.muted, fontSize: 12, mb: 3, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1, textAlign: 'center' }}>
+              <Box sx={{ color: D.muted, fontSize: 12, mb: 3, p: 1.5, border: `1px dashed ${D.line}`, borderRadius: 1, textAlign: 'center' }}>
                 Nothing empty. ✓
               </Box>
             ) : (
-              <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1, mb: 3, maxHeight: 200, overflow: 'auto', ...scrollbar }}>
+              <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 1, mb: 3, maxHeight: 200, overflow: 'auto', ...scrollbar }}>
                 {empty.map((e, i) => {
                   const checked = !!selectedIds[e._id];
                   return (
@@ -4154,24 +4156,24 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
                       sx={{
                         display: 'grid', gridTemplateColumns: '20px 80px 1fr auto',
                         gap: 1, alignItems: 'center', px: 1, py: 0.6,
-                        borderBottom: `1px solid ${B.faint}`, cursor: 'pointer',
+                        borderBottom: `1px solid ${D.line}`, cursor: 'pointer',
                         bgcolor: checked ? 'rgba(248,113,113,0.06)' : 'transparent',
                         '&:hover': { bgcolor: checked ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)' },
                       }}>
                       <Box sx={{
-                        width: 14, height: 14, border: `1.5px solid ${checked ? '#f87171' : B.muted}`,
+                        width: 14, height: 14, border: `1.5px solid ${checked ? '#f87171' : D.muted}`,
                         bgcolor: checked ? '#f87171' : 'transparent',
                         borderRadius: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {checked && <CloseIcon sx={{ color: '#fff', fontSize: 10 }} />}
                       </Box>
-                      <Typography sx={{ color: B.white, fontSize: 11, fontFamily: 'monospace' }}>
+                      <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace' }}>
                         #{e.projectNumber || '?'}
                       </Typography>
-                      <Typography sx={{ color: B.muted, fontSize: 11 }}>
+                      <Typography sx={{ color: D.muted, fontSize: 11 }}>
                         Untitled · status {e.status || '?'} · no items
                       </Typography>
-                      <Typography sx={{ color: B.muted, fontSize: 10, fontFamily: 'monospace' }}>
+                      <Typography sx={{ color: D.muted, fontSize: 10, fontFamily: 'monospace' }}>
                         {fmtRelative(e.createdAt)}
                       </Typography>
                     </Box>
@@ -4181,11 +4183,11 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
             )}
 
             {/* Company collisions */}
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
               Company name variants · {collisions.length}
             </Typography>
             {collisions.length === 0 ? (
-              <Box sx={{ color: B.muted, fontSize: 12, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1, textAlign: 'center' }}>
+              <Box sx={{ color: D.muted, fontSize: 12, p: 1.5, border: `1px dashed ${D.line}`, borderRadius: 1, textAlign: 'center' }}>
                 No accidental variants. Clients are deduped.
               </Box>
             ) : (
@@ -4194,8 +4196,8 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
                   const chosen = mergeTargets[c.companyKey] || c.variants[0].name;
                   const sources = c.variants.filter(v => v.name !== chosen);
                   return (
-                    <Box key={i} sx={{ border: `1px solid ${B.border}`, borderRadius: 1, p: 1.2 }}>
-                      <Typography sx={{ color: B.muted, fontSize: 10, mb: 0.5, fontFamily: 'monospace' }}>
+                    <Box key={i} sx={{ border: `1px solid ${D.line}`, borderRadius: 1, p: 1.2 }}>
+                      <Typography sx={{ color: D.muted, fontSize: 10, mb: 0.5, fontFamily: 'monospace' }}>
                         key: {c.companyKey} · {c.projectCount} project{c.projectCount === 1 ? '' : 's'}
                       </Typography>
                       <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
@@ -4204,23 +4206,23 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
                             label={`${v.name} · ${v.count}`}
                             onClick={() => setMergeTargets(t => ({ ...t, [c.companyKey]: v.name }))}
                             sx={{
-                              bgcolor: v.name === chosen ? B.green : 'rgba(255,255,255,0.04)',
-                              color:   v.name === chosen ? B.greenDk : B.white,
+                              bgcolor: v.name === chosen ? D.green : 'rgba(255,255,255,0.04)',
+                              color:   v.name === chosen ? D.greenDk : D.text,
                               fontWeight: v.name === chosen ? 700 : 500,
                               fontSize: 11,
                               cursor: 'pointer',
-                              '&:hover': { bgcolor: v.name === chosen ? B.green : 'rgba(255,255,255,0.08)' },
+                              '&:hover': { bgcolor: v.name === chosen ? D.green : 'rgba(255,255,255,0.08)' },
                             }}
                           />
                         ))}
                       </Stack>
                       <Stack direction="row" alignItems="center" gap={1}>
-                        <Typography sx={{ color: B.muted, fontSize: 11, flex: 1 }}>
+                        <Typography sx={{ color: D.muted, fontSize: 11, flex: 1 }}>
                           Click a name to choose canonical, then merge the rest into it.
                         </Typography>
                         {sources.map((s, j) => (
                           <Button key={j} size="small" onClick={() => onMerge(s.name, chosen)}
-                            sx={{ color: B.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
+                            sx={{ color: D.green, fontSize: 11, textTransform: 'none', fontWeight: 700 }}>
                             Merge "{s.name}" → "{chosen}"
                           </Button>
                         ))}
@@ -4235,34 +4237,34 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
                 one company, so revenue rollups double-count. Review each pair;
                 if it's really ONE job, archive the twin from its drawer (the
                 strong ones — same dollar value or a clone — are listed first). */}
-            <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 3, mb: 1 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 3, mb: 1 }}>
               Double-counted revenue suspects · {((data && data.revenueTwins) || []).length}
             </Typography>
             {((data && data.revenueTwins) || []).length === 0 ? (
-              <Typography sx={{ color: B.muted, fontSize: 12 }}>
+              <Typography sx={{ color: D.muted, fontSize: 12 }}>
                 No companies with multiple collected orders — nothing is double-counting.
               </Typography>
             ) : (
               <Stack gap={1}>
                 {(data.revenueTwins || []).map((t) => (
                   <Box key={t.companyKey} sx={{ p: 1.25, borderRadius: 1.5,
-                    border: `1px solid ${t.strong ? 'rgba(251,191,36,0.5)' : B.border}` }}>
+                    border: `1px solid ${t.strong ? 'rgba(251,191,36,0.5)' : D.line}` }}>
                     <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                      <Typography sx={{ color: B.white, fontWeight: 700, fontSize: 12.5 }}>{t.companyName}</Typography>
-                      <Typography sx={{ color: t.strong ? '#fbbf24' : B.muted, fontSize: 11 }}>
+                      <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 12.5 }}>{t.companyName}</Typography>
+                      <Typography sx={{ color: t.strong ? '#fbbf24' : D.muted, fontSize: 11 }}>
                         {t.suspicion} · counting {fmt(t.totalCounted)}
                       </Typography>
                     </Stack>
                     <Stack gap={0.25} sx={{ mt: 0.5 }}>
                       {t.orders.map((o) => (
-                        <Typography key={o._id} sx={{ color: B.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                        <Typography key={o._id} sx={{ color: D.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
                           #{o.projectNumber || o.orderNumber || o._id} · {o.status}{o.paid ? ' · paid' : ''} · {fmt(o.totalValue)}
                           {o.importedFrom ? ` · ${o.importedFrom}` : ''}
                           {o.orderDate ? ` · ${new Date(o.orderDate).toLocaleDateString()}` : ''}
                         </Typography>
                       ))}
                     </Stack>
-                    <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.5 }}>
+                    <Typography sx={{ color: D.muted, fontSize: 10.5, mt: 0.5 }}>
                       One real job? Open the newer/emptier twin in the tracker and archive it — revenue corrects instantly. A legit repeat order stays.
                     </Typography>
                   </Box>
@@ -4271,8 +4273,8 @@ function CleanupDialog({ open, data, loading, onClose, onBulkDelete, onMerge }) 
             )}
 
             {/* Manual merge for non-collision cases (different keys entirely) */}
-            <Box sx={{ mt: 3, p: 1.5, border: `1px dashed ${B.border}`, borderRadius: 1 }}>
-              <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
+            <Box sx={{ mt: 3, p: 1.5, border: `1px dashed ${D.line}`, borderRadius: 1 }}>
+              <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 1 }}>
                 Manual merge (different names, same client)
               </Typography>
               <ManualMergeForm onMerge={onMerge} />
@@ -4290,12 +4292,12 @@ function ManualMergeForm({ onMerge }) {
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
       <TextField size="small" placeholder="From (e.g. Green Gold)"
-        value={from} onChange={e => setFrom(e.target.value)} sx={{ ...darkInput, flex: 1 }} />
+        value={from} onChange={e => setFrom(e.target.value)} sx={{ ...dropInput, flex: 1 }} />
       <TextField size="small" placeholder="To (e.g. Bract House)"
-        value={to} onChange={e => setTo(e.target.value)} sx={{ ...darkInput, flex: 1 }} />
+        value={to} onChange={e => setTo(e.target.value)} sx={{ ...dropInput, flex: 1 }} />
       <Button onClick={() => { onMerge(from.trim(), to.trim()); setFrom(''); setTo(''); }}
         disabled={!from.trim() || !to.trim()}
-        sx={{ bgcolor: B.green, color: B.greenDk, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#3bd070' } }}>
+        sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#3bd070' } }}>
         Merge
       </Button>
     </Stack>
@@ -4331,40 +4333,40 @@ function TasksSection({ local, updateLocal, saveField, savingField }) {
   return (
     <Box sx={{ px: 2.5, pb: 2 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+        <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
           Tasks · {remaining}/{tasks.length}
-          {savingField === 'tasks' && <CircularProgress size={9} sx={{ color: B.green, ml: 0.5 }} />}
+          {savingField === 'tasks' && <CircularProgress size={9} sx={{ color: D.green, ml: 0.5 }} />}
         </Typography>
       </Stack>
       <Stack gap={0.4}>
         {tasks.length === 0 && (
-          <Typography sx={{ color: B.muted, fontSize: 11, fontStyle: 'italic', mb: 0.5 }}>
+          <Typography sx={{ color: D.muted, fontSize: 11, fontStyle: 'italic', mb: 0.5 }}>
             No tasks. Add one to track what's left on this project.
           </Typography>
         )}
         {tasks.map((t, i) => (
           <Stack key={i} direction="row" alignItems="center" gap={0.5}
-            sx={{ py: 0.4, borderBottom: `1px solid ${B.faint}`, fontSize: 12 }}>
+            sx={{ py: 0.4, borderBottom: `1px solid ${D.line}`, fontSize: 12 }}>
             <Box onClick={() => toggle(i)} sx={{
               width: 16, height: 16, borderRadius: 0.5, cursor: 'pointer',
-              border: `1.5px solid ${t.done ? B.green : 'rgba(255,255,255,0.3)'}`,
-              bgcolor: t.done ? B.green : 'transparent',
+              border: `1.5px solid ${t.done ? D.green : 'rgba(255,255,255,0.3)'}`,
+              bgcolor: t.done ? D.green : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: B.greenDk, fontSize: 11, fontWeight: 900, lineHeight: 1,
+              color: D.greenDk, fontSize: 11, fontWeight: 900, lineHeight: 1,
             }}>
               {t.done && '✓'}
             </Box>
-            <Box sx={{ flex: 1, color: t.done ? B.muted : B.white, fontSize: 12,
+            <Box sx={{ flex: 1, color: t.done ? D.muted : D.text, fontSize: 12,
               textDecoration: t.done ? 'line-through' : 'none' }}>
               {t.text}
             </Box>
             {t.done && t.completedAt && (
-              <Typography sx={{ color: B.muted, fontSize: 9, fontFamily: 'monospace' }}>
+              <Typography sx={{ color: D.muted, fontSize: 9, fontFamily: 'monospace' }}>
                 {fmtRelative(t.completedAt)}
               </Typography>
             )}
             <IconButton size="small" onClick={() => remove(i)}
-              sx={{ color: B.muted, p: 0.2, '&:hover': { color: '#f87171' } }}>
+              sx={{ color: D.muted, p: 0.2, '&:hover': { color: '#f87171' } }}>
               <RemoveCircleOutlineIcon sx={{ fontSize: 13 }} />
             </IconButton>
           </Stack>
@@ -4374,9 +4376,9 @@ function TasksSection({ local, updateLocal, saveField, savingField }) {
         <TextField size="small" fullWidth placeholder="New task — Enter to add"
           value={draft} onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          sx={{ ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } }} />
+          sx={{ ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 12, py: 0.5 } }} />
         <Button size="small" onClick={add} disabled={!draft.trim()}
-          sx={{ color: B.green, fontSize: 11, textTransform: 'none' }}>
+          sx={{ color: D.green, fontSize: 11, textTransform: 'none' }}>
           Add
         </Button>
       </Stack>
@@ -4403,8 +4405,8 @@ function ClientProfileSection({ client, saving, saveClient }) {
     } : {};
     return (
       <Box>
-        <Typography sx={{ color: B.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
-          {label} {saving === field && <CircularProgress size={8} sx={{ color: B.green, ml: 0.5 }} />}
+        <Typography sx={{ color: D.muted, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
+          {label} {saving === field && <CircularProgress size={8} sx={{ color: D.green, ml: 0.5 }} />}
         </Typography>
         <TextField size="small" fullWidth type={type} multiline={multiline}
           minRows={multiline ? 2 : undefined}
@@ -4414,7 +4416,7 @@ function ClientProfileSection({ client, saving, saveClient }) {
             const next = type === 'number' ? Number(e.target.value) || 0 : e.target.value;
             if (next !== client[field]) saveClient(field, next);
           }}
-          sx={{ ...darkInput, ...noSpinner, '& .MuiInputBase-input': { color: B.white, fontSize: 12, py: 0.5 } }} />
+          sx={{ ...dropInput, ...noSpinner, '& .MuiInputBase-input': { color: D.text, fontSize: 12, py: 0.5 } }} />
       </Box>
     );
   };
@@ -4423,12 +4425,12 @@ function ClientProfileSection({ client, saving, saveClient }) {
     <Box sx={{ px: 2.5, pb: 2 }}>
       <Stack direction="row" alignItems="center" gap={0.5} onClick={() => setOpen(o => !o)}
         sx={{ cursor: 'pointer', mb: open ? 1 : 0,
-          '&:hover .lbl': { color: B.white } }}>
-        <Typography className="lbl" sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          '&:hover .lbl': { color: D.text } }}>
+        <Typography className="lbl" sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
           Client profile {open ? '▾' : '▸'}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
+        <Typography sx={{ color: D.muted, fontSize: 10, fontStyle: 'italic' }}>
           Follows the company across every project
         </Typography>
       </Stack>
@@ -4608,32 +4610,32 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
   return (
     <Box sx={{ px: 2.5, pb: 2 }}>
       <Stack direction="row" alignItems="center" gap={1} mb={1}>
-        <TimelineIcon sx={{ color: B.green, fontSize: 14 }} />
-        <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+        <TimelineIcon sx={{ color: D.green, fontSize: 14 }} />
+        <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
           Client tracking
         </Typography>
         <Box sx={{ flex: 1 }} />
         {saving ? (
-          <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>Saving…</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 10, fontStyle: 'italic' }}>Saving…</Typography>
         ) : savedAt && (
-          <Typography sx={{ color: B.green, fontSize: 10 }}>Saved</Typography>
+          <Typography sx={{ color: D.green, fontSize: 10 }}>Saved</Typography>
         )}
       </Stack>
 
       {steps.length === 0 ? (
         <Box sx={{
-          border: `1px dashed ${B.faint}`, borderRadius: 1.5, p: 1.75,
+          border: `1px dashed ${D.line}`, borderRadius: 1.5, p: 1.75,
           textAlign: 'center',
         }}>
-          <Typography sx={{ color: B.muted, fontSize: 11.5, mb: 1, lineHeight: 1.5 }}>
+          <Typography sx={{ color: D.muted, fontSize: 11.5, mb: 1, lineHeight: 1.5 }}>
             No tracking timeline yet. Initialize the default steps (confirmation
             approved → arrived) — the client sees them on the same approval link
             once they approve.
           </Typography>
           <Button onClick={initDefaults} disabled={saving}
-            startIcon={saving ? <CircularProgress size={12} sx={{ color: B.greenDk }} /> : <TimelineIcon sx={{ fontSize: 14 }} />}
+            startIcon={saving ? <CircularProgress size={12} sx={{ color: D.greenDk }} /> : <TimelineIcon sx={{ fontSize: 14 }} />}
             sx={{
-              bgcolor: B.green, color: B.greenDk, fontSize: 11, fontWeight: 700,
+              bgcolor: D.green, color: D.greenDk, fontSize: 11, fontWeight: 700,
               textTransform: 'none', px: 1.5, py: 0.5,
               '&:hover': { bgcolor: '#3bd070' },
             }}>
@@ -4652,15 +4654,15 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                   gridTemplateColumns: '20px 1fr auto auto',
                   alignItems: 'center', gap: 1,
                   py: 0.6, px: 0.5,
-                  borderBottom: `1px solid ${B.faint}`,
+                  borderBottom: `1px solid ${D.line}`,
                   opacity: s.hidden ? 0.45 : 1,
                 }}>
                 {/* Tick / un-tick */}
                 <Tooltip title={done ? 'Mark not done' : 'Mark complete (sets timestamp to now)'}>
                   <IconButton onClick={() => toggleComplete(i)} size="small" sx={{ p: 0 }}>
                     {done
-                      ? <CheckCircleIcon sx={{ fontSize: 18, color: B.green }} />
-                      : <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: B.muted }} />}
+                      ? <CheckCircleIcon sx={{ fontSize: 18, color: D.green }} />
+                      : <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: D.muted }} />}
                   </IconButton>
                 </Tooltip>
 
@@ -4673,17 +4675,17 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                       if (e.key === 'Enter') { e.preventDefault(); commitLabelEdit(i); }
                       if (e.key === 'Escape') { setEditingLabelIdx(-1); setDraftLabel(''); }
                     }}
-                    sx={{ ...darkInput, '& .MuiInputBase-input': { fontSize: 12, py: 0.5, color: B.white } }} />
+                    sx={{ ...dropInput, '& .MuiInputBase-input': { fontSize: 12, py: 0.5, color: D.text } }} />
                 ) : (
                   <Box onClick={() => { setEditingLabelIdx(i); setDraftLabel(s.label || ''); }}
                     sx={{
                       cursor: 'text', fontSize: 12,
-                      color: done ? B.white : B.muted,
+                      color: done ? D.text : D.muted,
                       fontWeight: done ? 700 : 500,
                       textDecoration: s.hidden ? 'line-through' : 'none',
-                      '&:hover': { color: B.green },
+                      '&:hover': { color: D.green },
                     }}>
-                    {s.label || <em style={{ color: B.muted }}>Unlabeled</em>}
+                    {s.label || <em style={{ color: D.muted }}>Unlabeled</em>}
                   </Box>
                 )}
 
@@ -4692,8 +4694,8 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                   value={toLocalInput(s.completedAt)}
                   onChange={e => updateStep(i, { completedAt: fromLocalInput(e.target.value) })}
                   sx={{
-                    ...darkInput,
-                    '& .MuiInputBase-input': { fontSize: 10.5, py: 0.4, color: done ? B.white : B.muted, minWidth: 150 },
+                    ...dropInput,
+                    '& .MuiInputBase-input': { fontSize: 10.5, py: 0.4, color: done ? D.text : D.muted, minWidth: 150 },
                   }} />
 
                 {/* Per-row actions */}
@@ -4701,7 +4703,7 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                   <Tooltip title="Move up">
                     <span>
                       <IconButton onClick={() => moveStep(i, -1)} size="small" disabled={i === 0}
-                        sx={{ p: 0.3, color: B.muted, '&:hover': { color: B.green } }}>
+                        sx={{ p: 0.3, color: D.muted, '&:hover': { color: D.green } }}>
                         <Box component="span" sx={{ fontSize: 11, lineHeight: 1 }}>▲</Box>
                       </IconButton>
                     </span>
@@ -4709,26 +4711,26 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                   <Tooltip title="Move down">
                     <span>
                       <IconButton onClick={() => moveStep(i, 1)} size="small" disabled={i === steps.length - 1}
-                        sx={{ p: 0.3, color: B.muted, '&:hover': { color: B.green } }}>
+                        sx={{ p: 0.3, color: D.muted, '&:hover': { color: D.green } }}>
                         <Box component="span" sx={{ fontSize: 11, lineHeight: 1 }}>▼</Box>
                       </IconButton>
                     </span>
                   </Tooltip>
                   <Tooltip title={s.link ? 'Edit shipping / tracking link' : 'Attach a shipping or tracking URL'}>
                     <IconButton onClick={() => setEditingLinkIdx(editingLinkIdx === i ? -1 : i)} size="small"
-                      sx={{ p: 0.3, color: s.link ? B.green : B.muted, '&:hover': { color: B.green } }}>
+                      sx={{ p: 0.3, color: s.link ? D.green : D.muted, '&:hover': { color: D.green } }}>
                       <LinkIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title={s.hidden ? 'Show to client' : 'Hide from client (kept in your view)'}>
                     <IconButton onClick={() => toggleHidden(i)} size="small"
-                      sx={{ p: 0.3, color: s.hidden ? '#fbbf24' : B.muted, '&:hover': { color: B.green } }}>
+                      sx={{ p: 0.3, color: s.hidden ? '#fbbf24' : D.muted, '&:hover': { color: D.green } }}>
                       {s.hidden ? <VisibilityOffIcon sx={{ fontSize: 14 }} /> : <VisibilityIcon sx={{ fontSize: 14 }} />}
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Remove step">
                     <IconButton onClick={() => removeStep(i)} size="small"
-                      sx={{ p: 0.3, color: B.muted, '&:hover': { color: '#f87171' } }}>
+                      sx={{ p: 0.3, color: D.muted, '&:hover': { color: '#f87171' } }}>
                       <CloseIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Tooltip>
@@ -4742,12 +4744,12 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
                     display: 'flex', alignItems: 'center', gap: 1,
                     pl: 3.5, pr: 0.5, pb: 0.4,
                   }}>
-                    <LinkIcon sx={{ fontSize: 12, color: B.muted }} />
+                    <LinkIcon sx={{ fontSize: 12, color: D.muted }} />
                     <TextField placeholder="https://carrier.com/track/123…" size="small" fullWidth
                       value={s.link || ''}
                       onChange={e => updateStep(i, { link: e.target.value })}
                       onBlur={() => persistNow(steps)}
-                      sx={{ ...darkInput, '& .MuiInputBase-input': { fontSize: 11, py: 0.4, color: B.white } }} />
+                      sx={{ ...dropInput, '& .MuiInputBase-input': { fontSize: 11, py: 0.4, color: D.text } }} />
                   </Box>
                 )}
               </Box>
@@ -4756,11 +4758,11 @@ function TrackingPanel({ project, authHdr, onLocal, onToast }) {
           <Stack direction="row" gap={1} sx={{ pt: 0.5 }}>
             <Button onClick={addCustom}
               startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
-              sx={{ color: B.green, fontSize: 10.5, textTransform: 'none', minWidth: 0, px: 1 }}>
+              sx={{ color: D.green, fontSize: 10.5, textTransform: 'none', minWidth: 0, px: 1 }}>
               Add step
             </Button>
             <Box sx={{ flex: 1 }} />
-            <Typography sx={{ color: B.muted, fontSize: 10, fontStyle: 'italic' }}>
+            <Typography sx={{ color: D.muted, fontSize: 10, fontStyle: 'italic' }}>
               Client view auto-refreshes within a minute.
             </Typography>
           </Stack>

@@ -24,7 +24,7 @@ import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import axios from 'axios';
 import MergeTypeOutlinedIcon from '@mui/icons-material/MergeTypeOutlined';
 import config from '../../config.json';
-import { B, darkInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
+import { D, accentBar, dropInput, scrollbar, mono, money, ymd, normOrderNo, roundCents as round } from './_shared';
 import QuickbooksCard from './QuickbooksCard';
 import { confirmDialog } from './_dialog';
 import { useContextMenu } from './ContextMenu';
@@ -454,26 +454,28 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: B.bg, color: B.white,
+    <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text,
       '@keyframes jpBannerIn':  { from: { opacity: 0, transform: 'translateY(-8px)' },  to: { opacity: 1, transform: 'translateY(0)' } },
       '@keyframes jpBannerOut': { from: { opacity: 1, transform: 'translateY(0)' },     to: { opacity: 0, transform: 'translateY(-12px)' } },
       '@keyframes jpRise':      { from: { opacity: 0, transform: 'translateY(10px)' },   to: { opacity: 1, transform: 'translateY(0)' } },
       '@keyframes jpGrowX':     { from: { transform: 'scaleX(0)' }, to: { transform: 'scaleX(1)' } },
       '@keyframes jpGrowY':     { from: { transform: 'scaleY(0)' }, to: { transform: 'scaleY(1)' } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: B.panel, borderBottom: `1px solid ${B.border}`,
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: D.panel, borderBottom: `1px solid ${D.line}`,
         px: { xs: 2, md: 3 }, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+        {/* Hub accent bar — same green glow as every other Studio tool's header. */}
+        <Box sx={accentBar} />
         <Button onClick={onBack} startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />} size="small"
-          sx={{ textTransform: 'none', color: B.muted, fontWeight: 600, minWidth: 'auto', px: 1, fontSize: 12,
-            '&:hover': { color: B.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
-        <Typography sx={{ color: B.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Finances</Typography>
-        {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? B.green : B.muted }}>{busy}</Typography>}
+          sx={{ textTransform: 'none', color: D.muted, fontWeight: 600, minWidth: 'auto', px: 1, fontSize: 12,
+            '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
+        <Typography sx={{ color: D.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Finances</Typography>
+        {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? D.green : D.muted }}>{busy}</Typography>}
         {/* "Review duplicate transactions" — shown ONLY when the ledger actually has
             cross-source duplicate pairs (auto-hides at zero). One tap opens the merge
             surface; the count keeps it honest. */}
         {dedupeCount > 0 && (
           <Button onClick={() => setShowDedupe(true)} size="small" startIcon={<MergeTypeOutlinedIcon sx={{ fontSize: 16 }} />}
             title="Merge duplicate transactions left by the budget restart (preview first — reversible)"
-            sx={{ color: '#06281a', bgcolor: B.green, textTransform: 'none', fontWeight: 800, fontSize: 12, px: 1.5,
+            sx={{ color: '#06281a', bgcolor: D.green, textTransform: 'none', fontWeight: 800, fontSize: 12, px: 1.5,
               '&:hover': { bgcolor: '#3cc56f' } }}>
             Review duplicates ({dedupeCount})
           </Button>
@@ -490,10 +492,10 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
           </Button>
         )}
         <Button onClick={() => setShowAdd(true)} size="small" startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-          sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Add</Button>
+          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Add</Button>
         <FormControl size="small" sx={{ minWidth: 90 }}>
           <Select value={year} onChange={(e) => setYear(e.target.value)}
-            sx={{ color: B.white, fontSize: 13, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.04)', '& .MuiSvgIcon-root': { color: B.muted } }}>
+            sx={{ color: D.text, fontSize: 13, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.04)', '& .MuiSvgIcon-root': { color: D.muted } }}>
             {YEAR_OPTIONS.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
             <MenuItem value="">All</MenuItem>
           </Select>
@@ -505,26 +507,26 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; importCsv(f); }} />
             <IconButton size="small" title="Import JP Ledger CSV" onClick={() => fileRef.current?.click()}
-              sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
+              sx={{ color: D.muted, '&:hover': { color: D.green } }}><FileUploadOutlinedIcon fontSize="small" /></IconButton>
           </>
         )}
         <IconButton size="small" title="Export CSV" onClick={exportCsv}
-          sx={{ color: B.muted, '&:hover': { color: B.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
+          sx={{ color: D.muted, '&:hover': { color: D.green } }}><FileDownloadOutlinedIcon fontSize="small" /></IconButton>
       </Box>
 
       <Box data-ctx-chrome sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1100, mx: 'auto' }}>
         {/* QuickBooks connection — the connector for invoices/payments + pay-at-close. */}
         <Box sx={{ mb: 2.5 }}><QuickbooksCard token={token} /></Box>
         {loading ? (
-          <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: B.green }} /></Box>
+          <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>
         ) : empty ? (
-          <Box sx={{ border: '1px dashed rgba(255,255,255,0.14)', borderRadius: 3, py: 6, textAlign: 'center', color: B.muted }}>
+          <Box sx={{ border: '1px dashed rgba(255,255,255,0.14)', borderRadius: 3, py: 6, textAlign: 'center', color: D.muted }}>
             <Typography sx={{ fontSize: 13, mb: 1 }}>No transactions for {year || 'any year'} yet.</Typography>
             <Stack direction="row" gap={1} justifyContent="center">
               <Button onClick={() => fileRef.current?.click()} startIcon={<FileUploadOutlinedIcon />}
-                sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>Import ledger CSV</Button>
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700 }}>Import ledger CSV</Button>
               <Button onClick={() => setShowAdd(true)} startIcon={<AddCircleOutlineIcon />}
-                sx={{ color: B.green, textTransform: 'none', fontWeight: 700 }}>Add one</Button>
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700 }}>Add one</Button>
             </Stack>
             <Typography sx={{ fontSize: 11, mt: 1 }}>From the ledger Sheet: File → Download → CSV, then import here.</Typography>
           </Box>
@@ -539,9 +541,9 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               animation: bannerLeaving ? 'jpBannerOut 260ms ease forwards' : 'jpBannerIn 360ms cubic-bezier(.2,.7,.3,1) both' }}>
               <IconButton size="small" title="Dismiss for today"
                 onClick={() => { setBannerLeaving(true); setTimeout(() => { dismissBanner(); setBannerLeaving(false); }, 250); }}
-                sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: B.muted,
+                sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1, color: D.muted,
                   transition: 'transform 220ms ease, color 220ms ease',
-                  '&:hover': { color: B.white, transform: 'rotate(90deg) scale(1.12)' } }}>
+                  '&:hover': { color: D.text, transform: 'rotate(90deg) scale(1.12)' } }}>
                 <CloseIcon sx={{ fontSize: 15 }} />
               </IconButton>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, border: '1px solid rgba(251,191,36,0.4)',
@@ -551,7 +553,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                   <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 14 }}>
                     Merch is in the red — −{money(Math.abs(summary.net))} {year ? `in ${year}` : 'overall'}
                   </Typography>
-                  <Typography sx={{ color: B.muted, fontSize: 12 }}>
+                  <Typography sx={{ color: D.muted, fontSize: 12 }}>
                     Costs are outpacing sales this period.
                   </Typography>
                 </Box>
@@ -571,24 +573,24 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
               '& > *:nth-of-type(3)': { animationDelay: '140ms' },
               '& > *:nth-of-type(4)': { animationDelay: '210ms' },
               '& > *:nth-of-type(5)': { animationDelay: '280ms' } }}>
-              <Stat label="Revenue" value={money(summary.income)} color={B.white} sub="Recorded income · cash collected" />
+              <Stat label="Revenue" value={money(summary.income)} color={D.text} sub="Recorded income · cash collected" />
               <Stat label="Expenses" value={money(summary.expense)} color="#f87171"
                 sub={`${money(summary.cogs || 0)} order costs · ${money(summary.overhead || 0)} overhead`} />
-              <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? B.green : '#f87171'} big />
+              <Stat label="Net profit" value={money(summary.net)} color={summary.net >= 0 ? D.green : '#f87171'} big />
               <Stat label="Gross margin" value={`${pct(summary.grossMargin ?? summary.margin)}%`}
-                color={pct(summary.grossMargin ?? summary.margin) >= 0 ? B.green : '#f87171'}
+                color={pct(summary.grossMargin ?? summary.margin) >= 0 ? D.green : '#f87171'}
                 sub="on the merch — revenue vs order costs" />
               <Stat label="Net margin" value={`${pct(summary.margin)}%`}
-                color={pct(summary.margin) >= 0 ? B.green : '#f87171'}
+                color={pct(summary.margin) >= 0 ? D.green : '#f87171'}
                 sub="after monthly overhead too" />
             </Box>
             {/* Owner cash lens, demoted to a footnote (owner: profit EARNED is the
                 headline — what he took out is bookkeeping, not the story). One
                 quiet line instead of tiles that shouted TAKE-HOME. */}
             {(summary.ownerDraw > 0 || summary.ownerContribution > 0) && (
-              <Typography sx={{ color: B.muted, fontSize: 11.5, px: 0.5, lineHeight: 1.5 }}>
-                Draws so far: <Box component="span" sx={{ color: B.white, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.takeHome)}</Box>
-                {summary.ownerContribution > 0 && <> · contributed back: <Box component="span" sx={{ color: B.white, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.ownerContribution)}</Box></>}
+              <Typography sx={{ color: D.muted, fontSize: 11.5, px: 0.5, lineHeight: 1.5 }}>
+                Draws so far: <Box component="span" sx={{ color: D.text, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.takeHome)}</Box>
+                {summary.ownerContribution > 0 && <> · contributed back: <Box component="span" sx={{ color: D.text, fontFamily: 'monospace', fontWeight: 700 }}>{money(summary.ownerContribution)}</Box></>}
                 {' '}— net profit above is what you earned, whether or not you took it out.
               </Typography>
             )}
@@ -633,19 +635,19 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 
             <MonthlyTrend months={months} />
 
-            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>Where the money goes</Typography>
+            <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
+              <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.25 }}>Where the money goes</Typography>
               <Stack gap={1}>
                 {expenses.map(([cat, amt]) => {
                   const share = pct(summary.pctOfSpend?.[cat]);
                   return (
                     <Box key={cat}>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.3 }}>
-                        <Typography sx={{ color: B.white, fontSize: 12 }}>{cat}</Typography>
-                        <Typography sx={{ color: B.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {share}%</Typography>
+                        <Typography sx={{ color: D.text, fontSize: 12 }}>{cat}</Typography>
+                        <Typography sx={{ color: D.muted, fontSize: 12, fontFamily: 'monospace' }}>{money(amt)} · {share}%</Typography>
                       </Stack>
                       <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                        <Box sx={{ width: `${Math.max(0, Math.min(100, share))}%`, height: '100%', bgcolor: CAT_COLOR[cat] || B.green,
+                        <Box sx={{ width: `${Math.max(0, Math.min(100, share))}%`, height: '100%', bgcolor: CAT_COLOR[cat] || D.green,
                           transformOrigin: 'left', animation: 'jpGrowX 700ms cubic-bezier(.2,.7,.3,1) both' }} />
                       </Box>
                     </Box>
@@ -656,14 +658,14 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
 
             <TopClients clients={clients} onClient={goCompanyByKey} />
 
-            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>
+            <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
+              <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>
                 Profit by order ({orders.length})
               </Typography>
               <Box sx={{ overflowX: 'auto', ...scrollbar }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="thead">
-                    <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+                    <Box component="tr" sx={{ '& th': { color: D.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
                       <Box component="th" sx={{ textAlign: 'left !important' }}>Order</Box>
                       <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
                       <Box component="th">Revenue</Box><Box component="th">Cost</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
@@ -681,7 +683,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                       return (
                       <Box component="tr" key={o.orderNumber} onClick={() => setOpenOrder(o.orderNumber)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.035)' }, '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
-                        <Box component="td" sx={{ textAlign: 'left !important', color: canOrder ? B.green : B.muted }}>
+                        <Box component="td" sx={{ textAlign: 'left !important', color: canOrder ? D.green : D.muted }}>
                           <Box component="span"
                             onClick={canOrder ? (e) => { e.stopPropagation(); goOrder(o.orderNumber); } : undefined}
                             title={canOrder ? 'Open this order' : undefined}
@@ -689,20 +691,20 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                             #{o.orderNumber}
                           </Box>
                         </Box>
-                        <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <Box component="td" sx={{ textAlign: 'left !important', color: D.text, fontFamily: 'inherit !important', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {canClient ? (
                             <Box component="span"
                               onClick={(e) => { e.stopPropagation(); goCompanyForOrder(o.orderNumber); }}
                               title="Open this client's CRM card"
-                              sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                              sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                               {o.client}
                             </Box>
                           ) : (o.client || '—')}
                         </Box>
-                        <Box component="td" sx={{ color: B.white }}>{money(o.revenue)}</Box>
+                        <Box component="td" sx={{ color: D.text }}>{money(o.revenue)}</Box>
                         <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
-                        <Box component="td" sx={{ color: o.profit >= 0 ? B.green : '#f87171' }}>{money(o.profit)}</Box>
-                        <Box component="td" sx={{ color: pct(o.margin) >= 0 ? B.green : '#f87171' }}>{pct(o.margin)}%</Box>
+                        <Box component="td" sx={{ color: o.profit >= 0 ? D.green : '#f87171' }}>{money(o.profit)}</Box>
+                        <Box component="td" sx={{ color: pct(o.margin) >= 0 ? D.green : '#f87171' }}>{pct(o.margin)}%</Box>
                       </Box>
                       );
                     })}
@@ -712,23 +714,23 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             </Box>
 
             {/* Transactions log + receipts */}
-            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-              <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Transactions ({txns.length})</Typography>
+            <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
+              <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Transactions ({txns.length})</Typography>
               <Box sx={{ maxHeight: 460, overflowY: 'auto', ...scrollbar }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <Box component="tbody">
                     {txns.slice().reverse().map((t) => (
                       <Box component="tr" key={t._id} onClick={() => setEditTxn(t)} {...bindTxn(t)}
                         sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
-                        <Box component="td" sx={{ py: 0.6, px: 1.25, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{ymd(t.date)}</Box>
+                        <Box component="td" sx={{ py: 0.6, px: 1.25, color: D.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{ymd(t.date)}</Box>
                         <Box component="td" sx={{ py: 0.6, px: 0.5, whiteSpace: 'nowrap' }}>
                           <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
-                            color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
+                            color: t.type === 'income' ? D.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
                             {t.category}
                           </Box>
                           {t.isCredit && <CreditBadge />}
                         </Box>
-                        <Box component="td" sx={{ py: 0.6, px: 1, color: B.white, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Box component="td" sx={{ py: 0.6, px: 1, color: D.text, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {(() => {
                             // The order # on a transaction links to its order page
                             // (link #6); the party name links to that order's CRM
@@ -746,14 +748,14 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                               <Box component="span"
                                 onClick={(e) => { e.stopPropagation(); goCompanyForOrder(t.orderNumber); }}
                                 title="Open this client's CRM card"
-                                sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                                 {t.party}
                               </Box>
                             ) : canVendor ? (
                               <Box component="span"
                                 onClick={(e) => { e.stopPropagation(); goVendor(t.vendorId); }}
                                 title="Open this vendor's card"
-                                sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                                 {t.party}
                               </Box>
                             ) : (t.party || t.description);
@@ -761,7 +763,7 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                               <>
                                 {nameNode}
                                 {t.orderNumber ? (
-                                  <Box component="span" sx={{ color: canOrder ? B.green : B.muted }}> · {
+                                  <Box component="span" sx={{ color: canOrder ? D.green : D.muted }}> · {
                                     canOrder ? (
                                       <Box component="span"
                                         onClick={(e) => { e.stopPropagation(); goOrder(t.orderNumber); }}
@@ -776,12 +778,12 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                             );
                           })()}
                         </Box>
-                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', ...mono, whiteSpace: 'nowrap', color: isInflow(t) ? B.green : '#f87171' }}>
+                        <Box component="td" sx={{ py: 0.6, px: 1, textAlign: 'right', ...mono, whiteSpace: 'nowrap', color: isInflow(t) ? D.green : '#f87171' }}>
                           {isInflow(t) ? '+' : '−'}{money(t.amount)}
                         </Box>
                         <Box component="td" sx={{ py: 0.6, px: 1, width: 28, textAlign: 'center' }}>
                           {t.receiptUrl
-                            ? <a href={t.receiptUrl} target="_blank" rel="noreferrer" title="View receipt" onClick={(e) => e.stopPropagation()} style={{ color: B.green, display: 'inline-flex' }}><ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} /></a>
+                            ? <a href={t.receiptUrl} target="_blank" rel="noreferrer" title="View receipt" onClick={(e) => e.stopPropagation()} style={{ color: D.green, display: 'inline-flex' }}><ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} /></a>
                             : null}
                         </Box>
                       </Box>
@@ -854,23 +856,23 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
   const client = (rows.find((t) => t.type === 'income' && t.party) || rows.find((t) => t.party) || {}).party || '—';
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: 2 } }}>
+      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           Order #{orderNumber}{client !== '—' ? ` · ${client}` : ''}
         </Typography>
         {/* Jump out to the full surfaces — additive shortcuts beside the close X. */}
         {onOpenOrderPage && (
           <Box component="button" type="button" onClick={onOpenOrderPage}
-            sx={{ background: 'none', border: `1px solid ${B.border}`, borderRadius: 1, color: B.green, cursor: 'pointer',
-              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: B.green } }}>
+            sx={{ background: 'none', border: `1px solid ${D.line}`, borderRadius: 1, color: D.green, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: D.green } }}>
             Open order
           </Box>
         )}
         {onOpenClient && (
           <Box component="button" type="button" onClick={onOpenClient}
-            sx={{ background: 'none', border: `1px solid ${B.border}`, borderRadius: 1, color: B.green, cursor: 'pointer',
-              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: B.green } }}>
+            sx={{ background: 'none', border: `1px solid ${D.line}`, borderRadius: 1, color: D.green, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, px: 1, py: 0.4, whiteSpace: 'nowrap', '&:hover': { borderColor: D.green } }}>
             Open client
           </Box>
         )}
@@ -878,37 +880,37 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
       </Box>
       <DialogContent sx={{ p: 0 }}>
         {rows.length === 0 ? (
-          <Typography sx={{ color: B.muted, fontSize: 12, p: 2.5 }}>No transactions tagged to this order.</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12, p: 2.5 }}>No transactions tagged to this order.</Typography>
         ) : (
           <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <Box component="tbody">
               {rows.map((t) => (
                 <Box component="tr" key={t._id} onClick={() => onEditTxn && onEditTxn(t)}
-                  sx={{ borderTop: `1px solid ${B.border}`, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
-                  <Box component="td" sx={{ py: 0.7, px: 1.5, color: B.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
+                  sx={{ borderTop: `1px solid ${D.line}`, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}>
+                  <Box component="td" sx={{ py: 0.7, px: 1.5, color: D.muted, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
                     {ymd(t.date)}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 0.5, whiteSpace: 'nowrap' }}>
                     <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: 1, fontSize: 10, fontWeight: 700,
-                      color: t.type === 'income' ? B.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
+                      color: t.type === 'income' ? D.green : '#f87171', bgcolor: t.type === 'income' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)' }}>
                       {t.category}
                     </Box>
                     {t.isCredit && <CreditBadge />}
                   </Box>
-                  <Box component="td" sx={{ py: 0.7, px: 1, color: B.white, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <Box component="td" sx={{ py: 0.7, px: 1, color: D.text, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {/* Same vendor deep link as the main ledger: an expense's party
                         with a hard vendorId link opens the Vendor card. */}
                     {(onOpenVendor && t.type === 'expense' && t.vendorId && t.party) ? (
                       <Box component="span"
                         onClick={(e) => { e.stopPropagation(); onOpenVendor(t); }}
                         title="Open this vendor's card"
-                        sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                        sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                         {t.party}
                       </Box>
                     ) : (t.party || t.description || '')}
                   </Box>
                   <Box component="td" sx={{ py: 0.7, px: 1.5, textAlign: 'right', ...mono, whiteSpace: 'nowrap',
-                    color: isInflow(t) ? B.green : '#f87171' }}>
+                    color: isInflow(t) ? D.green : '#f87171' }}>
                     {isInflow(t) ? '+' : '−'}{money(t.amount)}
                   </Box>
                 </Box>
@@ -916,12 +918,12 @@ function OrderDialog({ orderNumber, txns, onClose, onEditTxn, onOpenOrderPage, o
             </Box>
           </Box>
         )}
-        <Box sx={{ borderTop: `1px solid ${B.border}`, px: 1.5, py: 1.25, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Typography sx={{ fontSize: 12, color: B.muted }}>In <Box component="span" sx={{ color: B.green, fontFamily: 'monospace' }}>{money(income)}</Box></Typography>
-          <Typography sx={{ fontSize: 12, color: B.muted }}>Out <Box component="span" sx={{ color: '#f87171', fontFamily: 'monospace' }}>{money(expense)}</Box></Typography>
-          <Typography sx={{ fontSize: 12, color: B.muted }}>Profit <Box component="span" sx={{ color: profit >= 0 ? B.green : '#f87171', fontFamily: 'monospace', fontWeight: 700 }}>{money(profit)}</Box></Typography>
+        <Box sx={{ borderTop: `1px solid ${D.line}`, px: 1.5, py: 1.25, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Typography sx={{ fontSize: 12, color: D.muted }}>In <Box component="span" sx={{ color: D.green, fontFamily: 'monospace' }}>{money(income)}</Box></Typography>
+          <Typography sx={{ fontSize: 12, color: D.muted }}>Out <Box component="span" sx={{ color: '#f87171', fontFamily: 'monospace' }}>{money(expense)}</Box></Typography>
+          <Typography sx={{ fontSize: 12, color: D.muted }}>Profit <Box component="span" sx={{ color: profit >= 0 ? D.green : '#f87171', fontFamily: 'monospace', fontWeight: 700 }}>{money(profit)}</Box></Typography>
         </Box>
-        {rows.length > 0 && <Typography sx={{ color: B.muted, fontSize: 10.5, px: 1.5, pb: 1.5 }}>Tap a line to edit it (e.g. fix a wrong date).</Typography>}
+        {rows.length > 0 && <Typography sx={{ color: D.muted, fontSize: 10.5, px: 1.5, pb: 1.5 }}>Tap a line to edit it (e.g. fix a wrong date).</Typography>}
       </DialogContent>
     </Dialog>
   );
@@ -948,16 +950,16 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
           <ErrorOutlineIcon sx={{ color: '#fbbf24' }} />
           <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 14, flex: 1 }}>Money owed to you</Typography>
         </Stack>
-        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+        <Typography sx={{ color: D.muted, fontSize: 12, pl: 4 }}>
           {noPayN > 0 && (
             <>
-              <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money(noPay)}</Box> in costs across {noPayN} order{noPayN > 1 ? 's' : ''} have no recorded client payment
+              <Box component="span" sx={{ color: D.text, fontWeight: 700 }}>{money(noPay)}</Box> in costs across {noPayN} order{noPayN > 1 ? 's' : ''} have no recorded client payment
               {owed > 0 ? '; ' : '.'}
             </>
           )}
           {owed > 0 && (
             <>
-              <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money(owed)}</Box> billed but not yet collected.
+              <Box component="span" sx={{ color: D.text, fontWeight: 700 }}>{money(owed)}</Box> billed but not yet collected.
             </>
           )}
           {' '}This isn’t in your profit yet — record the payments to close the gap.
@@ -966,7 +968,7 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
       <Box sx={{ overflowX: 'auto', ...scrollbar }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <Box component="thead">
-            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+            <Box component="tr" sx={{ '& th': { color: D.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
               <Box component="th" sx={{ textAlign: 'left !important' }}>Order</Box>
               <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
               <Box component="th">Billed</Box><Box component="th">Collected</Box><Box component="th">Cost</Box>
@@ -978,20 +980,20 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
             {rows.map((o) => (
               <Box component="tr" key={o.orderNumber}
                 sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
-                <Box component="td" sx={{ textAlign: 'left !important', color: onOpenOrder ? B.green : B.muted }}>
+                <Box component="td" sx={{ textAlign: 'left !important', color: onOpenOrder ? D.green : D.muted }}>
                   {onOpenOrder ? (
                     <Box component="span" onClick={() => onOpenOrder(o.orderNumber)} title="Open this order"
                       sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>#{o.orderNumber}</Box>
                   ) : `#${o.orderNumber}`}
                 </Box>
-                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Box component="td" sx={{ textAlign: 'left !important', color: D.text, fontFamily: 'inherit !important', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {(onOpenClient && o.client && canOpenClient && canOpenClient(o.orderNumber)) ? (
                     <Box component="span" onClick={() => onOpenClient(o.orderNumber)} title="Open this client's CRM card"
-                      sx={{ color: B.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>{o.client}</Box>
+                      sx={{ color: D.green, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>{o.client}</Box>
                   ) : (o.client || '—')}
                 </Box>
-                <Box component="td" sx={{ color: B.white }}>{o.billed ? money(o.billed) : '—'}</Box>
-                <Box component="td" sx={{ color: o.collected > 0 ? B.green : B.muted }}>{money(o.collected)}</Box>
+                <Box component="td" sx={{ color: D.text }}>{o.billed ? money(o.billed) : '—'}</Box>
+                <Box component="td" sx={{ color: o.collected > 0 ? D.green : D.muted }}>{money(o.collected)}</Box>
                 <Box component="td" sx={{ color: '#f87171' }}>{money(o.cost)}</Box>
                 <Box component="td" sx={{ textAlign: 'left !important' }}>
                   {o.costWithoutPayment
@@ -1000,7 +1002,7 @@ function PaymentGaps({ gaps, onRecord, onOpenOrder, onOpenClient, canOpenClient 
                 </Box>
                 <Box component="td">
                   <Button size="small" onClick={() => onRecord(o)}
-                    sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                    sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
                       '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Record payment</Button>
                 </Box>
               </Box>
@@ -1029,14 +1031,14 @@ function NeedsReceipts({ data, onOpenOrder, onAdd }) {
           <ReceiptLongOutlinedIcon sx={{ color: blue }} />
           <Typography sx={{ color: blue, fontWeight: 800, fontSize: 14, flex: 1 }}>Needs receipts</Typography>
         </Stack>
-        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+        <Typography sx={{ color: D.muted, fontSize: 12, pl: 4 }}>
           {rows.length} in-progress order{rows.length > 1 ? 's' : ''} {rows.length > 1 ? 'are' : 'is'} missing a cost receipt you haven’t entered yet.
         </Typography>
       </Box>
       <Box sx={{ overflowX: 'auto', ...scrollbar }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <Box component="thead">
-            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+            <Box component="tr" sx={{ '& th': { color: D.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
               <Box component="th">Order</Box>
               <Box component="th">Client</Box>
               <Box component="th">Missing</Box>
@@ -1047,13 +1049,13 @@ function NeedsReceipts({ data, onOpenOrder, onAdd }) {
             {rows.map((o) => (
               <Box component="tr" key={o.orderNumber}
                 sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, whiteSpace: 'nowrap' } }}>
-                <Box component="td" sx={{ fontFamily: 'monospace', color: onOpenOrder ? B.green : B.muted }}>
+                <Box component="td" sx={{ fontFamily: 'monospace', color: onOpenOrder ? D.green : D.muted }}>
                   {onOpenOrder ? (
                     <Box component="span" onClick={() => onOpenOrder(o.orderNumber)} title="Open this order"
                       sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>#{o.orderNumber}</Box>
                   ) : `#${o.orderNumber}`}
                 </Box>
-                <Box component="td" sx={{ color: B.white, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
+                <Box component="td" sx={{ color: D.text, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.client || '—'}</Box>
                 <Box component="td">
                   <Stack direction="row" gap={0.5} sx={{ flexWrap: 'wrap' }}>
                     {(o.missingLabels || []).map((m) => (
@@ -1065,7 +1067,7 @@ function NeedsReceipts({ data, onOpenOrder, onAdd }) {
                 <Box component="td" sx={{ textAlign: 'right' }}>
                   {onAdd && (
                     <Button size="small" onClick={() => onAdd(o)}
-                      sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                      sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
                         '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Add receipt</Button>
                   )}
                 </Box>
@@ -1101,14 +1103,14 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess, onIgnoreAll })
           <Typography sx={{ color: amber, fontWeight: 800, fontSize: 14, flex: 1 }}>Receipt inbox</Typography>
           {onIgnoreAll && reviewCount > 1 && (
             <Button size="small" onClick={onIgnoreAll}
-              sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
-                border: `1px solid ${B.border}`, borderRadius: 999, '&:hover': { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } }}>
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+                border: `1px solid ${D.line}`, borderRadius: 999, '&:hover': { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } }}>
               Ignore all {reviewCount}
             </Button>
           )}
           <Typography sx={{ ...mono, color: amber, fontWeight: 800, fontSize: 13 }}>{rows.length}</Typography>
         </Stack>
-        <Typography sx={{ color: B.muted, fontSize: 12, pl: 4 }}>
+        <Typography sx={{ color: D.muted, fontSize: 12, pl: 4 }}>
           Clean reads book themselves into the ledger automatically — these are the ones that need your eyes
           (unclear read, possible duplicate, or a refund).
         </Typography>
@@ -1116,7 +1118,7 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess, onIgnoreAll })
       <Box sx={{ overflowX: 'auto', ...scrollbar }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <Box component="thead">
-            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+            <Box component="tr" sx={{ '& th': { color: D.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'left', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
               <Box component="th">Uploaded</Box>
               <Box component="th">What the scanner read</Box>
               <Box component="th">Status</Box>
@@ -1135,18 +1137,18 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess, onIgnoreAll })
               return (
                 <Box component="tr" key={r._id}
                   sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, whiteSpace: 'nowrap' } }}>
-                  <Box component="td" sx={{ color: B.muted, fontSize: 11.5 }}>
+                  <Box component="td" sx={{ color: D.muted, fontSize: 11.5 }}>
                     {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
                   </Box>
-                  <Box component="td" sx={{ color: B.white, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <Box component="td" sx={{ color: D.text, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {r.fileUrl ? (
                       <Box component="a" href={r.fileUrl} target="_blank" rel="noreferrer"
-                        sx={{ color: B.green, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                        sx={{ color: D.green, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
                         {r.fileName || 'receipt'}
                       </Box>
                     ) : (r.fileName || 'receipt')}
                     {readBits && (
-                      <Box component="span" sx={{ color: B.muted, ml: 0.75, fontSize: 11.5 }}>— {readBits}</Box>
+                      <Box component="span" sx={{ color: D.muted, ml: 0.75, fontSize: 11.5 }}>— {readBits}</Box>
                     )}
                   </Box>
                   <Box component="td">
@@ -1157,15 +1159,15 @@ function ReceiptInbox({ receipts, onBook, onDismiss, onReprocess, onIgnoreAll })
                   </Box>
                   <Box component="td" sx={{ textAlign: 'right' }}>
                     <Button size="small" onClick={() => onBook(r)}
-                      sx={{ color: B.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                      sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
                         '&:hover': { bgcolor: 'rgba(74,222,128,0.08)' } }}>Book</Button>
                     {r.status === 'failed' && (
                       <Button size="small" onClick={() => onReprocess(r)}
-                        sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
-                          '&:hover': { color: B.white } }}>Re-read</Button>
+                        sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                          '&:hover': { color: D.text } }}>Re-read</Button>
                     )}
                     <Button size="small" onClick={() => onDismiss(r)}
-                      sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
+                      sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 'auto', px: 1,
                         '&:hover': { color: '#f87171' } }}>Ignore</Button>
                   </Box>
                 </Box>
@@ -1205,13 +1207,13 @@ function BookReceiptDialog({ receipt, categories = CATEGORIES, onClose, onBook }
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, border: `1px solid ${B.border}`, borderRadius: 2, backgroundImage: 'none' } }}>
-      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <ReceiptLongOutlinedIcon sx={{ color: B.green, fontSize: 18 }} />
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>Book receipt</Typography>
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, backgroundImage: 'none' } }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <ReceiptLongOutlinedIcon sx={{ color: D.green, fontSize: 18 }} />
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>Book receipt</Typography>
         {receipt.fileUrl && (
           <Button component="a" href={receipt.fileUrl} target="_blank" rel="noreferrer" size="small"
-            sx={{ color: B.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, '&:hover': { color: B.green } }}>
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, '&:hover': { color: D.green } }}>
             View file ↗
           </Button>
         )}
@@ -1221,35 +1223,35 @@ function BookReceiptDialog({ receipt, categories = CATEGORIES, onClose, onBook }
         <Stack gap={1.5}>
           <Stack direction="row" gap={1}>
             <FormControl size="small" fullWidth>
-              <Select value={type} onChange={(e) => setType(e.target.value)} sx={darkInput}>
+              <Select value={type} onChange={(e) => setType(e.target.value)} sx={dropInput}>
                 <MenuItem value="expense">Expense</MenuItem>
                 <MenuItem value="income">Income</MenuItem>
               </Select>
             </FormControl>
             <FormControl size="small" fullWidth>
               <Select value={categories.includes(category) ? category : 'Other'}
-                onChange={(e) => setCategory(e.target.value)} sx={darkInput}>
+                onChange={(e) => setCategory(e.target.value)} sx={dropInput}>
                 {categories.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
               </Select>
             </FormControl>
           </Stack>
           <TextField size="small" label="Who (vendor / payer)" value={party}
-            onChange={(e) => setParty(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+            onChange={(e) => setParty(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
           <Stack direction="row" gap={1}>
             <TextField size="small" label="Amount" type="number" value={amount} autoFocus={!Number(amount)}
-              onChange={(e) => setAmount(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+              onChange={(e) => setAmount(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
             <TextField size="small" label="Date" type="date" value={date}
-              onChange={(e) => setDate(e.target.value)} sx={darkInput} InputLabelProps={{ shrink: true, sx: { color: B.muted } }} />
+              onChange={(e) => setDate(e.target.value)} sx={dropInput} InputLabelProps={{ shrink: true, sx: { color: D.muted } }} />
           </Stack>
           <TextField size="small" label="Order # (optional — links it to the job)" value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+            onChange={(e) => setOrderNumber(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
           <TextField size="small" label="Note" value={summary} multiline minRows={2}
-            onChange={(e) => setSummary(e.target.value)} sx={darkInput} InputLabelProps={{ sx: { color: B.muted } }} />
+            onChange={(e) => setSummary(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
           <Stack direction="row" gap={1} justifyContent="flex-end">
-            <Button onClick={onClose} sx={{ color: B.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={onClose} sx={{ color: D.muted, textTransform: 'none', fontWeight: 700 }}>Cancel</Button>
             <Button onClick={submit} disabled={!canBook} startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
-              sx={{ bgcolor: canBook ? B.green : 'rgba(255,255,255,0.08)', color: canBook ? '#08130c' : B.muted,
-                textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: B.green, opacity: 0.9 } }}>
+              sx={{ bgcolor: canBook ? D.green : 'rgba(255,255,255,0.08)', color: canBook ? '#08130c' : D.muted,
+                textTransform: 'none', fontWeight: 800, px: 2, '&:hover': { bgcolor: D.green, opacity: 0.9 } }}>
               {saving ? 'Booking…' : 'Book it'}
             </Button>
           </Stack>
@@ -1270,12 +1272,12 @@ function MonthlyTrend({ months }) {
   // "Jan" bars don't read as one confusing jumble.
   const multiYear = new Set(months.map((m) => String(m.month).split('-')[0])).size > 1;
   return (
-    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'rgba(255,255,255,0.02)' }}>
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
-        <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly trend</Typography>
+        <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly trend</Typography>
         <Stack direction="row" gap={1.5}>
           <Legend color="rgba(255,255,255,0.22)" label="Revenue" />
-          <Legend color={B.green} label="Profit" />
+          <Legend color={D.green} label="Profit" />
         </Stack>
       </Stack>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', overflowX: 'auto', ...scrollbar, pb: 0.5 }}>
@@ -1290,10 +1292,10 @@ function MonthlyTrend({ months }) {
               <Box sx={{ height: 92, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 0.5 }}>
                 <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.22)', height: `${Math.max(2, (inc / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45}ms` }} />
-                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: net >= 0 ? B.green : '#f87171', height: `${Math.max(2, (Math.abs(net) / max) * 100)}%`,
+                <Box sx={{ width: 9, borderRadius: 0.5, bgcolor: net >= 0 ? D.green : '#f87171', height: `${Math.max(2, (Math.abs(net) / max) * 100)}%`,
                   transformOrigin: 'bottom', animation: 'jpGrowY 460ms ease both', animationDelay: `${mi * 45 + 60}ms` }} />
               </Box>
-              <Typography sx={{ fontSize: 9.5, color: B.muted, mt: 0.4, whiteSpace: 'nowrap' }}>{label}</Typography>
+              <Typography sx={{ fontSize: 9.5, color: D.muted, mt: 0.4, whiteSpace: 'nowrap' }}>{label}</Typography>
             </Box>
           );
         })}
@@ -1306,7 +1308,7 @@ function Legend({ color, label }) {
   return (
     <Stack direction="row" gap={0.5} alignItems="center">
       <Box sx={{ width: 9, height: 9, borderRadius: 0.5, bgcolor: color }} />
-      <Typography sx={{ fontSize: 10, color: B.muted }}>{label}</Typography>
+      <Typography sx={{ fontSize: 10, color: D.muted }}>{label}</Typography>
     </Stack>
   );
 }
@@ -1314,12 +1316,12 @@ function Legend({ color, label }) {
 function TopClients({ clients, onClient }) {
   if (!clients || clients.length === 0) return null;
   return (
-    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
-      <Typography sx={{ color: B.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Top clients ({clients.length})</Typography>
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.02)' }}>
+      <Typography sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, px: 1.5, pt: 1.25, pb: 0.5 }}>Top clients ({clients.length})</Typography>
       <Box sx={{ overflowX: 'auto', ...scrollbar }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <Box component="thead">
-            <Box component="tr" sx={{ '& th': { color: B.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
+            <Box component="tr" sx={{ '& th': { color: D.muted, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', textAlign: 'right', py: 0.75, px: 1.25, whiteSpace: 'nowrap' } }}>
               <Box component="th" sx={{ textAlign: 'left !important' }}>Client</Box>
               <Box component="th">Orders</Box><Box component="th">Revenue</Box><Box component="th">Profit</Box><Box component="th">Margin</Box>
             </Box>
@@ -1327,18 +1329,18 @@ function TopClients({ clients, onClient }) {
           <Box component="tbody">
             {clients.slice(0, 20).map((c) => (
               <Box component="tr" key={c.client} sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', '& td': { py: 0.7, px: 1.25, textAlign: 'right', ...mono, whiteSpace: 'nowrap' } }}>
-                <Box component="td" sx={{ textAlign: 'left !important', color: B.white, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Box component="td" sx={{ textAlign: 'left !important', color: D.text, fontFamily: 'inherit !important', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {c.companyKey && onClient ? (
                     <Box component="span" onClick={() => onClient(c.companyKey)}
-                      sx={{ cursor: 'pointer', borderBottom: '1px dotted rgba(255,255,255,0.35)', '&:hover': { color: B.green, borderBottomColor: B.green } }}>
+                      sx={{ cursor: 'pointer', borderBottom: '1px dotted rgba(255,255,255,0.35)', '&:hover': { color: D.green, borderBottomColor: D.green } }}>
                       {c.client}
                     </Box>
                   ) : c.client}
                 </Box>
-                <Box component="td" sx={{ color: B.muted }}>{c.orders}</Box>
-                <Box component="td" sx={{ color: B.white }}>{money(c.revenue)}</Box>
-                <Box component="td" sx={{ color: c.profit >= 0 ? B.green : '#f87171' }}>{money(c.profit)}</Box>
-                <Box component="td" sx={{ color: pct(c.margin) >= 0 ? B.green : '#f87171' }}>{pct(c.margin)}%</Box>
+                <Box component="td" sx={{ color: D.muted }}>{c.orders}</Box>
+                <Box component="td" sx={{ color: D.text }}>{money(c.revenue)}</Box>
+                <Box component="td" sx={{ color: c.profit >= 0 ? D.green : '#f87171' }}>{money(c.profit)}</Box>
+                <Box component="td" sx={{ color: pct(c.margin) >= 0 ? D.green : '#f87171' }}>{pct(c.margin)}%</Box>
               </Box>
             ))}
           </Box>
@@ -1423,7 +1425,7 @@ function ManageCategoriesDialog({ categories = [], custom = [], onAdd, onRemove,
             value={name} onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
             inputProps={{ maxLength: 40 }}
-            sx={darkInput} />
+            sx={dropInput} />
           <Button onClick={add} disabled={busy || !name.trim()}
             sx={{ px: 2, fontWeight: 700, textTransform: 'none', color: '#4ade80',
               border: '1px solid rgba(74,222,128,0.4)', borderRadius: 2,
@@ -1577,17 +1579,17 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
     try { await onSave(form); } catch (e) { setErr(e.response?.data?.message || e.message); setSaving(false); }
   };
 
-  const fld = { ...darkInput, '& .MuiInputBase-input': { color: B.white, fontSize: 13, py: 0.9 } };
-  const sel = { color: B.white, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: B.muted } };
+  const fld = { ...dropInput, '& .MuiInputBase-input': { color: D.text, fontSize: 13, py: 0.9 } };
+  const sel = { color: D.text, fontSize: 13, borderRadius: 1.5, '& .MuiSvgIcon-root': { color: D.muted } };
   const hasReceipt = !!(txn && txn.receiptUrl);
   // A refund is currently being entered (income credit) — the dialog reflects it.
   const isRefundMode = type === 'income' && isCredit;
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth
-      PaperProps={{ sx: { bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`, borderRadius: 2 } }}>
-      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${B.border}`, display: 'flex', alignItems: 'center' }}>
-        <Typography sx={{ color: B.white, fontWeight: 800, fontSize: 14, flex: 1 }}>
+      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: 2 } }}>
+      <Box sx={{ px: 2.5, py: 1.2, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
           {edit ? 'Edit transaction' : isRefundMode ? 'Record a refund' : 'Add transaction'}
         </Typography>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -1607,7 +1609,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
           {isRefundMode && (
             <Box sx={{ border: '1px solid rgba(251,113,133,0.4)', bgcolor: 'rgba(251,113,133,0.07)', borderRadius: 1.5, px: 1.25, py: 0.85 }}>
               <Typography sx={{ color: '#fb7185', fontWeight: 700, fontSize: 12 }}>Customer refund</Typography>
-              <Typography sx={{ color: B.muted, fontSize: 10.5, lineHeight: 1.35 }}>
+              <Typography sx={{ color: D.muted, fontSize: 10.5, lineHeight: 1.35 }}>
                 Money back to a client — this lowers the order&apos;s revenue and profit. Enter the amount refunded and the order&nbsp;#.
               </Typography>
             </Box>
@@ -1674,7 +1676,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
                   <TextField {...params} size="small" placeholder="Vendor" sx={fld} />
                 )}
                 componentsProps={{ paper: { sx: {
-                  bgcolor: B.panel, color: B.white, border: `1px solid ${B.border}`,
+                  bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`,
                   '& .MuiAutocomplete-option': { '&[aria-selected="true"], &.Mui-focused': { bgcolor: 'rgba(74,222,128,0.10)' } },
                 } } }}
               />
@@ -1691,10 +1693,10 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
               this order. Only on a real client payment (income · Client Sales, not
               a refund). The fee is previewed live so the owner sees what's deducted. */}
           {isClientPayment && (
-            <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 1.5, px: 1.25, py: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
+            <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 1.5, px: 1.25, py: 1, bgcolor: 'rgba(255,255,255,0.02)' }}>
               <Stack direction="row" alignItems="center" gap={0.75} sx={{ mb: 0.75 }}>
-                <CreditCardOutlinedIcon sx={{ fontSize: 15, color: B.muted }} />
-                <Typography sx={{ fontSize: 11, fontWeight: 700, color: B.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>How was it paid?</Typography>
+                <CreditCardOutlinedIcon sx={{ fontSize: 15, color: D.muted }} />
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: D.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>How was it paid?</Typography>
               </Stack>
               <FormControl size="small" sx={{ ...fld, width: '100%' }}>
                 <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} sx={sel}>
@@ -1702,14 +1704,14 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
                 </Select>
               </FormControl>
               {feeAmount > 0 ? (
-                <Typography sx={{ color: B.muted, fontSize: 11, mt: 0.75 }}>
+                <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.75 }}>
                   Processing fee <Box component="span" sx={{ color: '#f87171', fontWeight: 700 }}>{money(feeAmount)}</Box>
                   {' '}({(feeRate * 100).toFixed(2)}%) will be booked as a cost on
-                  {orderNumber ? <> order <Box component="span" sx={{ color: B.white }}>#{String(orderNumber).replace(/[^0-9]/g, '')}</Box></> : ' this order'}.
-                  Net into the business: <Box component="span" sx={{ color: B.white, fontWeight: 700 }}>{money((Number(amount) || 0) - feeAmount)}</Box>.
+                  {orderNumber ? <> order <Box component="span" sx={{ color: D.text }}>#{String(orderNumber).replace(/[^0-9]/g, '')}</Box></> : ' this order'}.
+                  Net into the business: <Box component="span" sx={{ color: D.text, fontWeight: 700 }}>{money((Number(amount) || 0) - feeAmount)}</Box>.
                 </Typography>
               ) : (
-                <Typography sx={{ color: B.muted, fontSize: 10.5, mt: 0.75 }}>
+                <Typography sx={{ color: D.muted, fontSize: 10.5, mt: 0.75 }}>
                   No processor fee (cash, check, or a waived fee). Pick CC/ACH to auto-book the merchant fee.
                 </Typography>
               )}
@@ -1720,41 +1722,41 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
               of looking like a charge/sale. */}
           <Box onClick={() => setIsCredit((v) => !v)}
             sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none',
-              border: `1px solid ${isCredit ? 'rgba(251,191,36,0.55)' : B.border}`, borderRadius: 1.5, px: 1.25, py: 0.5,
+              border: `1px solid ${isCredit ? 'rgba(251,191,36,0.55)' : D.line}`, borderRadius: 1.5, px: 1.25, py: 0.5,
               bgcolor: isCredit ? 'rgba(251,191,36,0.08)' : 'transparent', transition: 'border-color 160ms ease, background 160ms ease' }}>
             <Box sx={{ width: 15, height: 15, borderRadius: 0.5, flexShrink: 0,
-              border: `2px solid ${isCredit ? '#fbbf24' : B.muted}`, bgcolor: isCredit ? '#fbbf24' : 'transparent',
+              border: `2px solid ${isCredit ? '#fbbf24' : D.muted}`, bgcolor: isCredit ? '#fbbf24' : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 160ms ease' }}>
               {isCredit && <CheckIcon sx={{ fontSize: 11, color: '#1a1206' }} />}
             </Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 700, color: isCredit ? '#fbbf24' : B.white, whiteSpace: 'nowrap' }}>Credit / return</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: isCredit ? '#fbbf24' : D.text, whiteSpace: 'nowrap' }}>Credit / return</Typography>
             {isCredit && (
-              <Typography sx={{ fontSize: 10.5, color: B.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Typography sx={{ fontSize: 10.5, color: D.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 · {type === 'income' ? 'refund out (lowers revenue)' : 'credit in (lowers cost)'}
               </Typography>
             )}
           </Box>
           {hasReceipt && !receiptDataUrl && (
-            <a href={txn.receiptUrl} target="_blank" rel="noreferrer" style={{ color: B.green, fontSize: 12, textDecoration: 'none' }}>
+            <a href={txn.receiptUrl} target="_blank" rel="noreferrer" style={{ color: D.green, fontSize: 12, textDecoration: 'none' }}>
               View attached receipt ↗
             </a>
           )}
           <Button component="label" disabled={scanning}
-            startIcon={scanning ? <CircularProgress size={14} sx={{ color: B.green }} /> : <ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
-            sx={{ color: receiptName ? B.green : B.muted, textTransform: 'none', justifyContent: 'flex-start', fontSize: 12, border: `1px dashed ${B.border}`, borderRadius: 1.5, py: 0.75 }}>
+            startIcon={scanning ? <CircularProgress size={14} sx={{ color: D.green }} /> : <ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ color: receiptName ? D.green : D.muted, textTransform: 'none', justifyContent: 'flex-start', fontSize: 12, border: `1px dashed ${D.line}`, borderRadius: 1.5, py: 0.75 }}>
             {scanning ? 'Reading receipt…' : (receiptName || (hasReceipt ? 'Replace receipt' : 'Attach receipt / invoice (image or PDF)'))}
             <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => pickReceipt(e.target.files?.[0])} />
           </Button>
-          {scanNote && <Typography sx={{ color: B.green, fontSize: 11 }}>{scanNote}</Typography>}
+          {scanNote && <Typography sx={{ color: D.green, fontSize: 11 }}>{scanNote}</Typography>}
           {scanErr && <Typography sx={{ color: '#fbbf24', fontSize: 11, opacity: 0.9 }}>{scanErr}</Typography>}
           {err && <Typography sx={{ color: '#fbbf24', fontSize: 11 }}>{err}</Typography>}
           <Stack direction="row" justifyContent="flex-end" gap={1} alignItems="center">
             {edit && onDelete && (
               <Button size="small" onClick={onDelete} sx={{ color: '#f87171', textTransform: 'none', mr: 'auto', '&:hover': { bgcolor: 'rgba(248,113,113,0.08)' } }}>Delete</Button>
             )}
-            <Button size="small" onClick={onClose} sx={{ color: B.muted, textTransform: 'none' }}>Cancel</Button>
+            <Button size="small" onClick={onClose} sx={{ color: D.muted, textTransform: 'none' }}>Cancel</Button>
             <Button size="small" variant="contained" disabled={saving || scanning} onClick={save}
-              sx={{ bgcolor: B.green, color: B.greenDk, textTransform: 'none', fontWeight: 800, '&:hover': { bgcolor: B.green } }}>
+              sx={{ bgcolor: D.green, color: D.greenDk, textTransform: 'none', fontWeight: 800, '&:hover': { bgcolor: D.green } }}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </Stack>
@@ -1766,10 +1768,10 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
 
 function Stat({ label, value, color, big, sub }) {
   return (
-    <Box sx={{ border: `1px solid ${B.border}`, borderRadius: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
-      <Typography sx={{ color: B.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</Typography>
+    <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.02)' }}>
+      <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</Typography>
       <Typography sx={{ color, fontSize: big ? 24 : 19, fontWeight: 800, fontFamily: 'monospace', mt: 0.25 }}>{value}</Typography>
-      {sub && <Typography sx={{ color: B.muted, fontSize: 9, mt: 0.3, lineHeight: 1.3 }}>{sub}</Typography>}
+      {sub && <Typography sx={{ color: D.muted, fontSize: 9, mt: 0.3, lineHeight: 1.3 }}>{sub}</Typography>}
     </Box>
   );
 }
