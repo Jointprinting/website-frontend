@@ -100,9 +100,30 @@ const CAT_COLOR = {
 // (supplier credit) is money IN. Drives the +/− sign and colour in the ledger.
 const isInflow = (t) => (t.type === 'income') !== !!t.isCredit;
 
-// Brand accents for the recurring-revenue split (mirror of utils/brands.js /
-// BrandCube — the two subscription brands). Keep the hexes in sync.
-const FIN_BRAND_ACCENT = { webworks: '#54a6ff', atom: '#9e82ff' };
+// Brand accents (mirror of utils/brands.js / BrandCube). Keep the hexes in sync.
+const FIN_BRAND_ACCENT = { contact: '#4ade80', webworks: '#54a6ff', atom: '#9e82ff' };
+
+// P&L by brand — the brand-tagged ledger's split (income/net per brand), from
+// summary.byBrand. Only shown once more than one brand has activity, so a shop
+// that's all Joint Printing doesn't see a panel that just repeats the headline.
+function BrandPnlPanel({ byBrand }) {
+  const rows = (byBrand || []).filter((b) => b.income || b.expense);
+  if (rows.length < 2) return null;
+  return (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+      <Typography sx={{ color: D.green, fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', mb: 1 }}>P&amp;L by brand</Typography>
+      {rows.map((b) => (
+        <Stack key={b.brand} direction="row" alignItems="center" spacing={1}
+          sx={{ py: 0.65, borderTop: `1px solid ${D.line}`, '&:first-of-type': { borderTop: 'none' } }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: FIN_BRAND_ACCENT[b.brand] || D.green, flexShrink: 0 }} />
+          <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, flex: 1 }}>{b.label || b.brand}</Typography>
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 11, minWidth: 84, textAlign: 'right' }}>{money(b.income)} rev</Typography>
+          <Typography sx={{ ...mono, color: b.net >= 0 ? D.green : '#f87171', fontSize: 12.5, fontWeight: 800, minWidth: 84, textAlign: 'right' }}>{money(b.net)}</Typography>
+        </Stack>
+      ))}
+    </Box>
+  );
+}
 
 // Recurring revenue snapshot — the subscription-finance view. MRR/ARR headline +
 // a per-brand split, read from /api/subscriptions/summary. Hidden until there's a
@@ -648,6 +669,10 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
                 MRR/ARR + a per-brand split). Additive: hidden until a plan exists,
                 so a shop with no subscriptions sees the finance tab unchanged. */}
             <RecurringRevenuePanel mrr={mrr} />
+
+            {/* P&L split by brand (Joint Printing / Webworks / Atom) from the
+                brand-tagged ledger. Hidden until >1 brand has booked activity. */}
+            <BrandPnlPanel byBrand={summary.byBrand} />
 
             {/* Money owed to you / Unrecorded payments — the additive lens that
                 EXPLAINS a low net: vendor costs entered without the matching
@@ -1511,6 +1536,10 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
     return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
   });
   const [category, setCategory] = useState(seed?.category || (seed?.type === 'income' ? 'Client Sales' : 'Printer COGS'));
+  // Which brand's P&L this money belongs to. '' = auto (the backend derives it
+  // from the linked order); the owner overrides for non-order money (e.g. a
+  // Webworks/Atom subscription payment). Seeded from the row when editing.
+  const [brand, setBrand] = useState(seed?.brand || '');
   const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
   const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
   const [party, setParty] = useState(seed?.party || '');
@@ -1621,7 +1650,7 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
       setErr('Add the order # this refund is for'); return;
     }
     setSaving(true); setErr('');
-    const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit };
+    const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit, brand };
     // A vendor PICKED from the suggestions sends its hard link; free-typed text
     // sends none, so the server auto-resolves from the party name instead.
     if (type === 'expense' && vendorId) form.vendorId = vendorId;
@@ -1699,6 +1728,17 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
             </FormControl>
             <TextField size="small" type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} sx={fld} />
           </Box>
+          {/* Brand this money belongs to, for the per-brand P&L. '' = auto (the
+              backend derives it from the linked order); override for non-order
+              money like a Webworks/Atom subscription payment. */}
+          <FormControl size="small" sx={fld}>
+            <Select value={brand} displayEmpty onChange={(e) => setBrand(e.target.value)} sx={sel}>
+              <MenuItem value=""><em>Brand · auto from order</em></MenuItem>
+              <MenuItem value="contact">Joint Printing</MenuItem>
+              <MenuItem value="webworks">JP Webworks</MenuItem>
+              <MenuItem value="atom">JP Atom</MenuItem>
+            </Select>
+          </FormControl>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
             {type === 'expense' ? (
               /* Free-solo vendor picker (the PO builder's pattern): typing stays
