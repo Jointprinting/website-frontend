@@ -209,9 +209,10 @@ function RecordPlanDialog({ plan, onClose, onRecord }) {
     r.readAsDataURL(f);
   };
   const canSave = Number(amount) > 0 && !saving;
-  const submit = () => {
+  const submit = async () => {
     setSaving(true);
-    onRecord({ period: plan.period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+    const ok = await onRecord({ period: plan.period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+    if (ok === false) setSaving(false); // don't stick on "Recording…" if it failed
   };
   const who = plan.companyName || plan.plan || (plan.brand === 'atom' ? 'JP Atom' : 'JP Webworks');
   return (
@@ -322,7 +323,7 @@ function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdi
         {rows.map((e) => {
           const chip = statusChip(e);
           const st = e.status || {};
-          const canRecord = e.active && (st.state === 'awaiting' || (st.state === 'upcoming' && !st.recordedThisPeriod));
+          const canRecord = e.active && (st.state === 'awaiting' || (st.state === 'upcoming' && !st.recordedThisPeriod && !st.skippedThisPeriod));
           return (
             <Stack key={e._id} direction="row" alignItems="center" spacing={1}
               sx={{ py: 0.85, borderTop: `1px solid ${D.line}`, '&:first-of-type': { borderTop: 'none' } }}>
@@ -348,7 +349,10 @@ function OperatingSubscriptionsPanel({ data, onRecord, onSkip, onUnrecord, onEdi
                   <Button onClick={() => onSkip(e)} size="small"
                     sx={{ color: D.faint, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 0.5, '&:hover': { color: D.muted } }}>Skip</Button>
                 )}
-                {st.recordedThisPeriod && (
+                {st.skippedThisPeriod && !st.recordedThisPeriod && (
+                  <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 700 }}>skipped</Typography>
+                )}
+                {(st.recordedThisPeriod || st.skippedThisPeriod) && (
                   <Button onClick={() => onUnrecord(e)} size="small"
                     sx={{ color: D.faint, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 0.5, '&:hover': { color: D.muted } }}>Undo</Button>
                 )}
@@ -386,6 +390,18 @@ function RecordInvoiceDialog({ sub, onClose, onRecord }) {
   awaiting.forEach((a) => { if (!opts.find((o) => o.value === a.period)) opts.push({ value: a.period, label: periodLabel(a.period) }); });
   if (st.currentPeriod && !opts.find((o) => o.value === st.currentPeriod)) opts.push({ value: st.currentPeriod, label: periodLabel(st.currentPeriod) });
 
+  // The due DATE for a given period key, read off the awaiting list (each entry
+  // carries its own `due`), falling back to the next due / today. Used to KEEP the
+  // date in step with the period: picking a different month must book the expense
+  // in that month, not stay stuck on the first awaiting period's due date.
+  const dueForPeriod = (p) => {
+    const a = awaiting.find((x) => x.period === p);
+    if (a && a.due) return ymd(new Date(a.due));
+    if (st.nextDue) return ymd(new Date(st.nextDue));
+    return ymd(new Date());
+  };
+  const onPeriodChange = (p) => { setPeriod(p); setDate(dueForPeriod(p)); };
+
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
@@ -395,9 +411,11 @@ function RecordInvoiceDialog({ sub, onClose, onRecord }) {
     r.readAsDataURL(f);
   };
   const canSave = Number(amount) > 0 && !saving;
-  const submit = () => {
+  const submit = async () => {
     setSaving(true);
-    onRecord({ period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+    // Reset on failure so the dialog doesn't stick on "Recording…" (success unmounts it).
+    const ok = await onRecord({ period, amount: Number(amount), date, note, fileName, fileDataUrl: fileDataUrl || undefined });
+    if (ok === false) setSaving(false);
   };
 
   return (
@@ -411,7 +429,7 @@ function RecordInvoiceDialog({ sub, onClose, onRecord }) {
       <DialogContent sx={{ p: 2.5 }}>
         <Stack gap={1.5}>
           <FormControl size="small" fullWidth>
-            <Select value={period} onChange={(e) => setPeriod(e.target.value)} sx={dropInput}>
+            <Select value={period} onChange={(e) => onPeriodChange(e.target.value)} sx={dropInput}>
               {opts.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </Select>
           </FormControl>
@@ -454,20 +472,26 @@ function EditSubscriptionDialog({ sub, categories = CATEGORIES, onClose, onSave,
   const [cadence, setCadence] = useState(sub.cadence || 'monthly');
   const [category, setCategory] = useState(sub.category || 'Software');
   const [brand, setBrand] = useState(sub.brand || 'contact');
-  const [startDate, setStartDate] = useState(sub.startDate ? ymd(new Date(sub.startDate)) : ymd(new Date()));
+  const [startDate, setStartDate] = useState(() => {
+    // Guard a garbage stored startDate: ymd() returns '—' for an unparseable date,
+    // which would jam the type="date" field — fall back to today instead.
+    const d = sub.startDate ? new Date(sub.startDate) : null;
+    return d && !isNaN(d.getTime()) ? ymd(d) : ymd(new Date());
+  });
   const [remindersOn, setRemindersOn] = useState(sub.remindersOn !== false);
   const [active, setActive] = useState(sub.active !== false);
   const [notes, setNotes] = useState(sub.notes || '');
   const [saving, setSaving] = useState(false);
 
   const canSave = name.trim() && Number(amount) >= 0 && !saving;
-  const submit = () => {
+  const submit = async () => {
     setSaving(true);
-    onSave({
+    const ok = await onSave({
       name: name.trim(), vendor: vendor.trim(), amount: Number(amount) || 0,
       dueDay: Math.min(31, Math.max(1, Number(dueDay) || 1)), cadence, category, brand,
       startDate, remindersOn, active, notes,
     });
+    if (ok === false) setSaving(false); // don't stick on "Saving…" if it failed
   };
   const toggleSx = (on) => ({ px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer', fontSize: 12, fontWeight: 700,
     border: `1px solid ${on ? D.green : D.line}`, color: on ? D.green : D.muted, bgcolor: on ? 'rgba(74,222,128,0.10)' : 'transparent', userSelect: 'none' });
@@ -687,7 +711,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setRecSub(null);
       await load();
       setBusy('Invoice recorded ✓');
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+      return true;
+    } catch (e) { setBusy(e.response?.data?.message || e.message); return false; }
   }, [authHdr, load]);
 
   const skipSubPeriod = useCallback(async (id, period) => {
@@ -712,7 +737,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setEditSub(null);
       await reloadRecurring();
       setBusy('Saved ✓');
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+      return true;
+    } catch (e) { setBusy(e.response?.data?.message || e.message); return false; }
   }, [authHdr, reloadRecurring]);
 
   const deleteSub = useCallback(async (id) => {
@@ -731,7 +757,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       setRecPlan(null);
       await load();
       setBusy('Plan recorded ✓');
-    } catch (e) { setBusy(e.response?.data?.message || e.message); }
+      return true;
+    } catch (e) { setBusy(e.response?.data?.message || e.message); return false; }
   }, [authHdr, load]);
 
   const skipPlanPeriod = useCallback(async (id, period) => {

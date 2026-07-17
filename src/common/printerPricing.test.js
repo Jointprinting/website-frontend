@@ -207,6 +207,55 @@ test('qty_x_size_sqin (A+ DTF): sqin band × qty tier + placement apply fee', ()
   expect(priceMethod(sp, { qty: 12 }).error).toBe('pick-size');
 });
 
+test('qty_x_colors warns when the qty is below the printer minimum (no silent under-min quote)', () => {
+  const sp = { model: 'qty_x_colors', setup: 'included', label: 'Blue Moon',
+    colorColumns: ['1','2','3','4'],
+    tiers: [{ minQty: 12, label: '12-23', prices: [3.5, 4, 4.5, 5] },
+            { minQty: 24, label: '24-47', prices: [2.5, 3, 3.5, 4] }] };
+  const under = priceMethod(sp, { qty: 6, locations: [{ label: 'front', colors: 1 }] });
+  expect(under.printPerUnit).toBe(3.5);            // still snaps to the smallest tier
+  expect(under.warnings.some((w) => /below Blue Moon's minimum|Under 12 pieces/.test(w))).toBe(true);
+  // At/above the minimum → no sub-min warning.
+  const ok = priceMethod(sp, { qty: 20, locations: [{ label: 'front', colors: 1 }] });
+  expect(ok.warnings.some((w) => /minimum/.test(w))).toBe(false);
+});
+
+test('qty_x_size honors a catalog order minimum ($30 floor lifts the per-piece)', () => {
+  // Blue Moon DTG shape: flat per-location price, $30 non-program order minimum.
+  const sp = { model: 'qty_x_size', label: 'DTG', minimum: 30,
+    sizes: ['Left Chest', 'Full Front/Back'], qtyTiers: [{ minQty: 1, label: 'any qty' }],
+    grid: { 'Left Chest': [6.0], 'Full Front/Back': [8.0] } };
+  // 3 pieces × $6 = $18 < $30 → floored to $30/3 = $10/pc, with a warning + note.
+  const small = priceMethod(sp, { qty: 3, size: 'Left Chest' });
+  expect(small.printPerUnit).toBe(10);
+  expect(small.warnings.some((w) => /order minimum/.test(w))).toBe(true);
+  expect(small.notes.some((nn) => /\$30\.00 order minimum applied/.test(nn))).toBe(true);
+  // 10 pieces × $6 = $60 > $30 → grid price stands, no floor.
+  const big = priceMethod(sp, { qty: 10, size: 'Left Chest' });
+  expect(big.printPerUnit).toBe(6);
+  expect(big.warnings.length).toBe(0);
+  // A catalog with NO minimum (Garment Gear) is unaffected.
+  const gg = { model: 'qty_x_size', label: 'DTG', sizes: ['up to 5x5'],
+    qtyTiers: [{ minQty: 1, label: '1-8' }], grid: { 'up to 5x5': [6.55] } };
+  expect(priceMethod(gg, { qty: 2, size: 'up to 5x5' }).printPerUnit).toBe(6.55);
+});
+
+test('gang_sheet_flat surfaces heat-press-per-location and the order minimum', () => {
+  // Blue Moon DTF: $10/sheet, $2.50/location heat press, $30 minimum.
+  const sp = { model: 'gang_sheet_flat', sheetSize: '16x20in', pricePerSheet: 10, heatPressPerLocation: 2.5, minimum: 30 };
+  const one = priceMethod(sp, { sheets: 1 });
+  expect(one.printPerUnit).toBe(10);                                   // sheet price unchanged
+  expect(one.notes.some((nn) => /Heat press \$2\.50 per location/.test(nn))).toBe(true);
+  expect(one.warnings.some((w) => /order minimum/.test(w))).toBe(true); // 1 sheet ($10) < $30
+  // 3 sheets ($30) clears the floor — no warning.
+  const three = priceMethod(sp, { sheets: 3 });
+  expect(three.warnings.length).toBe(0);
+  // Print Hybrid DTF (no heat-press / minimum fields) still prices clean.
+  const ph = priceMethod({ model: 'gang_sheet_flat', sheetSize: '22x12in', pricePerSheet: 6.5 }, {});
+  expect(ph.printPerUnit).toBe(6.5);
+  expect(ph.warnings.length).toBe(0);
+});
+
 test('dispatcher falls back to Heritage priceGrids, and flags a pending grid', () => {
   expect(priceMethod(SP, { qty: 100, shade: 'light', locations: [{ label: 'front', colors: 1 }] }).printPerUnit).toBe(1.3);
   expect(priceMethod({ _needsFullGrid: true }, {}).error).toBe('grid-pending');
