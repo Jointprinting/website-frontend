@@ -796,18 +796,26 @@ function SupplierLink({ line, onPatch, tf, sx }) {
 //     option/quantity prices correctly from one click)
 function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
   const [openRows, setOpenRows] = useState(() => new Set());   // row cost-drawers (by row POSITION — stable across renames)
-  // The "price the print" spec: which printer, locations + colors + garment
+  // REHYDRATE the spec panel from what was saved on this design (4C). Every cell
+  // carries the same printSpec, so seed off the first line. This component is
+  // keyed by group, so it remounts per design — a lazy initializer runs once and
+  // restores the exact method / shade / areas / printer the quote was priced with,
+  // turning the Quoter from "compute once, forget" into a reconcilable record.
+  const seedLine = (lines[grid.allIdxs[0]] || {});
+  const seedSpec = seedLine.printSpec && typeof seedLine.printSpec === 'object' ? seedLine.printSpec : null;
+  // The "price the print" spec: which printer, method, print areas + garment
   // shade, priced off that printer's grids (src/common/printerPricing.js).
-  const [specOpen, setSpecOpen] = useState(false);
-  const [specShade, setSpecShade] = useState('light');  // garment shade — shared by every area (one garment)
+  const [specOpen, setSpecOpen] = useState(() => !!seedSpec);   // auto-open a design that was already priced
+  const [specShade, setSpecShade] = useState(() => seedSpec?.shade || 'light');  // garment shade — shared by every area (one garment)
   // Which print method this design is priced as — drives which catalog section
   // the engine reads, which printers can run it, and which inputs show.
-  const [specMethod, setSpecMethod] = useState('Screen Print');
+  const [specMethod, setSpecMethod] = useState(() => seedSpec?.method || 'Screen Print');
   // Print AREAS — first-class for EVERY method (front + back + sleeve…), not just
   // screen. Each area carries only the field(s) its method needs; priceAreas()
   // prices each and sums. `colors` for screen, `size` for DTG/DTF, `sqin`+
   // `placement` for A+ DTF, `stitches` for embroidery, label-only for squeegee.
-  const [specAreas, setSpecAreas] = useState([{ label: 'front', colors: 1 }]);
+  const [specAreas, setSpecAreas] = useState(() =>
+    Array.isArray(seedSpec?.areas) && seedSpec.areas.length ? seedSpec.areas.map(a => ({ ...a })) : [{ label: 'front', colors: 1 }]);
   // A printer's price-book section for the chosen method (null → can't run it).
   const sectionFor = (p, method) => (p && p.catalog && METHOD_SECTION[method]) ? p.catalog[METHOD_SECTION[method]] : null;
   // Methods any printer in the network can actually price, in menu order.
@@ -820,7 +828,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
       const st = String(shipToState || '').trim().toUpperCase();
       return (st && String(a.state).toUpperCase() === st ? 1 : 0) - (st && String(b.state).toUpperCase() === st ? 1 : 0);
     });
-  const [specPrinterKey, setSpecPrinterKey] = useState('');
+  const [specPrinterKey, setSpecPrinterKey] = useState(() => seedLine.printerKey || '');
   const specPrinter = capablePrinters.find(p => p.key === specPrinterKey) || capablePrinters[0] || null;
   const specSection = sectionFor(specPrinter, specMethod);
   // Size options for size-priced methods (DTG sizes, DTF discrete-size bands).
@@ -1278,10 +1286,14 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   if (!r || r.error) return {};
                   // Stamp the chosen printer onto the line (internal) so it flows
                   // Quoter → confirmation item → per-supplier PO with no re-typing.
+                  // Persist the structured spec (4C) so this quote can be re-priced /
+                  // margin-audited against the printer's live catalog later — internal
+                  // only, never whitelisted into the client payload.
                   return { printCost: r.printPerUnit, setupCost: r.setup || 0,
                     printType: specMethod, printDetails: detailsFor(),
                     printerKey: specPrinter ? specPrinter.key : '',
-                    printerName: specPrinter ? specPrinter.name : '' };
+                    printerName: specPrinter ? specPrinter.name : '',
+                    printSpec: { method: specMethod, shade: specShade, areas: specAreas.map(a => ({ ...a })) } };
                 });
               }}
               sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, fontSize: 11.5, textTransform: 'none', px: 2,
