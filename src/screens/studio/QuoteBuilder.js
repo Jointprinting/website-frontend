@@ -61,7 +61,10 @@ for (let p = 5; p <= 70; p += 5) TIERS.push(p);
 const priceAtMargin = (cogs, marginPct) =>
   marginPct >= 100 ? 0 : cogs / (1 - marginPct / 100);
 
-const PRINT_TYPES = ['Screen Print', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
+// The design's print-type LABEL options. The first five mirror the engine
+// methods (METHOD_SECTION keys) so the label and the "Price the print" method
+// stay unified; the rest are label-only decorations the engine doesn't price.
+const PRINT_TYPES = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
 
 const num = (v) => Number(v) || 0;
 
@@ -809,7 +812,11 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const [specShade, setSpecShade] = useState(() => seedSpec?.shade || 'light');  // garment shade — shared by every area (one garment)
   // Which print method this design is priced as — drives which catalog section
   // the engine reads, which printers can run it, and which inputs show.
-  const [specMethod, setSpecMethod] = useState(() => seedSpec?.method || 'Screen Print');
+  // Seed the engine method from the saved spec, else from the design's existing
+  // print-type LABEL when that label is itself an engine method (so an old quote
+  // labelled "DTG" opens the panel on DTG) — the two are unified.
+  const [specMethod, setSpecMethod] = useState(() => seedSpec?.method
+    || (METHOD_SECTION[seedLine.printType] ? seedLine.printType : 'Screen Print'));
   // Print AREAS — first-class for EVERY method (front + back + sleeve…), not just
   // screen. Each area carries only the field(s) its method needs; priceAreas()
   // prices each and sums. `colors` for screen, `size` for DTG/DTF, `sqin`+
@@ -861,11 +868,14 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const setArea = (i, patch) => setSpecAreas(a => a.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const addArea = () => setSpecAreas(a => [...a, freshArea(specMethod, a.length)]);
   const removeArea = (i) => setSpecAreas(a => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
-  // Switching method reshapes the areas to that method's fields (keeping labels).
+  // Switching method reshapes the areas to that method's fields (keeping labels)
+  // AND broadcasts the label to every cell, so the design's "Print type" chip and
+  // the engine method are always the same thing — no more two disconnected pickers.
   const changeMethod = (m) => {
     setSpecMethod(m);
     setSpecPrinterKey('');
     setSpecAreas(a => (a.length ? a : [{}]).map((x, i) => ({ ...freshArea(m, i), label: x.label || areaLabelFor(i) })));
+    onPatchIdxs(grid.allIdxs, { printType: m });
   };
 
   // Price the whole design (every area, summed) at a quantity, and compose the
@@ -1123,7 +1133,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
         <QF label="Print type" sx={{ width: { xs: '48%', sm: 132 } }}>
           <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
             <Select value={sharedVal('printType')} displayEmpty
-              onChange={e => onPatchIdxs(all, { printType: e.target.value })}
+              onChange={e => {
+                const v = e.target.value;
+                // Picking an engine method here drives the pricing panel too (and
+                // re-broadcasts the label). A label-only type just sets the label.
+                if (METHOD_SECTION[v] && v !== specMethod) changeMethod(v);
+                else onPatchIdxs(all, { printType: v });
+              }}
               sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
               <MenuItem value=""><em>{sharedMixed('printType') ? 'mixed' : '—'}</em></MenuItem>
               {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
