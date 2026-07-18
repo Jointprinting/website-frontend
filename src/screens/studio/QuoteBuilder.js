@@ -1312,6 +1312,19 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
               sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4,
                 '&:hover': { color: D.green } }}>area</Button>
             <Box sx={{ flex: 1 }} />
+            {/* Manual print-price override — first-class, right beside the auto
+                fill. "Pick a printer → Fill costs" quotes it; type here to change
+                the print $/u by hand for the whole design (overrides the catalog
+                price). Vary it by run size in a row's ⌄ drawer. */}
+            <QF label="Print $/u (override)" sx={{ width: 122 }}>
+              <DecimalField size="small" fullWidth
+                value={numMixedOver(all, 'printCost') ? '' : (num(firstLine.printCost) > 0 ? numValOver(all, 'printCost') : '')}
+                placeholder={numMixedOver(all, 'printCost') ? 'per-size' : '0'}
+                title="Set the print cost per unit by hand for every size of this design — overrides the auto-filled catalog price. Vary it by run size in a row's ⌄ drawer."
+                onChange={e => onPatchIdxs(all, { printCost: e.target.value })}
+                InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', mr: 0.4, whiteSpace: 'nowrap' }}>print&nbsp;$</Typography> }}
+                sx={tf} />
+            </QF>
             <Button size="small" disabled={!specSection}
               onClick={() => {
                 onPatchIdxs(all, (l) => {
@@ -1513,7 +1526,8 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                             {promoAuto ? '0%' : `${fmt(profit * q)} · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
                           </Typography>
                           <Typography sx={cellLabel}>COGS</Typography>
-                          <Typography sx={{ ...cellVal, color: D.muted }}>{fmt(cogs)}/u</Typography>
+                          <Typography sx={{ ...cellVal, color: D.muted }}
+                            title={`Per unit: blank ${fmt(num(l.blankCost))} + print ${fmt(num(l.printCost))}${(cogs - num(l.blankCost) - num(l.printCost)) > 0.005 ? ` + setup/ship ${fmt(cogs - num(l.blankCost) - num(l.printCost))}` : ''} = ${fmt(cogs)}. Change the print $ in the spec panel or this row's ⌄ drawer.`}>{fmt(cogs)}/u</Typography>
                           <Typography sx={{ ...cellVal, color: D.muted }}>{fmt(cogs * q)}</Typography>
                         </Box>
                       ) : (
