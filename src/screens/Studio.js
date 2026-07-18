@@ -3033,7 +3033,7 @@ function StudioBody({ token, onLogout }) {
   // project/company context so a new mockup auto-links + numbers correctly.
   const [mockupEntry, setMockupEntry]   = React.useState({ remoteId: null, newForProject: null, projectNumber: null, companyKey: null, client: null, nonce: 0 });
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
-  const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, nonce: 0 });
+  const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, companyName: null, projectNumber: null, newLookbook: false, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
   // Role gates the owner-only surfaces (the Team/Admin tile + its view). Read from
@@ -3202,6 +3202,9 @@ function StudioBody({ token, onLogout }) {
     } else if (v === 'lookbooks') {
       setLookbookEntry((p) => ({
         companyKey: target.companyKey ? String(target.companyKey) : null,
+        companyName: target.companyName ? String(target.companyName) : null,
+        projectNumber: target.projectNumber != null ? String(target.projectNumber) : null,
+        newLookbook: !!target.newLookbook,
         nonce: p.nonce + 1,
       }));
       setView('lookbooks');
@@ -3344,6 +3347,9 @@ function StudioBody({ token, onLogout }) {
         onBack={() => setView('hub')}
         onNavigate={navigate}
         initialCompanyKey={lookbookEntry.companyKey}
+        initialCompanyName={lookbookEntry.companyName}
+        initialProjectNumber={lookbookEntry.projectNumber}
+        initialNew={lookbookEntry.newLookbook}
       />
     );
   }

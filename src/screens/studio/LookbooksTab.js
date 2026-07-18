@@ -143,10 +143,11 @@ function TogglePill({ label, on, onClick }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  New Lookbook dialog — company + optional title, that's it
 // ─────────────────────────────────────────────────────────────────────────────
-function NewLookbookDialog({ open, onClose, onCreate, busy, initialCompany }) {
+function NewLookbookDialog({ open, onClose, onCreate, busy, initialCompany, initialProject }) {
   const fullScreen = useMobileFullScreen();
   const [company, setCompany] = React.useState('');
   const [title, setTitle] = React.useState('');
+  const submit = () => onCreate({ companyName: company.trim(), title: title.trim(), projectNumber: initialProject || '' });
   React.useEffect(() => {
     if (open) { setCompany(initialCompany || ''); setTitle(''); }
   }, [open, initialCompany]);
@@ -162,6 +163,9 @@ function NewLookbookDialog({ open, onClose, onCreate, busy, initialCompany }) {
       </DialogTitle>
       <DialogContent sx={{ pt: '18px !important' }}>
         <Stack spacing={1.75}>
+          {initialProject && (
+            <Typography sx={{ ...mono, fontSize: 12, color: D.green }}>Linked to project #{initialProject}</Typography>
+          )}
           <TextField
             label="Company" placeholder="Bleu Leaf Dispensary" value={company}
             onChange={(e) => setCompany(e.target.value)} size="small" fullWidth sx={dropInput}
@@ -171,7 +175,7 @@ function NewLookbookDialog({ open, onClose, onCreate, busy, initialCompany }) {
             label="Title (optional)" placeholder={`${company.trim() || 'Company'} Lookbook`} value={title}
             onChange={(e) => setTitle(e.target.value)} size="small" fullWidth sx={dropInput}
             disabled={busy}
-            onKeyDown={(e) => { if (e.key === 'Enter' && canCreate) onCreate({ companyName: company.trim(), title: title.trim() }); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && canCreate) submit(); }}
           />
         </Stack>
       </DialogContent>
@@ -180,7 +184,7 @@ function NewLookbookDialog({ open, onClose, onCreate, busy, initialCompany }) {
           Cancel
         </Button>
         <Button
-          onClick={() => onCreate({ companyName: company.trim(), title: title.trim() })}
+          onClick={submit}
           disabled={!canCreate} variant="contained" sx={{ ...dropPrimaryBtn, px: 2.5 }}
           startIcon={busy ? <CircularProgress size={14} sx={{ color: D.ink }} /> : <AddIcon />}
         >
@@ -296,7 +300,7 @@ function AddMockupsDialog({ open, onClose, loading, library, excluded, onAdd, pa
 // ─────────────────────────────────────────────────────────────────────────────
 //  Main tab
 // ─────────────────────────────────────────────────────────────────────────────
-export default function LookbooksTab({ token, onBack, onNavigate, initialCompanyKey }) {
+export default function LookbooksTab({ token, onBack, onNavigate, initialCompanyKey, initialCompanyName, initialProjectNumber, initialNew }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
 
   const [rows, setRows] = React.useState([]);
@@ -311,6 +315,13 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
   const [newOpen, setNewOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
+  // From a project drawer's "Make a lookbook": open the New dialog once on entry,
+  // prefilled with the client name and linked to the project number.
+  React.useEffect(() => {
+    if (initialNew) setNewOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Editor state. `draft` is the working copy the form renders from; `byRid`
   // resolves each page's remoteId to its library tile (image, name, _id).
   const [openId, setOpenId] = React.useState(null);
@@ -323,7 +334,10 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
 
   // Library summary for the picker — loaded once, on first open.
   const [library, setLibrary] = React.useState([]);
-  const [libLoaded, setLibLoaded] = React.useState(false);
+  // Which companyKey the loaded library is scoped to ('' = the unscoped/all set,
+  // null = never loaded). Keyed so opening a different client's lookbook reloads
+  // the picker to THAT client's mockups instead of showing a stale set.
+  const [libKey, setLibKey] = React.useState(null);
   const [libLoading, setLibLoading] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
@@ -354,10 +368,10 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
   const clearFilter = () => { setFilterKey(null); };
   const toggleArchived = () => { setShowArchived((v) => !v); };
 
-  const createLookbook = async ({ companyName, title }) => {
+  const createLookbook = async ({ companyName, title, projectNumber }) => {
     setCreating(true);
     try {
-      const { data } = await axios.post(API, { companyName, title }, authHdr);
+      const { data } = await axios.post(API, { companyName, title, projectNumber: projectNumber || '' }, authHdr);
       setNewOpen(false);
       if (data?.lookbook?._id) setOpenId(data.lookbook._id);
     } catch (e) {
@@ -496,12 +510,16 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
   // ── Picker ──────────────────────────────────────────────────────────────
   const openPicker = async () => {
     setPickerOpen(true);
-    if (libLoaded || libLoading) return;
+    // Scope the picker to THIS lookbook's client — only that client's mockups,
+    // spanning every project (one canonical companyKey join, no fuzzy matching).
+    const key = (lb && lb.companyKey) || '';
+    if (libKey === key || libLoading) return;   // already have this client's set
     setLibLoading(true);
     try {
-      const { data } = await axios.get(LIB_API, authHdr);
+      const url = key ? `${LIB_API}&companyKey=${encodeURIComponent(key)}` : LIB_API;
+      const { data } = await axios.get(url, authHdr);
       setLibrary(Array.isArray(data) ? data.filter(Boolean) : []);
-      setLibLoaded(true);
+      setLibKey(key);
     } catch (e) {
       flash('Could not load the mockup library.', 'error');
     } finally {
@@ -1141,7 +1159,9 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
       )}
 
       <NewLookbookDialog open={newOpen} onClose={() => setNewOpen(false)} onCreate={createLookbook}
-        busy={creating} initialCompany={filterKey ? filterLabel : ''} />
+        busy={creating}
+        initialCompany={initialCompanyName || (filterKey ? filterLabel : '')}
+        initialProject={initialProjectNumber || ''} />
 
       <AddMockupsDialog open={pickerOpen} onClose={() => setPickerOpen(false)}
         loading={libLoading} library={library}

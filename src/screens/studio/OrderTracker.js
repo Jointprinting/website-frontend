@@ -1999,6 +1999,21 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     '_blank', 'noopener,noreferrer',
   );
 
+  // "Make a lookbook" — the client-facing SHARE step, folded in right next to the
+  // mockups. Opens the Lookbooks builder on a NEW lookbook, prefilled to this
+  // client and linked to this project; its picker then shows only this client's
+  // mockups (spanning every project), joined on the canonical companyKey.
+  const goLookbook = () => {
+    if (!project || !onNavigate) return;
+    onNavigate({
+      view: 'lookbooks',
+      companyKey: local?.companyKey || deriveCompanyKey(project.companyName, project.clientName),
+      companyName: local?.companyName || local?.clientName || project.companyName || project.clientName || '',
+      projectNumber: project.projectNumber != null ? String(project.projectNumber) : '',
+      newLookbook: true,
+    });
+  };
+
   // Upload an EXTERNAL / promo mockup (a lighter, grinder, ashtray shot the
   // printer made — not built in the Mockup Lab). Reserves the next mockup
   // number for THIS project via the same authoritative endpoint the studio uses
@@ -2545,6 +2560,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
                     {tiles.length === 0 ? 'Link' : 'Edit'}
                   </Button>
+                  {onNavigate && (
+                    <Button size="small" startIcon={<SendIcon sx={{ fontSize: 13 }} />}
+                      onClick={goLookbook}
+                      title="Make a client lookbook from this project's mockups"
+                      sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
+                      Lookbook
+                    </Button>
+                  )}
                   <input ref={promoInputRef} type="file" accept="image/*" hidden
                     onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadPromoMockup(f); }} />
                 </Stack>
