@@ -6,6 +6,7 @@
 
 import {
   buildGmapsLegs, GMAPS_WAYPOINT_CAP, deriveCompanyKey, pinStatusOf, haversineMi,
+  stateDistanceMi, STATE_CENTROIDS,
 } from './_roadTrip';
 
 const mkStops = (n) =>
@@ -90,5 +91,46 @@ describe('haversineMi', () => {
     // Half the Earth's circumference ≈ 12,450 mi.
     expect(d).toBeGreaterThan(12000);
     expect(d).toBeLessThan(12900);
+  });
+});
+
+describe('stateDistanceMi (nexus-aware printer ordering)', () => {
+  it('has a centroid for every US state + DC (51 entries)', () => {
+    expect(Object.keys(STATE_CENTROIDS)).toHaveLength(51);
+  });
+
+  it('is 0 for a state against itself', () => {
+    expect(stateDistanceMi('TX', 'TX')).toBeCloseTo(0);
+  });
+
+  it('ranks a neighbor nearer than a far state — NM sees TX before NY', () => {
+    const toTx = stateDistanceMi('NM', 'TX');
+    const toNy = stateDistanceMi('NM', 'NY');
+    expect(toTx).toBeLessThan(toNy);
+    // TX is adjacent to NM; a few hundred miles centroid-to-centroid.
+    expect(toTx).toBeGreaterThan(100);
+    expect(toTx).toBeLessThan(700);
+  });
+
+  it('is case- and whitespace-insensitive on the 2-letter code', () => {
+    expect(stateDistanceMi(' nm ', 'tx')).toBeCloseTo(stateDistanceMi('NM', 'TX'));
+  });
+
+  it('returns NaN when either state is unknown or blank', () => {
+    expect(Number.isNaN(stateDistanceMi('NM', ''))).toBe(true);
+    expect(Number.isNaN(stateDistanceMi('ZZ', 'TX'))).toBe(true);
+    expect(Number.isNaN(stateDistanceMi(undefined, 'TX'))).toBe(true);
+  });
+
+  it('sorts a printer list nearest-first for a NM ship-to (skipping same-state)', () => {
+    // Mirrors the Quoter picker: rank eligible printers by miles, sink same-state.
+    const printers = [
+      { state: 'NY' }, { state: 'CA' }, { state: 'TX' }, { state: 'AZ' },
+    ];
+    const ranked = [...printers].sort((a, b) =>
+      stateDistanceMi('NM', a.state) - stateDistanceMi('NM', b.state));
+    // AZ and TX (both border NM) lead; NY trails.
+    expect(['AZ', 'TX']).toContain(ranked[0].state);
+    expect(ranked[ranked.length - 1].state).toBe('NY');
   });
 });
