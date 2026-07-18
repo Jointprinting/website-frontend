@@ -51,6 +51,7 @@ import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
+import { stateDistanceMi } from './_roadTrip';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -67,6 +68,21 @@ const priceAtMargin = (cogs, marginPct) =>
 const PRINT_TYPES = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery', 'Heat Transfer', 'Vinyl', 'Sublimation', 'None'];
 
 const num = (v) => Number(v) || 0;
+
+// Printer ordering key for the nexus-aware picker. Lower sorts first:
+//   • eligible (out-of-state) printers rank by real miles to the ship-to state
+//     — the NEAREST legal printer leads (lowest freight + fastest transit);
+//   • printers whose distance we can't compute (unknown state) sort after those;
+//   • same-state printers (nexus-blocked) always sink to the very end — shown,
+//     greyed, never hidden. With no ship-to state yet everything ties → the
+//     API's original order is preserved (stable sort, no reshuffle).
+const printerNexusRank = (p, shipToState) => {
+  const st = String(shipToState || '').trim().toUpperCase();
+  if (!st) return 0;
+  if (String(p.state || '').toUpperCase() === st) return Number.POSITIVE_INFINITY;
+  const mi = stateDistanceMi(st, p.state);
+  return Number.isFinite(mi) ? mi : 1e6;
+};
 
 // Muted accent hues rotated across line groups so alternative options that
 // belong to the same group read as a set at a glance.
@@ -829,12 +845,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const netMethods = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery']
     .filter(m => printers.some(p => sectionFor(p, m)));
   const capablePrinters = printers.filter(p => sectionFor(p, specMethod))
-    // Eligible (out-of-state) printers first; same-state sink to the end (still
-    // shown, greyed with the nexus reason). shipToState-aware, stable otherwise.
-    .sort((a, b) => {
-      const st = String(shipToState || '').trim().toUpperCase();
-      return (st && String(a.state).toUpperCase() === st ? 1 : 0) - (st && String(b.state).toUpperCase() === st ? 1 : 0);
-    });
+    // Nearest ELIGIBLE (out-of-state) printer first; same-state sink to the end
+    // (still shown, greyed with the nexus reason). shipToState-aware, stable
+    // otherwise — see printerNexusRank.
+    .sort((a, b) => printerNexusRank(a, shipToState) - printerNexusRank(b, shipToState));
   const [specPrinterKey, setSpecPrinterKey] = useState(() => seedLine.printerKey || '');
   const specPrinter = capablePrinters.find(p => p.key === specPrinterKey) || capablePrinters[0] || null;
   const specSection = sectionFor(specPrinter, specMethod);
@@ -1210,9 +1224,12 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   {capablePrinters.map(p => {
                     // Nexus: same-state printers are GREYED with the reason, never hidden.
                     const blocked = shipToState && String(p.state).toUpperCase() === String(shipToState).toUpperCase();
+                    // Approx miles to ship-to state — the list is sorted nearest-first.
+                    const mi = blocked ? NaN : stateDistanceMi(shipToState, p.state);
+                    const near = Number.isFinite(mi) ? ` · ~${Math.round(mi)}mi` : '';
                     return (
                       <MenuItem key={p.key} value={p.key} disabled={blocked}>
-                        {p.name.replace(/,? Inc\.?$/i, '')} · {p.state}{blocked ? ' — nexus ⚠' : ''}
+                        {p.name.replace(/,? Inc\.?$/i, '')} · {p.state}{blocked ? ' — nexus ⚠' : near}
                       </MenuItem>
                     );
                   })}
@@ -1723,10 +1740,11 @@ function PrinterSuggest({ shipToState, printerName, onPick, authHdr }) {
   }, []);
   if (!printers || !printers.length) return <Box sx={{ mb: 1.5 }} />;
   const st = String(shipToState || '').trim().toUpperCase();
-  // Eligible (out-of-state) printers lead; same-state ones sink to the end but
-  // stay visible + greyed with the reason — never hidden. Stable otherwise.
+  // Nearest eligible (out-of-state) printer leads; same-state ones sink to the
+  // end but stay visible + greyed with the reason — never hidden. Stable
+  // otherwise — see printerNexusRank.
   const ordered = [...printers].sort((a, b) =>
-    (!!st && String(a.state).toUpperCase() === st ? 1 : 0) - (!!st && String(b.state).toUpperCase() === st ? 1 : 0));
+    printerNexusRank(a, shipToState) - printerNexusRank(b, shipToState));
   return (
     <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" sx={{ mb: 2.5 }}>
       <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -1735,13 +1753,16 @@ function PrinterSuggest({ shipToState, printerName, onPick, authHdr }) {
       {ordered.map(p => {
         const blocked = !!st && String(p.state).toUpperCase() === st;
         const picked = (printerName || '').toLowerCase().includes(String(p.name || '').split(' ')[0].toLowerCase());
+        // Approx miles to the ship-to state, shown so the nearest-first order reads clearly.
+        const mi = blocked ? NaN : stateDistanceMi(st, p.state);
+        const near = Number.isFinite(mi) ? ` · ~${Math.round(mi)}mi` : '';
         return (
           <Chip key={p.key} size="small"
-            label={`${p.name.replace(/,? Inc\.?$/i, '')} · ${p.state}${blocked ? ' — nexus ⚠' : ''}`}
+            label={`${p.name.replace(/,? Inc\.?$/i, '')} · ${p.state}${blocked ? ' — nexus ⚠' : near}`}
             onClick={() => !blocked && onPick(p.name)}
             title={blocked
               ? `Ships to ${st} — same state as this printer. Nexus rule: pick an out-of-state printer.`
-              : `${p.location || p.state} · ${(p.capabilities || []).slice(0, 3).join(', ')}${p.catalogEffective ? ` · pricing eff. ${p.catalogEffective}` : ''}`}
+              : `${p.location || p.state}${near ? ` · ~${Math.round(mi)} mi from ${st}` : ''} · ${(p.capabilities || []).slice(0, 3).join(', ')}${p.catalogEffective ? ` · pricing eff. ${p.catalogEffective}` : ''}`}
             sx={{ fontWeight: 700, fontSize: 11, height: 24,
               cursor: blocked ? 'not-allowed' : 'pointer',
               bgcolor: picked ? D.green : blocked ? 'rgba(248,113,113,0.10)' : 'rgba(255,255,255,0.05)',
