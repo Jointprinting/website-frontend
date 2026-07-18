@@ -1,38 +1,52 @@
 // src/screens/studio/mockup/MockupEditor.js
 //
-// Mockup Lab v2 — the interactive placement editor (Phase 3). Opens a mockup in the
-// Studio, lets the owner place / drag / scale / rotate the logo on a garment blank
-// (front and back), flattens it exactly the way the legacy /jpstudio editor does,
-// and saves through the migration-safe mockupToLibraryItem so the backlog + every
-// downstream surface (Order Tracker, Approval, Lookbook, Confirmation PDF, CRM design
-// library) keep working byte-for-byte — no format change, no migration.
+// Mockup Lab v2 — the interactive editor. This is where EVERY mockup entry point
+// now lands (the hub tile, a project drawer's "New mockup", and clicking a mockup
+// tile) — no more new-tab hand-off to the classic /jpstudio editor.
 //
-// COORDINATE SPACE: a fixed 620×500 logical stage (the legacy editor's desktop canvas
-// size), so a placement stays interoperable with the classic editor. The blank is fit
-// into that stage the same way legacy does (scale = min(620/w,500/h)*0.93, centered).
-// The stage is drawn scaled-to-fit the responsive container. The flatten maps the
-// stage coords back to the blank's NATURAL pixels exactly like legacy confirmLogoPosition
-// (sX = naturalW / displayW), so what you see is what bakes.
+// It works PROJECT-FIRST, the way Nate does: a project drawer's "New mockup" opens
+// this in `mode="new"` already carrying that project's client + number context, so
+// the mockup it makes letters-in against the project and links back automatically.
+// Opening an existing mockup opens `mode="edit"` and saves in place — same remoteId,
+// same number — so the 145-mockup backlog keeps working byte-for-byte.
 //
-// SOURCE ART: synced mockups keep only the flattened composite (the legacy sync trims
-// the separable blank/logo), so re-placing needs the logo re-supplied. Upload a logo
-// (and optionally a fresh blank) right here; a placement then flattens onto the blank.
+// It flattens exactly the way the legacy editor does (verified headless: what you
+// see on the 620×500 stage is pixel-for-pixel what bakes into the saved composite),
+// saves through the migration-safe mockupToLibraryItem (zero format change), reserves
+// mockup numbers server-side (never client-side — that raced and dup'd letters),
+// and exports the same branded PDF via the lazy-loaded mockupPdf module.
+//
+// SOURCE ART: cloud-synced mockups keep only the flattened composite (the legacy
+// sync trims the separable blank/logo to save space), so re-placing the logo on an
+// existing synced mockup needs the logo re-supplied — there's an upload button that
+// says so. New placements and re-uploads flatten and save perfectly either way.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Stack, Typography, IconButton, Button, Slider, CircularProgress } from '@mui/material';
+import { Box, Stack, Typography, IconButton, Button, Slider, CircularProgress, TextField, MenuItem, Collapse } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import TuneIcon from '@mui/icons-material/Tune';
 import axios from 'axios';
 import config from '../../../config.json';
-import { D, mono, scrollbar } from '../_shared';
-import { mockupToLibraryItem, hydratePages, emptyPos } from './mockupModel';
+import { D, mono, scrollbar, dropInput } from '../_shared';
+import { mockupToLibraryItem, hydratePages, emptyPos, emptyPage, pageToState } from './mockupModel';
+import { PRESETS, PRESET_ORDER, presetPos } from './printAreas';
+import { exportMockupPdf } from './mockupPdf';
 
 const base = `${config.backendUrl}/api`;
 const STAGE_W = 620;
 const STAGE_H = 500;         // the legacy desktop canvas size — keep for interop
 const BLANK_FIT = 0.93;      // legacy blankImg fit factor
+
+const uid = () => (window.crypto && window.crypto.randomUUID)
+  ? window.crypto.randomUUID()
+  : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 // The blank's box within the 620×500 stage — same fit/center math as the legacy tool.
 function blankBox(natW, natH) {
@@ -59,7 +73,7 @@ const fileToDataUrl = (file) => new Promise((resolve) => {
 
 // Flatten one side to a PNG data URL — the EXACT legacy confirmLogoPosition math:
 // blank at natural size, logo mapped from stage coords to natural via sX = natW/dispW,
-// rotated about its center. Returns null if either image can't load.
+// rotated about its center. Returns null if the blank can't load.
 async function flattenSide(blankSrc, logoSrc, pos) {
   const [blank, logo] = await Promise.all([loadImg(blankSrc), loadImg(logoSrc)]);
   if (!blank) return null;
@@ -88,6 +102,8 @@ async function flattenSide(blankSrc, logoSrc, pos) {
 // Deep-ish clone of the page list so edits don't mutate the parent's model.
 const clonePages = (pages) => (pages || []).map((pg) => ({
   ...pg,
+  category: pg.category || 'generic',
+  template: pg.template != null ? pg.template : 1,
   print: { front: { ...pg.print.front }, back: { ...pg.print.back } },
   sides: {
     front: { ...pg.sides.front, pos: { ...pg.sides.front.pos } },
@@ -96,19 +112,48 @@ const clonePages = (pages) => (pages || []).map((pg) => ({
   _extra: { ...pg._extra },
 }));
 
-export default function MockupEditor({ token, mockup, item, onClose, onSaved }) {
+export default function MockupEditor({ token, mode, mockup, item, project, onClose, onSaved }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
-  const [pages, setPages] = useState(() => clonePages(mockup.pages));
+  const isNew = mode === 'new' || !mockup;
+
+  // The starting model — a fresh project-linked page for a new mockup, or the
+  // opened mockup's pages for an edit. Computed once (kept in a ref-like initializer).
+  const initial = useMemo(() => {
+    if (isNew) return [emptyPage()];
+    return clonePages(mockup.pages && mockup.pages.length ? mockup.pages : [emptyPage()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [pages, setPages] = useState(initial);
   const [pageIdx, setPageIdx] = useState(0);
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [nat, setNat] = useState({ blank: null, logo: null }); // natural dims of the loaded imgs
+  const [showInfo, setShowInfo] = useState(isNew);              // info panel open by default on a new mockup
   const stageRef = useRef(null);
   const [scaleToFit, setScaleToFit] = useState(1);
   const dragRef = useRef(null);
 
-  // Original page states — passed to mockupToLibraryItem so untracked legacy fields survive.
-  const prevStates = useMemo(() => hydratePages(item), [item]);
+  // Identity. The mockup number is reserved server-side on first save of a new
+  // mockup (never computed here — that raced and produced duplicate letters).
+  const [mockupNum, setMockupNum] = useState(isNew ? '' : (mockup.mockupNum || ''));
+  const remoteIdRef = useRef(isNew ? `studio-${uid()}` : (String((item && item.remoteId) || mockup.remoteId || '') || `studio-${uid()}`));
+  const p0extra = (!isNew && mockup.pages && mockup.pages[0] && mockup.pages[0]._extra) || {};
+  const [meta, setMeta] = useState({
+    title: isNew ? '' : (mockup.name || p0extra.title || ''),
+    subtitle: isNew ? '' : (p0extra.subtitle || ''),
+    notes: isNew ? '' : (p0extra.notes || ''),
+    client: isNew ? (project && project.client) || '' : (mockup.client || (project && project.client) || ''),
+  });
+
+  // The order _id we letter/duplicate against: the project passed in (new mode) or
+  // the projectId carried on the saved mockup (edit mode). '' → no order context.
+  const orderId = (project && project.id) || (item && item.pageState && item.pageState.projectId) || '';
+  const projectNumber = (mockup && mockup.projectNumber) || (project && project.projectNumber) || '';
+
+  // Original page states — passed to mockupToLibraryItem so untracked legacy fields
+  // (offloaded page data, detected colors, external flags) survive a round-trip.
+  const prevStates = useMemo(() => (isNew ? [] : hydratePages(item)), [item, isNew]);
 
   const page = pages[pageIdx] || pages[0];
   const sd = page.sides[side];
@@ -144,6 +189,7 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
 
   // Mutate the current side's placement (patch merged into pos).
   const patchPos = useCallback((patch) => {
+    if (!patch) return;
     setPages((prev) => {
       const next = clonePages(prev);
       const s = next[pageIdx].sides[side];
@@ -159,6 +205,22 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
       return next;
     });
   }, [pageIdx, side]);
+
+  const setPrint = useCallback((field, value) => {
+    setPages((prev) => {
+      const next = clonePages(prev);
+      next[pageIdx].print[side][field] = value;
+      return next;
+    });
+  }, [pageIdx, side]);
+
+  const setPageField = useCallback((field, value) => {
+    setPages((prev) => {
+      const next = clonePages(prev);
+      next[pageIdx][field] = value;
+      return next;
+    });
+  }, [pageIdx]);
 
   // Center the logo at a default size when it's first added / never placed.
   useEffect(() => {
@@ -202,6 +264,13 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
     patchPos({ w, h: w, x: cx - newW / 2, y: cy - newH / 2 });
   };
 
+  // Drop the logo onto a print-area quick spot (legacy PRESETS geometry).
+  const applyPreset = (key) => {
+    if (!box || !nat.logo) return;
+    const pos = presetPos(PRESETS[key], box, nat.logo);
+    if (pos) patchPos(pos);
+  };
+
   const onUpload = (field) => async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
@@ -213,29 +282,118 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
     e.target.value = '';
   };
 
+  // Flatten every side that has a blank+logo+placement, and stamp the shared
+  // identity (title/#/client/project/pdf name) onto every page's `_extra` so the
+  // saved doc + the PDF footer + the summary tile all read the same number. Returns
+  // the flattened pages plus the reserved number.
+  const buildFlat = async (num) => {
+    const pdfName = num ? `${String(num).replace(/^#/, '')}.pdf` : (mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : '');
+    const flat = clonePages(pages);
+    for (let i = 0; i < flat.length; i++) {
+      flat[i]._extra = {
+        ...flat[i]._extra,
+        title: meta.title, subtitle: meta.subtitle, notes: meta.notes, client: meta.client,
+        mockupNum: num || mockupNum || flat[i]._extra.mockupNum || '',
+        ...(pdfName ? { pdfName } : {}),
+        ...(projectNumber ? { projectNumber } : {}),
+        ...(orderId ? { projectId: orderId } : {}),
+      };
+      for (const s of ['front', 'back']) {
+        const p = flat[i].sides[s];
+        if (p.blank && p.logo && p.pos && p.pos.x != null) {
+          const comp = await flattenSide(p.blank, p.logo, p.pos);
+          if (comp) flat[i].sides[s] = { ...p, composite: comp };
+        }
+      }
+    }
+    return flat;
+  };
+
   const save = async () => {
     setBusy('Saving…');
     try {
-      const flat = clonePages(pages);
-      for (let i = 0; i < flat.length; i++) {
-        for (const s of ['front', 'back']) {
-          const p = flat[i].sides[s];
-          if (p.blank && p.logo && p.pos && p.pos.x != null) {
-            const comp = await flattenSide(p.blank, p.logo, p.pos);
-            if (comp) flat[i].sides[s] = { ...p, composite: comp };
-          }
-        }
+      let num = mockupNum;
+      // A brand-new mockup reserves its number from the SERVER, atomically, exactly
+      // like the promo upload + "add variation" paths — so it letters-in beside its
+      // siblings and links to the order. No order context → save unnumbered.
+      if (isNew && !num && orderId) {
+        const asg = await axios.post(`${base}/orders/${orderId}/mockups/assign`, {}, authHdr);
+        num = (asg.data && asg.data.mockupNum) || '';
+        if (num) setMockupNum(num);
       }
-      const model = { ...mockup, pages: flat };
+      const flat = await buildFlat(num);
+      const model = {
+        id: (!isNew && mockup.id != null) ? mockup.id : null,
+        remoteId: remoteIdRef.current,
+        mockupNum: num || mockupNum || '',
+        name: meta.title || meta.client || 'Mockup',
+        client: meta.client,
+        projectNumber,
+        pages: flat,
+      };
       const body = mockupToLibraryItem(model, prevStates);
-      // Keep the existing identity: same remoteId + mockup number → saves in place,
-      // no server letter assignment, no anti-clobber fork. Backlog-safe.
+      body.savedAt = Date.now();
+      // Same remoteId + same number → in-place upsert (backlog-safe). A NEW mockup's
+      // fresh remoteId just inserts. The server anti-clobber protects either way.
       await axios.post(`${base}/studio/library/mockups`, body, authHdr);
+      setPages(flat);                         // reflect the baked composites
       setBusy('Saved ✓');
       if (onSaved) onSaved();
     } catch (err) {
       setBusy(err.response?.data?.message || err.message);
     }
+  };
+
+  // Duplicate this SAVED mockup into a new one on the same project (next letter,
+  // same art) — the server clones the full doc so offloaded page data never has to
+  // round-trip. Needs a saved mockup (remote number) + an order to letter against.
+  const [dupBusy, setDupBusy] = useState(false);
+  const canDuplicate = !!orderId && !!mockupNum && !isNew;
+  const duplicate = async () => {
+    if (!canDuplicate || dupBusy) return;
+    setDupBusy(true);
+    try {
+      const { data } = await axios.post(`${base}/orders/${orderId}/mockups/duplicate`,
+        { remoteId: remoteIdRef.current, mockupNum }, authHdr);
+      setBusy(`Variation added · ${data.mockupNum}`);
+      if (onSaved) onSaved();
+    } catch (e) {
+      setBusy(e.response?.data?.message || 'Could not add a variation — try again.');
+    } finally {
+      setDupBusy(false);
+    }
+  };
+
+  // Export the branded PDF (lazy-loads pdf-lib). Reflects the current on-screen
+  // state, flattened, so what exports matches what saves.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const exportPdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    setBusy('Building PDF…');
+    try {
+      const flat = await buildFlat(mockupNum);
+      const pageStates = flat.map((pg, i) => pageToState(pg, prevStates[i]));
+      const fname = mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : `${(meta.title || 'mockup').replace(/[^\w-]+/g, '_')}.pdf`;
+      await exportMockupPdf(pageStates, fname);
+      setBusy('PDF exported ✓');
+    } catch (e) {
+      setBusy(e.message || 'PDF export failed.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const addPage = () => {
+    setPages((prev) => [...prev, emptyPage()]);
+    setPageIdx(pages.length);
+    setSide('front');
+  };
+  const removePage = () => {
+    if (pages.length <= 1) return;
+    setPages((prev) => prev.filter((_, i) => i !== pageIdx));
+    setPageIdx((i) => Math.max(0, i - 1));
+    setSide('front');
   };
 
   useEffect(() => {
@@ -245,37 +403,98 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
 
   const stageDisplayH = STAGE_H * scaleToFit;
   const placed = sd.pos && sd.pos.x != null && !!logoSrc && !!nat.logo;
+  const saving = busy.endsWith('…');
+
+  const infoField = (label, value, onChange, opts = {}) => (
+    <TextField label={label} value={value} onChange={(e) => onChange(e.target.value)}
+      size="small" fullWidth multiline={!!opts.multiline} minRows={opts.multiline ? 2 : undefined}
+      select={!!opts.select} sx={{ ...dropInput }}>
+      {opts.select && opts.children}
+    </TextField>
+  );
 
   return (
-    <Box sx={{ maxWidth: 720, mx: 'auto', px: { xs: 1.5, md: 2 }, py: 2, ...scrollbar }}>
+    <Box sx={{ maxWidth: 760, mx: 'auto', px: { xs: 1.5, md: 2 }, py: 2, ...scrollbar }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
         <IconButton onClick={onClose} size="small" sx={{ color: D.muted, '&:hover': { color: D.text } }}>
           <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Edit placement — {mockup.name || 'Untitled'}
-            {mockup.mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>#{mockup.mockupNum}</Box>}
+            {isNew ? 'New mockup' : `Edit — ${meta.title || 'Untitled'}`}
+            {mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>#{mockupNum}</Box>}
           </Typography>
+          {(meta.client || projectNumber) && (
+            <Typography sx={{ color: D.faint, fontSize: 11 }}>
+              {[meta.client, projectNumber ? `Project #${projectNumber}` : ''].filter(Boolean).join(' · ')}
+            </Typography>
+          )}
         </Box>
-        <Button onClick={save} disabled={busy.endsWith('…')} startIcon={busy.endsWith('…') ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
+        <Button onClick={save} disabled={saving} startIcon={saving ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
           sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>
           Save
         </Button>
       </Stack>
       {busy && <Typography sx={{ color: busy.includes('✓') ? D.green : '#fbbf24', fontSize: 12, mb: 1 }}>{busy}</Typography>}
 
-      {/* Page tabs */}
-      {pages.length > 1 && (
-        <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mb: 1 }}>
-          {pages.map((_, i) => (
-            <Button key={i} onClick={() => setPageIdx(i)} size="small"
-              sx={{ minWidth: 0, px: 1.5, fontWeight: 800, fontSize: 12, borderRadius: 1.5,
-                color: i === pageIdx ? D.green : D.muted, bgcolor: i === pageIdx ? 'rgba(74,222,128,0.10)' : 'transparent',
-                border: `1px solid ${i === pageIdx ? 'rgba(74,222,128,0.4)' : D.line}` }}>Page {i + 1}</Button>
-          ))}
+      {/* Info panel — client / title / subtitle / notes / template / print specs */}
+      <Box sx={{ mb: 1.5, bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3 }}>
+        <Stack direction="row" alignItems="center" onClick={() => setShowInfo((v) => !v)}
+          sx={{ px: 2, py: 1.25, cursor: 'pointer', userSelect: 'none' }}>
+          <TuneIcon sx={{ fontSize: 16, color: D.green, mr: 1 }} />
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 13, flex: 1 }}>Mockup details</Typography>
+          <Typography sx={{ color: D.faint, fontSize: 11 }}>{showInfo ? 'Hide' : 'Edit'}</Typography>
         </Stack>
-      )}
+        <Collapse in={showInfo}>
+          <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
+            <Stack gap={1.25}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
+                {infoField('Title', meta.title, (v) => setMeta((m) => ({ ...m, title: v })))}
+                {infoField('Client', meta.client, (v) => setMeta((m) => ({ ...m, client: v })))}
+              </Stack>
+              {infoField('Subtitle', meta.subtitle, (v) => setMeta((m) => ({ ...m, subtitle: v })))}
+              {infoField('Notes', meta.notes, (v) => setMeta((m) => ({ ...m, notes: v })), { multiline: true })}
+              <Stack direction="row" gap={1.25} alignItems="center">
+                {infoField('Layout', page.template, (v) => setPageField('template', Number(v)), {
+                  select: true,
+                  children: [
+                    <MenuItem key={1} value={1}>Front + back</MenuItem>,
+                    <MenuItem key={2} value={2}>Front only</MenuItem>,
+                  ],
+                })}
+                <Box sx={{ flex: 1 }} />
+              </Stack>
+              {/* Print spec for the CURRENT side (front/back toggle below the stage) */}
+              <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mt: 0.5 }}>
+                {side} print spec
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
+                {infoField('Type', page.print[side].type, (v) => setPrint('type', v))}
+                {infoField('Dimensions', page.print[side].dims, (v) => setPrint('dims', v))}
+                {infoField('Location', page.print[side].loc, (v) => setPrint('loc', v))}
+              </Stack>
+            </Stack>
+          </Box>
+        </Collapse>
+      </Box>
+
+      {/* Page tabs + add/remove */}
+      <Stack direction="row" flexWrap="wrap" gap={0.75} alignItems="center" sx={{ mb: 1 }}>
+        {pages.map((_, i) => (
+          <Button key={i} onClick={() => { setPageIdx(i); setSide('front'); }} size="small"
+            sx={{ minWidth: 0, px: 1.5, fontWeight: 800, fontSize: 12, borderRadius: 1.5,
+              color: i === pageIdx ? D.green : D.muted, bgcolor: i === pageIdx ? 'rgba(74,222,128,0.10)' : 'transparent',
+              border: `1px solid ${i === pageIdx ? 'rgba(74,222,128,0.4)' : D.line}` }}>Page {i + 1}</Button>
+        ))}
+        <IconButton onClick={addPage} size="small" title="Add a page" sx={{ color: D.muted, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
+          <AddIcon sx={{ fontSize: 15 }} />
+        </IconButton>
+        {pages.length > 1 && (
+          <IconButton onClick={removePage} size="small" title="Remove this page" sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}>
+            <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        )}
+      </Stack>
 
       {/* The stage */}
       <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, p: { xs: 1.25, md: 2 } }}>
@@ -319,7 +538,7 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
 
       {/* Controls */}
       <Box sx={{ mt: 1.5, bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, p: 2 }}>
-        <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: placed ? 1.5 : 0 }}>
+        <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: (placed || logoSrc) ? 1.5 : 0 }}>
           <Button component="label" size="small" startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 15 }} />}
             sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
             {logoSrc ? 'Replace logo' : 'Upload logo'}
@@ -331,6 +550,21 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
             <input type="file" hidden accept="image/*" onChange={onUpload('blank')} />
           </Button>
         </Stack>
+
+        {/* Print-area quick spots */}
+        {box && nat.logo && logoSrc && (
+          <Box sx={{ mb: 1.5 }}>
+            <Typography sx={{ color: D.faint, fontSize: 11, fontWeight: 700, mb: 0.5 }}>Quick spots</Typography>
+            <Stack direction="row" gap={0.6} flexWrap="wrap" useFlexGap>
+              {PRESET_ORDER.map((key) => (
+                <Button key={key} onClick={() => applyPreset(key)} size="small"
+                  sx={{ minWidth: 0, px: 1.1, py: 0.3, fontSize: 11, fontWeight: 700, textTransform: 'none',
+                    color: D.text, border: `1px solid ${D.line}`, borderRadius: 1.5,
+                    '&:hover': { borderColor: D.green, color: D.green } }}>{PRESETS[key].label}</Button>
+              ))}
+            </Stack>
+          </Box>
+        )}
 
         {placed && (
           <Stack gap={1.25}>
@@ -360,10 +594,28 @@ export default function MockupEditor({ token, mockup, item, onClose, onSaved }) 
         )}
         {!logoSrc && (
           <Typography sx={{ color: D.faint, fontSize: 12, mt: 1 }}>
-            This side has no separable logo (synced mockups keep only the flattened image). Upload the logo art to place it, then Save.
+            {sd.composite
+              ? 'This side has no separable logo (synced mockups keep only the flattened image). Upload the logo art to re-place it, then Save.'
+              : 'Upload the logo art to place it on the garment.'}
           </Typography>
         )}
       </Box>
+
+      {/* Bottom actions — PDF + variation */}
+      <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
+        <Button onClick={exportPdf} disabled={pdfBusy} size="small"
+          startIcon={pdfBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.75, '&:hover': { borderColor: D.green, color: D.green } }}>
+          Export PDF
+        </Button>
+        {canDuplicate && (
+          <Button onClick={duplicate} disabled={dupBusy} size="small"
+            startIcon={dupBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <ContentCopyIcon sx={{ fontSize: 15 }} />}
+            sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.75, '&:hover': { borderColor: D.green, color: D.green } }}>
+            Add a variation
+          </Button>
+        )}
+      </Stack>
     </Box>
   );
 }
