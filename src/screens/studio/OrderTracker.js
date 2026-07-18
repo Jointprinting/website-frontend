@@ -1987,14 +1987,21 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   const [duplicatingNum, setDuplicatingNum] = useState('');
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
-  // Open the Mockup Lab (/jpstudio) deep-linked to THIS project, so every
-  // mockup saved there auto-links to this project (the studio's smart workflow).
-  const goStudio = () => project && window.open(
-    // No token in the URL — /jpstudio picks up the studio session from localStorage
-    // (same origin). Only the non-secret project id is passed, for deep-linking.
-    `/jpstudio/?project=${encodeURIComponent(project._id)}`,
-    '_blank', 'noopener,noreferrer',
-  );
+  // "New mockup" opens the in-Studio Mockup Lab editor in NEW mode, deep-linked to
+  // THIS project — so the mockup it makes reserves this project's next number and
+  // links straight back (the project-first workflow), with no new-tab hand-off to
+  // the classic /jpstudio. The editor letters-in server-side on first save.
+  const goStudio = () => {
+    if (!project || !onNavigate) return;
+    const co = local?.companyName || local?.clientName || project.companyName || project.clientName || '';
+    onNavigate({
+      view: 'mockup',
+      newForProject: project._id,
+      projectNumber: project.projectNumber != null ? String(project.projectNumber) : '',
+      companyKey: local?.companyKey || deriveCompanyKey(project.companyName, project.clientName),
+      client: co,
+    });
+  };
 
   // Upload an EXTERNAL / promo mockup (a lighter, grinder, ashtray shot the
   // printer made — not built in the Mockup Lab). Reserves the next mockup
@@ -2558,18 +2565,18 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
                   {tiles.map((t, i) => {
-                    // Click a tile → open jpstudio with both the project and
-                    // the specific mockup deep-linked. The user can edit it
-                    // and re-save with one click. Stable identifier is the
-                    // mockup's remoteId (UUID, same value local + cloud).
+                    // Click a tile → open the in-Studio Mockup Lab editor deep-linked
+                    // to this mockup (project context carried). The new editor reads +
+                    // saves the same library item; the classic /jpstudio is still one
+                    // click away inside the Lab. Stable identifier is the remoteId.
                     const remoteId = t.item?.remoteId || '';
-                    const editUrl = t.item
-                      // No token in the URL — /jpstudio reads the session from
-                      // localStorage (same origin); only non-secret ids are passed.
-                      ? `/jpstudio/?project=${encodeURIComponent(project._id)}&mockup=${encodeURIComponent(remoteId)}`
-                      : null;
+                    const openInLab = () => t.item && onNavigate && onNavigate({
+                      view: 'mockup', mockupRemoteId: remoteId,
+                      projectNumber: project.projectNumber != null ? String(project.projectNumber) : '',
+                      client: local.companyName || local.clientName || '',
+                    });
                     return (
-                    <Box key={i} onClick={() => editUrl && window.open(editUrl, '_blank', 'noopener,noreferrer')}
+                    <Box key={i} onClick={openInLab}
                       title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Lab` : ''}
                       sx={{
                       aspectRatio: '1', borderRadius: 1.5, overflow: 'hidden',

@@ -29,7 +29,7 @@ const base = `${config.backendUrl}/api`;
 // The legacy editor still owns interactive editing; deep-link into it by remoteId.
 const classicHref = (remoteId) => `${process.env.PUBLIC_URL || ''}/jpstudio/${remoteId ? `?mockup=${encodeURIComponent(remoteId)}` : ''}`;
 
-export default function MockupLab({ token, onBack, onNavigate }) {
+export default function MockupLab({ token, onBack, onNavigate, entry }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [list, setList] = useState(null);       // summary array | null (loading)
   const [sel, setSel] = useState(null);          // { model, item } of the opened mockup
@@ -37,7 +37,8 @@ export default function MockupLab({ token, onBack, onNavigate }) {
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [q, setQ] = useState('');
-  const [editing, setEditing] = useState(false);   // in the interactive placement editor
+  const [editing, setEditing] = useState(false);   // in the placement editor (edits `sel`)
+  const [newProject, setNewProject] = useState(null); // { id, projectNumber, companyKey, client } → new-mockup mode
 
   const load = useCallback(async () => {
     try {
@@ -69,6 +70,18 @@ export default function MockupLab({ token, onBack, onNavigate }) {
     const t = setTimeout(() => setBusy(''), 5000); return () => clearTimeout(t);
   }, [busy]);
 
+  // Deep-link (from a project drawer / the hub): open an existing mockup by remoteId,
+  // or start a NEW project-linked mockup. The component is keyed by entry.nonce, so
+  // this fires once on entry.
+  useEffect(() => {
+    if (!entry) return;
+    if (entry.remoteId) { openMockup({ remoteId: entry.remoteId }); setEditing(true); }
+    else if (entry.newForProject) {
+      setNewProject({ id: entry.newForProject, projectNumber: entry.projectNumber || '', companyKey: entry.companyKey || '', client: entry.client || '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filtered = useMemo(() => {
     const items = list || [];
     const s = q.trim().toLowerCase();
@@ -76,10 +89,24 @@ export default function MockupLab({ token, onBack, onNavigate }) {
     return items.filter((m) => `${m.pageState?.mockupNum || ''} ${m.name || ''} ${m.client || ''}`.toLowerCase().includes(s));
   }, [list, q]);
 
-  // ── Interactive placement editor ─────────────────────────────────────────────
-  if (editing && sel) {
+  // ── New project-linked mockup ─────────────────────────────────────────────────
+  if (newProject) {
     return (
-      <MockupEditor token={token} mockup={sel.model} item={sel.item}
+      <MockupEditor token={token} mode="new" project={newProject}
+        onClose={() => { setNewProject(null); if (onBack) onBack(); }}
+        onSaved={async () => { setNewProject(null); await load(); }} />
+    );
+  }
+
+  // ── Interactive editor (existing mockup) ─────────────────────────────────────
+  if (editing && sel) {
+    const proj = {
+      id: (sel.item.pageState && sel.item.pageState.projectId) || '',
+      projectNumber: sel.model.projectNumber || '',
+      client: sel.model.client || '',
+    };
+    return (
+      <MockupEditor token={token} mode="edit" mockup={sel.model} item={sel.item} project={proj}
         onClose={() => setEditing(false)}
         onSaved={async () => { setEditing(false); await load(); await openMockup(sel.item); }} />
     );

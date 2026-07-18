@@ -3028,6 +3028,10 @@ function StudioBody({ token, onLogout }) {
   //   vendorsEntry  → open one vendor card in VendorsTab (by id, or resolve a name)
   //   lookbookEntry → open the Lookbooks builder prefiltered to one company
   const [ordersEntry, setOrdersEntry]   = React.useState({ orderNumber: null, projectNumber: null, openPos: false, nonce: 0 });
+  // mockupEntry → open the Mockup Lab deep-linked: an existing mockup by remoteId,
+  // or a NEW project-linked mockup (newForProject = the project _id). Carries the
+  // project/company context so a new mockup auto-links + numbers correctly.
+  const [mockupEntry, setMockupEntry]   = React.useState({ remoteId: null, newForProject: null, projectNumber: null, companyKey: null, client: null, nonce: 0 });
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
   const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, nonce: 0 });
   const isHub = view === 'hub';
@@ -3155,6 +3159,7 @@ function StudioBody({ token, onLogout }) {
     // target, so the tool remounts fresh — a stale deep-linked drawer from an
     // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
     if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
+    if (id === 'mockup') setMockupEntry((p) => ({ remoteId: null, newForProject: null, projectNumber: null, companyKey: null, client: null, nonce: p.nonce + 1 }));
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
     if (id === 'lookbooks') setLookbookEntry((p) => ({ companyKey: null, nonce: p.nonce + 1 }));
     if (id === 'outreach') setOutreachView(innerView || null);
@@ -3200,6 +3205,16 @@ function StudioBody({ token, onLogout }) {
         nonce: p.nonce + 1,
       }));
       setView('lookbooks');
+    } else if (v === 'mockup') {
+      setMockupEntry((p) => ({
+        remoteId: target.mockupRemoteId ? String(target.mockupRemoteId) : null,
+        newForProject: target.newForProject ? String(target.newForProject) : null,
+        projectNumber: target.projectNumber != null ? String(target.projectNumber) : null,
+        companyKey: target.companyKey ? String(target.companyKey) : null,
+        client: target.client ? String(target.client) : null,
+        nonce: p.nonce + 1,
+      }));
+      setView('mockup');
     } else {
       setView(v);
     }
@@ -3465,7 +3480,7 @@ function StudioBody({ token, onLogout }) {
                         <JpLoader size={56} label="Loading Mockup Lab…" />
                       </Box>
                     }>
-                      <MockupLab token={token} onBack={() => setView('hub')} onNavigate={navigate} />
+                      <MockupLab key={mockupEntry.nonce} token={token} onBack={() => setView('hub')} onNavigate={navigate} entry={mockupEntry} />
                     </React.Suspense>
                   )}
                   {view === 'coldcall'    && <ColdCallTab token={token} />}
