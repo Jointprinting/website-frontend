@@ -18,12 +18,10 @@ import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FlipOutlinedIcon from '@mui/icons-material/FlipOutlined';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar } from '../_shared';
 import { mockupFromLibraryItem, sidePreview } from './mockupModel';
-import MockupEditor from './MockupEditor';
 
 const base = `${config.backendUrl}/api`;
 // The legacy editor still owns interactive editing; deep-link into it by remoteId.
@@ -37,8 +35,6 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [q, setQ] = useState('');
-  const [editing, setEditing] = useState(false);   // in the placement editor (edits `sel`)
-  const [newProject, setNewProject] = useState(null); // { id, projectNumber, companyKey, client } → new-mockup mode
 
   const load = useCallback(async () => {
     try {
@@ -75,10 +71,9 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
   // this fires once on entry.
   useEffect(() => {
     if (!entry) return;
-    if (entry.remoteId) { openMockup({ remoteId: entry.remoteId }); setEditing(true); }
-    else if (entry.newForProject) {
-      setNewProject({ id: entry.newForProject, projectNumber: entry.projectNumber || '', companyKey: entry.companyKey || '', client: entry.client || '' });
-    }
+    // A mockup deep-link opens the read-only detail here; "Edit" hands off to the
+    // full-featured classic lab. (Project-drawer tiles open the lab directly.)
+    if (entry.remoteId) openMockup({ remoteId: entry.remoteId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -88,29 +83,6 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
     if (!s) return items;
     return items.filter((m) => `${m.pageState?.mockupNum || ''} ${m.name || ''} ${m.client || ''}`.toLowerCase().includes(s));
   }, [list, q]);
-
-  // ── New project-linked mockup ─────────────────────────────────────────────────
-  if (newProject) {
-    return (
-      <MockupEditor token={token} mode="new" project={newProject}
-        onClose={() => { setNewProject(null); if (onBack) onBack(); }}
-        onSaved={async () => { setNewProject(null); await load(); }} />
-    );
-  }
-
-  // ── Interactive editor (existing mockup) ─────────────────────────────────────
-  if (editing && sel) {
-    const proj = {
-      id: (sel.item.pageState && sel.item.pageState.projectId) || '',
-      projectNumber: sel.model.projectNumber || '',
-      client: sel.model.client || '',
-    };
-    return (
-      <MockupEditor token={token} mode="edit" mockup={sel.model} item={sel.item} project={proj}
-        onClose={() => setEditing(false)}
-        onSaved={async () => { setEditing(false); await load(); await openMockup(sel.item); }} />
-    );
-  }
 
   // ── Detail view ─────────────────────────────────────────────────────────────
   if (sel) {
@@ -136,11 +108,9 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
             <Button onClick={() => onNavigate({ view: 'clients', projectNumber })} size="small"
               sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open order →</Button>
           )}
-          <Button onClick={() => setEditing(true)} size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
-            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5 }}>Edit</Button>
           <Button component="a" href={classicHref(sel.item.remoteId)} target="_blank" rel="noreferrer" size="small"
             endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
-            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>Edit in classic</Button>
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, '&:hover': { color: '#3bd070' } }}>Edit in lab ↗</Button>
         </Stack>
 
         {/* The rendered view */}
