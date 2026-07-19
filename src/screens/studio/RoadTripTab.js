@@ -1,29 +1,41 @@
 // src/screens/studio/RoadTripTab.js — the FIELD MAP
 //
-// Nationwide dispensary prospecting map. How it works:
+// Nationwide dispensary prospecting map — the daily on-road cockpit: plan the
+// day's route, work it stop by stop, capture leads, and follow the day up.
 //
 //   - Pins come from OUR database (GET /api/roadtrip/dispensaries?bbox=…) —
-//     licensed rec dispensaries seeded from state rosters, PLUS stores found
-//     free via OpenStreetMap. Panning both reads the DB (instant) AND fires a
-//     free OSM sweep of the viewport (POST …/scan-osm) that fills in any new
-//     stores — so dispensaries just appear as you drive the map. ZERO paid
+//     licensed dispensaries from state rosters (24 rec + 14 medical markets;
+//     a roster autopilot keeps them fresh server-side) PLUS stores found free
+//     via OpenStreetMap (rec AND medical nets). Panning both reads the DB
+//     (instant) AND fires a free OSM sweep of any un-scanned tiles in the
+//     viewport — dispensaries just appear as you drive the map. ZERO paid
 //     API: no Google Places, no per-store enrichment, no manual state loading.
 //   - Rendering is a clustered GeoJSON source (native circles), not HTML
 //     markers — thousands of pins stay smooth. Pin color = status (fresh /
-//     in-CRM / customer / visited / dead). Chains never render (owner
-//     decision — too hard to pitch; excluded server-side). AUDIENCE clickers
-//     pick the markets: rec / med / hemp-THC (mirrors dispensaryStates).
-//   - TODAY'S RUN is the day plan: search the city → ADD ALL IN VIEW (or tap
-//     pins one at a time) → reorder with ▲▼ or OPTIMIZE (from your location)
-//     → GO opens Google Maps. Runs over 10 stops split into consecutive legs
-//     (Google's hard cap).
+//     in-CRM / customer / visited / dead). AUDIENCE clickers pick the
+//     markets — rec / med / hemp-THC — plus a CHAINS clicker: MSOs stay
+//     hidden by default (rarely pitchable) but the header always shows how
+//     many are hidden, so a chain-dominated market is never silently blank.
+//   - NAVIGATE searches places AND the dispensary DB by name/city in one box.
+//   - PLAN DAY (corridor) is the day builder: from → through → to (where
+//     you're sleeping), pick the band, SCAN — the server live-fills the whole
+//     route from OSM in one shot, then returns every store in the band in
+//     driving order, honoring the audience clickers. Prune, then BUILD DAY.
+//   - TODAY'S RUN is the working day: reorder with ▲▼ or OPTIMIZE (from your
+//     location) → GO opens Google Maps (legs of 10 — Google's hard cap) →
+//     ✓ visited → outcome → LOG VISIT captures the contact + queues tonight's
+//     catalog email. FINISH archives the day into the MISSION LOG.
+//   - MISSION LOG is the game layer: run streak, all-time totals, and every
+//     past day replayable on the map with each stop's CURRENT CRM stage — so
+//     yesterday's pitches are tonight's phone follow-ups.
 //   - CRM capture happens through the run: marking a stop "pitched" upserts
-//     the real CRM company (leadSource "Field Visit", visit logged); the run
-//     tray's + TO-DO writes a next-action so it lands in the CRM Today queue.
+//     the real CRM company (leadSource "Field Visit", visit logged); + TO-DO
+//     writes a next-action into the CRM Today queue. Bulk adds never write
+//     the CRM — only explicit captures do (the anti-flooding gate).
 //   - CRM state flows back onto the map: pins know their company's stage.
 //
-// Shared pure logic (gmaps leg chunking, key derivation, pin status) lives
-// in ./_roadTrip.js with tests.
+// Shared pure logic (gmaps leg chunking, key derivation, pin status, streak
+// math) lives in ./_roadTrip.js with tests.
 
 import * as React from 'react';
 import axios from 'axios';
@@ -35,11 +47,11 @@ import Alert from '@mui/material/Alert';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import config from '../../config.json';
-import { lsGet, lsSet } from '../../common/jpStorage';
+import { lsGet, lsSet, lsGetJson, lsSetJson } from '../../common/jpStorage';
 import { queuedRequest } from '../../common/offlineSync';
 import {
-  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS, SEGMENTS, INTEREST_LABELS, BULK_ADD_MAX,
-  haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf,
+  deriveCompanyKey, TODO_CHIPS, OUTCOME_CHIPS, SEGMENTS, CHAINS_CLICKER, INTEREST_LABELS,
+  haversineMi, fmtMi, buildGmapsLegs, PIN_STATUS, pinStatusOf, runStreakDays, historyTotals,
 } from './_roadTrip';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +95,10 @@ const CORRIDOR_SRC        = 'jp-corridor-route';
 const CORRIDOR_STOPS_SRC  = 'jp-corridor-stops';
 const LAYER_CORRIDOR_LINE  = 'jp-corridor-line';
 const LAYER_CORRIDOR_STOPS = 'jp-corridor-stop-pts';
+// Mission log replay: a past day's stops ghosted onto the map.
+const HISTORY_SRC        = 'jp-history-stops';
+const LAYER_HISTORY_PTS  = 'jp-history-pts';
+const LAYER_HISTORY_NUMS = 'jp-history-nums';
 
 const CUSTOM_TYPE_COLORS = { friend: '#06b6d4', client: '#a855f7', printer: '#f97316', other: '#94a3b8' };
 const CUSTOM_TYPE_LABELS = { friend: 'FRIEND', client: 'CLIENT', printer: 'PRINTER', other: 'WAYPOINT' };
@@ -231,6 +247,7 @@ function buildDispPopup({ d, inRun, onAddToRun, onHide, onOpenCrm }) {
   const badges = [];
   const seg = SEGMENTS.find((s) => s.id === d.segment);
   if (seg) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${seg.color};color:${seg.color};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;">${seg.label}</span>`);
+  if (d.isChain) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${CHAINS_CLICKER.color};color:${CHAINS_CLICKER.color};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;" title="${escapeAttr(d.chainName || 'multi-state chain')}">CHAIN${d.chainName ? ` · ${escapeHtml(truncate(d.chainName, 16).toUpperCase())}` : ''}</span>`);
   if (d.crm) badges.push(`<span data-jp="crm" style="display:inline-block;padding:2px 6px;border:1px solid ${statusMeta.color};color:${statusMeta.color};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;cursor:pointer;">CRM · ${escapeHtml(String(d.crm.stage).toUpperCase())} ↗</span>`);
   if (!d.verified) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${TERM.faint};color:${TERM.muted};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;">UNVERIFIED</span>`);
   if (d.verified && d.licenseNumber) badges.push(`<span style="display:inline-block;padding:2px 6px;border:1px solid ${TERM.borderDim};color:${TERM.muted};font-size:9px;font-weight:800;letter-spacing:1px;border-radius:2px;" title="${escapeAttr(d.licenseNumber)}">LICENSED</span>`);
@@ -366,31 +383,49 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [zoomedOut, setZoomedOut] = React.useState(false);
   const byIdRef = React.useRef(new Map());    // _id -> dispensary
 
-  // Filters. Segment clickers (REC / MED / HEMP-THC) persist across sessions —
+  // AUDIENCE clickers (REC / MED / HEMP-THC + CHAINS) persist across sessions —
   // the owner works one market at a time for days (SEGMENTS mirrors the server
-  // vocabulary in services/dispensaryStates.js — keep in sync).
+  // vocabulary in services/dispensaryStates.js — keep in sync). Stored under
+  // the house jpStorage namespace; the old raw 'jpfm-segments' key migrates on
+  // first read.
   const [segmentsOn, setSegmentsOn] = React.useState(() => {
+    // Validate BEFORE the emptiness check — a saved array of stale ids must
+    // fall through to all-on, not initialize zero clickers against a server
+    // that treats the empty param as "no filter".
+    const validate = (arr) => (Array.isArray(arr) ? arr.filter((s) => SEGMENTS.some((x) => x.id === s)) : []);
+    const saved = validate(lsGetJson('jpfm-audience', null)?.segments);
+    if (saved.length) return saved;
     try {
-      const saved = JSON.parse(localStorage.getItem('jpfm-segments') || 'null');
-      // Validate BEFORE the emptiness check — a saved array of stale ids must
-      // fall through to all-on, not initialize zero clickers against a server
-      // that treats the empty param as "no filter".
-      const valid = Array.isArray(saved) ? saved.filter((s) => SEGMENTS.some((x) => x.id === s)) : [];
-      if (valid.length) return valid;
+      const legacy = validate(JSON.parse(localStorage.getItem('jpfm-segments') || 'null'));
+      if (legacy.length) return legacy;
     } catch { /* fall through */ }
     return SEGMENTS.map((s) => s.id);
   });
+  const [chainsOn, setChainsOn] = React.useState(() => !!lsGetJson('jpfm-audience', null)?.chains);
+  const persistAudience = (segments, chains) => lsSetJson('jpfm-audience', { segments, chains });
   const toggleSegment = (id) => setSegmentsOn((prev) => {
     // Never allow zero segments — an empty map reads as broken, not filtered.
     const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
     if (!next.length) return prev;
-    try { localStorage.setItem('jpfm-segments', JSON.stringify(next)); } catch { /* ignore */ }
+    persistAudience(next, chainsOn);
     return next;
   });
-  const [verifiedOnly, setVerifiedOnly] = React.useState(false);
-  const [hideVisited, setHideVisited] = React.useState(false);
-  const [hideCustomers, setHideCustomers] = React.useState(false);
+  const toggleChains = () => setChainsOn((prev) => {
+    persistAudience(segmentsOn, !prev);
+    return !prev;
+  });
+  const [chainCount, setChainCount] = React.useState(0); // hidden-MSO count for the current view
   const [heatmapOn, setHeatmapOn] = React.useState(false);
+
+  // MISSION LOG — archived days (server FieldRun history) + the replay layer.
+  const [history, setHistory] = React.useState({ runs: [], loaded: false });
+  const [historyOpen, setHistoryOpen] = React.useState(null);  // { id, run, summary } | null
+  const [historyBusyId, setHistoryBusyId] = React.useState(null);
+  const [replayId, setReplayId] = React.useState(null);        // run id ghosted on the map
+  const replayRef = React.useRef(null);                        // geojson survives style swaps
+
+  // Coverage feedback: a live OSM sweep of new ground is running.
+  const [scanningGround, setScanningGround] = React.useState(false);
 
   // Today's Run
   const [run, setRun] = React.useState(null);
@@ -437,7 +472,10 @@ export default function RoadTripTab({ token, onNavigate }) {
   const myLocMarkerRef = React.useRef(null);
   const [locationSearch, setLocationSearch] = React.useState('');
   const [locationResults, setLocationResults] = React.useState([]);
+  const [dispResults, setDispResults] = React.useState([]); // dispensary-name hits from our DB
   const [locationSearching, setLocationSearching] = React.useState(false);
+  const searchDebounceRef = React.useRef(null);
+  const searchSeqRef = React.useRef(0);
 
   // Mobile — land on TODAY (the day's cockpit), not the raw map.
   const [mobileTab, setMobileTab] = React.useState('today');
@@ -581,7 +619,31 @@ export default function RoadTripTab({ token, onNavigate }) {
         },
       });
     }
-    // Re-hydrate corridor data after a style swap wiped the sources.
+    // Mission-log replay: a past day's stops ghosted on the map (amber rings +
+    // their day order), so "what did I drive Tuesday" is one tap.
+    if (!map.getSource(HISTORY_SRC)) {
+      map.addSource(HISTORY_SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: LAYER_HISTORY_PTS, type: 'circle', source: HISTORY_SRC,
+        paint: {
+          'circle-color': 'rgba(251,191,36,0.16)',
+          'circle-stroke-color': TERM.amber,
+          'circle-stroke-width': 1.5,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 8, 11, 12, 15, 15],
+        },
+      });
+      map.addLayer({
+        id: LAYER_HISTORY_NUMS, type: 'symbol', source: HISTORY_SRC,
+        layout: {
+          'text-field': ['get', 'n'],
+          'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+          'text-size': 10,
+          'text-allow-overlap': true,
+        },
+        paint: { 'text-color': TERM.amber },
+      });
+    }
+    // Re-hydrate corridor + replay data after a style swap wiped the sources.
     if (corridorRef.current) {
       const { geometry, stops } = corridorRef.current;
       const rs = map.getSource(CORRIDOR_SRC);
@@ -589,22 +651,20 @@ export default function RoadTripTab({ token, onNavigate }) {
       const ss = map.getSource(CORRIDOR_STOPS_SRC);
       if (ss) ss.setData({ type: 'FeatureCollection', features: (stops || []).map((d) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [d.lng, d.lat] }, properties: {} })) });
     }
+    if (replayRef.current) {
+      const hs = map.getSource(HISTORY_SRC);
+      if (hs) hs.setData(replayRef.current);
+    }
   }, []);
 
-  // ── Feature building (filters applied here) ────────────────────────────────
-  const visibleDisps = React.useMemo(() => {
-    return disps.filter((d) => {
-      if (d.lat == null || d.lng == null || !isFinite(d.lat) || !isFinite(d.lng)) return false;
-      if (verifiedOnly && !d.verified) return false;
-      const st = pinStatusOf(d);
-      if (hideVisited && (st === 'visited' || d.lastVisitedAt)) return false;
-      if (hideCustomers && (st === 'customer' || st === 'dead')) return false;
-      return true;
-    });
-  }, [disps, verifiedOnly, hideVisited, hideCustomers]);
-
-  const visibleDispsRef = React.useRef([]);
-  React.useEffect(() => { visibleDispsRef.current = visibleDisps; }, [visibleDisps]);
+  // ── Feature building ───────────────────────────────────────────────────────
+  // No client-side hide filters anymore (the old FILTERS panel thinned an
+  // already-capped sample and mostly hid pins people forgot about) — status is
+  // told through pin COLOR, and the audience clickers filter server-side.
+  const visibleDisps = React.useMemo(
+    () => disps.filter((d) => d.lat != null && d.lng != null && isFinite(d.lat) && isFinite(d.lng)),
+    [disps]
+  );
 
   const syncMapData = React.useCallback(() => {
     const map = mapRef.current;
@@ -679,6 +739,10 @@ export default function RoadTripTab({ token, onNavigate }) {
   };
 
   // ── Viewport loading ───────────────────────────────────────────────────────
+  // A dispensary picked from the search box wants its popup opened once its
+  // pin is actually in the loaded set — loadArea consumes this after fetching.
+  const pendingPopupRef = React.useRef(null); // { id, coords } | null
+
   const loadArea = React.useCallback(async () => {
     const map = mapRef.current;
     if (!map || !token) return;
@@ -691,53 +755,62 @@ export default function RoadTripTab({ token, onNavigate }) {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
         segments: segmentsOn.join(','),
+        ...(chainsOn ? { chains: 'true' } : {}),
       });
       const r = await axios.get(`${api}/api/roadtrip/dispensaries?${params}`, authHdr);
-      setDisps(r.data?.results || []);
+      const rows = r.data?.results || [];
+      setDisps(rows);
+      setChainCount(r.data?.chainCount || 0);
+      // A search-picked dispensary lands here after the fly-to: open its popup.
+      const pending = pendingPopupRef.current;
+      if (pending && rows.some((d) => String(d._id) === pending.id)) {
+        pendingPopupRef.current = null;
+        // byIdRef updates in an effect after setDisps commits — defer a tick.
+        setTimeout(() => openDispPopupRef.current(pending.id, pending.coords), 60);
+      }
     } catch (err) {
       showToast(err?.response?.data?.message || 'Area load failed.', 'error');
     } finally {
       setLoadingArea(false);
     }
-  }, [api, token, authHdr, showToast, segmentsOn]);
+  }, [api, token, authHdr, showToast, segmentsOn, chainsOn]);
 
   const loadAreaRef = React.useRef(loadArea);
   React.useEffect(() => { loadAreaRef.current = loadArea; }, [loadArea]);
 
-  // Free OSM viewport fill. When zoomed into an area, ask the server to sweep it
-  // on OpenStreetMap (Overpass — no API key, no billing) and upsert any new
-  // dispensaries into our DB; if it found any, reload the pins. A client-side
-  // tile guard (matching the server's ~0.5° tile throttle) means each area is
-  // only requested once per session — panning around a worked area stays free
-  // and instant. This is what makes stores "just appear" as you drive the map.
-  const scannedTilesRef = React.useRef(new Set());
+  // Free OSM viewport fill. When zoomed into an area, ask the server to sweep
+  // any un-scanned tiles on OpenStreetMap (Overpass — no API key, no billing;
+  // rec AND medical nets) and upsert new dispensaries into our DB; if it found
+  // any, reload the pins. The SERVER is the tile ledger now (per-tile, 30-day
+  // TTL over every tile the viewport touches) — the old client-side center-tile
+  // guard could skip fringe ground the server had never seen. A cheap "cached"
+  // answer is the steady state when panning worked ground; the in-flight guard
+  // keeps overlapping pans from stacking requests.
+  const scanBusyRef = React.useRef(false);
   const scanOsmArea = React.useCallback(async () => {
     const map = mapRef.current;
     if (!map || !token || map.getZoom() < OSM_SCAN_ZOOM) return;
-    const c = map.getCenter();
-    const tileKey = `${Math.floor(c.lat / 0.5) * 0.5}_${Math.floor(c.lng / 0.5) * 0.5}`;
-    if (scannedTilesRef.current.has(tileKey)) return;
-    scannedTilesRef.current.add(tileKey);
+    if (scanBusyRef.current) return;
+    scanBusyRef.current = true;
     const b = map.getBounds();
     try {
+      setScanningGround(true);
       const r = await axios.post(`${api}/api/roadtrip/dispensaries/scan-osm`, {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
       }, authHdr);
-      if (r.data?.error) {
-        // Soft failure (HTTP 200 + {error} — Overpass down or backing off).
-        // Unflag the tile so a later pan retries; otherwise this area would
-        // never scan again this session and its stores would never appear.
-        scannedTilesRef.current.delete(tileKey);
-        return;
-      }
-      if ((r.data?.added || 0) > 0 || (r.data?.attached || 0) > 0) {
+      if (r.data?.error || r.data?.cached || r.data?.skipped) return;
+      const added = r.data?.added || 0;
+      if (added > 0 || (r.data?.attached || 0) > 0) {
         loadAreaRef.current(); // surface the fresh finds
+        if (added > 0) showToast(`+${added} new store${added === 1 ? '' : 's'} found on this ground.`, 'success');
       }
-    } catch {
-      scannedTilesRef.current.delete(tileKey); // let a later pan retry
+    } catch { /* soft — DB pins already render; a later pan retries */ }
+    finally {
+      scanBusyRef.current = false;
+      setScanningGround(false);
     }
-  }, [api, token, authHdr]);
+  }, [api, token, authHdr, showToast]);
   const scanOsmAreaRef = React.useRef(scanOsmArea);
   React.useEffect(() => { scanOsmAreaRef.current = scanOsmArea; }, [scanOsmArea]);
 
@@ -755,10 +828,10 @@ export default function RoadTripTab({ token, onNavigate }) {
     return () => { map.off('moveend', onMoveEnd); if (t) clearTimeout(t); };
   }, [mapReady]);
 
-  // Toggling a segment clicker re-queries the viewport with the new mix.
+  // Toggling an audience clicker (segment or chains) re-queries the viewport.
   React.useEffect(() => {
     if (mapReady) loadAreaRef.current();
-  }, [mapReady, segmentsOn]);
+  }, [mapReady, segmentsOn, chainsOn]);
 
   // ── CRM actions ────────────────────────────────────────────────────────────
   const companyKeyFor = (d) => d.companyKey || deriveCompanyKey(d.name);
@@ -865,6 +938,16 @@ export default function RoadTripTab({ token, onNavigate }) {
       setCatQueue({ rows: r.data?.rows || [], loaded: true });
     } catch {
       setCatQueue((prev) => ({ ...prev, loaded: true }));
+    }
+  }, [api, authHdr]);
+
+  // The mission log's scoreboard rows (archived days, newest first).
+  const refreshHistory = React.useCallback(async () => {
+    try {
+      const r = await axios.get(`${api}/api/roadtrip/run/history?limit=60`, authHdr);
+      setHistory({ runs: r.data?.runs || [], loaded: true });
+    } catch {
+      setHistory((prev) => ({ ...prev, loaded: true }));
     }
   }, [api, authHdr]);
 
@@ -1036,7 +1119,8 @@ export default function RoadTripTab({ token, onNavigate }) {
     // Catalogs promised on today's visits and not yet emailed. Check-in calls
     // don't show here — sending the catalog books them into CRM Today.
     refreshCatQueue();
-  }, [token, api, authHdr, refreshRun, refreshCatQueue]);
+    refreshHistory();
+  }, [token, api, authHdr, refreshRun, refreshCatQueue, refreshHistory]);
 
   const addDispToRun = React.useCallback(async (d) => {
     try {
@@ -1161,41 +1245,6 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr, run, getLocation, showToast]);
 
-  // "Add all in view" — the day-planning flow: search the city being visited,
-  // let the viewport fill with stores, add every visible one to the day in a
-  // single tap (server-side bulk with dedupe), then reorder / optimize / hand
-  // off to Google Maps.
-  const [bulkAdding, setBulkAdding] = React.useState(false);
-  const addAllInView = React.useCallback(async () => {
-    const targets = (visibleDispsRef.current || []).filter((d) => d._id);
-    if (!targets.length) { showToast('No stores in view — search a city or zoom out a touch.', 'info'); return; }
-    // A drivable day is ~a dozen stops — adding 375 pins is never what you
-    // meant. Zoom to the block you're actually working.
-    if (targets.length > BULK_ADD_MAX) {
-      showToast(`${targets.length} stores in view — zoom in to ${BULK_ADD_MAX} or fewer to bulk-add (or tap pins one at a time).`, 'info');
-      return;
-    }
-    setBulkAdding(true);
-    try {
-      const r = await axios.post(`${api}/api/roadtrip/run/stops`, {
-        dispensaryIds: targets.map((d) => String(d._id)),
-      }, authHdr);
-      if (r.data?.run) setRun(r.data.run);
-      setRunMiles(null);
-      const added = r.data?.added || 0;
-      showToast(
-        added
-          ? `Added ${added} store${added === 1 ? '' : 's'} to the day${r.data?.capped ? ' (capped — zoom in for the rest)' : ''}.`
-          : 'Everything in view is already on the day.',
-        added ? 'success' : 'info',
-      );
-    } catch (err) {
-      showToast(err?.response?.data?.message || 'Bulk add failed.', 'error');
-    } finally {
-      setBulkAdding(false);
-    }
-  }, [api, authHdr, showToast]);
-
   // ── Corridor day planner ─────────────────────────────────────────────────────
   // Geocode one town (same Mapbox endpoint the NAVIGATE search uses).
   const geocodeOne = React.useCallback(async (q) => {
@@ -1250,23 +1299,33 @@ export default function RoadTripTab({ token, onNavigate }) {
       const step = Math.max(1, Math.ceil(line.length / 400));
       const points = line.filter((_, i) => i % step === 0 || i === line.length - 1)
         .map(([lng, lat]) => ({ lat, lng }));
-      const resp = await axios.post(`${api}/api/roadtrip/dispensaries/corridor`,
-        { points, bufferMi: corForm.bufferMi }, authHdr);
+      // The server live-fills the whole route band from OSM (one free query),
+      // then returns every store in the band in driving order — honoring the
+      // same audience clickers the map uses, chains included only when on.
+      const resp = await axios.post(`${api}/api/roadtrip/dispensaries/corridor`, {
+        points,
+        bufferMi: corForm.bufferMi,
+        segments: segmentsOn.join(','),
+        chains: chainsOn,
+      }, authHdr);
       const stops = resp.data?.results || [];
-      setCorPlan({ miles, stops, fromLabel: from.label, toLabel: to.label });
+      const fill = resp.data?.fill || null;
+      setCorPlan({ miles, stops, fromLabel: from.label, toLabel: to.label, fill });
       drawCorridor(route.geometry, stops);
       const b = new mapboxgl.LngLatBounds();
       line.forEach((c) => b.extend(c));
       mapRef.current?.fitBounds(b, { padding: 70 });
+      const fresh = fill && !fill.failed && fill.added > 0 ? ` (+${fill.added} found live)` : '';
+      const degraded = fill && fill.failed ? ' — live route scan unavailable, showing known stores' : '';
       showToast(stops.length
-        ? `${stops.length} dispos along the ${miles} mi drive — ✕ the out-of-the-way ones, then add the rest.`
-        : `Route found (${miles} mi) — no dispos in the band; widen the corridor?`, stops.length ? 'success' : 'info');
+        ? `${stops.length} dispos along the ${miles} mi drive${fresh}${degraded} — ✕ the out-of-the-way ones, then BUILD DAY.`
+        : `Route found (${miles} mi) — nothing in the band${degraded}; widen it?`, stops.length ? 'success' : 'info');
     } catch (err) {
       showToast(err?.response?.data?.message || err.message || 'Corridor scan failed.', 'error');
     } finally {
       setCorBusy(false);
     }
-  }, [api, authHdr, corForm, geocodeOne, drawCorridor, showToast]);
+  }, [api, authHdr, corForm, segmentsOn, chainsOn, geocodeOne, drawCorridor, showToast]);
 
   // Prune one proposed stop (his "remove the unnecessarily-out-of-the-way ones").
   const removeCorStop = React.useCallback((d) => {
@@ -1327,16 +1386,65 @@ export default function RoadTripTab({ token, onNavigate }) {
     }
   }, [api, authHdr, run, refreshRun, showToast]);
 
+  // ── Mission log (run history) ──────────────────────────────────────────────
+  // Ghost a past day onto the map (amber rings numbered in drive order).
+  const drawReplay = React.useCallback((runDoc) => {
+    const stops = (runDoc?.stops || []).filter((s) => isFinite(s.lat) && isFinite(s.lng));
+    const data = {
+      type: 'FeatureCollection',
+      features: stops.map((s, i) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
+        properties: { n: String(i + 1) },
+      })),
+    };
+    replayRef.current = stops.length ? data : null;
+    const src = mapRef.current?.getSource(HISTORY_SRC);
+    if (src) src.setData(data);
+    if (stops.length && mapRef.current) {
+      const b = new mapboxgl.LngLatBounds();
+      stops.forEach((s) => b.extend([s.lng, s.lat]));
+      mapRef.current.fitBounds(b, { padding: 80, maxZoom: 12 });
+    }
+  }, []);
+
+  const clearReplay = React.useCallback(() => {
+    setReplayId(null);
+    replayRef.current = null;
+    const src = mapRef.current?.getSource(HISTORY_SRC);
+    if (src) src.setData({ type: 'FeatureCollection', features: [] });
+  }, []);
+
+  // Open one archived day: full stops + each stop's CURRENT CRM stage.
+  const openHistoryRun = React.useCallback(async (summary) => {
+    if (historyOpen?.id === String(summary._id)) { setHistoryOpen(null); return; }
+    setHistoryBusyId(String(summary._id));
+    try {
+      const r = await axios.get(`${api}/api/roadtrip/run/history/${summary._id}`, authHdr);
+      setHistoryOpen({ id: String(summary._id), run: r.data?.run || null, summary: r.data?.summary || summary });
+    } catch {
+      showToast('Could not load that day.', 'error');
+    } finally {
+      setHistoryBusyId(null);
+    }
+  }, [api, authHdr, historyOpen, showToast]);
+
   const completeRun = React.useCallback(async () => {
     try {
-      await axios.post(`${api}/api/roadtrip/run/complete`, {}, authHdr);
+      const r = await axios.post(`${api}/api/roadtrip/run/complete`, {}, authHdr);
       setRun(null);
       setRunMiles(null);
-      showToast('Run finished — next stop starts a fresh one.', 'success');
+      // The day's scoreboard, straight to the face — then it lives in the log.
+      const done = r.data?.run;
+      const v = (done?.stops || []).filter((s) => s.status === 'visited').length;
+      const p = (done?.stops || []).filter((s) => s.outcome === 'pitched').length;
+      const q = (done?.stops || []).filter((s) => s.catalogQueued).length;
+      showToast(`DAY COMPLETE — ${v} visited · ${p} pitched · ${q} catalog${q === 1 ? '' : 's'} queued. Logged.`, 'success');
+      refreshHistory();
     } catch {
       showToast('Finish run failed.', 'error');
     }
-  }, [api, authHdr, showToast]);
+  }, [api, authHdr, showToast, refreshHistory]);
 
   const pendingStops = React.useMemo(
     () => (run?.stops || []).filter((s) => s.status === 'pending').sort((a, b) => a.order - b.order),
@@ -1475,23 +1583,51 @@ export default function RoadTripTab({ token, onNavigate }) {
       .catch((err) => showToast(err.message, 'error'));
   }, [getLocation, showToast]);
 
-  // ── Location search ────────────────────────────────────────────────────────
-  const searchLocation = async (query) => {
-    if (!query.trim()) { setLocationResults([]); return; }
+  // ── Search: places AND dispensaries in one box ─────────────────────────────
+  // "philadelphia" used to be a pure camera fly-to — the box never searched
+  // dispensaries at all. Now every query races the Mapbox geocoder AND our own
+  // DB name/city search; a store hit flies straight to its pin and pops it.
+  // Debounced (the old version geocoded every keystroke), sequence-guarded so
+  // a slow early response can't clobber a fresh one.
+  const runSearch = React.useCallback(async (query) => {
+    const q = query.trim();
+    if (!q) { setLocationResults([]); setDispResults([]); return; }
+    const seq = ++searchSeqRef.current;
     setLocationSearching(true);
     try {
-      const encoded = encodeURIComponent(query.trim());
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`
-        + `?access_token=${config.mapboxToken}&limit=5&country=US`;
-      const r = await fetch(url);
-      const data = await r.json();
-      setLocationResults(data.features || []);
-    } catch {
-      setLocationResults([]);
+      const geoUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
+        + `?access_token=${config.mapboxToken}&limit=4&country=US`;
+      const [geo, disp] = await Promise.allSettled([
+        fetch(geoUrl).then((r) => r.json()),
+        axios.get(`${api}/api/roadtrip/dispensaries/find?q=${encodeURIComponent(q)}`, authHdr),
+      ]);
+      if (seq !== searchSeqRef.current) return; // superseded by newer keystrokes
+      setLocationResults(geo.status === 'fulfilled' ? (geo.value.features || []) : []);
+      setDispResults(disp.status === 'fulfilled' ? (disp.value.data?.results || []) : []);
     } finally {
-      setLocationSearching(false);
+      if (seq === searchSeqRef.current) setLocationSearching(false);
     }
+  }, [api, authHdr]);
+
+  const queueSearch = React.useCallback((query) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => runSearch(query), 280);
+  }, [runSearch]);
+
+  const clearSearch = () => {
+    setLocationSearch('');
+    setLocationResults([]);
+    setDispResults([]);
   };
+
+  // Picking a dispensary hit: fly to the pin, and once the viewport load
+  // includes it, its popup opens (pendingPopupRef consumed by loadArea).
+  const pickDispResult = React.useCallback((d) => {
+    pendingPopupRef.current = { id: String(d._id), coords: [d.lng, d.lat] };
+    mapRef.current?.flyTo({ center: [d.lng, d.lat], zoom: 14, essential: true, duration: 1200 });
+    clearSearch();
+    if (window.innerWidth < 900) setMobileTab('map');
+  }, []);
 
   // ── Custom pin add ─────────────────────────────────────────────────────────
   const addCustomPin = async () => {
@@ -1541,6 +1677,20 @@ export default function RoadTripTab({ token, onNavigate }) {
   // Panels (shared between desktop sidebar + mobile overlays)
   // ─────────────────────────────────────────────────────────────────────────
 
+  const pickPlaceResult = (f) => {
+    const [lng, lat] = f.center;
+    mapRef.current?.flyTo({ center: [lng, lat], zoom: 11.5, essential: true, duration: 1200 });
+    clearSearch();
+    if (window.innerWidth < 900) setMobileTab('map');
+  };
+  // GO / Enter takes the top hit — a store beats a place (that's the search
+  // people actually mean when they type a dispensary's name).
+  const goTopHit = () => {
+    if (dispResults.length) pickDispResult(dispResults[0]);
+    else if (locationResults.length) pickPlaceResult(locationResults[0]);
+    else if (locationSearch.length > 1) runSearch(locationSearch);
+  };
+
   const navigatePanel = (
     <PanelSection title="NAVIGATE" persistKey="jpfm-nav">
       <Box sx={{ mb: 1.25 }}>
@@ -1550,11 +1700,11 @@ export default function RoadTripTab({ token, onNavigate }) {
               value={locationSearch}
               onChange={(e) => {
                 setLocationSearch(e.target.value);
-                if (e.target.value.length > 2) searchLocation(e.target.value);
-                else setLocationResults([]);
+                if (e.target.value.trim().length > 1) queueSearch(e.target.value);
+                else { setLocationResults([]); setDispResults([]); }
               }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && locationSearch.length > 1) searchLocation(locationSearch); }}
-              placeholder="Search city or address…"
+              onKeyDown={(e) => { if (e.key === 'Enter') goTopHit(); }}
+              placeholder="City, address, or dispensary name…"
               style={{ ...inputStyle, padding: '8px 32px 8px 10px', border: `1.5px solid ${TERM.border}`, background: 'rgba(74,222,128,0.04)', fontSize: 11.5, letterSpacing: 0.3 }}
             />
             {locationSearching && (
@@ -1562,7 +1712,7 @@ export default function RoadTripTab({ token, onNavigate }) {
             )}
           </Box>
           <Box role="button" tabIndex={0}
-            onClick={() => { if (locationSearch.length > 1) searchLocation(locationSearch); }}
+            onClick={goTopHit}
             sx={{
               fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
               color: TERM.greenDk, px: 1.25, flexShrink: 0, cursor: 'pointer', borderRadius: 0.5,
@@ -1571,17 +1721,34 @@ export default function RoadTripTab({ token, onNavigate }) {
               '&:hover': { opacity: 0.88 },
             }}>GO</Box>
         </Box>
-        {locationResults.length > 0 && (
+        {(dispResults.length > 0 || locationResults.length > 0) && (
           <Box sx={{ mt: 0.5, border: `1px solid ${TERM.border}`, borderRadius: 0.5, overflow: 'hidden' }}>
+            {dispResults.map((d) => {
+              const seg = SEGMENTS.find((s) => s.id === d.segment);
+              return (
+                <Box key={String(d._id)} role="button" tabIndex={0}
+                  onClick={() => pickDispResult(d)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.9,
+                    fontFamily: MONO, fontSize: 10.5, color: TERM.text, px: 1.25, py: 0.85,
+                    cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
+                    '&:hover': { bgcolor: 'rgba(74,222,128,0.08)', color: TERM.green },
+                  }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: seg ? seg.color : TERM.muted, boxShadow: `0 0 6px ${seg ? seg.color : TERM.muted}80` }} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, color: 'inherit' }}>
+                      {d.name}{d.isChain ? ' · CHAIN' : ''}
+                    </Typography>
+                    <Typography noWrap sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.muted }}>
+                      {d.address || d.state}{d.verified ? ' · licensed' : ''}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
             {locationResults.map((f) => (
               <Box key={f.id} role="button" tabIndex={0}
-                onClick={() => {
-                  const [lng, lat] = f.center;
-                  mapRef.current?.flyTo({ center: [lng, lat], zoom: 11.5, essential: true, duration: 1200 });
-                  setLocationSearch('');
-                  setLocationResults([]);
-                  if (window.innerWidth < 900) setMobileTab('map');
-                }}
+                onClick={() => pickPlaceResult(f)}
                 sx={{
                   fontFamily: MONO, fontSize: 10.5, color: TERM.text, px: 1.25, py: 0.85,
                   cursor: 'pointer', borderBottom: `1px solid ${TERM.borderDim}`,
@@ -1679,19 +1846,8 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       ) : (
         <Box sx={{ mb: 2 }}>
-          <Box role="button" tabIndex={0} onClick={addAllInView}
-            sx={{
-              fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1, textAlign: 'center',
-              py: 0.9, mb: 0.75, cursor: 'pointer', borderRadius: 0.5,
-              color: bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.muted : TERM.greenDk),
-              bgcolor: bulkAdding || visibleDisps.length > BULK_ADD_MAX ? 'transparent' : TERM.green,
-              border: `1.5px solid ${bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.borderDim : TERM.green)}`,
-              '&:hover': { opacity: 0.9 },
-            }}>{bulkAdding ? 'ADDING…'
-              : visibleDisps.length > BULK_ADD_MAX ? `ZOOM IN TO ADD ALL (${visibleDisps.length} · max ${BULK_ADD_MAX})`
-              : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}</Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
-            Search the city you're visiting, then add every store in view — or tap pins one at a time. Your day is saved here; even 20 stops chunk into Google Maps legs you reopen anytime.
+            No day built yet. PLAN DAY maps your whole drive — from where you are, through the towns you pass, to tonight's camp — and lines up every dispensary along it in driving order. Or tap any pin → ＋ ADD TO RUN.
           </Typography>
         </Box>
       )}
@@ -1765,10 +1921,11 @@ export default function RoadTripTab({ token, onNavigate }) {
     </Box>
   );
 
-  // CORRIDOR PLAN — the day planner: from → through → to, scan the band along
-  // the drive, ✕ the out-of-the-way ones, send the rest to Today's Run.
+  // PLAN DAY — the day builder: from → through → to (tonight's camp), scan the
+  // band along the drive (server live-fills the route from OSM first), ✕ the
+  // out-of-the-way ones, BUILD DAY sends the rest to Today's Run in drive order.
   const corridorPanel = (
-    <PanelSection title={`CORRIDOR PLAN${corPlan ? ` · ${corPlan.stops.length}` : ''}`} persistKey="jpfm-corridor">
+    <PanelSection title={`PLAN DAY${corPlan ? ` · ${corPlan.stops.length}` : ''}`} persistKey="jpfm-corridor">
       {!corPlan ? (
         <Stack spacing={0.75}>
           <input value={corForm.from} onChange={(e) => setCorForm((f) => ({ ...f, from: e.target.value }))}
@@ -1782,7 +1939,7 @@ export default function RoadTripTab({ token, onNavigate }) {
             style={inputStyle} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, letterSpacing: 1 }}>BAND</Typography>
-            {[2, 3, 5, 8].map((m) => (
+            {[2, 3, 5, 8, 12].map((m) => (
               <Box key={m} role="button" onClick={() => setCorForm((f) => ({ ...f, bufferMi: m }))}
                 sx={{ px: 1, py: 0.3, borderRadius: 0.5, cursor: 'pointer', fontFamily: MONO, fontSize: 9.5, fontWeight: 800,
                   color: corForm.bufferMi === m ? TERM.cyan : TERM.muted,
@@ -1802,13 +1959,16 @@ export default function RoadTripTab({ token, onNavigate }) {
             {corBusy ? 'SCANNING…' : '🛣 SCAN MY ROUTE'}
           </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, fontStyle: 'italic', lineHeight: 1.5 }}>
-            Maps the whole day: your drive + every dispo within the band, in driving order. Needs signal — plan before you roll.
+            Maps the whole day: your drive + every dispo within the band, in driving order — the route gets a live scan first, so nothing on the way is missed. Honors the AUDIENCE clickers. Needs signal — plan before you roll.
           </Typography>
         </Stack>
       ) : (
         <Stack spacing={0.5}>
           <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, lineHeight: 1.5 }}>
-            {corPlan.fromLabel} → {corPlan.toLabel} · {corPlan.miles} mi · ✕ what's out of the way
+            {corPlan.fromLabel} → {corPlan.toLabel} · {corPlan.miles} mi
+            {corPlan.fill && !corPlan.fill.failed && corPlan.fill.added > 0 ? ` · +${corPlan.fill.added} found live` : ''}
+            {corPlan.fill && corPlan.fill.failed ? ' · live scan unavailable (known stores only)' : ''}
+            {' '}· ✕ what's out of the way
           </Typography>
           <Box sx={{ maxHeight: 260, overflowY: 'auto' }}>
             <Stack spacing={0.4}>
@@ -1836,7 +1996,7 @@ export default function RoadTripTab({ token, onNavigate }) {
                 py: 0.9, cursor: 'pointer', borderRadius: 0.5, color: TERM.greenDk, bgcolor: TERM.green,
                 border: `1.5px solid ${TERM.green}`, '&:hover': { opacity: 0.9 },
               }}>
-              ＋ ADD {corPlan.stops.length} TO TODAY'S RUN
+              ⚑ BUILD DAY — {corPlan.stops.length} STOP{corPlan.stops.length === 1 ? '' : 'S'} IN DRIVE ORDER
             </Box>
           )}
           <Box role="button" onClick={clearCorridor}
@@ -1851,26 +2011,9 @@ export default function RoadTripTab({ token, onNavigate }) {
   const runPanel = (
     <PanelSection title={`TODAY'S RUN · ${run?.stops?.length || 0}`} persistKey="jpfm-run">
       {(!run || !run.stops?.length) ? (
-        <>
-          <Box role="button" tabIndex={0}
-            onClick={addAllInView}
-            onKeyDown={(e) => { if (e.key === 'Enter') addAllInView(); }}
-            sx={{
-              fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: 1,
-              py: 0.9, mb: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
-              color: bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.muted : TERM.greenDk),
-              bgcolor: bulkAdding || visibleDisps.length > BULK_ADD_MAX ? 'transparent' : TERM.green,
-              border: `1.5px solid ${bulkAdding ? TERM.amber : (visibleDisps.length > BULK_ADD_MAX ? TERM.borderDim : TERM.green)}`,
-              '&:hover': { opacity: 0.9 },
-            }}>
-            {bulkAdding ? 'ADDING…'
-              : visibleDisps.length > BULK_ADD_MAX ? `ZOOM IN TO ADD ALL (${visibleDisps.length} · max ${BULK_ADD_MAX})`
-              : `＋ ADD ALL IN VIEW${visibleDisps.length ? ` (${visibleDisps.length})` : ''}`}
-          </Box>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 0.5, fontStyle: 'italic' }}>
-            Search the city you're visiting, then save every store in view to the day. Or tap any pin → ＋ ADD TO RUN.
-          </Typography>
-        </>
+        <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, lineHeight: 1.55, py: 0.5, fontStyle: 'italic' }}>
+          Empty day. Build it with PLAN DAY (your whole drive in order, ending at camp) or tap any pin → ＋ ADD TO RUN.
+        </Typography>
       ) : (
         <>
           <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5 }}>
@@ -1887,17 +2030,6 @@ export default function RoadTripTab({ token, onNavigate }) {
               {optimizing ? 'OPTIMIZING…' : '⚡ OPTIMIZE'}
             </Box>
             <Box role="button" tabIndex={0}
-              onClick={addAllInView}
-              title="Add every store in the current view to the day"
-              sx={{
-                fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                py: 0.8, px: 1.25, textAlign: 'center', cursor: 'pointer', borderRadius: 0.5,
-                color: bulkAdding ? TERM.amber : TERM.cyan, border: `1px solid ${bulkAdding ? TERM.amber : TERM.cyan}`,
-                '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
-              }}>
-              {bulkAdding ? '…' : '＋ VIEW'}
-            </Box>
-            <Box role="button" tabIndex={0}
               onClick={completeRun}
               sx={{
                 fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: 1,
@@ -1909,8 +2041,18 @@ export default function RoadTripTab({ token, onNavigate }) {
             </Box>
           </Stack>
 
+          {/* Day progress — the "mission bar": visited fill + pitched ticks. */}
+          <Box sx={{ mb: 0.6, height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', overflow: 'hidden', border: `1px solid ${TERM.borderDim}` }}>
+            <Box sx={{
+              width: `${run.stops.length ? Math.round((visitedCount / run.stops.length) * 100) : 0}%`,
+              height: '100%', bgcolor: TERM.green, boxShadow: `0 0 10px ${TERM.green}`,
+              transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
+            }} />
+          </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: TERM.muted, letterSpacing: 0.5, mb: 1 }}>
             {visitedCount}/{run.stops.length} visited
+            <Box component="span" sx={{ color: TERM.green }}> · ⚡{(run.stops || []).filter((s) => s.outcome === 'pitched').length} pitched</Box>
+            <Box component="span" sx={{ color: TERM.amber }}> · 📬{(run.stops || []).filter((s) => s.catalogQueued).length} queued</Box>
             {runMiles != null && <Box component="span" sx={{ color: TERM.green }}> · ~{runMiles}mi</Box>}
             {myLoc == null && <Box component="span" sx={{ color: TERM.amber }}> · tap MY LOCATION for distances</Box>}
           </Typography>
@@ -2054,41 +2196,10 @@ export default function RoadTripTab({ token, onNavigate }) {
     </PanelSection>
   );
 
-  const filtersPanel = (
-    <PanelSection title="FILTERS" persistKey="jpfm-filters" defaultOpen={false}>
-      {[
-        { label: 'LICENSED ONLY', on: verifiedOnly, set: setVerifiedOnly },
-        { label: 'HIDE VISITED', on: hideVisited, set: setHideVisited },
-        { label: 'HIDE CUSTOMERS + DEAD', on: hideCustomers, set: setHideCustomers },
-      ].map((f) => (
-        <Box key={f.label} role="button" tabIndex={0}
-          onClick={() => f.set((v) => !v)}
-          sx={{
-            fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1,
-            px: 1, py: 0.6, mb: 0.5, cursor: 'pointer', borderRadius: 0.25,
-            display: 'flex', alignItems: 'center', gap: 1,
-            color: f.on ? TERM.green : TERM.muted,
-            border: `1px solid ${f.on ? TERM.green : TERM.borderDim}`,
-            bgcolor: f.on ? 'rgba(74,222,128,0.08)' : 'transparent',
-            '&:hover': { borderColor: TERM.green },
-          }}>
-          <Box component="span">{f.on ? '☑' : '☐'}</Box> {f.label}
-        </Box>
-      ))}
-      <Box sx={{ mt: 1 }}>
-        {Object.entries(PIN_STATUS).map(([k, v]) => (
-          <Box key={k} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.4 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: v.color, flexShrink: 0, border: '1.5px solid #05080a', boxShadow: `0 0 0 1px ${v.color}` }} />
-            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>{v.label}</Typography>
-          </Box>
-        ))}
-      </Box>
-    </PanelSection>
-  );
-
   // The audience clickers — which markets render: licensed rec, licensed
-  // medical, and hemp-derived THC retail ("bodega THC"). Chains never render
-  // at all (server-side exclusion — too hard to pitch).
+  // medical, hemp-derived THC retail ("bodega THC"), and the CHAINS clicker
+  // (MSOs hidden by default but never silently — the count is always shown).
+  // Pin colors carry the status story, so the old FILTERS panel is gone.
   const segmentsPanel = (
     <PanelSection title="AUDIENCE" persistKey="jpfm-segments-panel">
       <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -2110,9 +2221,128 @@ export default function RoadTripTab({ token, onNavigate }) {
           );
         })}
       </Box>
+      <Box role="button" tabIndex={0}
+        onClick={toggleChains}
+        sx={{
+          mt: 0.5, textAlign: 'center', fontFamily: MONO, fontSize: 9.5, fontWeight: 900,
+          letterSpacing: 0.8, px: 0.5, py: 0.7, cursor: 'pointer', borderRadius: 0.25,
+          color: chainsOn ? CHAINS_CLICKER.color : TERM.muted,
+          border: `1.5px solid ${chainsOn ? CHAINS_CLICKER.color : TERM.borderDim}`,
+          bgcolor: chainsOn ? `${CHAINS_CLICKER.color}14` : 'transparent',
+          '&:hover': { borderColor: CHAINS_CLICKER.color },
+        }}>
+        {chainsOn ? '☑' : '☐'} {CHAINS_CLICKER.label}
+        {!chainsOn && chainCount > 0 ? ` · +${chainCount} hidden here` : ''}
+      </Box>
       <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.faint, mt: 0.75, lineHeight: 1.4 }}>
-        HEMP THC = delta-8 / THCA shops in no-rec states (TX, the South). Chains never show.
+        HEMP THC = delta-8 / THCA shops in no-rec states (TX, the South). CHAINS = MSO stores (Curaleaf, RISE…) — usually corporate-buy, but never hidden without a count.
       </Typography>
+      <Box sx={{ mt: 1 }}>
+        {Object.entries(PIN_STATUS).map(([k, v]) => (
+          <Box key={k} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.4 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: v.color, flexShrink: 0, border: '1.5px solid #05080a', boxShadow: `0 0 0 1px ${v.color}` }} />
+            <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted }}>{v.label}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </PanelSection>
+  );
+
+  // ── MISSION LOG — the game layer: streak, all-time score, and every past
+  // day expandable + replayable on the map with live CRM stages. ─────────────
+  const streak = runStreakDays(history.runs);
+  const totals = historyTotals(history.runs);
+  const historyPanel = (
+    <PanelSection title={`MISSION LOG${history.runs.length ? ` · ${history.runs.length}` : ''}`} persistKey="jpfm-log" defaultOpen={false}>
+      {!history.loaded ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1 }}>loading…</Typography>
+      ) : !history.runs.length ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5 }}>
+          no days logged yet — FINISH a run and it lands here with its scoreboard
+        </Typography>
+      ) : (
+        <Stack spacing={0.5}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            {streak.days > 0 && (
+              <Box sx={{
+                fontFamily: MONO, fontSize: 9.5, fontWeight: 900, letterSpacing: 0.5, px: 1, py: 0.5,
+                borderRadius: 0.5, color: TERM.amber, border: `1px solid ${TERM.amber}`, bgcolor: 'rgba(251,191,36,0.08)',
+              }}>🔥 {streak.days}-DAY STREAK</Box>
+            )}
+            <Box sx={{
+              fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, px: 1, py: 0.5,
+              borderRadius: 0.5, color: TERM.muted, border: `1px solid ${TERM.borderDim}`,
+            }}>{totals.visited} visited · {totals.pitched} pitched · {totals.miles}mi all-time</Box>
+          </Box>
+          {replayId && (
+            <Box role="button" tabIndex={0} onClick={clearReplay}
+              sx={{
+                fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textAlign: 'center', py: 0.6,
+                cursor: 'pointer', borderRadius: 0.5, color: TERM.amber, border: `1px dashed ${TERM.amber}`,
+                '&:hover': { bgcolor: 'rgba(251,191,36,0.1)' },
+              }}>CLEAR REPLAY FROM MAP</Box>
+          )}
+          <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+            <Stack spacing={0.4}>
+              {history.runs.map((r) => {
+                const open = historyOpen?.id === String(r._id);
+                const when = r.date ? new Date(r.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : r.label;
+                return (
+                  <Box key={String(r._id)} sx={{ border: `1px solid ${open ? TERM.amber : TERM.borderDim}`, borderRadius: 0.5 }}>
+                    <Box role="button" tabIndex={0} onClick={() => openHistoryRun(r)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 0.75, py: 0.6, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(251,191,36,0.05)' } }}>
+                      <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, color: TERM.text, width: 46, flexShrink: 0 }}>
+                        {historyBusyId === String(r._id) ? '…' : when}
+                      </Typography>
+                      <Typography noWrap sx={{ fontFamily: MONO, fontSize: 9, color: TERM.muted, flex: 1 }}>
+                        {r.visited}/{r.stops} ✓ · ⚡{r.pitched}{r.catalogsSent ? ` · 📬${r.catalogsSent}` : ''}{r.miles ? ` · ${r.miles}mi` : ''}
+                      </Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: 9, color: TERM.amber, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</Typography>
+                    </Box>
+                    {open && historyOpen?.run && (
+                      <Box sx={{ borderTop: `1px solid ${TERM.borderDim}`, p: 0.75 }}>
+                        <Box role="button" tabIndex={0}
+                          onClick={() => { setReplayId(String(r._id)); drawReplay(historyOpen.run); if (window.innerWidth < 900) setMobileTab('map'); }}
+                          sx={{
+                            fontFamily: MONO, fontSize: 9.5, fontWeight: 900, letterSpacing: 1, textAlign: 'center', py: 0.6, mb: 0.6,
+                            cursor: 'pointer', borderRadius: 0.5, color: TERM.amber, border: `1px solid ${TERM.amber}`,
+                            bgcolor: replayId === String(r._id) ? 'rgba(251,191,36,0.14)' : 'transparent',
+                            '&:hover': { bgcolor: 'rgba(251,191,36,0.1)' },
+                          }}>{replayId === String(r._id) ? '◉ ON THE MAP' : '⟲ REPLAY ON MAP'}</Box>
+                        <Stack spacing={0.3}>
+                          {(historyOpen.run.stops || []).map((s, i) => (
+                            <Box key={String(s._id)} sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                              <Typography sx={{ fontFamily: MONO, fontSize: 8.5, color: TERM.amber, width: 14, flexShrink: 0 }}>{i + 1}</Typography>
+                              <Typography noWrap sx={{
+                                fontFamily: MONO, fontSize: 9.5, color: s.status === 'visited' ? TERM.text : TERM.muted, flex: 1, minWidth: 0,
+                                textDecoration: s.status === 'visited' ? 'none' : 'line-through', textDecorationColor: TERM.faint,
+                              }}>{s.name}</Typography>
+                              {s.outcome && (
+                                <Typography sx={{ fontFamily: MONO, fontSize: 8, color: s.outcome === 'pitched' ? TERM.green : TERM.muted, flexShrink: 0 }}>
+                                  {s.outcome === 'pitched' ? '⚡' : s.outcome === 'no_buyer' ? '∅' : '✕'}
+                                </Typography>
+                              )}
+                              {s.crm ? (
+                                <Box role="button" tabIndex={0}
+                                  onClick={() => onNavigate && onNavigate({ view: 'crm', companyKey: s.crm.companyKey })}
+                                  sx={{
+                                    fontFamily: MONO, fontSize: 8, fontWeight: 800, px: 0.5, py: 0.15, borderRadius: 0.25,
+                                    color: TERM.cyan, border: `1px solid ${TERM.cyan}`, cursor: 'pointer', flexShrink: 0,
+                                    '&:hover': { bgcolor: 'rgba(6,182,212,0.12)' },
+                                  }}>{String(s.crm.stage || 'lead').toUpperCase()} ↗</Box>
+                              ) : null}
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Stack>
+          </Box>
+        </Stack>
+      )}
     </PanelSection>
   );
 
@@ -2151,6 +2381,32 @@ export default function RoadTripTab({ token, onNavigate }) {
             border: `1px solid ${loadingArea ? TERM.amber : TERM.green}`,
           }}
         />
+        {!chainsOn && chainCount > 0 && (
+          <Chip
+            label={`+${chainCount} CHAINS`}
+            size="small"
+            onClick={toggleChains}
+            sx={{
+              height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
+              letterSpacing: 1, borderRadius: 0.5, cursor: 'pointer',
+              bgcolor: 'transparent', color: CHAINS_CLICKER.color,
+              border: `1px dashed ${CHAINS_CLICKER.color}`,
+              '&:hover': { bgcolor: `${CHAINS_CLICKER.color}1a` },
+            }}
+          />
+        )}
+        {scanningGround && (
+          <Chip
+            label="SCANNING NEW GROUND…"
+            size="small"
+            sx={{
+              height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
+              letterSpacing: 1, borderRadius: 0.5,
+              bgcolor: 'rgba(6,182,212,0.12)', color: TERM.cyan,
+              border: `1px solid ${TERM.cyan}`,
+            }}
+          />
+        )}
         <Box sx={{ flexGrow: 1 }} />
         <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: TERM.muted, letterSpacing: 0.5, display: { xs: 'none', sm: 'block' } }}>
           [ JOINT PRINTING · FIELD OPS ]
@@ -2177,7 +2433,7 @@ export default function RoadTripTab({ token, onNavigate }) {
             {corridorPanel}
             {segmentsPanel}
             {runPanel}
-            {filtersPanel}
+            {historyPanel}
           </Box>
         </Box>
 
@@ -2287,8 +2543,8 @@ export default function RoadTripTab({ token, onNavigate }) {
         </Box>
       )}
 
-      {/* ── Mobile LEADS overlay (search pins + audience + filters) ────── */}
-      {mobileTab === 'leads' && (
+      {/* ── Mobile PLAN overlay (search + day builder + audience) ──────── */}
+      {mobileTab === 'plan' && (
         <Box sx={{
           display: { xs: 'flex', md: 'none' },
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
@@ -2300,8 +2556,20 @@ export default function RoadTripTab({ token, onNavigate }) {
             {navigatePanel}
             {corridorPanel}
             {segmentsPanel}
-            {filtersPanel}
           </Box>
+        </Box>
+      )}
+
+      {/* ── Mobile LOG overlay (the mission log) ───────────────────────── */}
+      {mobileTab === 'log' && (
+        <Box sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 56, zIndex: 15,
+          bgcolor: TERM.panel, flexDirection: 'column', overflow: 'auto',
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-thumb': { background: 'rgba(74,222,128,0.18)', borderRadius: 3 },
+        }}>
+          <Box sx={{ p: 2 }}>{historyPanel}</Box>
         </Box>
       )}
 
@@ -2314,8 +2582,9 @@ export default function RoadTripTab({ token, onNavigate }) {
         {[
           { id: 'today', label: 'TODAY', icon: '◎' },
           { id: 'map',   label: 'MAP',   icon: '⊕' },
-          { id: 'leads', label: 'LEADS', icon: '⊞' },
+          { id: 'plan',  label: 'PLAN',  icon: '⊞' },
           { id: 'run',   label: run?.stops?.length ? `RUN·${visitedCount}/${run.stops.length}` : 'RUN', icon: '◉' },
+          { id: 'log',   label: 'LOG',   icon: '▤' },
         ].map((tab) => (
           <Box key={tab.id} role="button" tabIndex={0}
             onClick={() => setMobileTab(tab.id)}

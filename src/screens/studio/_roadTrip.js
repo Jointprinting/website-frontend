@@ -13,8 +13,9 @@ export function deriveCompanyKey(name) {
 
 // ── Market segments (MIRRORS services/dispensaryStates.js SEGMENTS /
 // deriveSegment on the backend — keep ids in sync). The map's clickers:
-//   rec  — licensed adult-use dispensaries
-//   med  — licensed medical-only dispensaries
+//   rec  — licensed adult-use dispensaries (24 roster states)
+//   med  — licensed medical-only dispensaries (14 roster states — PA, FL, OK…
+//          license-loaded server-side just like the rec markets)
 //   hemp — hemp-derived-THC retail ("bodega THC": delta-8/THCA smoke, vape
 //          and CBD shops in states with no legal marijuana retail)
 // The server derives a pin's segment from its state + source; '' (unknown)
@@ -24,6 +25,11 @@ export const SEGMENTS = [
   { id: 'med',  label: 'MED',      color: '#60a5fa' },
   { id: 'hemp', label: 'HEMP THC', color: '#c084fc' },
 ];
+
+// The fourth clicker: chain / MSO stores. Excluded server-side unless asked
+// for (`chains=true`) — the count of hidden chains always comes back so an
+// MSO-dominated market (Philly med) is never silently invisible.
+export const CHAINS_CLICKER = { id: 'chains', label: 'CHAINS', color: '#f472b6' };
 
 // ── Quick to-do chips — each writes a CRM next-action log entry + follow-up
 // date so it lands in the CRM Today queue. ───────────────────────────────────
@@ -44,9 +50,48 @@ export const OUTCOME_CHIPS = [
 // 🔥 interest scale for the on-road contact capture (1–5).
 export const INTEREST_LABELS = ['', 'not into it', 'lukewarm', 'curious', 'hot', 'ON FIRE'];
 
-// "Add all in view" refuses above this — a drivable day is ~a dozen stops, so
-// a 375-pin viewport is a mis-zoom, not a plan.
-export const BULK_ADD_MAX = 30;
+// ── Mission log math (run history panel) ─────────────────────────────────────
+// Honest streak/totals over the server's per-day run summaries — same spirit
+// as the Content tab's unit-tested streak chip: the fun parts must be honest.
+
+const localDayKey = (d) => {
+  const t = new Date(d);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * Consecutive-day run streak. Counts back from today (or yesterday, so an
+ * unstarted morning doesn't read as a broken streak) through days that have
+ * at least one archived run. → { days, active }
+ */
+export function runStreakDays(summaries, now = new Date()) {
+  const days = new Set(
+    (summaries || []).map((r) => r.date || r.endedAt).filter(Boolean).map(localDayKey)
+  );
+  if (!days.size) return { days: 0, active: false };
+  let cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const back = () => { cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 1); };
+  if (!days.has(localDayKey(cur))) back(); // streak may anchor on yesterday
+  if (!days.has(localDayKey(cur))) return { days: 0, active: false };
+  let n = 0;
+  while (days.has(localDayKey(cur))) { n += 1; back(); }
+  return { days: n, active: true };
+}
+
+/** All-time scoreboard across run summaries. */
+export function historyTotals(summaries) {
+  const t = { runs: 0, stops: 0, visited: 0, pitched: 0, catalogsSent: 0, miles: 0 };
+  for (const r of (summaries || [])) {
+    t.runs += 1;
+    t.stops += r.stops || 0;
+    t.visited += r.visited || 0;
+    t.pitched += r.pitched || 0;
+    t.catalogsSent += r.catalogsSent || 0;
+    t.miles += r.miles || 0;
+  }
+  t.miles = Math.round(t.miles);
+  return t;
+}
 
 // ── Distance ─────────────────────────────────────────────────────────────────
 export function haversineMi(a, b) {
