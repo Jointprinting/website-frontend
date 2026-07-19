@@ -122,7 +122,7 @@ function allocFor(item, key) {
 function emptyItem() {
   return {
     mockupNum: '', customMockupDataUrl: '', mockupSnapshots: [], showBack: false,
-    productName: '', brandName: '', styleCode: '', printType: '', color: '', printerName: '',
+    productName: '', brandName: '', styleCode: '', printType: '', color: '', printerName: '', printerKey: '',
     sizes: DEFAULT_SIZES.map(s => ({ label: s, qty: 0, unitPrice: 0 })),
   };
 }
@@ -1400,6 +1400,11 @@ function seedItemFromQuote(line, projectPrinter) {
     // printer now flows straight to the confirmation and splits POs per supplier
     // instead of forcing a re-type at PO time.
     printerName: line.printerName || projectPrinter || line.supplier || '',
+    // The catalog key + priced recipe the line was quoted on — ride through to
+    // the PO on a stable id so Finances can reconcile quoted-vs-actual per printer
+    // (internal; stripped from the client confirmation by _safeConfirmation).
+    printerKey: line.printerKey || '',
+    printSpec: line.printSpec || undefined,
     unitCost:  +unitCost.toFixed(4),
     // Client-facing estimated turnaround, carried from the picked quote line.
     turnaroundWeeks: Number(line.turnaroundWeeks) || 0,
