@@ -17,14 +17,24 @@ document.addEventListener('wheel', () => {
 }, { passive: true });
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <BrowserRouter>
-    <ScrollToTop />
-    {/* Custom right-click menu system. Inert until a surface registers actions
-        (or a tool registers a fallback), so the public site keeps the native
-        browser menu untouched; only the Studio opts in. */}
-    <ContextMenuProvider>
-      <App />
-    </ContextMenuProvider>
-  </BrowserRouter>
-);
+
+// ?__labtest=1 → the Mockup Lab verification harness (src/LabTestHarness.js):
+// mounts the native lab against legacy-shaped docs inside the REAL bundle so a
+// would-be white screen reproduces headlessly. Synthetic data only — no API,
+// no auth, unreachable without the explicit flag.
+if (window.location.search.includes('__labtest')) {
+  const LabTestHarness = require('./LabTestHarness').default;
+  root.render(<LabTestHarness />);
+} else {
+  root.render(
+    <BrowserRouter>
+      <ScrollToTop />
+      {/* Custom right-click menu system. Inert until a surface registers actions
+          (or a tool registers a fallback), so the public site keeps the native
+          browser menu untouched; only the Studio opts in. */}
+      <ContextMenuProvider>
+        <App />
+      </ContextMenuProvider>
+    </BrowserRouter>
+  );
+}
