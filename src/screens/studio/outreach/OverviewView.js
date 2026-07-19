@@ -547,6 +547,9 @@ export default function OverviewView({
         {engine.from ? (
           <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, ...mono }}>
             sending as {engine.from}{engine.lastRunAt ? ` · last run ${fmtRelative(engine.lastRunAt)}` : ''}
+            {/* Outside Mon–Fri 9a–5p the engine holds — so "last run" naturally
+                reads stale over a weekend. Say it's healthy, not dead. */}
+            {!engine.withinWindow ? ' · window closed — healthy, resumes next weekday 9a ET' : ''}
           </Typography>
         ) : null}
         {/* Sender pool — per-inbox headroom when more than one is configured. */}
