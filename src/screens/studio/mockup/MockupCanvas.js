@@ -17,7 +17,12 @@ const DEFAULT_LOGO = 0.28;        // classic default logo scale (min(w,h)/max(lo
 
 const loadFabricImage = (src) => new Promise((resolve) => {
   if (!src) { resolve(null); return; }
-  fabric.Image.fromURL(src, (img) => resolve(img || null), { crossOrigin: 'anonymous' });
+  // fabric 5 calls back with (img, isError) — on a failed load (bad URL, R2
+  // CORS rejection) img exists but has no element and width 0. Treating that as
+  // loaded produced Infinity scales downstream; resolve null instead.
+  fabric.Image.fromURL(src, (img, isError) => {
+    resolve((!img || isError || !img.width || !img.height) ? null : img);
+  }, { crossOrigin: 'anonymous' });
 });
 
 const loadHtmlImage = (src) => new Promise((resolve) => {
