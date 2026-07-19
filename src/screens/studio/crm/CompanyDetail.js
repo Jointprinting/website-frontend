@@ -605,8 +605,9 @@ function SubscriptionRow({ s, onSetStatus }) {
 
 // Recurring plans on the company card — the per-client slice of the money layer.
 // Lists the company's Webworks/Atom subscriptions, sums active MRR, and lets the
-// owner add a plan or pause/resume/cancel one. Always shown (adding the first plan
-// is how a print client becomes a subscription client).
+// owner add a plan or pause/resume/cancel one. The parent renders this ONLY for
+// clients that already carry a plan, so a merch-only card never shows the
+// Webworks/Atom subscription layer.
 function SubscriptionsPanel({ subscriptions, onAdd, onSetStatus }) {
   const subs = subscriptions || [];
   const [adding, setAdding] = React.useState(false);
@@ -1199,10 +1200,11 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
           <DesignLibraryPanel designLibrary={designLibrary} onOpenOrder={onOpenOrder} onOpenMockups={onOpenMockups} />
 
           {/* Recurring plans — the per-client slice of the Webworks/Atom money
-              layer. Add a plan / pause / resume / cancel; active MRR sums in the
-              header. Shown for everyone (the first plan turns a print client into a
-              subscription client). Only wired when the parent passes the handlers. */}
-          {onAddSubscription && onSetSubStatus && (
+              layer. Shown ONLY for clients that actually carry a plan (≥1), so a
+              merch-only client's card stays free of the subscription UI — those
+              plans are a Webworks/Atom thing, not a print thing. Pause / resume /
+              cancel + MRR live here for real subscription clients. */}
+          {onAddSubscription && onSetSubStatus && subscriptions.length > 0 && (
             <SubscriptionsPanel
               subscriptions={subscriptions}
               onAdd={onAddSubscription}
