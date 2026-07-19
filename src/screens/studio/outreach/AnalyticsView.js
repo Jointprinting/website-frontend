@@ -28,15 +28,20 @@ function replyVerdict(rate) {
   if (rate > 0) return { label: 'Low', tone: C.opened };
   return null;
 }
+// "High" (red) means the ENGINE auto-pauses at this rate — so the flag matches
+// what actually happens instead of crying wolf. Cutoffs mirror the server
+// breaker (services/outreachEngine evaluateDeliverability): bounce OUTREACH_MAX_
+// BOUNCE_RATE 5%, unsub OUTREACH_MAX_UNSUB_RATE 4%. "Watch" (amber) is the
+// campaignHealth warn band below that — worth an eye, not yet a pause.
 function bounceVerdict(rate) {
   if (rate < 0.02) return { label: 'Healthy', tone: C.replied };
   if (rate < 0.05) return { label: 'Watch', tone: C.opened };
-  return { label: 'High', tone: C.unsub };
+  return { label: 'High · auto-pauses', tone: C.unsub };
 }
 function unsubVerdict(rate) {
-  if (rate < 0.005) return { label: 'Healthy', tone: C.replied };
-  if (rate < 0.02) return { label: 'Watch', tone: C.opened };
-  return { label: 'High', tone: C.unsub };
+  if (rate < 0.02) return { label: 'Healthy', tone: C.replied };
+  if (rate < 0.04) return { label: 'Watch', tone: C.opened };
+  return { label: 'High · auto-pauses', tone: C.unsub };
 }
 function VerdictChip({ v }) {
   if (!v) return null;
