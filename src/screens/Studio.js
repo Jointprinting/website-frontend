@@ -90,14 +90,12 @@ import NewsletterTab from './studio/NewsletterTab';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import VendorsTab from './studio/VendorsTab';
-import PrinterCatalogTab from './studio/PrinterCatalogTab';
 import AgentsAdminTab from './studio/AgentsAdminTab';
 import AgentHome from './studio/agent/AgentHome';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import BackupIcon from '@mui/icons-material/Backup';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
-import FactoryOutlinedIcon from '@mui/icons-material/FactoryOutlined';
 import JpLoader from '../common/JpLoader';
 import PendingSyncBadge from '../common/PendingSyncBadge';
 import { setAuthProvider, startAutoFlush } from '../common/offlineSync';
@@ -1628,8 +1626,7 @@ const HUB_GROUPS = [
         id: 'tucked',
         label: 'Maintenance',
         tools: [
-          { id: 'vendors', label: 'Printers · Vendors', desc: 'Supplier directory — POs, spend',  Icon: LocalShippingOutlinedIcon },
-          { id: 'printers', label: 'Printer Catalog', desc: 'Price books — edit without a deploy', Icon: FactoryOutlinedIcon },
+          { id: 'vendors', label: 'Printers', desc: 'Each printer: contact, POs, spend + price book',  Icon: LocalShippingOutlinedIcon },
           // Backup lifted to the cross-brand "All business" strip (it snapshots the
           // whole system's data across every business) — see CROSS_BRAND_TOOLS.
           // Owner-only: onboard sales agents, set goals, watch access. Gated by
@@ -3395,9 +3392,6 @@ function StudioBody({ token, onLogout }) {
     );
   }
 
-  if (view === 'printers') {
-    return <PrinterCatalogTab token={token} onBack={() => setView('hub')} />;
-  }
 
   return (
     <Box sx={{
