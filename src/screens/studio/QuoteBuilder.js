@@ -44,6 +44,7 @@ import GridViewOutlinedIcon    from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon  from '@mui/icons-material/ViewAgendaOutlined';
 import OpenInNewIcon           from '@mui/icons-material/OpenInNew';
 import LinkIcon                from '@mui/icons-material/Link';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
@@ -222,6 +223,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   const [cardView,     setCardView]     = useState(() => new Set());
   // The promo catalog picker (vendor items with client price + net cost baked in).
   const [promoOpen,    setPromoOpen]    = useState(false);
+  const [copyOpen,     setCopyOpen]     = useState(false);
   // What the CLIENT's link currently shows (signature of the pushed snapshot).
   // Autosave keeps edits owner-side; "Push to client" updates the link.
   const [pushedSig, setPushedSig] = useState(null);
@@ -395,6 +397,40 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     }
     appendLines(newLines.map(l => ({ ...l, group: g })));
     setPromoOpen(false);
+  };
+
+  // Pull the lines of an EARLIER quote into this one — the repeat-client / standard-
+  // job shortcut. Mirrors the backend duplicateOrder carry-list EXACTLY (the fields
+  // that define a reusable quote line: qty, blanks, print spec, printer, prices),
+  // so nothing acceptance-, art-, or identity-specific rides along and the copy
+  // starts as fresh, fully-editable lines. Each distinct source design group is
+  // remapped to a label not already in this quote, so a copied grid stays grouped
+  // but never merges into an existing one.
+  const copyFromQuote = (srcLines) => {
+    const clean = (srcLines || []).map(l => ({
+      group: l.group, qty: l.qty, styleCode: l.styleCode, description: l.description, color: l.color,
+      supplier: l.supplier, supplierUrl: l.supplierUrl, blankCost: l.blankCost,
+      printType: l.printType, printDetails: l.printDetails, printCost: l.printCost,
+      printerKey: l.printerKey, printerName: l.printerName, printSpec: l.printSpec,
+      setupCost: l.setupCost, shippingCost: l.shippingCost,
+      markup: l.markup, noMarkup: l.noMarkup, unitPrice: l.unitPrice, turnaroundWeeks: l.turnaroundWeeks,
+    }));
+    if (!clean.length) return;
+    const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
+    const remap = new Map();
+    clean.forEach(l => {
+      const src = (l.group || '').trim();
+      if (!src || remap.has(src)) return;
+      let g = src;
+      if (used.has(g.toLowerCase())) { let n = 2; while (used.has(`${g} ${n}`.toLowerCase())) n += 1; g = `${g} ${n}`; }
+      used.add(g.toLowerCase());
+      remap.set(src, g);
+    });
+    appendLines(clean.map(l => {
+      const src = (l.group || '').trim();
+      return src ? { ...l, group: remap.get(src) } : { ...l };
+    }));
+    setCopyOpen(false);
   };
 
   const setMeta = (setter) => (v) => { setter(v); setDirty(true); };
@@ -601,6 +637,12 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
                   '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
                 Add promo item
               </Button>
+              <Button onClick={() => setCopyOpen(true)} startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 15 }} />}
+                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                  px: 2, transition: 'background-color 0.18s, color 0.18s',
+                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                Copy from a past quote
+              </Button>
             </Stack>
           </Box>
         ) : (
@@ -653,11 +695,108 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
                 '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add promo item
             </Button>
+            <Button onClick={() => setCopyOpen(true)} startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
+                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              Copy from a past quote
+            </Button>
           </Stack>
         )}
 
         <PromoPickerDialog open={promoOpen} onClose={() => setPromoOpen(false)}
           authHdr={authHdr} onAdd={addPromoLines} />
+        <CopyQuoteDialog open={copyOpen} onClose={() => setCopyOpen(false)}
+          authHdr={authHdr} currentId={project._id} companyKey={project.companyKey}
+          onPick={copyFromQuote} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// A picker for reusing an earlier quote: lists past projects that carry quote
+// lines (this client's first, then newest), and hands the chosen project's
+// quoteLines to onPick. Reads the SAME /api/orders/projects feed the tracker
+// uses — which already carries quoteLines — so there's no new endpoint.
+function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick }) {
+  const [projects, setProjects] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    if (!open) return undefined;
+    let gone = false;
+    setProjects(null); setQ('');
+    axios.get(`${config.backendUrl}/api/orders/projects`, authHdr)
+      .then(r => { if (!gone) setProjects(r.data.projects || r.data.orders || []); })
+      .catch(() => { if (!gone) setProjects([]); });
+    return () => { gone = true; };
+  }, [open, authHdr]);
+
+  const rows = (projects || [])
+    .filter(p => String(p._id) !== String(currentId) && Array.isArray(p.quoteLines) && p.quoteLines.length)
+    .map(p => ({
+      ...p,
+      _optionCount: new Set((p.quoteLines || []).map(l => (l.group || '').trim()).filter(Boolean)).size,
+      _lineCount: p.quoteLines.length,
+    }));
+  const needle = q.trim().toLowerCase();
+  const shown = rows
+    .filter(p => !needle || `${p.projectNumber} ${p.companyName} ${p.clientName}`.toLowerCase().includes(needle))
+    .sort((a, b) => {
+      const am = companyKey && a.companyKey === companyKey ? 0 : 1;
+      const bm = companyKey && b.companyKey === companyKey ? 0 : 1;
+      if (am !== bm) return am - bm;
+      return new Date(b.updatedAt || b.orderDate || 0) - new Date(a.updatedAt || a.orderDate || 0);
+    });
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3 } }}>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 15, color: D.text, mb: 0.5 }}>Copy from a past quote</Typography>
+        <Typography sx={{ color: D.faint, fontSize: 12, mb: 1.5 }}>
+          Pulls that quote's lines in as fresh, editable lines — prices, print specs and printer included.
+        </Typography>
+        <TextField size="small" fullWidth value={q} onChange={e => setQ(e.target.value)}
+          placeholder="Search project # or client…" sx={{ ...dropInput, mb: 1.5 }} />
+        <Box sx={{ maxHeight: 360, overflowY: 'auto', ...scrollbar }}>
+          {projects === null ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress size={20} sx={{ color: D.green }} /></Box>
+          ) : shown.length === 0 ? (
+            <Typography sx={{ color: D.faint, fontSize: 12.5, textAlign: 'center', py: 4 }}>
+              {q ? 'No quotes match.' : 'No past quotes to copy from yet.'}
+            </Typography>
+          ) : (
+            <Stack gap={0.75}>
+              {shown.map(p => (
+                <Box key={p._id} role="button" tabIndex={0}
+                  onClick={() => onPick(p.quoteLines)}
+                  onKeyDown={e => { if (e.key === 'Enter') onPick(p.quoteLines); }}
+                  sx={{ cursor: 'pointer', border: `1px solid ${D.line}`, borderRadius: 2, p: 1.25,
+                    display: 'flex', alignItems: 'center', gap: 1,
+                    '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+                      <Typography sx={{ ...mono, fontSize: 12, color: D.text, fontWeight: 700 }}>#{p.projectNumber || '—'}</Typography>
+                      <Typography sx={{ fontSize: 13, color: D.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.companyName || p.clientName || 'Unnamed'}
+                      </Typography>
+                      {companyKey && p.companyKey === companyKey && (
+                        <Chip size="small" label="this client" sx={{ height: 18, fontSize: 9.5, bgcolor: 'rgba(74,222,128,0.14)', color: D.green }} />
+                      )}
+                    </Stack>
+                    <Typography sx={{ color: D.faint, fontSize: 11, ...mono, mt: 0.2 }}>
+                      {p._optionCount ? `${p._optionCount} design${p._optionCount === 1 ? '' : 's'} · ` : ''}{p._lineCount} line{p._lineCount === 1 ? '' : 's'}
+                    </Typography>
+                  </Box>
+                  <ContentCopyOutlinedIcon sx={{ fontSize: 16, color: D.faint }} />
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </Box>
+        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.5 }}>
+          <Button size="small" onClick={onClose} sx={{ textTransform: 'none', color: D.muted }}>Close</Button>
+        </Stack>
       </DialogContent>
     </Dialog>
   );
