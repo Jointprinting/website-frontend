@@ -119,7 +119,16 @@ const MockupCanvas = forwardRef(function MockupCanvas(
   useEffect(() => {
     const fc = new fabric.Canvas(elRef.current, { backgroundColor: '#1c1c1c', preserveObjectStacking: true });
     fc.setWidth(width); fc.setHeight(height);
-    const onLive = (e) => { const t = e.target; if (t && t.selectable !== false) clampToArea(t); };
+    // Clamp on every live event; emit rAF-throttled so the inch readout and
+    // smart Dimensions track the drag in real time (classic behavior) without
+    // flooding React with per-mousemove state updates.
+    let raf = 0;
+    const onLive = (e) => {
+      const t = e.target;
+      if (!t || t.selectable === false) return;
+      clampToArea(t);
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; emit(); });
+    };
     fc.on('object:moving', onLive);
     fc.on('object:scaling', onLive);
     fc.on('object:rotating', onLive);

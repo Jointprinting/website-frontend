@@ -241,7 +241,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
     try {
       const key = deriveCompanyKey(client);
       const { data } = await axios.get(`${base}/client-logos`, authHdr);
-      const has = Array.isArray(data) && data.some((l) => l && l.companyKey === key);
+      // The endpoint returns { logos: [...] } (OrderTracker reads it the same way).
+      const list = Array.isArray(data) ? data : ((data && data.logos) || []);
+      const has = list.some((l) => l && l.companyKey === key);
       if (!has) {
         await axios.post(`${base}/client-logos`, { companyName: client, clientName: client, imageDataUrl: url }, authHdr);
       }
