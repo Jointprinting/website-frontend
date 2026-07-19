@@ -1,31 +1,32 @@
 // src/screens/studio/mockup/MockupLab.js
 //
-// Mockup Lab v2 — the in-Studio surface. Phase 2: browse the mockup library and
-// view every page × side rendered NATIVELY inside the Studio (no new-tab hand-off
-// to the legacy /jpstudio/ editor), reading through the migration-safe model in
-// mockupModel.js so page-2+ backs render correctly. The interactive canvas editor
-// (place / drag / snap / flip / variants) lands on top of this in the next phase;
-// until then, "Edit in classic" opens the existing editor one click away, so no
-// capability is lost while the rebuild proceeds.
+// Mockup Lab — the in-Studio BROWSER over the one mockup library. It's the single
+// grid the whole "visuals of the job" area shares: open it plain to browse every
+// mockup, or through a LENS (one client / one project) so the CRM design library
+// and a project's mockups are this same browser, scoped — not five parallel grids.
 //
-// Reuses the shared `D` palette + the existing /api/studio/library endpoints — the
-// same ones OrderTracker / Lookbooks / the CRM design library already read.
+// Browsing (grid + read-only detail) lives here; EDITING hands off to the lab
+// itself — the full-featured /jpstudio, now embedded IN the Studio (Studio.js
+// renders MockupLabFrame), so the S&S blank finder, ink auto-detect, print areas,
+// and the workshop feel are all intact. "Edit"/"New" navigate to that embed.
+//
+// Reuses the shared `D` palette + the /api/studio/library endpoints (incl. the
+// ?companyKey client scope), the same ones OrderTracker / Lookbooks / CRM read.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Stack, Typography, IconButton, Button, CircularProgress } from '@mui/material';
+import { Box, Stack, Typography, IconButton, Button, CircularProgress, Chip } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FlipOutlinedIcon from '@mui/icons-material/FlipOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import AddIcon from '@mui/icons-material/Add';
 import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar } from '../_shared';
 import { mockupFromLibraryItem, sidePreview } from './mockupModel';
 
 const base = `${config.backendUrl}/api`;
-// The legacy editor still owns interactive editing; deep-link into it by remoteId.
-const classicHref = (remoteId) => `${process.env.PUBLIC_URL || ''}/jpstudio/${remoteId ? `?mockup=${encodeURIComponent(remoteId)}` : ''}`;
 
 export default function MockupLab({ token, onBack, onNavigate, entry }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -36,16 +37,25 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
   const [busy, setBusy] = useState('');
   const [q, setQ] = useState('');
 
+  // Browser lens — scope the grid to one client (companyKey) or project. Seeded
+  // from the entry (a CRM "see all" / a project deep-link), clearable back to all.
+  const [lens, setLens] = useState(() => ({
+    companyKey: (entry && entry.lensCompanyKey) || '',
+    projectNumber: (entry && entry.lensProjectNumber) || '',
+    label: (entry && entry.lensLabel) || '',
+  }));
+
   const load = useCallback(async () => {
     try {
-      const r = await axios.get(`${base}/studio/library/mockups?summary=1`, authHdr);
+      const params = { summary: 1 };
+      if (lens.companyKey) params.companyKey = lens.companyKey;   // client lens → server-scoped
+      const r = await axios.get(`${base}/studio/library/mockups`, { ...authHdr, params });
       const items = Array.isArray(r.data) ? r.data.filter(Boolean) : [];
-      // Newest first; the summary carries pageState.mockupNum + thumbnail (front).
       items.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
       setList(items);
     } catch (e) { setBusy(e.response?.data?.message || e.message); setList([]); }
-  }, [authHdr]);
-  useEffect(() => { load(); }, [load]);
+  }, [authHdr, lens.companyKey]);
+  useEffect(() => { setList(null); load(); }, [load]);
 
   // Open one mockup: pull the full doc (so inline-stored backs hydrate) and model it.
   const openMockup = useCallback(async (item) => {
@@ -66,25 +76,25 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
     const t = setTimeout(() => setBusy(''), 5000); return () => clearTimeout(t);
   }, [busy]);
 
-  // Deep-link (from a project drawer / the hub): open an existing mockup by remoteId,
-  // or start a NEW project-linked mockup. The component is keyed by entry.nonce, so
-  // this fires once on entry.
+  // A remoteId deep-link opens the read-only detail; "Edit" then hands to the lab.
   useEffect(() => {
-    if (!entry) return;
-    // A mockup deep-link opens the read-only detail here; "Edit" hands off to the
-    // full-featured classic lab. (Project-drawer tiles open the lab directly.)
-    if (entry.remoteId) openMockup({ remoteId: entry.remoteId });
+    if (entry && entry.remoteId) openMockup({ remoteId: entry.remoteId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const editMockup = (remoteId, client) => onNavigate && onNavigate({ view: 'mockup', editMockup: remoteId, client });
+  const newInLab = () => onNavigate && onNavigate({ view: 'mockup', editFresh: true });
+  const clearLens = () => setLens({ companyKey: '', projectNumber: '', label: '' });
+
   const filtered = useMemo(() => {
-    const items = list || [];
+    let items = list || [];
+    if (lens.projectNumber) items = items.filter((m) => String(m.pageState?.projectNumber || '') === String(lens.projectNumber));
     const s = q.trim().toLowerCase();
     if (!s) return items;
     return items.filter((m) => `${m.pageState?.mockupNum || ''} ${m.name || ''} ${m.client || ''}`.toLowerCase().includes(s));
-  }, [list, q]);
+  }, [list, q, lens.projectNumber]);
 
-  // ── Detail view ─────────────────────────────────────────────────────────────
+  // ── Detail view (read-only) ───────────────────────────────────────────────────
   if (sel) {
     const m = sel.model;
     const page = m.pages[pageIdx] || m.pages[0];
@@ -108,12 +118,11 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
             <Button onClick={() => onNavigate({ view: 'clients', projectNumber })} size="small"
               sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open order →</Button>
           )}
-          <Button component="a" href={classicHref(sel.item.remoteId)} target="_blank" rel="noreferrer" size="small"
-            endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
-            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, '&:hover': { color: '#3bd070' } }}>Edit in lab ↗</Button>
+          <Button onClick={() => editMockup(sel.item.remoteId, m.client)} size="small"
+            startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, '&:hover': { color: '#3bd070' } }}>Edit in lab</Button>
         </Stack>
 
-        {/* The rendered view */}
         <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, p: { xs: 1.5, md: 2.5 } }}>
           <Box sx={{ position: 'relative', bgcolor: '#fff', borderRadius: 2, overflow: 'hidden',
             aspectRatio: '3/4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -128,7 +137,6 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
             )}
           </Box>
 
-          {/* Front / back flip */}
           <Stack direction="row" justifyContent="center" spacing={1} sx={{ mt: 1.5 }}>
             {['front', 'back'].map((s) => {
               const on = s === side;
@@ -145,7 +153,6 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
           </Stack>
         </Box>
 
-        {/* Page tabs for a multi-page mockup */}
         {m.pages.length > 1 && (
           <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mt: 1.5 }}>
             {m.pages.map((_, i) => (
@@ -157,7 +164,6 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
           </Stack>
         )}
 
-        {/* Print spec for the current page/side */}
         {(page.print[side]?.type || page.print[side]?.loc) && (
           <Typography sx={{ color: D.faint, fontSize: 12, mt: 1.25 }}>
             {[page.print[side].type, page.print[side].dims, page.print[side].loc].filter(Boolean).join(' · ')}
@@ -168,6 +174,7 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
   }
 
   // ── Gallery ──────────────────────────────────────────────────────────────────
+  const lensOn = !!(lens.companyKey || lens.projectNumber);
   return (
     <Box sx={{ maxWidth: 920, mx: 'auto', px: { xs: 1.5, md: 2 }, py: 2, ...scrollbar }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
@@ -178,12 +185,20 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
         )}
         <DesignServicesIcon sx={{ color: D.green, fontSize: 20 }} />
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, flex: 1 }}>
-          Mockup Lab{list ? <Box component="span" sx={{ color: D.faint, fontWeight: 600, fontSize: 13, ml: 1 }}>{list.length}</Box> : null}
+          Mockup Lab{list ? <Box component="span" sx={{ color: D.faint, fontWeight: 600, fontSize: 13, ml: 1 }}>{filtered.length}</Box> : null}
         </Typography>
-        <Button component="a" href={classicHref('')} target="_blank" rel="noreferrer" size="small"
-          endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
-          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>Classic editor</Button>
+        <Button onClick={newInLab} size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+          sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5, '&:hover': { color: '#3bd070' } }}>New in lab</Button>
       </Stack>
+
+      {lensOn && (
+        <Box sx={{ mb: 1.5 }}>
+          <Chip label={`Showing: ${lens.label || lens.companyKey || `project #${lens.projectNumber}`}`}
+            onDelete={clearLens} size="small"
+            sx={{ bgcolor: 'rgba(74,222,128,0.12)', color: D.green, fontWeight: 700, border: `1px solid rgba(74,222,128,0.4)`,
+              '& .MuiChip-deleteIcon': { color: D.green, '&:hover': { color: '#3bd070' } } }} />
+        </Box>
+      )}
 
       <Box component="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by number, name or client…"
         sx={{ width: '100%', mb: 1.75, px: 1.5, py: 1, fontSize: 13, color: D.text, bgcolor: D.panel,
@@ -196,7 +211,7 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
         <Box display="flex" justifyContent="center" py={8}><CircularProgress size={28} sx={{ color: D.green }} /></Box>
       ) : filtered.length === 0 ? (
         <Typography sx={{ color: D.faint, fontSize: 13, py: 5, textAlign: 'center' }}>
-          {list.length === 0 ? 'No mockups saved yet — build one in the classic editor and it appears here.' : 'No mockups match your search.'}
+          {lensOn ? 'No mockups for this filter yet — open the lab to make one.' : (list.length === 0 ? 'No mockups yet — “New in lab” opens the lab to make one.' : 'No mockups match your search.')}
         </Typography>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1.25 }}>

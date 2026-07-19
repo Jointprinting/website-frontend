@@ -1992,12 +1992,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   // the full-featured lab — S&S blank finder, auto ink-colour detection, per-garment
   // print areas, PDF export. The in-Studio React rewrite is being reworked to match
   // it before it takes over again, so mockups route here in the meantime.
-  const goStudio = () => project && window.open(
-    // No token in the URL — /jpstudio picks up the studio session from localStorage
-    // (same origin). Only the non-secret project id is passed, for deep-linking.
-    `/jpstudio/?project=${encodeURIComponent(project._id)}`,
-    '_blank', 'noopener,noreferrer',
-  );
+  const goStudio = () => {
+    if (!project) return;
+    // Open the full-featured lab IN the Studio (embedded /jpstudio, same session),
+    // pinned to this project so a new mockup auto-links + numbers. Falls back to a
+    // new tab only if there's no in-Studio navigator.
+    if (onNavigate) onNavigate({ view: 'mockup', editProject: project._id, client: local?.companyName || local?.clientName || '' });
+    else window.open(`/jpstudio/?project=${encodeURIComponent(project._id)}`, '_blank', 'noopener,noreferrer');
+  };
 
   // "Make a lookbook" — the client-facing SHARE step, folded in right next to the
   // mockups. Opens the Lookbooks builder on a NEW lookbook, prefilled to this
@@ -2589,10 +2591,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     // it was made with (blanks, ink colours, print areas, PDF). Stable
                     // identifier is the remoteId.
                     const remoteId = t.item?.remoteId || '';
-                    const openInLab = () => remoteId && window.open(
-                      `/jpstudio/?mockup=${encodeURIComponent(remoteId)}`,
-                      '_blank', 'noopener,noreferrer',
-                    );
+                    const openInLab = () => {
+                      if (!remoteId) return;
+                      // Open this mockup in the embedded in-Studio lab (full features).
+                      if (onNavigate) onNavigate({ view: 'mockup', editMockup: remoteId, client: local.companyName || local.clientName || '' });
+                      else window.open(`/jpstudio/?mockup=${encodeURIComponent(remoteId)}`, '_blank', 'noopener,noreferrer');
+                    };
                     return (
                     <Box key={i} onClick={openInLab}
                       title={t.item ? `Click to edit "${t.item.name || t.num}" in Mockup Lab` : ''}

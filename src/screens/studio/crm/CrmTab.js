@@ -1227,6 +1227,12 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
           onOpenLookbooks={onNavigate && detail?.client?.companyKey
             ? () => onNavigate({ view: 'lookbooks', companyKey: detail.client.companyKey })
             : undefined}
+          // This company's mockups — the ONE Mockup Lab browser, scoped to this
+          // client (the companyKey lens), so the CRM design library and the lab
+          // are the same grid, not parallel ones.
+          onOpenMockups={onNavigate && detail?.client?.companyKey
+            ? () => onNavigate({ view: 'mockup', lensCompanyKey: detail.client.companyKey, lensLabel: detail.client.companyName || detail.client.clientName || detail.client.companyKey })
+            : undefined}
           // Deals on the business profile — the owner's "deal cards attached to
           // one profile". New/edit reuse the shared dialog with this company fixed.
           onNewDeal={() => detail?.client && setDealDlg({
