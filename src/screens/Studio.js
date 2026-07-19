@@ -84,7 +84,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import LookbooksTab from './studio/LookbooksTab';
-import MockupLabFrame from './studio/mockup/MockupLabFrame';
+import NativeMockupLabHost from './studio/mockup/NativeMockupLabHost';
 import ContentTab from './studio/ContentTab';
 import NewsletterTab from './studio/NewsletterTab';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
@@ -3293,11 +3293,16 @@ function StudioBody({ token, onLogout }) {
   // existing mockup or a new project-linked one. Full viewport, like Road Trip.
   if (view === 'mockup' && (mockupEntry.editProject || mockupEntry.editMockup || mockupEntry.editFresh)) {
     return (
-      <MockupLabFrame
+      <NativeMockupLabHost
         key={mockupEntry.nonce}
-        project={mockupEntry.editProject}
-        mockup={mockupEntry.editMockup}
-        label={mockupEntry.editLabel}
+        token={token}
+        entry={{
+          editProject: mockupEntry.editProject,
+          editMockup: mockupEntry.editMockup,
+          editFresh: mockupEntry.editFresh,
+          client: mockupEntry.client || mockupEntry.editLabel || '',
+          projectNumber: mockupEntry.lensProjectNumber || '',
+        }}
         onBack={() => setView('hub')}
       />
     );
