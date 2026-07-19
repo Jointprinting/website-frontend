@@ -802,22 +802,29 @@ function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick
   );
 }
 
-// Downscale an uploaded design render to a compact JPEG data URL so quote
-// lines stay light in the order document (vendor renders arrive as multi-MB
-// photos; ~700px is plenty for the approval card and the admin preview).
+// Downscale an uploaded design render to a compact JPEG data URL so quote lines
+// stay light in the order document (vendor renders arrive as multi-MB photos).
+// The CLIENT sees this on the approval card, often near-full-width and on retina
+// (2× device pixels), so 700px looked fuzzy to them — 1600px @ 0.9 keeps it crisp
+// there while staying a fraction of the raw upload. Higher-quality resampling
+// (imageSmoothingQuality:'high') avoids the jaggy nearest-neighbor look on the
+// downscale itself. Small sources are never upscaled (scale caps at 1).
 function readDesignImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const MAX = 700;
+      const MAX = 1600;
       const scale = Math.min(1, MAX / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
       c.width = Math.round(img.width * scale);
       c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/jpeg', 0.82));
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.9));
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
     img.src = url;
