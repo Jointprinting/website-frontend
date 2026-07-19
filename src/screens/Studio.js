@@ -84,6 +84,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import LookbooksTab from './studio/LookbooksTab';
+import MockupLabFrame from './studio/mockup/MockupLabFrame';
 import ContentTab from './studio/ContentTab';
 import NewsletterTab from './studio/NewsletterTab';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
@@ -3028,10 +3029,17 @@ function StudioBody({ token, onLogout }) {
   //   vendorsEntry  → open one vendor card in VendorsTab (by id, or resolve a name)
   //   lookbookEntry → open the Lookbooks builder prefiltered to one company
   const [ordersEntry, setOrdersEntry]   = React.useState({ orderNumber: null, projectNumber: null, openPos: false, nonce: 0 });
-  // mockupEntry → open the Mockup Lab deep-linked: an existing mockup by remoteId,
-  // or a NEW project-linked mockup (newForProject = the project _id). Carries the
-  // project/company context so a new mockup auto-links + numbers correctly.
-  const [mockupEntry, setMockupEntry]   = React.useState({ remoteId: null, newForProject: null, projectNumber: null, companyKey: null, client: null, nonce: 0 });
+  // mockupEntry → the Mockup Lab surface. Two intents:
+  //   • EDIT — open the lab (the embedded /jpstudio, in-Studio) on a mockup
+  //     (editMockup = remoteId) or a new project-linked one (editProject = _id).
+  //   • BROWSE — open the gallery, optionally through a lens (lensCompanyKey /
+  //     lensProjectNumber) so the CRM design library + a project's mockups are
+  //     the same one browser, scoped. remoteId still opens the read-only detail.
+  const [mockupEntry, setMockupEntry]   = React.useState({
+    editProject: null, editMockup: null, editFresh: false, editLabel: null,
+    lensCompanyKey: null, lensProjectNumber: null, lensLabel: null,
+    remoteId: null, companyKey: null, client: null, nonce: 0,
+  });
   const [vendorsEntry, setVendorsEntry] = React.useState({ vendorId: null, vendorName: null, nonce: 0 });
   const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, companyName: null, projectNumber: null, newLookbook: false, nonce: 0 });
   const isHub = view === 'hub';
@@ -3159,7 +3167,7 @@ function StudioBody({ token, onLogout }) {
     // target, so the tool remounts fresh — a stale deep-linked drawer from an
     // earlier cross-tab jump never lingers when the owner re-opens the tool plain.
     if (id === 'clients') setOrdersEntry((p) => ({ orderNumber: null, projectNumber: null, openPos: false, nonce: p.nonce + 1 }));
-    if (id === 'mockup') setMockupEntry((p) => ({ remoteId: null, newForProject: null, projectNumber: null, companyKey: null, client: null, nonce: p.nonce + 1 }));
+    if (id === 'mockup') setMockupEntry((p) => ({ editProject: null, editMockup: null, editFresh: false, editLabel: null, lensCompanyKey: null, lensProjectNumber: null, lensLabel: null, remoteId: null, companyKey: null, client: null, nonce: p.nonce + 1 }));
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
     if (id === 'lookbooks') setLookbookEntry((p) => ({ companyKey: null, nonce: p.nonce + 1 }));
     if (id === 'outreach') setOutreachView(innerView || null);
@@ -3210,9 +3218,15 @@ function StudioBody({ token, onLogout }) {
       setView('lookbooks');
     } else if (v === 'mockup') {
       setMockupEntry((p) => ({
+        // EDIT intents open the embedded lab; BROWSE/lens open the gallery.
+        editProject: target.editProject ? String(target.editProject) : null,
+        editMockup: target.editMockup ? String(target.editMockup) : null,
+        editFresh: !!target.editFresh,
+        editLabel: target.editLabel ? String(target.editLabel) : (target.client ? String(target.client) : null),
+        lensCompanyKey: target.lensCompanyKey ? String(target.lensCompanyKey) : null,
+        lensProjectNumber: target.lensProjectNumber != null && target.lensProjectNumber !== '' ? String(target.lensProjectNumber) : null,
+        lensLabel: target.lensLabel ? String(target.lensLabel) : (target.client ? String(target.client) : null),
         remoteId: target.mockupRemoteId ? String(target.mockupRemoteId) : null,
-        newForProject: target.newForProject ? String(target.newForProject) : null,
-        projectNumber: target.projectNumber != null ? String(target.projectNumber) : null,
         companyKey: target.companyKey ? String(target.companyKey) : null,
         client: target.client ? String(target.client) : null,
         nonce: p.nonce + 1,
@@ -3274,6 +3288,21 @@ function StudioBody({ token, onLogout }) {
         </Stack>
         <RoadTripTab token={token} onNavigate={navigate} />
       </Box>
+    );
+  }
+
+  // The Mockup Lab editor, folded into the Studio — the full-featured /jpstudio
+  // lab embedded in-place (keeps the S&S finder, ink detect, print areas), on an
+  // existing mockup or a new project-linked one. Full viewport, like Road Trip.
+  if (view === 'mockup' && (mockupEntry.editProject || mockupEntry.editMockup || mockupEntry.editFresh)) {
+    return (
+      <MockupLabFrame
+        key={mockupEntry.nonce}
+        project={mockupEntry.editProject}
+        mockup={mockupEntry.editMockup}
+        label={mockupEntry.editLabel}
+        onBack={() => setView('hub')}
+      />
     );
   }
 

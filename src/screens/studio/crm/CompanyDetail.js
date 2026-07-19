@@ -494,7 +494,7 @@ function MockupTile({ m, onOpenOrder }) {
 // The company's whole visual footprint in one panel: its logo(s) + every mockup
 // made for it, each deep-linked to its order. Hidden entirely when there's nothing
 // yet (no empty box).
-function DesignLibraryPanel({ designLibrary, onOpenOrder }) {
+function DesignLibraryPanel({ designLibrary, onOpenOrder, onOpenMockups }) {
   const logos   = (designLibrary && designLibrary.logos)   || [];
   const mockups = (designLibrary && designLibrary.mockups) || [];
   if (!logos.length && !mockups.length) return null;
@@ -505,9 +505,18 @@ function DesignLibraryPanel({ designLibrary, onOpenOrder }) {
           <PaletteOutlinedIcon sx={{ color: D.green, fontSize: 16 }} />
           <Eyebrow>Design library</Eyebrow>
         </Stack>
-        <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>
-          {mockups.length ? `${mockups.length} mockup${mockups.length === 1 ? '' : 's'}` : ''}
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Typography sx={{ color: D.faint, fontSize: 11, ...mono }}>
+            {mockups.length ? `${mockups.length} mockup${mockups.length === 1 ? '' : 's'}` : ''}
+          </Typography>
+          {onOpenMockups && (
+            <Typography component="button" onClick={onOpenMockups}
+              sx={{ background: 'none', border: 'none', cursor: 'pointer', color: D.green, fontSize: 11, fontWeight: 700,
+                p: 0, '&:hover': { textDecoration: 'underline' } }}>
+              See all in Mockup Lab →
+            </Typography>
+          )}
+        </Stack>
       </Stack>
 
       {logos.length > 0 && (
@@ -770,7 +779,7 @@ function ProgressCard({ stage, isCustomer }) {
   );
 }
 
-export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onAddSubscription, onSetSubStatus, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage, onOpenPortal, onRevokePortal }) {
+export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, onDeleteLog, onEditLog, onArchive, onOpenOrder, onOpenPo, onOpenVendor, onOpenLookbooks, onOpenMockups, onAddSubscription, onSetSubStatus, onNewDeal, onEditDeal, onWinDeal, onLoseDeal, onReopenDeal, onRemoveDeal, onOpenDeal, onStartJob, onSetDealStage, onOpenPortal, onRevokePortal }) {
   // data = { client, orders, pos, finance, isCustomer, deals }
   const client = data?.client || null;
   const orders = data?.orders || [];
@@ -1187,7 +1196,7 @@ export default function CompanyDetail({ data, loading, onBack, onPatch, onLog, o
               and every mockup made for it, each deep-linked to the order it lives
               on. Shown for leads too (art often precedes the first order). Renders
               nothing until there's an asset. */}
-          <DesignLibraryPanel designLibrary={designLibrary} onOpenOrder={onOpenOrder} />
+          <DesignLibraryPanel designLibrary={designLibrary} onOpenOrder={onOpenOrder} onOpenMockups={onOpenMockups} />
 
           {/* Recurring plans — the per-client slice of the Webworks/Atom money
               layer. Add a plan / pause / resume / cancel; active MRR sums in the
