@@ -6,7 +6,7 @@
 
 import {
   buildGmapsLegs, GMAPS_WAYPOINT_CAP, deriveCompanyKey, pinStatusOf, haversineMi,
-  stateDistanceMi, STATE_CENTROIDS,
+  stateDistanceMi, STATE_CENTROIDS, runStreakDays, historyTotals,
 } from './_roadTrip';
 
 const mkStops = (n) =>
@@ -71,6 +71,48 @@ describe('pinStatusOf', () => {
     expect(pinStatusOf({ lastVisitedAt: '2026-07-01' })).toBe('visited');
     expect(pinStatusOf({ verified: false })).toBe('unverified');
     expect(pinStatusOf({ verified: true })).toBe('fresh');
+  });
+});
+
+describe('runStreakDays (mission log — the fun parts must be honest)', () => {
+  const NOW = new Date(2026, 6, 19, 14, 0); // Jul 19 2026, local
+  const day = (y, m, d) => ({ date: new Date(y, m, d, 10, 0).toISOString() });
+
+  it('counts consecutive days ending today', () => {
+    const runs = [day(2026, 6, 19), day(2026, 6, 18), day(2026, 6, 17)];
+    expect(runStreakDays(runs, NOW)).toEqual({ days: 3, active: true });
+  });
+
+  it('anchors on yesterday so an unstarted morning keeps the streak', () => {
+    const runs = [day(2026, 6, 18), day(2026, 6, 17)];
+    expect(runStreakDays(runs, NOW)).toEqual({ days: 2, active: true });
+  });
+
+  it('a gap breaks the streak — honestly', () => {
+    const runs = [day(2026, 6, 19), day(2026, 6, 17), day(2026, 6, 16)];
+    expect(runStreakDays(runs, NOW)).toEqual({ days: 1, active: true });
+    expect(runStreakDays([day(2026, 6, 15)], NOW)).toEqual({ days: 0, active: false });
+  });
+
+  it('two runs in one day count once; empty history is zero', () => {
+    const runs = [day(2026, 6, 19), day(2026, 6, 19), day(2026, 6, 18)];
+    expect(runStreakDays(runs, NOW).days).toBe(2);
+    expect(runStreakDays([], NOW)).toEqual({ days: 0, active: false });
+  });
+});
+
+describe('historyTotals', () => {
+  it('sums the scoreboard and rounds miles', () => {
+    const t = historyTotals([
+      { stops: 9, visited: 7, pitched: 4, catalogsSent: 2, miles: 101.4 },
+      { stops: 5, visited: 5, pitched: 1, catalogsSent: 1, miles: 40.9 },
+    ]);
+    expect(t).toEqual({ runs: 2, stops: 14, visited: 12, pitched: 5, catalogsSent: 3, miles: 142 });
+  });
+
+  it('tolerates empty and missing fields', () => {
+    expect(historyTotals([]).runs).toBe(0);
+    expect(historyTotals([{}]).stops).toBe(0);
   });
 });
 
