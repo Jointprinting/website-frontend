@@ -1,36 +1,33 @@
-// src/screens/studio/PrinterCatalogTab.js
+// src/screens/studio/PriceBookEditor.js
 //
-// The PRINTER CATALOG editor — the in-Studio home for the quoter's price network.
-// Until now a printer's price book could only change by hand-editing a committed
-// JSON and redeploying; this surface makes it app-writable: edit prices, add a
-// printer, mark a sheet re-verified, all without a deploy. The Quoter reads the
-// exact same catalog (via /api/printers), so an edit here reprices every quote.
+// A printer's PRICE BOOK, embeddable inside its record. A real printer is ONE
+// shop that lives in two docs — the Vendor card (its money: POs, spend, receipts)
+// and the Printer catalog (its price book, read by the Quoter). This is that price
+// book, rendered as a section INSIDE the Vendor card (VendorsTab) so there's one
+// printer surface, not a separate "Printer Catalog" tab beside "Printers · Vendors".
 //
-// Mirrors the Vendors tab shape (self-chrome list → detail) and reuses the shared
-// D palette / dialogs. Owner-only (the API is behind requireAdmin). Capabilities
-// are DERIVED server-side from the price sections present (never hand-typed), so
-// they're shown read-only here. Editing a section uses a structure-preserving
-// tree editor (you change numbers, never the shape), so a hand-edit can't produce
-// a section the engine silently can't price.
+// App-writable (no deploy to change a price): the Quoter reads the exact same
+// catalog via /api/printers, so an edit here reprices every quote. Owner-only (the
+// API is behind requireAdmin). Capabilities are DERIVED server-side from the price
+// sections present (never hand-typed), shown read-only. Editing a section uses a
+// structure-preserving grid editor (you change numbers, never the shape), so a
+// hand-edit can't produce a section the engine silently can't price.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, TextField, IconButton, Button, CircularProgress,
   Chip, Divider, Dialog, DialogContent, MenuItem, Select, FormControl,
 } from '@mui/material';
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import FactoryOutlinedIcon from '@mui/icons-material/FactoryOutlined';
-import SearchIcon from '@mui/icons-material/Search';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmtDate } from './_shared';
-import { confirmDialog, alertDialog, promptDialog } from './_dialog';
+import { D, mono, scrollbar, dropInput, dropPrimaryBtn, fmtDate } from './_shared';
+import { confirmDialog, alertDialog } from './_dialog';
 import { setAtPath, coerceLikeShape } from './_catalogEdit';
 
 const base = `${config.backendUrl}/api`;
@@ -396,8 +393,11 @@ function Field({ label, value, onCommit, placeholder, width }) {
   );
 }
 
-// ── Printer detail ────────────────────────────────────────────────────────────
-function PrinterDetail({ pkey, authHdr, onBack, onPrinterChanged }) {
+// ── Embeddable price-book panel ───────────────────────────────────────────────
+// Rendered inside a Vendor card (VendorsTab) for the linked printer: derived
+// capabilities, the pricing provenance + yearly re-verify nudge, and the editable
+// price-book grids. Identity / contact / money are owned by the surrounding card.
+export default function PriceBookEditor({ pkey, authHdr, onUnlink, vendorState }) {
   const [p, setP] = useState(null);
   const [loading, setLoading] = useState(true);
   const [addingSection, setAddingSection] = useState(false);
@@ -406,12 +406,12 @@ function PrinterDetail({ pkey, authHdr, onBack, onPrinterChanged }) {
     setLoading(true);
     axios.get(`${base}/printers/${pkey}`, authHdr)
       .then((r) => setP(r.data.printer))
-      .catch((e) => { alertDialog({ title: 'Couldn’t load printer', message: e.response?.data?.message || e.message, danger: true }); onBack(); })
+      .catch((e) => alertDialog({ title: 'Couldn’t load the price book', message: e.response?.data?.message || e.message, danger: true }))
       .finally(() => setLoading(false));
-  }, [pkey, authHdr, onBack]);
+  }, [pkey, authHdr]);
   useEffect(() => { load(); }, [load]);
 
-  const applyPrinter = (printer) => { setP(printer); onPrinterChanged?.(printer); };
+  const applyPrinter = (printer) => setP(printer);
 
   const patch = async (body) => {
     try {
@@ -423,7 +423,7 @@ function PrinterDetail({ pkey, authHdr, onBack, onPrinterChanged }) {
   };
 
   if (loading || !p) {
-    return <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>;
+    return <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress size={20} sx={{ color: D.green }} /></Box>;
   }
 
   const catalog = (p.catalog && typeof p.catalog === 'object') ? p.catalog : {};
@@ -431,61 +431,68 @@ function PrinterDetail({ pkey, authHdr, onBack, onPrinterChanged }) {
   const sectionKeys = Object.keys(catalog).filter((k) => !NON_PRICED.has(k) && catalog[k] && typeof catalog[k] === 'object');
   const archived = p.catalogArchive && typeof p.catalogArchive === 'object' ? Object.keys(p.catalogArchive) : [];
   const reviewDue = p.reviewDue;
+  // Surface (don't silently reconcile) a nexus-state disagreement between the
+  // vendor card and the printer catalog — the Quoter routes on the printer's.
+  const stateDrift = vendorState && p.state && String(vendorState).toUpperCase() !== String(p.state).toUpperCase();
 
   return (
-    <Stack spacing={2}>
-      <Button onClick={onBack} startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 11 }} />} size="small"
-        sx={{ textTransform: 'none', color: D.muted, fontWeight: 600, px: 0.5, alignSelf: 'flex-start', '&:hover': { color: D.green, bgcolor: 'transparent' } }}>
-        All printers
-      </Button>
-
-      {/* Identity + meta */}
-      <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, bgcolor: D.panel, p: 2 }}>
-        <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 18, color: D.text }}>{p.name}</Typography>
-          <Chip size="small" label={p.state || '—'} sx={{ ...mono, height: 22, bgcolor: D.inset, color: D.muted }} />
-          {(p.capabilities || []).map((c) => (
-            <Chip key={c} size="small" label={CAP_LABEL[c] || c} sx={{ height: 22, fontSize: 11, bgcolor: 'rgba(74,222,128,0.12)', color: D.green }} />
-          ))}
-        </Stack>
-
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-          <Field label="Name" value={p.name} onCommit={(v) => patch({ name: v })} />
-          <Field label="Home state (nexus)" value={p.state} onCommit={(v) => patch({ state: v })} width={120} placeholder="PA" />
-          <Field label="Location" value={p.location} onCommit={(v) => patch({ location: v })} />
-          <Field label="Price sheet effective" value={p.catalogEffective} onCommit={(v) => patch({ catalogEffective: v })} placeholder="2026-01-01" />
-          <Field label="Source PDF URL" value={p.sourcePdfUrl} onCommit={(v) => patch({ sourcePdfUrl: v })} placeholder="https://…" />
-          <Field label="Notes" value={p.notes} onCommit={(v) => patch({ notes: v })} />
-        </Box>
-
-        {/* Yearly re-verify nudge — surfaced, cleared with one tap */}
-        <Divider sx={{ borderColor: D.line, my: 1.75 }} />
-        <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-          <EventRepeatOutlinedIcon sx={{ fontSize: 18, color: reviewDue ? D.amber : D.faint }} />
-          <Typography sx={{ fontSize: 12.5, color: reviewDue ? D.amber : D.muted }}>
-            {reviewDue ? 'Pricing is a year old — re-verify with the printer.' : 'Pricing captured'}
-            {p.capturedOn ? ` · captured ${p.capturedOn}` : ''}
-            {p.pricingReviewedOn ? ` · reviewed ${p.pricingReviewedOn}` : ''}
-          </Typography>
-          <Box sx={{ flex: 1 }} />
-          <Button size="small" onClick={() => patch({ markReviewed: true })} startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 15 }} />}
-            sx={{ textTransform: 'none', fontSize: 12, color: D.green, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5,
-              '&:hover': { borderColor: D.green } }}>
-            Pricing reviewed today
-          </Button>
-          {p.sourcePdfUrl && (
-            <IconButton size="small" component="a" href={p.sourcePdfUrl} target="_blank" rel="noreferrer"
-              title="Open the source price sheet" sx={{ color: D.muted, '&:hover': { color: D.green } }}>
-              <OpenInNewIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          )}
-        </Stack>
-        {p.editedBy && (
-          <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 1 }}>
-            Last edited by {p.editedBy}{p.editedAt ? ` · ${fmtDate(p.editedAt)}` : ''}
-          </Typography>
+    <Stack spacing={1.5}>
+      {/* Derived capabilities + the yearly re-verify flag + unlink */}
+      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+        {(p.capabilities || []).length ? (p.capabilities || []).map((c) => (
+          <Chip key={c} size="small" label={CAP_LABEL[c] || c} sx={{ height: 22, fontSize: 11, bgcolor: 'rgba(74,222,128,0.12)', color: D.green }} />
+        )) : (
+          <Typography sx={{ color: D.faint, fontSize: 12 }}>No priced sections yet.</Typography>
         )}
+        {reviewDue && <Chip size="small" label="review due" sx={{ height: 20, fontSize: 10.5, bgcolor: 'rgba(251,191,36,0.16)', color: D.amber }} />}
+        <Box sx={{ flex: 1 }} />
+        {onUnlink && (
+          <Button size="small" onClick={onUnlink} startIcon={<LinkOffOutlinedIcon sx={{ fontSize: 15 }} />}
+            title="Unlink this supplier from its price book (the price book itself is kept)"
+            sx={{ textTransform: 'none', fontSize: 11.5, color: D.faint, '&:hover': { color: '#f87171' } }}>
+            Unlink
+          </Button>
+        )}
+      </Stack>
+
+      {/* Pricing provenance — effective date, nexus home state (the Quoter's), source sheet */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1.25 }}>
+        <Field label="Price sheet effective" value={p.catalogEffective} onCommit={(v) => patch({ catalogEffective: v })} placeholder="2026-01-01" />
+        <Field label="Nexus home state (Quoter)" value={p.state} onCommit={(v) => patch({ state: v })} placeholder="PA" />
+        <Field label="Source PDF URL" value={p.sourcePdfUrl} onCommit={(v) => patch({ sourcePdfUrl: v })} placeholder="https://…" />
       </Box>
+      {stateDrift && (
+        <Typography sx={{ color: D.amber, fontSize: 11 }}>
+          ⚠ Nexus state is <b>{String(p.state).toUpperCase()}</b> here vs <b>{String(vendorState).toUpperCase()}</b> on the card — the Quoter routes on {String(p.state).toUpperCase()}.
+        </Typography>
+      )}
+      <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+        <EventRepeatOutlinedIcon sx={{ fontSize: 17, color: reviewDue ? D.amber : D.faint }} />
+        <Typography sx={{ fontSize: 12, color: reviewDue ? D.amber : D.muted }}>
+          {reviewDue ? 'Pricing is a year old — re-verify with the printer.' : 'Pricing captured'}
+          {p.capturedOn ? ` · captured ${p.capturedOn}` : ''}
+          {p.pricingReviewedOn ? ` · reviewed ${p.pricingReviewedOn}` : ''}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {p.sourcePdfUrl && (
+          <IconButton size="small" component="a" href={p.sourcePdfUrl} target="_blank" rel="noreferrer"
+            title="Open the source price sheet" sx={{ color: D.muted, '&:hover': { color: D.green } }}>
+            <OpenInNewIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        )}
+        <Button size="small" onClick={() => patch({ markReviewed: true })} startIcon={<CheckCircleOutlineIcon sx={{ fontSize: 15 }} />}
+          sx={{ textTransform: 'none', fontSize: 12, color: D.green, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5,
+            '&:hover': { borderColor: D.green } }}>
+          Pricing reviewed today
+        </Button>
+      </Stack>
+      {p.editedBy && (
+        <Typography sx={{ color: D.faint, fontSize: 10.5 }}>
+          Last edited by {p.editedBy}{p.editedAt ? ` · ${fmtDate(p.editedAt)}` : ''}
+        </Typography>
+      )}
+
+      <Divider sx={{ borderColor: D.line }} />
 
       {/* Price books */}
       <Box>
@@ -585,116 +592,5 @@ function AddSectionDialog({ printerKey, authHdr, existing, onClose, onAdded }) {
         </Stack>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── List ──────────────────────────────────────────────────────────────────────
-function PrinterRow({ p, onOpen }) {
-  return (
-    <Box onClick={() => onOpen(p.key)} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.key); }}
-      sx={{ cursor: 'pointer', bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 1.6,
-        display: 'flex', alignItems: 'center', gap: 1.25, transition: 'border-color .15s, background-color .15s',
-        '&:hover': { borderColor: D.green, bgcolor: D.panelHi } }}>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-          <Typography sx={{ fontWeight: 700, fontSize: 14, color: D.text }}>{p.name}</Typography>
-          <Chip size="small" label={p.state || '—'} sx={{ ...mono, height: 19, fontSize: 10.5, bgcolor: D.inset, color: D.muted }} />
-          {p.reviewDue && <Chip size="small" label="review due" sx={{ height: 19, fontSize: 10, bgcolor: 'rgba(251,191,36,0.16)', color: D.amber }} />}
-        </Stack>
-        <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.3 }}>
-          {(p.capabilities || []).map((c) => CAP_LABEL[c] || c).join(' · ') || 'no price books yet'}
-          {p.capturedOn ? ` · captured ${p.capturedOn}` : ''}
-        </Typography>
-      </Box>
-      <ChevronRightIcon sx={{ color: D.faint }} />
-    </Box>
-  );
-}
-
-// ── Tab shell ─────────────────────────────────────────────────────────────────
-export default function PrinterCatalogTab({ token, onBack }) {
-  const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
-  const [printers, setPrinters] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [query, setQuery] = useState('');
-  const [openKey, setOpenKey] = useState(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    axios.get(`${base}/printers`, authHdr)
-      .then((r) => setPrinters(r.data.printers || []))
-      .catch(() => setPrinters([]))
-      .finally(() => setLoading(false));
-  }, [authHdr]);
-  useEffect(() => { load(); }, [load]);
-
-  const addPrinter = async () => {
-    const name = await promptDialog({ title: 'Add a printer', message: 'Printer name (you can add prices next):', placeholder: 'e.g. Anchor & Ink' });
-    if (!name) return;
-    try {
-      const r = await axios.post(`${base}/printers`, { name }, authHdr);
-      load();
-      setOpenKey(r.data.printer.key);
-    } catch (e) {
-      alertDialog({ title: 'Couldn’t add printer', message: e.response?.data?.message || e.message, danger: true });
-    }
-  };
-
-  const shown = printers.filter((p) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return `${p.name} ${p.state} ${(p.capabilities || []).join(' ')}`.toLowerCase().includes(q);
-  });
-
-  return (
-    <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 5, bgcolor: D.panel, borderBottom: `1px solid ${D.line}`,
-        px: { xs: 1.5, md: 3 }, py: 1.35, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={accentBar} />
-        <IconButton size="small" onClick={onBack} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
-          <ArrowBackIosNewIcon sx={{ fontSize: 15 }} />
-        </IconButton>
-        <FactoryOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
-        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, flex: 1, letterSpacing: 0.2 }}>
-          Printer Catalog
-          <Typography component="span" sx={{ color: D.muted, fontSize: 11.5, fontWeight: 500, ml: 1 }}>
-            Price books &amp; routing
-          </Typography>
-        </Typography>
-      </Box>
-
-      <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 1.5, md: 3 }, py: { xs: 2, md: 3 }, ...scrollbar }}>
-        {openKey ? (
-          <PrinterDetail pkey={openKey} authHdr={authHdr} onBack={() => setOpenKey(null)}
-            onPrinterChanged={(printer) => setPrinters((prev) => prev.map((x) => x.key === printer.key
-              ? { ...x, name: printer.name, state: printer.state, capabilities: printer.capabilities, capturedOn: printer.capturedOn, reviewDue: false }
-              : x))} />
-        ) : (
-          <Stack spacing={2}>
-            <Stack direction="row" gap={1.5} alignItems="center">
-              <TextField size="small" fullWidth value={query} onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search printers…"
-                InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 18, color: D.faint, mr: 1 }} /> }}
-                sx={fieldSx} />
-              <Button size="small" onClick={addPrinter} startIcon={<AddIcon sx={{ fontSize: 16 }} />} sx={{ ...dropPrimaryBtn, whiteSpace: 'nowrap' }}>
-                Add printer
-              </Button>
-            </Stack>
-            {loading ? (
-              <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress size={22} sx={{ color: D.green }} /></Box>
-            ) : shown.length === 0 ? (
-              <Typography sx={{ color: D.faint, fontSize: 13, textAlign: 'center', py: 6 }}>
-                {query ? 'No printers match.' : 'No printers yet — add one.'}
-              </Typography>
-            ) : (
-              <Stack spacing={1}>
-                {shown.map((p) => <PrinterRow key={p.key} p={p} onOpen={setOpenKey} />)}
-              </Stack>
-            )}
-          </Stack>
-        )}
-      </Box>
-    </Box>
   );
 }

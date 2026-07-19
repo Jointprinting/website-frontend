@@ -18,9 +18,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box, Stack, Typography, TextField, IconButton, Button, CircularProgress,
   InputAdornment, Switch, FormControlLabel, Tooltip, Radio, Chip, Divider, Collapse,
+  Select, MenuItem, FormControl,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
+import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
@@ -35,7 +37,8 @@ import config from '../../config.json';
 import {
   D, mono, accentBar, scrollbar, dropInput, dropPrimaryBtn, fmt, fmtDate, fmtRelative, money0,
 } from './_shared';
-import { alertDialog } from './_dialog';
+import { alertDialog, confirmDialog } from './_dialog';
+import PriceBookEditor from './PriceBookEditor';
 import { useContextMenu } from './ContextMenu';
 import { buildVendorMenu, buildFallbackMenu } from './contextMenuActions';
 import RebuildPrintersView from './RebuildPrintersView';
@@ -418,8 +421,80 @@ function ProfileField({ label, value, onCommit, placeholder, saving }) {
   );
 }
 
+// The linked printer's PRICE BOOK, shown inside the vendor card. Linked → the
+// editor (the same one that used to be the standalone "Printer Catalog" tab);
+// unlinked → a one-tap picker that ties this supplier to its catalog printer by
+// `printerKey` (best name match sorted first). One printer = one card.
+function VendorPriceBook({ vendor, authHdr, onPatch }) {
+  const linked = vendor.printerKey || '';
+  const [printers, setPrinters] = useState(null);
+  useEffect(() => {
+    if (linked) return undefined;                 // only need the list to pick when unlinked
+    let gone = false;
+    axios.get(`${base}/printers`, authHdr)
+      .then((r) => { if (!gone) setPrinters(r.data.printers || []); })
+      .catch(() => { if (!gone) setPrinters([]); });
+    return () => { gone = true; };
+  }, [linked, authHdr]);
+
+  const unlink = async () => {
+    if (await confirmDialog({ title: 'Unlink the price book?', message: 'The price book itself is kept — this only detaches it from this supplier card.', confirmLabel: 'Unlink' })) {
+      onPatch({ printerKey: '' });
+    }
+  };
+
+  // Create a fresh catalog printer named after this supplier and link it — the
+  // path for a newly-scanned price sheet (replaces the old tab's "Add printer").
+  const createAndLink = async () => {
+    try {
+      const r = await axios.post(`${base}/printers`, { name: vendor.name }, authHdr);
+      onPatch({ printerKey: r.data.printer.key });
+    } catch (e) {
+      alertDialog({ title: 'Couldn’t create the price book', message: e.response?.data?.message || e.message, danger: true });
+    }
+  };
+
+  // Best name match to this vendor sorts first, so the right price book is one tap.
+  const ranked = useMemo(() => {
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const v = norm(vendor.name);
+    const match = (n) => (v && n && (n.includes(v) || v.includes(n)) ? 0 : 1);
+    return [...(printers || [])].sort((a, b) =>
+      match(norm(a.name)) - match(norm(b.name)) || String(a.name || '').localeCompare(String(b.name || '')));
+  }, [printers, vendor.name]);
+
+  if (linked) {
+    return <PriceBookEditor pkey={linked} authHdr={authHdr} vendorState={vendor.state} onUnlink={unlink} />;
+  }
+  return (
+    <Stack spacing={1}>
+      <Typography sx={{ color: D.faint, fontSize: 12.5 }}>
+        Link this supplier to its price book — then edit prices here and the Quoter routes to it.
+      </Typography>
+      <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+        <FormControl size="small" sx={{ ...dropInput, minWidth: 240, maxWidth: 380 }}>
+          <Select value="" displayEmpty onChange={(e) => e.target.value && onPatch({ printerKey: e.target.value })}
+            sx={{ color: D.text, fontSize: 13 }}>
+            <MenuItem value="" disabled>
+              {printers === null ? 'Loading price books…' : ranked.length ? 'Link an existing price book…' : 'No price books yet'}
+            </MenuItem>
+            {ranked.map((pr) => (
+              <MenuItem key={pr.key} value={pr.key}>{pr.name}{pr.state ? ` · ${pr.state}` : ''}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Button size="small" onClick={createAndLink} startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+          sx={{ textTransform: 'none', fontSize: 12, color: D.green, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5,
+            '&:hover': { borderColor: D.green } }}>
+          New price book
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
 // ── Detail card ───────────────────────────────────────────────────────────────
-function VendorDetail({ data, loading, onBack, onPatch, savingField, onOpenOrder }) {
+function VendorDetail({ data, loading, onBack, onPatch, savingField, authHdr, onOpenOrder }) {
   const vendor = data?.vendor || null;
   const pos = data?.pos || [];
   const orders = data?.orders || [];
@@ -537,6 +612,13 @@ function VendorDetail({ data, loading, onBack, onPatch, savingField, onOpenOrder
         <Box sx={{ mt: 1.5 }}>
           <ProfileField label="Capabilities (comma-separated)" value={(vendor.capabilities || []).join(', ')} placeholder="screen print, embroidery, DTG, promo, signage" saving={savingField === 'capabilities'} onCommit={(x) => onPatch({ capabilities: x.split(',').map((s) => s.trim()).filter(Boolean) })} />
         </Box>
+      </Box>
+
+      {/* Price book — the printer's catalog the Quoter prices off, edited right
+          here. Same printer, one card: identity + money above, prices below. */}
+      <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
+        <Eyebrow sx={{ mb: 1.5, display: 'block' }}>Price book — what the Quoter prices off</Eyebrow>
+        <VendorPriceBook vendor={vendor} authHdr={authHdr} onPatch={onPatch} />
       </Box>
 
       {/* Connected records: orders → POs → receipts. The "full database" view. */}
@@ -752,7 +834,7 @@ export default function VendorsTab({ token, onBack, onNavigate, initialVendor })
             />
           </Stack>
         ) : openId ? (
-          <VendorDetail data={detail} loading={detailLoading} savingField={savingField}
+          <VendorDetail data={detail} loading={detailLoading} savingField={savingField} authHdr={authHdr}
             onBack={() => setOpenId(null)} onPatch={patch}
             // A connected order/PO/receipt row jumps to that order's project page.
             onOpenOrder={onNavigate ? (t) => onNavigate({ view: 'clients', orderNumber: t.orderNumber, projectNumber: t.projectNumber }) : undefined} />
