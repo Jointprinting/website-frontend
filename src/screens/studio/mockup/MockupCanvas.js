@@ -66,31 +66,89 @@ async function compositeNatural(blankSrc, logoSrc, blankObj, logoObj) {
 }
 
 const MockupCanvas = forwardRef(function MockupCanvas(
-  { blankSrc, logoSrc, pos, width = 620, height = 500, onChange }, ref,
+  { blankSrc, logoSrc, pos, area, width = 620, height = 500, onChange }, ref,
 ) {
   const elRef = useRef(null);
   const fcRef = useRef(null);
   const blankRef = useRef(null);
   const logoRef = useRef(null);
+  const guideRef = useRef(null);
+  const areaRef = useRef(area);
+  areaRef.current = area;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Emit the placement plus the DISPLAY geometry (blank + logo boxes in stage
+  // px) so the lab can turn a placement into real inches via the ppi ratio.
   const emit = () => {
-    const lg = logoRef.current;
+    const lg = logoRef.current, bk = blankRef.current;
     if (lg && onChangeRef.current) {
-      onChangeRef.current({ x: lg.left, y: lg.top, w: lg.scaleX, h: lg.scaleY, angle: lg.angle || 0 });
+      onChangeRef.current(
+        { x: lg.left, y: lg.top, w: lg.scaleX, h: lg.scaleY, angle: lg.angle || 0 },
+        {
+          logo: { width: lg.getScaledWidth(), height: lg.getScaledHeight() },
+          blank: bk ? { left: bk.left, top: bk.top, width: bk.getScaledWidth(), height: bk.getScaledHeight() } : null,
+        },
+      );
     }
   };
 
-  // Init the fabric canvas once.
+  // Rotation-aware clamp to the printable area — the classic _clampLogoToPrintArea:
+  // cap the scale so the bounding box fits, then push it back inside the rect.
+  const clampToArea = (logo) => {
+    const a = areaRef.current;
+    if (!a || !logo) return;
+    logo.setCoords();
+    let bb = logo.getBoundingRect(true);
+    if (bb.width > a.width || bb.height > a.height) {
+      const s = Math.min(a.width / bb.width, a.height / bb.height);
+      logo.set({ scaleX: logo.scaleX * s, scaleY: logo.scaleY * s });
+      logo.setCoords();
+      bb = logo.getBoundingRect(true);
+    }
+    let dx = 0, dy = 0;
+    if (bb.left < a.left) dx = a.left - bb.left;
+    if (bb.top < a.top) dy = a.top - bb.top;
+    if (bb.left + bb.width > a.left + a.width) dx = a.left + a.width - (bb.left + bb.width);
+    if (bb.top + bb.height > a.top + a.height) dy = a.top + a.height - (bb.top + bb.height);
+    if (dx || dy) { logo.set({ left: logo.left + dx, top: logo.top + dy }); logo.setCoords(); }
+  };
+
+  // Init the fabric canvas once. Live clamp on every drag/scale/rotate — the
+  // same four bindings the classic editor uses (no-op when no area).
   useEffect(() => {
     const fc = new fabric.Canvas(elRef.current, { backgroundColor: '#1c1c1c', preserveObjectStacking: true });
     fc.setWidth(width); fc.setHeight(height);
-    fc.on('object:modified', emit);
+    const onLive = (e) => { const t = e.target; if (t && t.selectable !== false) clampToArea(t); };
+    fc.on('object:moving', onLive);
+    fc.on('object:scaling', onLive);
+    fc.on('object:rotating', onLive);
+    fc.on('object:modified', (e) => { onLive(e); emit(); });
     fcRef.current = fc;
     return () => { try { fc.dispose(); } catch (_) { /* already gone */ } fcRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Draw / move the dashed print-area guide when the area changes.
+  useEffect(() => {
+    const fc = fcRef.current; if (!fc) return;
+    if (guideRef.current) { fc.remove(guideRef.current); guideRef.current = null; }
+    if (area) {
+      const rect = new fabric.Rect({
+        left: area.left, top: area.top, width: area.width, height: area.height,
+        fill: 'rgba(184,242,86,.04)', stroke: 'rgba(184,242,86,.85)', strokeDashArray: [6, 5],
+        strokeWidth: 1.25, selectable: false, evented: false, excludeFromExport: true,
+      });
+      fc.add(rect);
+      guideRef.current = rect;
+      // Stack: blank at the bottom, guide above it, logo on top.
+      if (blankRef.current && typeof blankRef.current.moveTo === 'function') blankRef.current.moveTo(0);
+      if (typeof rect.moveTo === 'function') rect.moveTo(1);
+      if (logoRef.current) { clampToArea(logoRef.current); emit(); }
+    }
+    fc.requestRenderAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [area && area.left, area && area.top, area && area.width, area && area.height]);
 
   // Load / swap the blank (fit ×0.93, centered, locked; kept at the bottom).
   useEffect(() => {
@@ -158,6 +216,38 @@ const MockupCanvas = forwardRef(function MockupCanvas(
       const w = logo.getScaledWidth(), h = logo.getScaledHeight();
       logo.set({ left: bL + bW * (preset.xPct || 0.5) - w / 2, top: bT + bH * (preset.yPct || 0.4) - h / 2 });
       logo.setCoords();
+      clampToArea(logo);
+      fc.setActiveObject(logo);
+      fc.requestRenderAll();
+      emit();
+    },
+    // Drop the logo on an INCH preset inside the printable area — the classic
+    // applyPrintAreaPreset: size by inch width (capped both axes), position at
+    // cx/cy of the printable rect, clamp.
+    applyAreaPreset(preset) {
+      const fc = fcRef.current, logo = logoRef.current, a = areaRef.current;
+      if (!fc || !logo || !a || !preset || !a.ppi) return;
+      logo.set({ angle: 0 });
+      let s = (Math.min(preset.wIn, a.maxWIn) * a.ppi) / logo.width;
+      if ((logo.height * s) / a.ppi > a.maxHIn) s = (a.maxHIn * a.ppi) / logo.height;
+      logo.set({ scaleX: s, scaleY: s });
+      const w = logo.getScaledWidth(), h = logo.getScaledHeight();
+      logo.set({ left: a.left + a.width * preset.cx - w / 2, top: a.top + a.height * preset.cy - h / 2 });
+      logo.setCoords();
+      clampToArea(logo);
+      fc.setActiveObject(logo);
+      fc.requestRenderAll();
+      emit();
+    },
+    // Recenter at the classic default size, angle 0 (the ↺ Reset button).
+    resetPosition() {
+      const fc = fcRef.current, logo = logoRef.current;
+      if (!fc || !logo) return;
+      const def = (Math.min(width, height) / Math.max(logo.width, logo.height)) * DEFAULT_LOGO;
+      logo.set({ angle: 0, scaleX: def, scaleY: def });
+      fc.centerObject(logo);
+      logo.setCoords();
+      clampToArea(logo);
       fc.setActiveObject(logo);
       fc.requestRenderAll();
       emit();

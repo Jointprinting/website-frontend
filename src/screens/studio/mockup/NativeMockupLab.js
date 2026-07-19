@@ -9,9 +9,9 @@
 // StudioLibraryItem format, companyKey-stamped), and reserves mockup numbers
 // server-side. Garment/ink colours + multi-page carry over unchanged.
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Box, Stack, Typography, IconButton, Button, TextField, MenuItem, CircularProgress, Divider,
+  Box, Stack, Typography, IconButton, Button, TextField, MenuItem, CircularProgress, Divider, Autocomplete,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import CheckIcon from '@mui/icons-material/Check';
@@ -25,8 +25,9 @@ import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey } from '../_shared';
 import { emptyPage, hydratePages, mockupToLibraryItem, pageToState } from './mockupModel';
-import { PRESETS, PRESET_ORDER } from './printAreas';
+import { PRESETS, PRESET_ORDER, PRINT_AREAS, CATEGORY_ORDER, printAreaRect } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
+import { analyzeArtwork, isScreenPrintType, INK } from './inkDetect';
 import MockupCanvas from './MockupCanvas';
 
 const base = `${config.backendUrl}/api`;
@@ -104,10 +105,61 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
     notes: isNew ? '' : (p0extra.notes || ''),
     client: isNew ? (project && project.client) || '' : (mockup.client || (project && project.client) || ''),
   });
-  const orderId = (project && project.id) || (item && item.pageState && item.pageState.projectId) || '';
-  const projectNumber = (mockup && mockup.projectNumber) || (project && project.projectNumber) || '';
+  // The linked project — state (not just props) so the typeahead can pick or
+  // switch it, exactly like the classic lab's required Project field. Save is
+  // gated on it: a mockup must belong to a project to letter-in and be findable.
+  const [proj, setProj] = useState(() => ({
+    id: (project && project.id) || (item && item.pageState && item.pageState.projectId) || '',
+    projectNumber: (mockup && mockup.projectNumber) || (project && project.projectNumber) || '',
+    label: '',
+  }));
+  const orderId = proj.id;
+  const projectNumber = proj.projectNumber;
   const prevStates = useMemo(() => (isNew ? [] : hydratePages(item)), [item, isNew]);
   const canvasRef = useRef(null);
+
+  // Project list for the typeahead — same endpoint + label the classic lab uses
+  // ("#133 · Bleu Leaf"). Loaded once; resolves the current id to its label.
+  const [projects, setProjects] = useState([]);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const { data } = await axios.get(`${base}/orders/projects`, authHdr);
+        if (!live) return;
+        const list = (data.projects || []).map((p) => ({
+          id: p._id,
+          projectNumber: p.projectNumber != null ? String(p.projectNumber) : '',
+          client: p.clientName || p.companyName || '',
+          company: p.companyName || p.clientName || 'Untitled',
+          label: `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`,
+        }));
+        setProjects(list);
+        setProj((prev) => {
+          const hit = prev.id && list.find((p) => p.id === prev.id);
+          return hit ? { ...prev, projectNumber: hit.projectNumber || prev.projectNumber, label: hit.label } : prev;
+        });
+      } catch (_) { /* best-effort — typing still works, save gate still guards */ }
+    })();
+    return () => { live = false; };
+  }, [authHdr]);
+
+  const pickProject = (p) => {
+    if (!p) { setProj({ id: '', projectNumber: '', label: '' }); return; }
+    setProj({ id: p.id, projectNumber: p.projectNumber, label: p.label });
+    // Auto-fills, classic-style: client always follows the project; title
+    // "<Company> Merch" only when empty or still the previous auto value.
+    setMeta((m) => {
+      const autoTitle = `${p.company} Merch`;
+      const prevAuto = m._autoTitle && m.title === m._autoTitle;
+      return {
+        ...m,
+        client: p.client || m.client,
+        title: (!m.title || prevAuto) ? autoTitle : m.title,
+        _autoTitle: autoTitle,
+      };
+    });
+  };
 
   const page = pages[pageIdx] || pages[0];
   const sd = page.sides[side];
@@ -115,9 +167,55 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const patchSide = useCallback((patch) => {
     setPages((prev) => { const n = clonePages(prev); Object.assign(n[pageIdx].sides[side], patch); return n; });
   }, [pageIdx, side]);
-  const setPos = useCallback((pos) => {
-    setPages((prev) => { const n = clonePages(prev); n[pageIdx].sides[side].pos = pos; return n; });
-  }, [pageIdx, side]);
+
+  // The blank's natural dims → its box in the 620×500 stage → the printable
+  // area (in stage px + ppi) for the page's product category. One ratio powers
+  // the guide box, the clamps, the inch presets, and the smart Dimensions.
+  const [natBlank, setNatBlank] = useState(null);
+  const blankSrcCur = sd.blank || sd.composite || null;
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const img = await loadImg(blankSrcCur);
+      if (live) setNatBlank(img ? { w: img.naturalWidth, h: img.naturalHeight } : null);
+    })();
+    return () => { live = false; };
+  }, [blankSrcCur]);
+  const area = useMemo(() => {
+    if (!natBlank) return null;
+    return printAreaRect(page.category || 'generic', side, blankBox(natBlank.w, natBlank.h));
+  }, [natBlank, page.category, side]);
+
+  // Smart Dimensions — placement → real inches, auto-written into the print
+  // spec ("4.00\"w × 2.72\"h — 3.00\" below collar") unless hand-edited.
+  const autoDimsRef = useRef({});
+  const [inchInfo, setInchInfo] = useState(null);
+  const setPos = useCallback((pos, geom) => {
+    // Inches computed OUTSIDE the state updater (updaters must stay pure).
+    let dims = null;
+    if (geom && geom.logo && geom.blank && area && area.ppi) {
+      const wIn = geom.logo.width / area.ppi;
+      const hIn = geom.logo.height / area.ppi;
+      const belowIn = Math.max(0, (pos.y - area.top) / area.ppi);
+      dims = `${wIn.toFixed(2)}"w × ${hIn.toFixed(2)}"h — ${belowIn.toFixed(2)}" below collar`;
+      setInchInfo({ wIn, hIn, maxWIn: area.maxWIn, maxHIn: area.maxHIn, method: area.method,
+        atMax: wIn >= area.maxWIn - 0.05 || hIn >= area.maxHIn - 0.05 });
+    } else if (geom) {
+      setInchInfo(null);
+    }
+    const key = `${pageIdx}:${side}`;
+    setPages((prev) => {
+      const n = clonePages(prev);
+      n[pageIdx].sides[side].pos = pos;
+      // Smart Dimensions: fill the print spec unless the owner hand-edited it.
+      if (dims) {
+        const cur = n[pageIdx].print[side].dims;
+        if (!cur || cur === autoDimsRef.current[key]) n[pageIdx].print[side].dims = dims;
+      }
+      return n;
+    });
+    if (dims) autoDimsRef.current[key] = dims;
+  }, [pageIdx, side, area]);
   const setPrint = useCallback((field, value) => {
     setPages((prev) => { const n = clonePages(prev); n[pageIdx].print[side][field] = value; return n; });
   }, [pageIdx, side]);
@@ -125,10 +223,39 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
     setPages((prev) => { const n = clonePages(prev); n[pageIdx][field] = value; return n; });
   }, [pageIdx]);
 
+  // Intelligent logo filing — an uploaded logo is worth more than one mockup:
+  // (a) it lands in the logos LIBRARY tagged to this client + project so it's
+  // reusable everywhere, and (b) if the client has NO brand logo on their CRM
+  // card yet, it becomes it (never clobbers an existing card logo). Best-effort
+  // — a filing hiccup must never block the mockup work.
+  const fileLogoToClient = useCallback(async (url) => {
+    const client = meta.client || (project && project.client) || '';
+    try {
+      await axios.post(`${base}/studio/library/logos`, {
+        name: `${client || 'Logo'}${projectNumber ? ` · #${projectNumber}` : ''}`,
+        data: url, thumbnail: url, client,
+        savedAt: Date.now(), remoteId: `logo-${uid()}`,
+      }, authHdr);
+    } catch (_) { /* library filing is best-effort */ }
+    if (!client) return;
+    try {
+      const key = deriveCompanyKey(client);
+      const { data } = await axios.get(`${base}/client-logos`, authHdr);
+      const has = Array.isArray(data) && data.some((l) => l && l.companyKey === key);
+      if (!has) {
+        await axios.post(`${base}/client-logos`, { companyName: client, clientName: client, imageDataUrl: url }, authHdr);
+      }
+    } catch (_) { /* card filing is best-effort */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.client, projectNumber, authHdr]);
+
   const onUpload = (field) => async (e) => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     const url = await fileToDataUrl(f);
-    if (url) patchSide(field === 'logo' ? { logo: url, composite: null } : { blank: url, composite: null });
+    if (url) {
+      patchSide(field === 'logo' ? { logo: url, composite: null } : { blank: url, composite: null });
+      if (field === 'logo') fileLogoToClient(url);   // fire-and-forget
+    }
     e.target.value = '';
   };
 
@@ -162,6 +289,27 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
     finally { setSsBusy(false); }
   };
 
+  // ── Ink colors — the classic ✨ auto-detect, ported ──────────────────────────
+  const [inkBusy, setInkBusy] = useState(false);
+  const [inkMsg, setInkMsg] = useState('');
+  useEffect(() => { setInkMsg(''); }, [pageIdx, side]);
+  const sideColors = (sd.colors || []).map((c) => (typeof c === 'string' ? { hex: c, name: '' } : { hex: c.hex || '', name: c.name || '' }));
+  const setColors = (colors) => patchSide({ colors });
+  const autoDetect = async () => {
+    if (!sd.logo) { setInkMsg(`Upload the ${side} artwork first, then I can read its colors.`); return; }
+    setInkBusy(true); setInkMsg('Scanning…');
+    let res;
+    try { res = await analyzeArtwork(sd.logo); } catch (e) { res = { error: 'could not read the artwork' }; }
+    setInkBusy(false);
+    if (!res || res.error) { setInkMsg(res && res.error ? `Couldn't read that artwork (${res.error}).` : 'Nothing to scan.'); return; }
+    const top = res.colors.slice(0, INK.maxInks);
+    if (!top.length) { setInkMsg('No solid colors found — the artwork may be empty or fully transparent.'); return; }
+    setColors(top.map((c) => ({ hex: c.hex.toLowerCase(), name: '' })));
+    setInkMsg(res.isComplex
+      ? `Complex / photographic design (${res.overflow ? 'lots of' : `${res.colors.length}+`} colors) — filled the ${top.length} most-used; review before quoting.`
+      : `Found ${top.length} ink color${top.length === 1 ? '' : 's'} and filled them in.`);
+  };
+
   // ── Save / PDF ───────────────────────────────────────────────────────────────
   const buildFlat = async (num) => {
     const pdfName = num ? `${String(num).replace(/^#/, '')}.pdf` : (mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : '');
@@ -187,6 +335,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   };
 
   const save = async () => {
+    // Classic save gate: a mockup needs a project — that's how it letters-in
+    // (#projA/B/C), auto-links to the order, and stays findable.
+    if (!orderId) { setBusy('Pick a project first — the mockup number and order link come from it.'); return; }
     setBusy('Saving…');
     try {
       let num = mockupNum;
@@ -268,7 +419,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         {busy && <Typography sx={{ fontSize: 12, color: busy.includes('✓') ? D.green : '#fbbf24' }}>{busy}</Typography>}
         <Button onClick={exportPdf} disabled={pdfBusy} size="small" startIcon={pdfBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
           sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5, '&:hover': { borderColor: D.green, color: D.green } }}>PDF</Button>
-        <Button onClick={save} disabled={saving} startIcon={saving ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
+        <Button onClick={save} disabled={saving || !orderId}
+          title={!orderId ? 'Pick a project first — the mockup number and order link come from it' : undefined}
+          startIcon={saving ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
           sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>Save</Button>
       </Stack>
 
@@ -298,22 +451,52 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
             </Stack>
           )}
 
+          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>PRODUCT</Typography>
+          <TextField select size="small" fullWidth value={page.category || 'generic'}
+            onChange={(e) => setPageField('category', e.target.value)} sx={{ ...dropInput }}>
+            {CATEGORY_ORDER.map((k) => <MenuItem key={k} value={k}>{PRINT_AREAS[k].label}</MenuItem>)}
+          </TextField>
+          {area && (
+            <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.5 }}>
+              Max {area.maxWIn}″ × {area.maxHIn}″ · {area.method} · dashed box = printable
+            </Typography>
+          )}
+
           {sd.logo && (
             <>
               <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>AUTO-PLACEMENT</Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0.5 }}>
-                {PRESET_ORDER.map((k) => (
-                  <Button key={k} onClick={() => canvasRef.current && canvasRef.current.applyPreset(PRESETS[k])} size="small"
-                    sx={{ color: D.text, fontSize: 10, textTransform: 'none', fontWeight: 600, border: `1px solid ${D.line}`, borderRadius: 1, minWidth: 0, px: 0.5, '&:hover': { borderColor: D.green, color: D.green } }}>{PRESETS[k].label}</Button>
-                ))}
-              </Box>
+              {area ? (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
+                  {area.presets.map((p) => (
+                    <Button key={p.label} onClick={() => canvasRef.current && canvasRef.current.applyAreaPreset(p)} size="small"
+                      sx={{ color: D.text, fontSize: 10, textTransform: 'none', fontWeight: 600, border: `1px solid ${D.line}`, borderRadius: 1, minWidth: 0, px: 0.5, '&:hover': { borderColor: D.green, color: D.green } }}>
+                      {p.label} {p.wIn}″
+                    </Button>
+                  ))}
+                </Box>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0.5 }}>
+                  {PRESET_ORDER.map((k) => (
+                    <Button key={k} onClick={() => canvasRef.current && canvasRef.current.applyPreset(PRESETS[k])} size="small"
+                      sx={{ color: D.text, fontSize: 10, textTransform: 'none', fontWeight: 600, border: `1px solid ${D.line}`, borderRadius: 1, minWidth: 0, px: 0.5, '&:hover': { borderColor: D.green, color: D.green } }}>{PRESETS[k].label}</Button>
+                  ))}
+                </Box>
+              )}
               <Stack direction="row" gap={0.5} alignItems="center" sx={{ mt: 1 }}>
                 <Typography sx={{ fontSize: 10, color: D.faint, fontWeight: 700 }}>Nudge</Typography>
                 {[['←', -2, 0], ['→', 2, 0], ['↑', 0, -2], ['↓', 0, 2]].map(([l, dx, dy]) => (
                   <Button key={l} onClick={() => canvasRef.current && canvasRef.current.nudge(dx, dy)} size="small"
                     sx={{ minWidth: 26, color: D.text, border: `1px solid ${D.line}`, borderRadius: 1, fontSize: 13, fontWeight: 800, '&:hover': { borderColor: D.green, color: D.green } }}>{l}</Button>
                 ))}
+                <Button onClick={() => canvasRef.current && canvasRef.current.resetPosition()} size="small"
+                  sx={{ minWidth: 0, px: 1, color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1, fontSize: 11, fontWeight: 700, '&:hover': { borderColor: D.green, color: D.green } }}>↺</Button>
               </Stack>
+              {inchInfo && (
+                <Typography sx={{ ...mono, fontSize: 10.5, mt: 0.75, color: inchInfo.atMax ? '#fbbf24' : D.green }}>
+                  {inchInfo.wIn.toFixed(2)}″ × {inchInfo.hIn.toFixed(2)}″
+                  {inchInfo.atMax ? ` · at the ${inchInfo.method} max` : ''}
+                </Typography>
+              )}
             </>
           )}
         </Box>
@@ -330,7 +513,8 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
           </Stack>
           <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, overflow: 'hidden', maxWidth: '100%' }}>
             <MockupCanvas ref={canvasRef} key={canvasKey} width={STAGE_W} height={STAGE_H}
-              blankSrc={sd.blank || sd.composite || null} logoSrc={sd.logo || null} pos={sd.pos} onChange={setPos} />
+              blankSrc={sd.blank || sd.composite || null} logoSrc={sd.logo || null} pos={sd.pos}
+              area={area} onChange={setPos} />
           </Box>
           <Stack direction="row" gap={1} sx={{ mt: 1.5 }}>
             {['front', 'back'].map((s) => {
@@ -352,9 +536,29 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         <Box sx={{ borderLeft: { md: `1px solid ${D.line}` }, p: 1.75, overflowY: 'auto', ...scrollbar }}>
           <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>MOCKUP INFO</Typography>
           <Stack gap={1.25}>
-            {field('Title', meta.title, (v) => setMeta((m) => ({ ...m, title: v })))}
+            <Autocomplete
+              size="small"
+              options={projects}
+              getOptionLabel={(o) => o.label || ''}
+              isOptionEqualToValue={(o, v) => o.id === v.id}
+              value={projects.find((p) => p.id === proj.id) || (proj.id ? { id: proj.id, label: proj.label || `#${proj.projectNumber}` } : null)}
+              onChange={(_, v) => pickProject(v)}
+              renderInput={(params) => (
+                <TextField {...params} label="Project *" placeholder="Type a project — #133 Dredo, Bleu Leaf"
+                  sx={{ ...dropInput }} error={!proj.id}
+                  helperText={!proj.id ? 'Required — the number + order link come from it' : undefined} />
+              )}
+              slotProps={{ paper: { sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}` } } }}
+            />
             {field('Client', meta.client, (v) => setMeta((m) => ({ ...m, client: v })))}
+            {field('Title', meta.title, (v) => setMeta((m) => ({ ...m, title: v })))}
             {field('Subtitle', meta.subtitle, (v) => setMeta((m) => ({ ...m, subtitle: v })))}
+            <Stack direction="row" gap={1.25}>
+              <TextField label="Mockup # · auto" value={mockupNum || '— on save —'} size="small" fullWidth
+                InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
+              <TextField label="PDF · auto" value={mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : '—'} size="small" fullWidth
+                InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
+            </Stack>
             {field('Notes', meta.notes, (v) => setMeta((m) => ({ ...m, notes: v })), { multiline: true })}
             {field('Template', page.template, (v) => setPageField('template', Number(v)), { select: true, children: [<MenuItem key={1} value={1}>Front + Back</MenuItem>, <MenuItem key={2} value={2}>Front only</MenuItem>] })}
             <Divider sx={{ borderColor: D.line }} />
@@ -362,6 +566,41 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
             {field('Type', page.print[side].type, (v) => setPrint('type', v))}
             {field('Dimensions', page.print[side].dims, (v) => setPrint('dims', v))}
             {field('Location', page.print[side].loc, (v) => setPrint('loc', v))}
+            <Divider sx={{ borderColor: D.line }} />
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{side} logo colors</Typography>
+              <Button onClick={autoDetect} disabled={inkBusy} size="small"
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 1 }}>
+                {inkBusy ? <CircularProgress size={12} sx={{ color: D.green }} /> : '✨ Auto-detect'}
+              </Button>
+            </Stack>
+            {!isScreenPrintType(page.print[side].type) && (
+              <Typography sx={{ color: D.faint, fontSize: 10.5, mt: -0.75 }}>
+                {page.print[side].type} doesn't price by ink color — palette optional.
+              </Typography>
+            )}
+            {inkMsg && <Typography sx={{ color: D.muted, fontSize: 11, mt: -0.5 }}>{inkMsg}</Typography>}
+            {sideColors.map((c, i) => (
+              <Stack key={i} direction="row" gap={0.75} alignItems="center" sx={{ mt: i === 0 ? 0 : -0.75 }}>
+                <Box component="input" type="color" value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex : '#000000'}
+                  onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
+                  sx={{ width: 26, height: 26, p: 0, border: `1px solid ${D.line}`, borderRadius: 1, bgcolor: 'transparent', cursor: 'pointer' }} />
+                <TextField value={c.hex} onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
+                  size="small" sx={{ ...dropInput, width: 92, '& input': { ...mono, fontSize: 11 } }} />
+                <TextField value={c.name} placeholder="name (shows in PDF)"
+                  onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                  size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 11 } }} />
+                <IconButton onClick={() => setColors(sideColors.filter((_, j) => j !== i))} size="small" sx={{ color: D.faint, '&:hover': { color: '#f87171' } }}>
+                  <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Stack>
+            ))}
+            {sideColors.length < INK.maxInks && (
+              <Button onClick={() => setColors([...sideColors, { hex: '#000000', name: '' }])} size="small"
+                sx={{ color: D.faint, textTransform: 'none', fontWeight: 600, fontSize: 11, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
+                + Add a color
+              </Button>
+            )}
             {canDuplicate && (
               <Button onClick={duplicate} disabled={dupBusy} size="small" startIcon={dupBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <ContentCopyIcon sx={{ fontSize: 15 }} />}
                 sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, mt: 1, '&:hover': { borderColor: D.green, color: D.green } }}>Add a variation</Button>
