@@ -36,6 +36,9 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [q, setQ] = useState('');
+  // Overview-style grouping: tiles grouped by linked project (classic Overview
+  // tab behavior), "Unlinked" last. Toggleable to a flat newest-first grid.
+  const [byProject, setByProject] = useState(true);
 
   // Browser lens — scope the grid to one client (companyKey) or project. Seeded
   // from the entry (a CRM "see all" / a project deep-link), clearable back to all.
@@ -214,8 +217,34 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
           {lensOn ? 'No mockups for this filter yet — open the lab to make one.' : (list.length === 0 ? 'No mockups yet — “New in lab” opens the lab to make one.' : 'No mockups match your search.')}
         </Typography>
       ) : (
+        <>
+        <Stack direction="row" justifyContent="flex-end" sx={{ mb: 0.75 }}>
+          <Typography component="button" onClick={() => setByProject((v) => !v)}
+            sx={{ background: 'none', border: 'none', cursor: 'pointer', color: D.faint, fontSize: 11, fontWeight: 700, '&:hover': { color: D.green } }}>
+            {byProject ? 'view: by project' : 'view: all (newest first)'}
+          </Typography>
+        </Stack>
+        {(byProject
+          ? (() => {
+              const groups = new Map();
+              for (const m of filtered) {
+                const k = (m.pageState && m.pageState.projectNumber) ? String(m.pageState.projectNumber) : '';
+                if (!groups.has(k)) groups.set(k, []);
+                groups.get(k).push(m);
+              }
+              const keys = [...groups.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : Number(b) - Number(a)));
+              return keys.map((k) => ({ key: k, label: k ? `#${k} · ${groups.get(k)[0].client || ''}` : 'Unlinked', items: groups.get(k) }));
+            })()
+          : [{ key: 'all', label: '', items: filtered }]
+        ).map((g) => (
+        <Box key={g.key} sx={{ mb: 2 }}>
+          {g.label && (
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', mb: 0.75 }}>
+              {g.label} <Box component="span" sx={{ color: 'rgba(255,255,255,0.25)' }}>· {g.items.length}</Box>
+            </Typography>
+          )}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1.25 }}>
-          {filtered.map((m) => (
+          {g.items.map((m) => (
             <Box key={m._id} onClick={() => openMockup(m)} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMockup(m); } }}
               sx={{ cursor: 'pointer', borderRadius: 2, overflow: 'hidden', border: `1px solid ${D.line}`, bgcolor: D.panel,
@@ -241,6 +270,9 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
             </Box>
           ))}
         </Box>
+        </Box>
+        ))}
+        </>
       )}
     </Box>
   );
