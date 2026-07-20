@@ -697,6 +697,16 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                         </Tooltip>
                       );
                     })()}
+                    {active && c.firstTouchQuarantinedAt && (
+                      <Tooltip title="The engine stopped NEW first-touches because this list kept bouncing even after auto-cleaning (follow-ups to alive leads continue; auto-enroll skips it). Resume once the list is rebuilt — if it's still rotten, the quarantine re-trips on its own.">
+                        <Button onClick={() => onUpdate(c._id, { firstTouchQuarantined: false })}
+                          startIcon={<PlayArrowRoundedIcon sx={{ fontSize: 16 }} />}
+                          sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12, color: D.amber,
+                            border: `1px solid ${D.amber}55`, bgcolor: 'rgba(251,191,36,0.08)' }}>
+                          Resume first-touches
+                        </Button>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Edit the sequence">
                       <Button onClick={() => setEditor({ campaign: c })} startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
                         sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12 }}>
