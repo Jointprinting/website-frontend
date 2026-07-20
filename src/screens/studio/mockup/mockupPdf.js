@@ -17,9 +17,9 @@ import { JP_LOGO_B64, JP_GLOBE_B64, JP_INSTA_B64 } from './brandAssets';
 
 const PAGE_WIDTH = 720;
 const PAGE_HEIGHT = 1080;
-// Legacy drew placeholder boxes when a garment image was missing and "print
-// preview" was on (its default). Keep that so an empty side reads as intentional.
-const SHOW_PLACEHOLDER = true;
+// Placeholder borders for missing images — the lab's "Borders" toggle. Module
+// state set per-build (the classic showPrintPreview flag).
+let SHOW_PLACEHOLDER = true;
 
 const hexToRgb = (rgb, hex) => {
   let h = String(hex || '').replace(/^#/, '');
@@ -273,7 +273,8 @@ async function renderTemplate2(lib, pdfDoc, page, pg) {
 }
 
 // Build the PDF bytes from an array of legacy pageState objects.
-export async function buildMockupPdfBytes(pageStates) {
+export async function buildMockupPdfBytes(pageStates, opts) {
+  SHOW_PLACEHOLDER = !opts || opts.placeholders !== false;
   const lib = await import('pdf-lib');
   const { PDFDocument } = lib;
   const pdfDoc = await PDFDocument.create();
@@ -288,8 +289,8 @@ export async function buildMockupPdfBytes(pageStates) {
 
 // Build the PDF and trigger a browser download. `filename` defaults to the mockup
 // number ("000150A.pdf"), matching the legacy pdfName.
-export async function exportMockupPdf(pageStates, filename) {
-  const bytes = await buildMockupPdfBytes(pageStates);
+export async function exportMockupPdf(pageStates, filename, opts) {
+  const bytes = await buildMockupPdfBytes(pageStates, opts);
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

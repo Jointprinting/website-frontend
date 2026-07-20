@@ -66,7 +66,7 @@ async function compositeNatural(blankSrc, logoSrc, blankObj, logoObj) {
 }
 
 const MockupCanvas = forwardRef(function MockupCanvas(
-  { blankSrc, logoSrc, pos, area, width = 620, height = 500, onChange }, ref,
+  { blankSrc, logoSrc, pos, area, width = 620, height = 500, displayScale = 1, onChange }, ref,
 ) {
   const elRef = useRef(null);
   const fcRef = useRef(null);
@@ -137,6 +137,17 @@ const MockupCanvas = forwardRef(function MockupCanvas(
     return () => { try { fc.dispose(); } catch (_) { /* already gone */ } fcRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Responsive: shrink the CANVAS (not a CSS transform — that breaks fabric's
+  // pointer math) via setDimensions + setZoom. Logical coords stay 620×500, so
+  // placements, presets, and the ppi inch math are identical at every size.
+  useEffect(() => {
+    const fc = fcRef.current; if (!fc) return;
+    const s = Math.max(0.3, Math.min(1, displayScale || 1));
+    fc.setDimensions({ width: Math.round(width * s), height: Math.round(height * s) });
+    fc.setZoom(s);
+    fc.requestRenderAll();
+  }, [displayScale, width, height]);
 
   // Draw / move the dashed print-area guide when the area changes.
   useEffect(() => {
@@ -242,6 +253,23 @@ const MockupCanvas = forwardRef(function MockupCanvas(
       logo.set({ scaleX: s, scaleY: s });
       const w = logo.getScaledWidth(), h = logo.getScaledHeight();
       logo.set({ left: a.left + a.width * preset.cx - w / 2, top: a.top + a.height * preset.cy - h / 2 });
+      logo.setCoords();
+      clampToArea(logo);
+      fc.setActiveObject(logo);
+      fc.requestRenderAll();
+      emit();
+    },
+    // Set the logo's printed WIDTH in inches (the dims⇄size link): uniform
+    // scale about the logo's current center, clamped to the printable area.
+    setSizeInches(wIn) {
+      const fc = fcRef.current, logo = logoRef.current, a = areaRef.current;
+      if (!fc || !logo || !a || !a.ppi || !wIn || wIn <= 0) return;
+      const oldW = logo.getScaledWidth(), oldH = logo.getScaledHeight();
+      const cx = logo.left + oldW / 2, cy = logo.top + oldH / 2;
+      const s = (wIn * a.ppi) / logo.width;
+      logo.set({ scaleX: s, scaleY: s });
+      const nw = logo.getScaledWidth(), nh = logo.getScaledHeight();
+      logo.set({ left: cx - nw / 2, top: cy - nh / 2 });
       logo.setCoords();
       clampToArea(logo);
       fc.setActiveObject(logo);
