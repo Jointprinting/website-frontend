@@ -817,10 +817,16 @@ export default function RoadTripTab({ token, onNavigate }) {
         setTimeout(() => loadAreaRef.current(), 180_000);
       }
       if (r.data?.error || r.data?.cached || r.data?.skipped) return;
-      const added = r.data?.added || 0;
-      if (added > 0 || (r.data?.attached || 0) > 0) {
+      // OSM finds + (when the ground still looked thin) the budget-capped
+      // Google deep-sweep finds — surfaced together as one "new stores" beat.
+      const added = (r.data?.added || 0) + (r.data?.gapFill?.added || 0);
+      const attached = (r.data?.attached || 0) + (r.data?.gapFill?.attachedToRoster || 0);
+      if (added > 0 || attached > 0) {
         loadAreaRef.current(); // surface the fresh finds
-        if (added > 0) showToast(`+${added} new store${added === 1 ? '' : 's'} found on this ground.`, 'success');
+        if (added > 0) {
+          const deep = r.data?.gapFill?.added || 0;
+          showToast(`+${added} new store${added === 1 ? '' : 's'} found on this ground${deep > 0 ? ` (${deep} via deep sweep)` : ''}.`, 'success');
+        }
       }
     } catch { /* soft — DB pins already render; a later pan retries */ }
     finally {
