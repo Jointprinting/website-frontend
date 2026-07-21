@@ -424,8 +424,12 @@ export default function RoadTripTab({ token, onNavigate }) {
   const [replayId, setReplayId] = React.useState(null);        // run id ghosted on the map
   const replayRef = React.useRef(null);                        // geojson survives style swaps
 
-  // Coverage feedback: a live OSM sweep of new ground is running.
+  // Coverage feedback: a live OSM sweep of new ground is running, and what the
+  // viewport's STATE actually holds (from the scan response) — "is it working?"
+  // answered on screen: "OH · 174 LICENSED" / "LOADING ROSTER" / "NO LICENSED
+  // MARKET" (Indiana isn't broken, it's empty for real).
   const [scanningGround, setScanningGround] = React.useState(false);
+  const [coverage, setCoverage] = React.useState(null); // { state, rosterRows, rosterState }
 
   // Today's Run
   const [run, setRun] = React.useState(null);
@@ -800,15 +804,17 @@ export default function RoadTripTab({ token, onNavigate }) {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
       }, authHdr);
+      if (r.data?.coverage) setCoverage(r.data.coverage);
       // The state under the viewport had no license roster yet — the server just
       // kicked its ingest ("hovering Cleveland, zero OH rows" heals itself).
-      // Say so once and refresh as the roster lands.
+      // Say so once and refresh as the roster lands (a big state's roster +
+      // geocoding can take a few minutes; the header readout tracks it live).
       const seeding = r.data?.seeding;
       if (seeding && !seedingNotifiedRef.current.has(seeding)) {
         seedingNotifiedRef.current.add(seeding);
-        showToast(`Loading ${seeding}'s license roster — licensed stores land here in a minute or two.`, 'info');
+        showToast(`Loading ${seeding}'s license roster — watch the header count; big states take a few minutes.`, 'info');
         setTimeout(() => loadAreaRef.current(), 60_000);
-        setTimeout(() => loadAreaRef.current(), 150_000);
+        setTimeout(() => loadAreaRef.current(), 180_000);
       }
       if (r.data?.error || r.data?.cached || r.data?.skipped) return;
       const added = r.data?.added || 0;
@@ -2385,17 +2391,35 @@ export default function RoadTripTab({ token, onNavigate }) {
             JP.FIELD_MAP // NATIONWIDE
           </Typography>
         </Stack>
-        <Chip
-          label={loadingArea ? 'LOADING AREA…' : `${visibleDisps.length} IN VIEW`}
-          size="small"
-          sx={{
-            height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
-            letterSpacing: 1, borderRadius: 0.5,
-            bgcolor: loadingArea ? 'rgba(251,191,36,0.15)' : 'rgba(74,222,128,0.15)',
-            color: loadingArea ? TERM.amber : TERM.green,
-            border: `1px solid ${loadingArea ? TERM.amber : TERM.green}`,
-          }}
-        />
+        {/* ONE stable status chip — constant layout, so mobile never reflows on
+            pan. The dot tells the story: pulsing amber = loading the area,
+            pulsing cyan = live OSM scan of new ground, solid green = idle. The
+            coverage suffix reports what the viewport's STATE actually holds. */}
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 0.75,
+          height: 18, px: 1, borderRadius: 0.5,
+          bgcolor: 'rgba(74,222,128,0.12)', border: `1px solid ${TERM.green}`,
+          fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: 1, color: TERM.green,
+          whiteSpace: 'nowrap',
+        }}>
+          <Box sx={{
+            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+            bgcolor: loadingArea ? TERM.amber : scanningGround ? TERM.cyan : TERM.green,
+            boxShadow: `0 0 6px ${loadingArea ? TERM.amber : scanningGround ? TERM.cyan : TERM.green}`,
+            ...(loadingArea || scanningGround ? {
+              animation: 'jpfm-pulse 1s ease-in-out infinite',
+              '@keyframes jpfm-pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.25 } },
+            } : {}),
+          }} />
+          {visibleDisps.length} IN VIEW
+          {coverage && (
+            <Box component="span" sx={{ color: TERM.muted }}>
+              · {coverage.state}{' '}
+              {coverage.rosterRows > 0 ? `${coverage.rosterRows} LICENSED`
+                : coverage.rosterState ? 'LOADING ROSTER' : 'NO LICENSED MARKET'}
+            </Box>
+          )}
+        </Box>
         {!chainsOn && chainCount > 0 && (
           <Chip
             label={`+${chainCount} CHAINS`}
@@ -2407,18 +2431,6 @@ export default function RoadTripTab({ token, onNavigate }) {
               bgcolor: 'transparent', color: CHAINS_CLICKER.color,
               border: `1px dashed ${CHAINS_CLICKER.color}`,
               '&:hover': { bgcolor: `${CHAINS_CLICKER.color}1a` },
-            }}
-          />
-        )}
-        {scanningGround && (
-          <Chip
-            label="SCANNING NEW GROUND…"
-            size="small"
-            sx={{
-              height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
-              letterSpacing: 1, borderRadius: 0.5,
-              bgcolor: 'rgba(6,182,212,0.12)', color: TERM.cyan,
-              border: `1px solid ${TERM.cyan}`,
             }}
           />
         )}
