@@ -1912,7 +1912,13 @@ function PrinterSuggest({ shipToState, printerName, onPick, authHdr }) {
       </Typography>
       {ordered.map(p => {
         const blocked = !!st && String(p.state).toUpperCase() === st;
-        const picked = (printerName || '').toLowerCase().includes(String(p.name || '').split(' ')[0].toLowerCase());
+        // Selected = THIS printer, matched on the full normalized name (one may
+        // carry a suffix the other lacks, e.g. ", Inc."). The old first-word
+        // `includes` lit up strangers: "Print Hybrid"'s first word is "print",
+        // which "Heritage Screen PRINTing" contains.
+        const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        const np = normName(printerName), nc = normName(p.name);
+        const picked = !!np && !!nc && (np === nc || np.startsWith(nc) || nc.startsWith(np));
         // Approx miles to the ship-to state, shown so the nearest-first order reads clearly.
         const mi = blocked ? NaN : stateDistanceMi(st, p.state);
         const near = Number.isFinite(mi) ? ` · ~${Math.round(mi)}mi` : '';
