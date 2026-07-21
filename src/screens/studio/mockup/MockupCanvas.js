@@ -114,10 +114,18 @@ const MockupCanvas = forwardRef(function MockupCanvas(
     if (dx || dy) { logo.set({ left: logo.left + dx, top: logo.top + dy }); logo.setCoords(); }
   };
 
-  // Init the fabric canvas once. Live clamp on every drag/scale/rotate — the
-  // same four bindings the classic editor uses (no-op when no area).
+  // Init the fabric canvas once. CRITICAL DOM-ownership rule: React renders only
+  // the HOST <div>; the <canvas> is created imperatively here and handed to
+  // fabric. fabric wraps/moves canvas nodes behind React's back, so letting
+  // React own the canvas caused "removeChild: not a child of this node" crashes
+  // on remount. With the host-div pattern React never tracks fabric's nodes —
+  // cleanup disposes fabric then clears the host wholesale. Structural fix.
   useEffect(() => {
-    const fc = new fabric.Canvas(elRef.current, { backgroundColor: '#1c1c1c', preserveObjectStacking: true });
+    const host = elRef.current;
+    const cv = document.createElement('canvas');
+    cv.width = width; cv.height = height;
+    host.appendChild(cv);
+    const fc = new fabric.Canvas(cv, { backgroundColor: '#1c1c1c', preserveObjectStacking: true });
     fc.setWidth(width); fc.setHeight(height);
     // Clamp on every live event; emit rAF-throttled so the inch readout and
     // smart Dimensions track the drag in real time (classic behavior) without
@@ -134,7 +142,13 @@ const MockupCanvas = forwardRef(function MockupCanvas(
     fc.on('object:rotating', onLive);
     fc.on('object:modified', (e) => { onLive(e); emit(); });
     fcRef.current = fc;
-    return () => { try { fc.dispose(); } catch (_) { /* already gone */ } fcRef.current = null; };
+    return () => {
+      try { fc.dispose(); } catch (_) { /* fabric teardown is best-effort */ }
+      fcRef.current = null; blankRef.current = null; logoRef.current = null; guideRef.current = null;
+      // Clear whatever DOM fabric left (wrapper divs, upper-canvas) — React never
+      // tracked these nodes, so this can't conflict with its own removals.
+      try { while (host.firstChild) host.removeChild(host.firstChild); } catch (_) { /* already gone */ }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -306,7 +320,9 @@ const MockupCanvas = forwardRef(function MockupCanvas(
     },
   }));
 
-  return <canvas ref={elRef} width={width} height={height} />;
+  // React owns ONLY this div — fabric's canvas + wrappers live inside it,
+  // created and torn down imperatively (see the init effect).
+  return <div ref={elRef} style={{ lineHeight: 0 }} />;
 });
 
 export default MockupCanvas;

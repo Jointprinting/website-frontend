@@ -703,7 +703,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const addPage = () => { setPages((p) => [...p, emptyPage()]); setPageIdx(pages.length); setSide('front'); };
   const removePage = () => { if (pages.length <= 1) return; setPages((p) => p.filter((_, i) => i !== pageIdx)); setPageIdx((i) => Math.max(0, i - 1)); setSide('front'); };
 
-  const canvasKey = `${pageIdx}:${side}:${sd.blank ? sd.blank.slice(-24) : 'x'}:${sd.logo ? sd.logo.slice(-24) : 'x'}`;
+  // Remount only on page/side flips (so the saved pos re-applies); blank/logo
+  // changes swap IN PLACE inside the canvas — fewer teardowns, no DOM churn.
+  const canvasKey = `${pageIdx}:${side}`;
   const field = (label, value, onChange, opts = {}) => (
     <TextField label={label} value={value} onChange={(e) => onChange(e.target.value)} size="small" fullWidth
       multiline={!!opts.multiline} minRows={opts.multiline ? 2 : undefined} select={!!opts.select} sx={{ ...dropInput }}>
