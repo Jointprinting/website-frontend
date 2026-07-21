@@ -787,6 +787,7 @@ export default function RoadTripTab({ token, onNavigate }) {
   // answer is the steady state when panning worked ground; the in-flight guard
   // keeps overlapping pans from stacking requests.
   const scanBusyRef = React.useRef(false);
+  const seedingNotifiedRef = React.useRef(new Set()); // one toast per state per session
   const scanOsmArea = React.useCallback(async () => {
     const map = mapRef.current;
     if (!map || !token || map.getZoom() < OSM_SCAN_ZOOM) return;
@@ -799,6 +800,16 @@ export default function RoadTripTab({ token, onNavigate }) {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
       }, authHdr);
+      // The state under the viewport had no license roster yet — the server just
+      // kicked its ingest ("hovering Cleveland, zero OH rows" heals itself).
+      // Say so once and refresh as the roster lands.
+      const seeding = r.data?.seeding;
+      if (seeding && !seedingNotifiedRef.current.has(seeding)) {
+        seedingNotifiedRef.current.add(seeding);
+        showToast(`Loading ${seeding}'s license roster — licensed stores land here in a minute or two.`, 'info');
+        setTimeout(() => loadAreaRef.current(), 60_000);
+        setTimeout(() => loadAreaRef.current(), 150_000);
+      }
       if (r.data?.error || r.data?.cached || r.data?.skipped) return;
       const added = r.data?.added || 0;
       if (added > 0 || (r.data?.attached || 0) > 0) {
@@ -1310,16 +1321,20 @@ export default function RoadTripTab({ token, onNavigate }) {
       }, authHdr);
       const stops = resp.data?.results || [];
       const fill = resp.data?.fill || null;
-      setCorPlan({ miles, stops, fromLabel: from.label, toLabel: to.label, fill });
+      const seedingStates = resp.data?.seedingStates || [];
+      setCorPlan({ miles, stops, fromLabel: from.label, toLabel: to.label, fill, seedingStates });
       drawCorridor(route.geometry, stops);
       const b = new mapboxgl.LngLatBounds();
       line.forEach((c) => b.extend(c));
       mapRef.current?.fitBounds(b, { padding: 70 });
       const fresh = fill && !fill.failed && fill.added > 0 ? ` (+${fill.added} found live)` : '';
       const degraded = fill && fill.failed ? ' — live route scan unavailable, showing known stores' : '';
+      const seedNote = seedingStates.length
+        ? ` Loading ${seedingStates.join('/')} license roster${seedingStates.length === 1 ? '' : 's'} now — re-scan in ~2 min to pick those up.`
+        : '';
       showToast(stops.length
-        ? `${stops.length} dispos along the ${miles} mi drive${fresh}${degraded} — ✕ the out-of-the-way ones, then BUILD DAY.`
-        : `Route found (${miles} mi) — nothing in the band${degraded}; widen it?`, stops.length ? 'success' : 'info');
+        ? `${stops.length} dispos along the ${miles} mi drive${fresh}${degraded} — ✕ the out-of-the-way ones, then BUILD DAY.${seedNote}`
+        : `Route found (${miles} mi) — nothing in the band${degraded}.${seedNote || ' Widen it?'}`, stops.length ? 'success' : 'info');
     } catch (err) {
       showToast(err?.response?.data?.message || err.message || 'Corridor scan failed.', 'error');
     } finally {
