@@ -140,6 +140,20 @@ function WarmRow({ row, onOpenCompany, onMarkReplied, onStop, onNotAReply }) {
 
 // The single ranked to-do list, computed server-side from the whole dashboard —
 // the "what do I do right now" a busy one-person shop wants above everything.
+// Closed-window footer note. "Healthy" used to be claimed unconditionally, which
+// papered over a genuinely held engine (auth gate, circuit-breaker, send
+// failures). A daily-cap hold IS healthy — the day finished its budget — so only
+// a non-cap hold changes the message; the reason comes from the engine's own
+// last-result line (mirrors services/outreachEngine.js recordRun wording).
+function closedWindowNote(lastResult = '') {
+  const r = String(lastResult || '');
+  if (/^held/i.test(r) && !/daily cap reached/i.test(r)) {
+    const reason = r.replace(/^held:?\s*/i, '').split(/[—(]/)[0].trim().slice(0, 70);
+    return ` · window closed — last run was HELD${reason ? ` (${reason})` : ''} · resumes next weekday 9a ET`;
+  }
+  return ' · window closed — healthy, resumes next weekday 9a ET';
+}
+
 const ACTION_TONE = { action: '#f87171', warm: '#4ade80', info: '#60a5fa', ok: '#9ca3af' };
 function NextActions({ actions = [], onGoCampaigns, onGoImport, onGoReplies }) {
   if (!actions.length) return null;
@@ -548,8 +562,9 @@ export default function OverviewView({
           <Typography sx={{ color: D.faint, fontSize: 11.5, mt: 0.75, ...mono }}>
             sending as {engine.from}{engine.lastRunAt ? ` · last run ${fmtRelative(engine.lastRunAt)}` : ''}
             {/* Outside Mon–Fri 9a–5p the engine holds — so "last run" naturally
-                reads stale over a weekend. Say it's healthy, not dead. */}
-            {!engine.withinWindow ? ' · window closed — healthy, resumes next weekday 9a ET' : ''}
+                reads stale over a weekend. Say it's healthy, not dead — unless
+                the last in-window run was genuinely held (closedWindowNote). */}
+            {!engine.withinWindow ? closedWindowNote(engine.lastResult) : ''}
           </Typography>
         ) : null}
         {/* Sender pool — per-inbox headroom when more than one is configured. */}
