@@ -213,6 +213,31 @@ function AddMockupsDialog({ open, onClose, loading, library, excluded, onAdd, pa
       slug(`${m.client || ''} ${m.name || ''} ${m.pageState?.mockupNum || ''}`).includes(needle));
   }, [library, excluded, q]);
 
+  // Grouped BY PROJECT, newest first. This picker is company-scoped on purpose —
+  // a lookbook is often exactly "here's what we've done for you" across jobs —
+  // but a client with fifty orders turned that into one undifferentiated wall of
+  // hundreds of thumbnails with a text box as the only way through. The work
+  // still spans every project; it just arrives in the shape the owner thinks in.
+  // A search flattens back to one list, because then the query IS the grouping.
+  const groups = React.useMemo(() => {
+    if (slug(q)) return [{ key: '__all', label: '', items: shown }];
+    const by = new Map();
+    for (const m of shown) {
+      const pn = String(m.projectNumber || m.pageState?.projectNumber || '');
+      const key = pn || '__unlinked';
+      if (!by.has(key)) by.set(key, []);
+      by.get(key).push(m);
+    }
+    const numOf = (k) => (k === '__unlinked' ? -1 : parseInt(String(k).split('-')[0], 10) || 0);
+    return [...by.entries()]
+      .sort((a, b) => numOf(b[0]) - numOf(a[0]))
+      .map(([key, items]) => ({
+        key,
+        label: key === '__unlinked' ? 'Not on a project' : `Project #${key}`,
+        items,
+      }));
+  }, [shown, q]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
       PaperProps={{ sx: { bgcolor: D.panel, color: D.text, borderRadius: fullScreen ? 0 : 3, border: `1px solid ${D.line}` } }}>
@@ -242,8 +267,16 @@ function AddMockupsDialog({ open, onClose, loading, library, excluded, onAdd, pa
             </Typography>
           </Box>
         ) : (
+          groups.map((g) => (
+          <Box key={g.key} sx={{ mb: 2 }}>
+          {g.label && (
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8,
+              textTransform: 'uppercase', mb: 0.75 }}>
+              {g.label} <Box component="span" sx={{ opacity: 0.55 }}>· {g.items.length}</Box>
+            </Typography>
+          )}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 1 }}>
-            {shown.map((m) => {
+            {g.items.map((m) => {
               const num = m.pageState?.mockupNum;
               return (
                 <Box key={m._id} onClick={() => onAdd(m)} role="button" tabIndex={0}
@@ -285,6 +318,8 @@ function AddMockupsDialog({ open, onClose, loading, library, excluded, onAdd, pa
               );
             })}
           </Box>
+          </Box>
+          ))
         )}
       </DialogContent>
       <DialogActions sx={{ borderTop: `1px solid ${D.line}`, px: 3, py: 2 }}>

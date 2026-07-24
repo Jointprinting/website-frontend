@@ -52,6 +52,7 @@ import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
 import CarryMockupsDialog from './mockup/CarryMockupsDialog';
 import FixDataDialog from './FixDataDialog';
+import { readStudioUrl, patchStudioUrl, onStudioNavigate, closeStudioOverlay } from './_studioUrl';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import PoBuilderDialog from './PoBuilderDialog';
 import FlowPipeline from './FlowPipeline';
@@ -257,11 +258,43 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       (on && list.find((p) => normOrderNo(p.projectNumber) === on)) ||
       null;
     if (match) {
-      setActiveProject(match);
+      openProject(match);
       setOpenPosOnMount(!!want.openPos);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, projects, initialOrder]);
+
+  // ── The open project lives in the URL (?p=) ────────────────────────────────
+  // Opening a project PUSHES a history entry, so on a phone — where the drawer
+  // is a full-screen takeover — the back button closes it instead of leaving the
+  // Studio. It also makes a project linkable and refresh-proof; the open tab used
+  // to reset to Overview on every open because nothing outside React knew.
+  const openProject = useCallback((proj) => {
+    setActiveProject(proj);
+    if (proj) patchStudioUrl({ view: 'clients', projectNumber: proj.projectNumber || '' }, { push: true });
+  }, []);
+
+  const closeProject = useCallback(() => {
+    setActiveProject(null);
+    closeStudioOverlay({ projectNumber: '', tab: '' });
+  }, []);
+
+  // Back/forward: the URL is the truth. No project in it → the drawer closes.
+  useEffect(() => onStudioNavigate((next) => {
+    if (!next.projectNumber) { setActiveProject(null); return; }
+    const match = (projects || []).find((p) => String(p.projectNumber) === next.projectNumber);
+    if (match) setActiveProject(match);
+  }), [projects]);
+
+  // A ?p= present on first load opens that project — the refresh/bookmark path.
+  const urlOpenDone = React.useRef(false);
+  useEffect(() => {
+    if (urlOpenDone.current || loading) return;
+    const { projectNumber } = readStudioUrl();
+    if (!projectNumber) { urlOpenDone.current = true; return; }
+    const match = (projects || []).find((p) => String(p.projectNumber) === projectNumber);
+    if (match) { urlOpenDone.current = true; setActiveProject(match); }
+  }, [loading, projects]);
 
   // Keyboard shortcuts: `/` focuses search, `n` creates a new project,
   // `Esc` closes the drawer. Ignore when typing in any input.
@@ -278,7 +311,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         e.preventDefault();
         handleCreate();
       } else if (e.key === 'Escape' && activeProject) {
-        setActiveProject(null);
+        closeProject();
       }
     };
     window.addEventListener('keydown', handler);
@@ -461,15 +494,15 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   // bindOrder(project) → props an order card spreads onto its container. Built at
   // right-click time so the menu reflects the live quote/confirmation state.
   const bindOrder = useCallback((p) => bindMenu(() => buildOrderMenu(p, {
-    onOpen: (proj) => setActiveProject(proj),
+    onOpen: (proj) => openProject(proj),
     onOpenQuote: (proj) => setQuote(proj),
     onOpenConfirmation: (proj) => setConfirmation(proj),
     // "Open POs" opens the project drawer and tells it to pop the PO dialog on
     // mount — the same deep-link path used when arriving from a PO link.
-    onOpenPos: (proj) => { setActiveProject(proj); setOpenPosOnMount(true); },
+    onOpenPos: (proj) => { openProject(proj); setOpenPosOnMount(true); },
     onSetStatus: setOrderStatus,
     flash,
-  })), [bindMenu, setOrderStatus, flash]);
+  })), [bindMenu, setOrderStatus, flash, openProject]);
 
   // Right-click on empty Order Tracker chrome → search (focus the box) + hub.
   useEffect(() => registerFallback(() => buildFallbackMenu({
@@ -966,7 +999,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                 selectMode={selectMode}
                 selected={selectedIds.includes(p._id)}
                 bindProps={selectMode ? null : bindOrder(p)}
-                onClick={() => (selectMode ? toggleSelect(p._id) : setActiveProject(p))} />
+                onClick={() => (selectMode ? toggleSelect(p._id) : openProject(p))} />
             ))}
           </Box>
         )}
@@ -982,7 +1015,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         logo={activeProject ? logoFor(activeProject) : null}
         onUploadLogo={(file) => activeProject && uploadLogo(activeProject, file)}
         onRemoveLogo={() => activeProject && removeLogo(activeProject)}
-        onClose={() => setActiveProject(null)}
+        onClose={closeProject}
         onSave={handleSave}
         onReload={loadProjects}
         onDelete={handleDelete}
@@ -1200,6 +1233,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         mockups={mockups}
         companyName={picker.project?.companyName || ''}
         clientName={picker.project?.clientName || ''}
+        companyKey={picker.project?.companyKey || deriveCompanyKey(picker.project?.companyName, picker.project?.clientName)}
         initialSelected={picker.project?.mockupNumbers || []}
         title={`Link mockups · Project #${picker.project?.projectNumber || ''}`}
         confirmLabel="Save"
@@ -1997,8 +2031,20 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
   // Which drawer tab is showing. Overview is the everyday editing surface, so
   // each open lands there; the choice is plain component state — nothing
   // persists across opens and the URL never changes.
-  const [tab, setTab] = useState('overview');
-  useEffect(() => { if (open) setTab('overview'); }, [open]);
+  // Which panel is showing, kept in the URL (?t=) so a project can be linked to
+  // on its Approval or Files panel, and a refresh doesn't dump you back on
+  // Overview. Replaces (never pushes) — switching panels shouldn't make the back
+  // button walk through them before it closes the project.
+  const [tab, setTab] = useState(() => readStudioUrl().tab || 'overview');
+  useEffect(() => {
+    if (!open) return;
+    const fromUrl = readStudioUrl().tab;
+    setTab(fromUrl || 'overview');
+  }, [open, project?._id]);
+  const pickTab = useCallback((next) => {
+    setTab(next);
+    patchStudioUrl({ tab: next === 'overview' ? '' : next });
+  }, []);
 
   // When opened via a "open this PO" deep link, pop the PO dialog once the drawer
   // is up. Fires once per request (the parent clears openPosOnMount via onPosOpened).
@@ -2386,8 +2432,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
           return (
             <Box key={t.id} role="tab" aria-selected={active}
               tabIndex={0}
-              onClick={() => setTab(t.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTab(t.id); } }}
+              onClick={() => pickTab(t.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickTab(t.id); } }}
               sx={{
                 flex: { xs: 1, md: '0 0 auto' },
                 textAlign: 'center', cursor: 'pointer', userSelect: 'none',
