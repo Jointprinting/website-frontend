@@ -25,6 +25,7 @@ import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar } from '../_shared';
 import { mockupFromLibraryItem, sidePreview } from './mockupModel';
+import { displayMockupNum } from '../../../common/mockupNum';
 
 const base = `${config.backendUrl}/api`;
 
@@ -113,7 +114,7 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {m.name || 'Untitled'}
-              {m.mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>#{m.mockupNum}</Box>}
+              {m.mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>{displayMockupNum(m.mockupNum)}</Box>}
             </Typography>
             {m.client && <Typography sx={{ color: D.faint, fontSize: 11.5 }}>{m.client}</Typography>}
           </Box>
@@ -260,7 +261,7 @@ export default function MockupLab({ token, onBack, onNavigate, entry }) {
               )}
               <Box sx={{ px: 1, py: 0.8 }}>
                 {m.pageState?.mockupNum && (
-                  <Typography sx={{ ...mono, color: D.faint, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>#{m.pageState.mockupNum}</Typography>
+                  <Typography sx={{ ...mono, color: D.faint, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayMockupNum(m.pageState.mockupNum)}</Typography>
                 )}
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                   <Typography sx={{ color: D.text, fontSize: 11.5, fontWeight: 700, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name || 'Untitled'}</Typography>

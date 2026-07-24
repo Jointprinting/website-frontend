@@ -38,6 +38,7 @@ import { D, mono, scrollbar, dropInput } from '../_shared';
 import { mockupToLibraryItem, hydratePages, emptyPos, emptyPage, pageToState } from './mockupModel';
 import { PRESETS, PRESET_ORDER, presetPos, blankBox, STAGE_W, STAGE_H } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
+import { displayMockupNum } from '../../../common/mockupNum';
 
 const base = `${config.backendUrl}/api`;
 
@@ -413,7 +414,7 @@ export default function MockupEditor({ token, mode, mockup, item, project, onClo
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {isNew ? 'New mockup' : `Edit — ${meta.title || 'Untitled'}`}
-            {mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>#{mockupNum}</Box>}
+            {mockupNum && <Box component="span" sx={{ ...mono, color: D.faint, fontSize: 12, fontWeight: 600, ml: 1 }}>{displayMockupNum(mockupNum)}</Box>}
           </Typography>
           {(meta.client || projectNumber) && (
             <Typography sx={{ color: D.faint, fontSize: 11 }}>

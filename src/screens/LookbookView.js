@@ -27,9 +27,11 @@ import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { keyframes } from '@mui/system';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
+import { displayMockupNum } from '../common/mockupNum';
 
 // Gentle ambient bob for the collage — each piece drifts on its own cadence so
 // everything gets its moment, never a static stack. Honors reduced-motion.
@@ -322,6 +324,9 @@ function CollageProduct({ m, slot, i, theme, onOpen, focused }) {
 
 export default function LookbookView() {
   const { id } = useParams();
+  // Phone: the lightbox and the pricing form take the whole screen. A client
+  // tapping a design to look closer shouldn't get a boxed thumbnail with margins.
+  const fsDialog = useMediaQuery('(max-width:599.95px)');
   const [params] = useSearchParams();
   const token = params.get('token');
   const q = `token=${encodeURIComponent(token || '')}`;
@@ -498,7 +503,7 @@ export default function LookbookView() {
     <Stack direction="row" alignItems="baseline" justifyContent="center" gap={0.9} sx={{ mb: size === 'md' ? 1.75 : 1 }}>
       <Typography sx={{ ...mono, color: theme.faint, fontSize: size === 'md' ? 12 : 11 }}>{String(i + 1).padStart(2, '0')}</Typography>
       <Typography sx={{ fontWeight: 800, fontSize: size === 'md' ? { xs: 16, sm: 18 } : 15, color: theme.text }}>{m.name || 'Untitled'}</Typography>
-      {m.mockupNum && <Typography sx={{ ...mono, color: theme.faint, fontSize: size === 'md' ? 12 : 11 }}>#{m.mockupNum}</Typography>}
+      {m.mockupNum && <Typography sx={{ ...mono, color: theme.faint, fontSize: size === 'md' ? 12 : 11 }}>{displayMockupNum(m.mockupNum)}</Typography>}
     </Stack>
   ) : null;
 
@@ -714,8 +719,8 @@ export default function LookbookView() {
       )}
 
       {/* ── Focus lightbox (collage / grid tap) ─────────────────────────────── */}
-      <Dialog open={!!focusM} onClose={() => setFocusRid(null)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: 3, border: `1px solid ${theme.line}` } }}>
+      <Dialog open={!!focusM} onClose={() => setFocusRid(null)} fullWidth maxWidth="sm" fullScreen={fsDialog}
+        PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: fsDialog ? 0 : 3, border: `1px solid ${theme.line}` } }}>
         {focusM && (
           <>
             <IconButton size="small" onClick={() => setFocusRid(null)} sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, color: theme.faint, bgcolor: theme.panel, '&:hover': { color: theme.text } }}>
@@ -728,7 +733,7 @@ export default function LookbookView() {
                 <Box key={k} sx={{ mt: 1.5 }}><ProductImage src={src} alt={`${focusM.name} view ${k + 2}`} clean theme={theme} radius={3} /></Box>
               ))}
               <Box sx={{ textAlign: 'center', mt: 2 }}>
-                {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{focusM.name || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>#{focusM.mockupNum}</Box>}</Typography>}
+                {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{focusM.name || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>{displayMockupNum(focusM.mockupNum)}</Box>}</Typography>}
                 {focusM.caption && <Typography sx={{ color: theme.muted, fontSize: 14, mt: 0.75, lineHeight: 1.6, maxWidth: 440, mx: 'auto' }}>{focusM.caption}</Typography>}
               </Box>
               {!me && <Box sx={{ mt: 2, maxWidth: 360, mx: 'auto' }}>{nameField}</Box>}
@@ -752,8 +757,8 @@ export default function LookbookView() {
       </Dialog>
 
       {/* ── Request-pricing dialog ──────────────────────────────────────────── */}
-      <Dialog open={rpOpen} onClose={() => !rpBusy && setRpOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: 3, border: `1px solid ${theme.line}` } }}>
+      <Dialog open={rpOpen} onClose={() => !rpBusy && setRpOpen(false)} fullWidth maxWidth="sm" fullScreen={fsDialog}
+        PaperProps={{ sx: { bgcolor: theme.bg, color: theme.text, borderRadius: fsDialog ? 0 : 3, border: `1px solid ${theme.line}` } }}>
         {rpDone ? (
           <DialogContent sx={{ textAlign: 'center', py: 6 }}>
             <Typography sx={{ fontSize: 40, mb: 1 }}>🎉</Typography>

@@ -29,13 +29,14 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import axios from 'axios';
 import config from '../../../config.json';
-import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey } from '../_shared';
+import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey, useMobileFullScreen } from '../_shared';
 import { emptyPage, hydratePages, mockupToLibraryItem, pageToState, pageFromState } from './mockupModel';
 import { PRESETS, PRESET_ORDER, PRINT_AREAS, CATEGORY_ORDER, printAreaRect, blankBox, STAGE_W, STAGE_H } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
 import { analyzeArtwork, isScreenPrintType, INK } from './inkDetect';
 import { detectSolidBg, removeBackground, recolorInk, fnvHash } from './artTools';
 import MockupCanvas from './MockupCanvas';
+import { displayMockupNum } from '../../../common/mockupNum';
 
 const base = `${config.backendUrl}/api`;
 
@@ -99,6 +100,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const [side, setSide] = useState('front');
   const [busy, setBusy] = useState('');
   const [mockupNum, setMockupNum] = useState(isNew ? '' : (mockup.mockupNum || ''));
+  // Phone: dialogs take the whole screen (house pattern) — a PDF preview in a
+  // margined box on a 390px screen is unreadable.
+  const fsDialog = useMobileFullScreen();
   const remoteIdRef = useRef(isNew ? `studio-${uid()}` : (String((item && item.remoteId) || mockup.remoteId || '') || `studio-${uid()}`));
   const p0extra = (!isNew && mockup.pages && mockup.pages[0] && mockup.pages[0]._extra) || {};
   const [meta, setMeta] = useState({
@@ -729,21 +733,40 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: D.bg, display: 'flex', flexDirection: 'column', ...scrollbar }}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ height: 52, px: 2, position: 'relative', flex: '0 0 auto', borderBottom: `1px solid ${D.line}`, bgcolor: D.panel }}>
+      {/* Header. On a phone this used to be ONE non-wrapping row — back, title,
+          number, save state, then History / Borders / Preview / PDF / Save now.
+          At ~390px everything from History onward was pushed clean off the right
+          edge with no way to scroll to it, so the PDF export (the way you get a
+          mockup off your phone) and Save now were simply unreachable, and the
+          title wrapped to two lines as the row squeezed. Identity stays on the
+          top line; the actions drop to their own full-width row on xs, which
+          scrolls horizontally if they still don't fit. Unchanged from md up. */}
+      <Stack direction="row" alignItems="center" spacing={1.5}
+        sx={{ height: { xs: 'auto', md: 52 }, minHeight: 52, py: { xs: 1, md: 0 }, px: 2,
+          position: 'relative', flex: '0 0 auto', borderBottom: `1px solid ${D.line}`, bgcolor: D.panel,
+          flexWrap: { xs: 'wrap', md: 'nowrap' }, rowGap: { xs: 1, md: 0 } }}>
         <Box sx={accentBar} />
-        <IconButton onClick={onBack} size="small" sx={{ color: D.muted, '&:hover': { color: D.text } }}><ArrowBackIosNewIcon sx={{ fontSize: 15 }} /></IconButton>
-        <Typography sx={{ ...mono, fontSize: 13, color: D.green, fontWeight: 800 }}>MOCKUP LAB</Typography>
+        <IconButton onClick={onBack} size="small" sx={{ color: D.muted, flexShrink: 0, '&:hover': { color: D.text } }}><ArrowBackIosNewIcon sx={{ fontSize: 15 }} /></IconButton>
+        <Typography sx={{ ...mono, fontSize: 13, color: D.green, fontWeight: 800, whiteSpace: 'nowrap' }}>MOCKUP LAB</Typography>
         {/* mockupNum already carries its own '#' (formatMockupNum) — strip before
             prefixing or the header reads '##000153B'. Same rule as the PDF name
             and the history rows below. */}
-        {mockupNum && <Typography sx={{ ...mono, fontSize: 12, color: D.faint }}>#{String(mockupNum).replace(/^#/, '')}</Typography>}
+        {mockupNum && <Typography sx={{ ...mono, fontSize: 12, color: D.faint, whiteSpace: 'nowrap' }}>{displayMockupNum(mockupNum)}</Typography>}
         <Box sx={{ flexGrow: 1 }} />
-        {(busy || cwBusy) && <Typography sx={{ fontSize: 12, maxWidth: 340, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: (busy + cwBusy).includes('✓') ? D.green : '#fbbf24' }}>{cwBusy || busy}</Typography>}
+        {(busy || cwBusy) && <Typography sx={{ fontSize: 12, maxWidth: { xs: 150, md: 340 }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: (busy + cwBusy).includes('✓') ? D.green : '#fbbf24' }}>{cwBusy || busy}</Typography>}
         {/* Autosave pill — no Ctrl+S in this lab; edits save themselves. */}
         <Typography sx={{ ...mono, fontSize: 10.5, px: 1, whiteSpace: 'nowrap',
           color: saveState === 'error' ? '#f87171' : saveState === 'saving' ? '#fbbf24' : saveState === 'dirty' ? D.faint : D.green }}>
           {!orderId ? 'pick a project to save' : saveState === 'saving' ? 'saving…' : saveState === 'dirty' ? 'edits pending…' : saveState === 'error' ? 'save failed — retrying on next edit' : 'all changes saved ✓'}
         </Typography>
+        {/* Actions. Their own full-width row on a phone, scrollable if still too
+            wide, so nothing can be clipped out of reach again. */}
+        <Stack direction="row" alignItems="center" spacing={1}
+          sx={{ width: { xs: '100%', md: 'auto' },
+            overflowX: { xs: 'auto', md: 'visible' }, overflowY: 'visible',
+            pb: { xs: 0.25, md: 0 },
+            '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
+            '& > *': { flexShrink: 0 } }}>
         <Tooltip title="Version history"><span>
           <IconButton onClick={openHistory} size="small" disabled={isNew && !mockupNum}
             sx={{ color: D.muted, border: `1px solid ${D.line}`, borderRadius: 999, '&:hover': { color: D.green, borderColor: D.green } }}>
@@ -763,7 +786,8 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         <Button onClick={save} disabled={saveState === 'saving' || !orderId}
           title={!orderId ? 'Pick a project first — the mockup number and order link come from it' : 'Autosave is on — this just saves right now'}
           startIcon={saveState === 'saving' ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
-          sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>Save now</Button>
+          sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, whiteSpace: 'nowrap', '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>Save now</Button>
+        </Stack>
       </Stack>
 
       <Box sx={{ flex: 1, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '236px 1fr 300px' }, gap: 0, overflow: 'hidden' }}>
@@ -1031,8 +1055,8 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
       </Box>
 
       {/* PDF sheet preview — the real export, rendered inline */}
-      <Dialog open={!!pvUrl} onClose={closePreview} maxWidth="md" fullWidth
-        PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, height: '88vh' } }}>
+      <Dialog open={!!pvUrl} onClose={closePreview} maxWidth="md" fullWidth fullScreen={fsDialog}
+        PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, height: fsDialog ? '100%' : '88vh' } }}>
         <DialogTitle sx={{ py: 1.25, px: 2, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center' }}>
           <Typography component="span" sx={{ fontWeight: 800, fontSize: 14, flex: 1 }}>PDF preview — exactly what exports</Typography>
           <Button onClick={closePreview} size="small" sx={{ color: D.muted, textTransform: 'none' }}>Close</Button>
@@ -1043,7 +1067,7 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
       </Dialog>
 
       {/* Version history — colorways vs art edits vs details, restorable */}
-      <Dialog open={histOpen} onClose={() => setHistOpen(false)} maxWidth="sm" fullWidth
+      <Dialog open={histOpen} onClose={() => setHistOpen(false)} maxWidth="sm" fullWidth fullScreen={fsDialog}
         PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}` } }}>
         <DialogTitle sx={{ py: 1.25, px: 2, borderBottom: `1px solid ${D.line}` }}>
           <Typography component="span" sx={{ fontWeight: 800, fontSize: 14 }}>Version history</Typography>
