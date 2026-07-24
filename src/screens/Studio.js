@@ -70,6 +70,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
+import { readStudioUrl, patchStudioUrl, onStudioNavigate } from './studio/_studioUrl';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, countsBySource, effectiveSource, statusValuesFor } from './studio/_submissions';
 import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
@@ -3013,7 +3014,9 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
 //  Main shell
 // ─────────────────────────────────────────────────────────────────────────────
 function StudioBody({ token, onLogout }) {
-  const [view, setView] = React.useState('hub');
+  // View is URL-backed (?v=…) so the Studio can be linked to, survives a
+  // refresh, and the browser back button walks tools instead of leaving.
+  const [view, setView] = React.useState(() => readStudioUrl().view || 'hub');
   // Which internal view the CRM should land on when entered from a hub tile (the
   // CRM tile → 'companies', i.e. the Clients tab; cross-tab links may request
   // another). Null = the CRM's own default. Bumped with a nonce so re-picking the
@@ -3234,6 +3237,21 @@ function StudioBody({ token, onLogout }) {
       setView(v);
     }
   }, []);
+
+  // Keep the address bar in step with the tool on screen. A tool change PUSHES
+  // (back returns to the previous tool); the initial hub lands as a replace so
+  // there's no empty entry to step back into.
+  const firstUrlSync = React.useRef(true);
+  React.useEffect(() => {
+    patchStudioUrl({ view: view === 'hub' ? '' : view }, { push: !firstUrlSync.current });
+    firstUrlSync.current = false;
+  }, [view]);
+
+  // Back/forward drives the shell. Deep-link params are left to whichever tool
+  // owns them (the Order Tracker reads ?p= itself) — this only moves tools.
+  React.useEffect(() => onStudioNavigate((next) => {
+    setView(next.view || 'hub');
+  }), []);
 
   // Road Trip Recon needs the full viewport — break out of the Studio's
   // maxWidth="md" container and render a slim header instead of the usual

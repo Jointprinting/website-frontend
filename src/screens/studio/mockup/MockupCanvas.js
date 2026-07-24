@@ -11,8 +11,8 @@
 
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { fabric } from 'fabric';
+import { blankBox, centerInStage } from './printAreas';
 
-const FIT = 0.93;                 // classic blankImg fit factor
 const DEFAULT_LOGO = 0.28;        // classic default logo scale (min(w,h)/max(logo)) ×0.28
 
 const loadFabricImage = (src) => new Promise((resolve) => {
@@ -91,6 +91,17 @@ const MockupCanvas = forwardRef(function MockupCanvas(
         },
       );
     }
+  };
+
+  // Centre an object in the LOGICAL stage — never fabric's canvas.centerObject().
+  // fabric's getCenter() reads the PHYSICAL canvas dimensions (which we shrink to
+  // width×displayScale to fit a phone) while object coordinates live in un-zoomed
+  // logical space, so centerObject() lands the object at 310×scale instead of 310
+  // — visibly left of centre on mobile, and misaligned against the print-area
+  // guide, which is computed from the logical blankBox. Shared helper = no drift.
+  const center = (obj) => {
+    obj.set(centerInStage(obj.getScaledWidth(), obj.getScaledHeight(), width, height));
+    obj.setCoords();
   };
 
   // Rotation-aware clamp to the printable area — the classic _clampLogoToPrintArea:
@@ -193,9 +204,14 @@ const MockupCanvas = forwardRef(function MockupCanvas(
       const img = await loadFabricImage(blankSrc);
       if (!live || !fcRef.current) return;
       if (img) {
-        const scale = Math.min(width / img.width, height / img.height) * FIT;
-        img.set({ scaleX: scale, scaleY: scale, selectable: false, evented: false });
-        fc.centerObject(img);
+        // Same box the print-area guide is built from — see printAreas.blankBox.
+        const box = blankBox(img.width, img.height, width, height);
+        img.set({
+          scaleX: box.scale, scaleY: box.scale,
+          left: box.originX, top: box.originY,
+          selectable: false, evented: false,
+        });
+        img.setCoords();
         fc.add(img);
         if (typeof img.moveTo === 'function') img.moveTo(0);  // behind the logo
         blankRef.current = img;
@@ -222,7 +238,7 @@ const MockupCanvas = forwardRef(function MockupCanvas(
         } else {
           const def = (Math.min(width, height) / Math.max(img.width, img.height)) * DEFAULT_LOGO;
           img.set({ scaleX: def, scaleY: def });
-          fc.centerObject(img);
+          center(img);
         }
         img.set({ lockUniScaling: true });
         fc.add(img);

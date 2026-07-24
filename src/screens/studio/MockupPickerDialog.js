@@ -11,7 +11,7 @@ import { B, useMobileFullScreen } from './_shared';
 
 export default function MockupPickerDialog({
   open, onClose, onConfirm, mockups,
-  companyName = '', clientName = '',
+  companyName = '', clientName = '', companyKey = '',
   initialSelected = [],
   title = 'Pick Mockups',
   confirmLabel = 'Save',
@@ -35,6 +35,15 @@ export default function MockupPickerDialog({
   // matches a library item named "BleuLeafDispensary_Merch" — raw substring
   // matching broke on spaces / punctuation and made the picker look empty.
   const matched = React.useMemo(() => {
+    // Prefer the CANONICAL companyKey — an exact join, the same one the API
+    // indexes on. The name-slug match below is only a fallback for legacy items
+    // that predate the key, because comparing company names is guesswork: it is
+    // what used to pull a stranger's mockups into a project (and, through the
+    // old auto-link, save them there).
+    if (companyKey) {
+      const exact = mockups.filter((m) => m.companyKey === companyKey);
+      if (exact.length) return exact;
+    }
     const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const cn = slug(companyName);
     const pn = slug(clientName);
@@ -44,7 +53,7 @@ export default function MockupPickerDialog({
       return (cn && cn.length >= 3 && hay.includes(cn)) ||
              (pn && pn.length >= 3 && hay.includes(pn));
     });
-  }, [mockups, companyName, clientName]);
+  }, [mockups, companyName, clientName, companyKey]);
 
   const shown = showAll || matched.length === 0 ? mockups : matched;
   const filteringPossible = matched.length > 0 && matched.length < mockups.length;
