@@ -32,6 +32,7 @@ import config from '../config.json';
 import { detectGridRows } from '../common/quoteGrid';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
+import { displayMockupNum } from '../common/mockupNum';
 
 // Processing-fee rates by payment method (decimals) — mirrors the backend
 // Order.PAYMENT_FEES single source of truth. Shown to the client for
@@ -808,7 +809,7 @@ export default function ApprovalView() {
                   <Box key={i}>
                     {(m.name || m.mockupNum) && (
                       <Typography sx={{ color: T.muted, fontSize: 12, fontWeight: 700, mb: 0.6 }}>
-                        {m.name || 'Design'}{m.mockupNum ? <Box component="span" sx={{ ...mono, color: T.faint, fontWeight: 600, ml: 0.75 }}>#{m.mockupNum}</Box> : null}
+                        {m.name || 'Design'}{m.mockupNum ? <Box component="span" sx={{ ...mono, color: T.faint, fontWeight: 600, ml: 0.75 }}>{displayMockupNum(m.mockupNum)}</Box> : null}
                       </Typography>
                     )}
                     {/* Dense wrap row of small thumbnails — a whole design collapses

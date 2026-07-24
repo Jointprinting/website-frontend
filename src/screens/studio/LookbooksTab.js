@@ -48,6 +48,7 @@ import {
 } from './_shared';
 import { confirmDialog } from './_dialog';
 import JpLoader from '../../common/JpLoader';
+import { displayMockupNum } from '../../common/mockupNum';
 
 const API = `${config.backendUrl}/api/lookbooks`;
 // The picker reads the same summary feed the library grid uses (thumbnail,
@@ -870,7 +871,7 @@ export default function LookbooksTab({ token, onBack, onNavigate, initialCompany
                                 {t.name || p.remoteId}
                               </Typography>
                               {t.mockupNum && (
-                                <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5 }}>#{t.mockupNum}</Typography>
+                                <Typography sx={{ ...mono, color: D.faint, fontSize: 10.5 }}>{displayMockupNum(t.mockupNum)}</Typography>
                               )}
                             </Box>
                             {sideViews.length > 0 && (
