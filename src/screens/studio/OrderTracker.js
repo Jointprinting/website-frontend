@@ -7,7 +7,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   Box, Stack, Typography, Button, TextField, IconButton, Chip,
   Drawer, MenuItem, Select, FormControl, Tooltip, CircularProgress, InputAdornment,
-  Dialog, DialogContent, DialogActions, Menu, ListItemIcon, ListItemText, Divider,
+  Dialog, DialogContent, Menu, ListItemIcon, ListItemText, Divider,
   useMediaQuery, useTheme, Snackbar, Alert,
 } from '@mui/material';
 import ArrowBackIcon       from '@mui/icons-material/ArrowBack';
@@ -15,12 +15,13 @@ import AddIcon             from '@mui/icons-material/Add';
 import SearchIcon          from '@mui/icons-material/Search';
 import CloseIcon           from '@mui/icons-material/Close';
 import DesignServicesIcon  from '@mui/icons-material/DesignServices';
+import HistoryIcon         from '@mui/icons-material/History';
+import HealingOutlinedIcon from '@mui/icons-material/HealingOutlined';
 import ContentCopyIcon     from '@mui/icons-material/ContentCopy';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
-import AutoFixHighIcon    from '@mui/icons-material/AutoFixHigh';
 import ChecklistIcon      from '@mui/icons-material/Checklist';
 import CheckIcon          from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -49,6 +50,8 @@ import { SOURCE_META } from './_submissions';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
+import CarryMockupsDialog from './mockup/CarryMockupsDialog';
+import FixDataDialog from './FixDataDialog';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import PoBuilderDialog from './PoBuilderDialog';
 import FlowPipeline from './FlowPipeline';
@@ -139,6 +142,10 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [quote,         setQuote]         = useState(null);
   const [healthOpen,    setHealthOpen]    = useState(false);
   const [healthData,    setHealthData]    = useState(null);
+  // "Fix data" — only offered when the API says there's something to fix, per
+  // the house rule that a one-time repair tool auto-hides once it's done.
+  const [fixDataOpen,   setFixDataOpen]   = useState(false);
+  const [fixDataCount,  setFixDataCount]  = useState(0);
   const [healthLoading, setHealthLoading] = useState(false);
   const [analyticsOpen,    setAnalyticsOpen]    = useState(false);
   const [analyticsData,    setAnalyticsData]    = useState(null);
@@ -149,10 +156,6 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [cleanupOpen,    setCleanupOpen]    = useState(false);
   const [cleanupData,    setCleanupData]    = useState(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
-  const [autoLinkOpen,     setAutoLinkOpen]     = useState(false);
-  const [autoLinkData,     setAutoLinkData]     = useState(null);
-  const [autoLinkLoading,  setAutoLinkLoading]  = useState(false);
-  const [autoLinkApplying, setAutoLinkApplying] = useState(false);
   const [selectMode,  setSelectMode]  = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkSaving,  setBulkSaving]  = useState(false);
@@ -199,6 +202,10 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       const d = mk.value.data;
       setMockups(Array.isArray(d) ? d : (d.items || []));
     } else console.error('loadProjects /studio/library/mockups failed:', mk.reason?.message || mk.reason);
+    // Repair-tool badge: cheap, best-effort, never blocks the board.
+    axios.get(`${base}/crm/data-cleanup/status`, authHdr)
+      .then((r) => setFixDataCount(Number(r.data?.total) || 0))
+      .catch(() => setFixDataCount(0));
     if (ds.status === 'fulfilled') setStats(ds.value.data || {});
     else console.error('loadProjects /orders/dashboard failed:', ds.reason?.message || ds.reason);
     if (lg.status === 'fulfilled') setLogos(lg.value.data?.logos || []);
@@ -303,75 +310,27 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
   const lookupMockup = (mockupNum) => mockupMap[mockupNum] || mockupMap[normMockupKey(mockupNum)];
 
-  // Index mockups by slugged client so "Highway 90 Merch" auto-attaches to
-  // the Highway 90 project without anyone typing a mockup #.
-  const _slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  const mockupsByClientSlug = useMemo(() => {
+  // Mockups indexed by the project they belong to. This replaces a slugged
+  // client-NAME index and a fuzzy prefix/substring matcher that decided which
+  // mockups "belonged" to a project by how similar the company names looked —
+  // which meant every project of a long-term client showed (and, worse, silently
+  // saved) every mockup that client had ever had. A mockup number already names
+  // its project; the API now stores that as a real indexed field.
+  const mockupsByProject = useMemo(() => {
     const map = {};
-    mockups.forEach(m => {
-      const client = m.pageState?.client || m.client || '';
-      const name = m.name || '';
-      // Pull a client guess from the title — "Highway 90 Merch" → "highway90".
-      const titleClient = name.replace(/\s+merch\s*$/i, '').trim();
-      [client, titleClient].forEach(raw => {
-        const k = _slug(raw);
-        if (!k) return;
-        (map[k] = map[k] || []).push(m);
-      });
+    mockups.forEach((m) => {
+      const k = String(m.projectNumber || m.pageState?.projectNumber || '');
+      if (!k) return;
+      (map[k] = map[k] || []).push(m);
     });
     return map;
   }, [mockups]);
 
-  // Match a project to mockups. First by exact slug, then a fuzzy fallback
-  // where either slug starts-with or contains the other — covers "Cannapi
-  // LLC" project vs "Cannapi Merch" mockup, "Highway 90" vs "Highway90 Co".
-  const autoMockupsFor = (project) => {
-    if (!project) return [];
-    const projSlugs = [project.companyName, project.clientName]
-      .map(_slug).filter(Boolean);
-    if (!projSlugs.length) return [];
-    // Numbers the owner explicitly X'd off this project — an exclusion is the
-    // only thing that makes "remove" stick, otherwise the client-name match
-    // just re-surfaces the mockup on the next render/session.
-    const normNum = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
-    const excluded = new Set((project.excludedMockups || []).map(normNum));
-    const out = [];
-    const seenIds = new Set();
-    const push = (m) => {
-      const id = m._id || m.remoteId || m.name;
-      if (excluded.has(normNum(m.pageState && m.pageState.mockupNum))) return;
-      if (!seenIds.has(id)) { seenIds.add(id); out.push(m); }
-    };
-    // Exact slug match first
-    projSlugs.forEach(k => (mockupsByClientSlug[k] || []).forEach(push));
-    // Fuzzy: any mockup-slug that's a prefix/substring of a project-slug
-    // (or vice versa) within reason (min 4 chars to avoid false positives).
-    if (out.length === 0) {
-      Object.keys(mockupsByClientSlug).forEach(mk => {
-        if (mk.length < 4) return;
-        const hit = projSlugs.some(pk =>
-          pk.length >= 4 && (pk.startsWith(mk) || mk.startsWith(pk) || pk.includes(mk) || mk.includes(pk))
-        );
-        if (hit) mockupsByClientSlug[mk].forEach(push);
-      });
-    }
-    return out;
-  };
+  const mockupsFor = useCallback(
+    (project) => (project ? (mockupsByProject[String(project.projectNumber || '')] || []) : []),
+    [mockupsByProject],
+  );
 
-  // For card hero fallback: when a project has no mockups linked, show
-  // other mockups from the same company so the card isn't blank.
-  const companyMockupPool = useMemo(() => {
-    const byCompany = {};
-    projects.forEach(p => {
-      const key = (p.companyKey || deriveCompanyKey(p.companyName, p.clientName));
-      if (!key) return;
-      (p.mockupNumbers || []).forEach(n => {
-        if (!byCompany[key]) byCompany[key] = [];
-        if (!byCompany[key].includes(n)) byCompany[key].push(n);
-      });
-    });
-    return byCompany;
-  }, [projects]);
 
   // Map company → logo data URL for cards + drawer + confirmation page.
   const logoMap = useMemo(() => {
@@ -601,36 +560,6 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       setAnalyticsOpen(false);
     } finally {
       setAnalyticsLoading(false);
-    }
-  };
-
-  // eslint-disable-next-line no-unused-vars
-  const handleOpenAutoLink = async () => {
-    setAutoLinkOpen(true);
-    setAutoLinkLoading(true);
-    setAutoLinkData(null);
-    try {
-      const r = await axios.post(`${base}/orders/mockups/auto-link`, { commit: false }, authHdr);
-      setAutoLinkData(r.data);
-    } catch (e) {
-      flash(`Couldn't scan the library: ${e.response?.data?.message || e.message}`, 'error');
-      setAutoLinkOpen(false);
-    } finally {
-      setAutoLinkLoading(false);
-    }
-  };
-  const handleApplyAutoLink = async () => {
-    setAutoLinkApplying(true);
-    try {
-      const r = await axios.post(`${base}/orders/mockups/auto-link`, { commit: true }, authHdr);
-      await loadProjects();
-      setAutoLinkOpen(false);
-      const s = r.data.summary;
-      flash(`Linked ${s.mockupsLinked} mockup${s.mockupsLinked === 1 ? '' : 's'} across ${s.projectsAffected} project${s.projectsAffected === 1 ? '' : 's'}`, 'success');
-    } catch (e) {
-      flash(`Apply failed: ${e.response?.data?.message || e.message}`, 'error');
-    } finally {
-      setAutoLinkApplying(false);
     }
   };
 
@@ -872,7 +801,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             </span>
           </Tooltip>
 
-          <Tooltip title="More — analytics, mockup health, auto-link">
+          <Tooltip title="More — analytics, mockup health">
             <span>
               <IconButton onClick={(e) => setMoreAnchor(e.currentTarget)} size="small"
                 sx={{ color: D.muted, opacity: 0.55, '&:hover': { opacity: 1, color: D.green } }}>
@@ -895,6 +824,16 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                 secondaryTypographyProps={{ sx: { fontSize: 10, color: D.muted } }}
                 secondary="Sweep UPS links → auto-deliver">Check UPS now</ListItemText>
             </MenuItem>
+            {fixDataCount > 0 && (
+              <MenuItem onClick={() => { setMoreAnchor(null); setFixDataOpen(true); }}>
+                <ListItemIcon sx={{ color: D.green }}><HealingOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primaryTypographyProps={{ sx: { fontSize: 13, color: D.green, fontWeight: 700 } }}
+                  secondaryTypographyProps={{ sx: { fontSize: 10, color: D.muted } }}
+                  secondary="Wrong-project mockups, unlinked orders — reversible">
+                  Fix data · {fixDataCount}
+                </ListItemText>
+              </MenuItem>
+            )}
             {/* The rich cleanup: empty placeholders, name collisions, and the
                 revenue-twins (2+ collected orders on one company). */}
             <MenuItem onClick={() => { setMoreAnchor(null); handleOpenCleanup(); }}>
@@ -1022,7 +961,6 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
             {filtered.map(p => (
               <ProjectCard key={p._id} project={p}
                 lookupMockup={lookupMockup}
-                companyMockupPool={companyMockupPool}
                 logo={logoFor(p)}
                 attention={attention[p._id]}
                 selectMode={selectMode}
@@ -1040,7 +978,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         project={activeProject}
         mockupMap={mockupMap}
         mockups={mockups}
-        autoMatched={activeProject ? autoMockupsFor(activeProject) : []}
+        projectMockups={activeProject ? mockupsFor(activeProject) : []}
         logo={activeProject ? logoFor(activeProject) : null}
         onUploadLogo={(file) => activeProject && uploadLogo(activeProject, file)}
         onRemoveLogo={() => activeProject && removeLogo(activeProject)}
@@ -1171,13 +1109,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         }}
       />
 
-      <AutoLinkDialog
-        open={autoLinkOpen}
-        data={autoLinkData}
-        loading={autoLinkLoading}
-        applying={autoLinkApplying}
-        onClose={() => setAutoLinkOpen(false)}
-        onApply={handleApplyAutoLink}
+      <FixDataDialog
+        open={fixDataOpen}
+        onClose={() => setFixDataOpen(false)}
+        authHdr={authHdr}
+        onToast={flash}
+        onApplied={loadProjects}
       />
 
       <ShareApprovalDialog
@@ -1361,7 +1298,7 @@ function Stat({ label, value, accent, hint }) {
   );
 }
 
-function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention, onClick, selectMode, selected, bindProps }) {
+function ProjectCard({ project, lookupMockup, logo, attention, onClick, selectMode, selected, bindProps }) {
   const meta = STATUS_META[project.status] || STATUS_META.quoted;
   const itemSummary = (project.items || []).map(i => i.description).filter(Boolean).join(' · ') || '—';
 
@@ -1374,17 +1311,11 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
   // Ordered by mockup number (design → colour → edit) so the 4 shown are the
   // sensible lead tiles, and colours/edits read in sequence — same grouping as
   // the drawer grid.
-  const ownTiles = sortMockupTiles(project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
-  let mockupTiles = ownTiles;
-  let usingFallback = false;
-  if (mockupTiles.length === 0) {
-    const companyKey = project.companyKey || deriveCompanyKey(project.companyName, project.clientName);
-    const pool = (companyMockupPool && companyMockupPool[companyKey]) || [];
-    const others = pool.slice(0, 4)
-      .map(n => ({ num: n, item: lookupMockup(n) }))
-      .filter(t => t.item);
-    if (others.length > 0) { mockupTiles = others; usingFallback = true; }
-  }
+  // THIS project's designs only. A card used to fall back to other projects of
+  // the same client when it had none of its own, which is the same cross-project
+  // bleed the client saw — a project with no designs yet should look like a
+  // project with no designs yet. The client logo already fills the space.
+  const mockupTiles = sortMockupTiles(project.mockupNumbers || []).slice(0, 4).map(n => ({ num: n, item: lookupMockup(n) }));
 
   return (
     <Box onClick={onClick} {...(bindProps || {})} sx={{
@@ -1429,16 +1360,6 @@ function ProjectCard({ project, lookupMockup, companyMockupPool, logo, attention
               color: '#1a1205', fontSize: 9.5, fontWeight: 800, letterSpacing: 0.2,
             }}>
             {attention.ageDays}d · {attention.flag === 'possibly_late' ? 'possibly late' : 'running long'}
-          </Box>
-        )}
-        {usingFallback && (
-          <Box sx={{
-            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 2, bgcolor: 'rgba(0,0,0,0.65)', color: D.muted,
-            px: 1, py: 0.2, borderRadius: 1, fontSize: 9, fontWeight: 700,
-            letterSpacing: 0.6, textTransform: 'uppercase',
-          }}>
-            Client&apos;s work
           </Box>
         )}
         {mockupTiles.length > 0 ? (
@@ -1978,13 +1899,15 @@ function PreorderSection({ order, authHdr, onToast }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
+function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
   const [uploading, setUploading] = useState(false);
   // "Add a variation" in flight — the tile whose duplicate is being cloned.
   const [duplicatingNum, setDuplicatingNum] = useState('');
+  // "Carry over" picker — this client's earlier projects, grouped.
+  const [carryOpen, setCarryOpen] = useState(false);
   const [client, setClient] = useState(null);
   const [clientSaving, setClientSaving] = useState('');
   // Open the Mockup Lab (/jpstudio) deep-linked to THIS project, so every mockup
@@ -2113,33 +2036,12 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.mockupNumbers, project?.files, project?.quoteLines, project?.confirmation, project?.totalValue, project?.cogs, project?.orderDate]);
 
-  // Auto-link: silently promote auto-matched mockups when the drawer opens.
-  // ADD-ONLY by design — never prune existing refs here. Pruning against the
-  // studio library destroyed real data in two cases: (a) the library fetch
-  // failed or came back empty, wiping EVERY link on the project, and (b)
-  // legacy GDrive mockup refs aren't in jpstudio but are intentionally kept
-  // as "NOT IN STUDIO" flags on the card.
-  const lastAutoLinkedRef = React.useRef(null);
-  useEffect(() => {
-    if (!project || !project._id) return;
-    if (lastAutoLinkedRef.current === project._id) return;     // once per session/project
-    if (!mockups || mockups.length === 0) return;              // library not loaded — don't touch links
-    const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
-    const current = project.mockupNumbers || [];
-    const currentKeys = new Set(current.map(norm));
-    // Never re-promote a number the owner X'd off — the exclusion is what makes
-    // "remove" stick against the client-name matcher.
-    const excludedKeys = new Set((project.excludedMockups || []).map(norm));
-    const toAdd = (autoMatched || [])
-      .map(m => m.pageState && m.pageState.mockupNum)
-      .filter(n => n && !currentKeys.has(norm(n)) && !excludedKeys.has(norm(n)));
-    lastAutoLinkedRef.current = project._id;
-    if (toAdd.length > 0) {
-      onSave(project._id, { mockupNumbers: [...current, ...toAdd] })
-        .catch(() => { /* keep silent — drawer still works */ });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?._id, mockups, autoMatched]);
+  // NOTE: opening this drawer used to silently write every fuzzy client-name
+  // match into project.mockupNumbers — permanently, with no visible action. That
+  // is what made every project of a long-term client accumulate every mockup
+  // that client had ever had, and the client saw the result on pre-confirmation
+  // approval links. A mockup's project is now a real field set where the mockup
+  // is made or carried over; opening a project never changes its data.
 
   // Load (or auto-create) the client profile for this project's company.
   useEffect(() => {
@@ -2314,16 +2216,14 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
   };
 
   // Drop one mockup # from this project (typo, wrong #, never-made design).
-  // ALSO records it on excludedMockups — without the exclusion, the client-name
-  // auto-matcher (and the silent auto-link effect) would just re-attach it and
-  // the X would look like it "doesn't delete". Re-linking on purpose still
-  // works via the Edit picker or Mockup Lab (explicit link clears nothing).
+  // Just a removal now: nothing re-attaches it, so there is no exclusion list to
+  // keep. (excludedMockups existed solely to make "remove" stick against the
+  // client-name matcher that used to re-add it on every open. Both are gone.)
   const removeMockup = async (num) => {
     const nk = _normKey(num);
     const next = (local.mockupNumbers || []).filter(n => _normKey(n) !== nk);
-    const excluded = [...new Set([...(local.excludedMockups || project.excludedMockups || []), num])];
-    updateLocal({ mockupNumbers: next, excludedMockups: excluded });
-    await onSave(project._id, { mockupNumbers: next, excludedMockups: excluded });
+    updateLocal({ mockupNumbers: next });
+    await onSave(project._id, { mockupNumbers: next });
   };
 
   return (
@@ -2515,27 +2415,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           const explicitNums = local.mockupNumbers || [];
           const explicitKeys = new Set(explicitNums.map(n => _normKey(n)));
           // Numbers the owner X'd off this project. Checked here (not just in
-          // the parent's matcher) so a removal disappears INSTANTLY — the
-          // autoMatched prop only refreshes after the save round-trips.
-          const excludedKeys = new Set((local.excludedMockups || project.excludedMockups || []).map(n => _normKey(n)));
-          // Auto-matched mockups (by client/title slug) that aren't already in
-          // the explicit list. These appear without anyone manually typing #s.
-          const autoTiles = (autoMatched || [])
-            .filter(m => {
+          // Designs the API says belong to THIS project (the indexed link), plus
+          // any number the order lists that resolves to a library item. The two
+          // agree in the normal case; the union covers a legacy row whose link
+          // hasn't been backfilled yet, without ever reaching into another
+          // project's work.
+          const linkedTiles = (projectMockups || [])
+            .filter((m) => {
               const k = _normKey(m.pageState?.mockupNum || '');
-              return k && !explicitKeys.has(k) && !excludedKeys.has(k);
+              return k && !explicitKeys.has(k);
             })
-            .map(m => ({ num: m.pageState?.mockupNum || '', item: m, source: 'auto' }));
+            .map((m) => ({ num: m.pageState?.mockupNum || '', item: m, source: 'linked' }));
           const explicitTiles = explicitNums.map(n => ({
             num: n, item: mockupMap[n] || mockupMap[_normKey(n)] || null, source: 'linked',
           }));
-          // Drop tiles that don't resolve to a studio item — the silent
-          // auto-link effect prunes them from mockupNumbers shortly after, so
-          // showing an orange "NOT IN STUDIO" placeholder just confuses.
-          // Then ORDER by mockup number so a design's colours (A, B, C…) and each
-          // colour's edits (#150A, #150A2…) sit adjacent — the grouping Nate asked
-          // for, derived from the number itself (promo/unparseable tiles sort last).
-          const tiles = sortMockupTiles([...explicitTiles.filter(t => t.item), ...autoTiles], t => t.num);
+          // Drop tiles that don't resolve to a studio item, then ORDER by mockup
+          // number so a design's colours (A, B, C…) and each colour's edits
+          // (#150A, #150A2…) sit adjacent — the grouping derived from the number
+          // itself (promo/unparseable tiles sort last).
+          const tiles = sortMockupTiles([...explicitTiles.filter(t => t.item), ...linkedTiles], t => t.num);
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
@@ -2556,6 +2454,16 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                     title="Upload a promo/product mockup (grinder, lighter, ashtray) your printer made — it gets a mockup # and links here"
                     sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
                     {uploadingPromo ? 'Uploading…' : 'Upload'}
+                  </Button>
+                  {/* Carry over — the returning-client path. Opens the client's
+                      earlier work grouped BY PROJECT (not one flat wall), and the
+                      carry re-letters the design under this project so it becomes
+                      this job's own, versionable, isolated from the finished one. */}
+                  <Button size="small" startIcon={<HistoryIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => setCarryOpen(true)}
+                    title="Bring a design over from one of this client's earlier projects"
+                    sx={{ color: D.muted, fontSize: 11, textTransform: 'none' }}>
+                    Carry over
                   </Button>
                   <Button size="small" startIcon={<DesignServicesIcon sx={{ fontSize: 14 }} />}
                     onClick={onOpenPicker}
@@ -2580,8 +2488,9 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
                    shot). Duplicating them here read as two different features. */
                 <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 1.5, py: 3, px: 2,
                   textAlign: 'center', color: D.muted, fontSize: 12 }}>
-                  No mockups yet — <b>New mockup</b> builds one in the Mockup Lab (it auto-links here);
-                  <b> Upload</b> takes a promo/product shot your printer made and files it as a numbered mockup.
+                  No designs on this project yet — <b>New mockup</b> builds one in the Mockup Lab,
+                  <b> Carry over</b> brings one across from this client&apos;s earlier work, and
+                  <b> Upload</b> files a promo/product shot your printer made as a numbered mockup.
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 1 }}>
@@ -3074,6 +2983,15 @@ function ProjectDrawer({ open, project, mockupMap, mockups, autoMatched, logo, o
           Delete project
         </Button>
       </Box>
+      <CarryMockupsDialog
+        open={carryOpen}
+        onClose={() => setCarryOpen(false)}
+        project={project}
+        companyKey={local.companyKey || deriveCompanyKey(project.companyName, project.clientName)}
+        authHdr={authHdr}
+        onToast={onToast}
+        onCarried={onReload}
+      />
     </Drawer>
   );
 }
@@ -3435,23 +3353,23 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
               <HealthStat label="Projects"     value={summary.projects} />
               <HealthStat label="Studio items" value={summary.libraryItems} />
-              <HealthStat label="Linked"       value={summary.linked}      accent={D.green} />
-              <HealthStat label="Auto-matched" value={summary.autoMatched ?? 0} accent={(summary.autoMatched ?? 0) > 0 ? D.green : undefined} />
-              <HealthStat label="Missing"      value={summary.missing}     accent={summary.missing > 0 ? '#fbbf24' : undefined} />
-              <HealthStat label="Orphans"      value={summary.orphans}     accent={summary.orphans > 0 ? '#60a5fa' : undefined} />
+              <HealthStat label="Linked"      value={summary.linked}           accent={D.green} />
+              <HealthStat label="Missing"     value={summary.missing}          accent={summary.missing > 0 ? '#fbbf24' : undefined} />
+              <HealthStat label="Unlinked"    value={summary.unlinked ?? 0}    accent={(summary.unlinked ?? 0) > 0 ? '#60a5fa' : undefined} />
+              <HealthStat label="Conflicting" value={summary.conflicting ?? 0} accent={(summary.conflicting ?? 0) > 0 ? '#f87171' : undefined} />
             </Box>
 
             {/* Tabs */}
             <Stack direction="row" gap={0.5} mb={1.5} flexWrap="wrap">
               {[
-                { id: 'missing',     label: `Missing (${summary.missing})`,             color: '#fbbf24' },
-                { id: 'linked',      label: `Linked (${summary.linked})`,               color: D.green   },
-                { id: 'autoMatched', label: `Auto-matched (${summary.autoMatched ?? 0})`, color: D.green   },
-                { id: 'orphans',     label: `Orphans (${summary.orphans})`,             color: '#60a5fa' },
+                { id: 'missing',     label: `Missing (${summary.missing})`,               color: '#fbbf24' },
+                { id: 'linked',      label: `Linked (${summary.linked})`,                 color: D.green   },
+                { id: 'unlinked',    label: `Unlinked (${summary.unlinked ?? 0})`,        color: '#60a5fa' },
+                { id: 'conflicting', label: `Conflicting (${summary.conflicting ?? 0})`,  color: '#f87171' },
               ].map(t => {
-                const active = tab === (t.id === 'linked' ? 'matched' : t.id);
+                const active = tab === t.id;
                 return (
-                  <Box key={t.id} onClick={() => setTab(t.id === 'linked' ? 'matched' : t.id)}
+                  <Box key={t.id} onClick={() => setTab(t.id)}
                     sx={{
                       px: 1.5, py: 0.6, borderRadius: 1, cursor: 'pointer',
                       fontSize: 11, fontWeight: 700,
@@ -3468,10 +3386,10 @@ function MockupHealthDialog({ open, data, loading, projects, onClose, onJumpToPr
 
             {/* Hint */}
             <Typography sx={{ color: D.muted, fontSize: 11, mb: 1 }}>
-              {tab === 'missing'     && 'These mockup #s are assigned to projects but don\'t exist in your jpstudio library. Open jpstudio, pick the project, and save a mockup with the matching #.'}
-              {tab === 'matched'     && 'These project mockup #s are paired with a library item. Healthy state.'}
-              {tab === 'autoMatched' && 'These library mockups aren\'t in any project\'s mockupNumbers list, but their client name matches a project — they auto-appear there with the green AUTO badge. Open the project drawer + hit Tidy to make the link permanent.'}
-              {tab === 'orphans'     && 'These library mockups aren\'t referenced by any project AND don\'t client-match any project. Probably drafts or mockups for a client you haven\'t created a project for yet.'}
+              {tab === 'missing'     && 'These mockup #s are listed on a project but no library item carries them. Open the Mockup Lab on that project and save a mockup with the matching #.'}
+              {tab === 'linked'      && 'These project mockup #s resolve to a library item. Healthy state.'}
+              {tab === 'unlinked'    && 'These mockups aren\'t on any project yet — drafts, or work for a client whose project hasn\'t been started. Open one in the Mockup Lab and pick its project.'}
+              {tab === 'conflicting' && 'These mockups are listed on one project but belong to another — residue from the old client-name matcher. Fix data → “Mockups on the wrong project” clears them, reversibly.'}
             </Typography>
 
             {/* List */}
@@ -3524,126 +3442,7 @@ function HealthStat({ label, value, accent }) {
   );
 }
 
-// ── AutoLinkDialog ───────────────────────────────────────────────────────────
-// Preview + apply for the auto-link scan. Shows which orphan jpstudio mockups
-// can be attached to a project (by batch number or company name) before the
-// user commits the bulk update. Nothing changes until Apply is pressed.
-function AutoLinkDialog({ open, data, loading, applying, onClose, onApply }) {
-  const fsDialog  = useFullScreenDialog();
-  const summary   = data && data.summary;
-  const links     = (data && data.links) || [];
-  const ambiguous = (data && data.ambiguous) || [];
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fsDialog}
-      PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: { xs: 0, sm: 2 } } }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: D.panel,
-        borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.2,
-        display: 'flex', alignItems: 'center', gap: 1 }}>
-        <AutoFixHighIcon sx={{ color: D.green, fontSize: 18 }} />
-        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14, flex: 1 }}>
-          Auto-link library mockups
-        </Typography>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
-      </Box>
-      <DialogContent sx={{ p: 2.5 }}>
-        {loading ? (
-          <Box sx={{ textAlign: 'center', py: 6 }}>
-            <CircularProgress size={24} sx={{ color: D.green }} />
-          </Box>
-        ) : !data || !summary ? (
-          <Typography sx={{ color: D.muted, fontSize: 12 }}>No data.</Typography>
-        ) : (
-          <>
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 1, mb: 2 }}>
-              <HealthStat label="Library"        value={summary.libraryMockups} />
-              <HealthStat label="Already linked" value={summary.alreadyLinked} />
-              <HealthStat label="To link"        value={summary.proposed}  accent={summary.proposed  > 0 ? D.green : undefined} />
-              <HealthStat label="Ambiguous"      value={summary.ambiguous} accent={summary.ambiguous > 0 ? '#fbbf24' : undefined} />
-              <HealthStat label="Unmatched"      value={summary.unmatched} accent={summary.unmatched > 0 ? '#60a5fa' : undefined} />
-            </Box>
-
-            {links.length > 0 && (
-              <>
-                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
-                  Will link {summary.proposed} mockup{summary.proposed === 1 ? '' : 's'} → {summary.projectsAffected} project{summary.projectsAffected === 1 ? '' : 's'}
-                </Typography>
-                <Box sx={{ maxHeight: 300, overflow: 'auto', ...scrollbar, border: `1px solid ${D.line}`,
-                  borderRadius: 1, mb: ambiguous.length ? 2 : 0 }}>
-                  {links.map((l, i) => (
-                    <Box key={i} sx={{ px: 1.5, py: 0.8, display: 'flex', alignItems: 'center', gap: 1.5,
-                      fontSize: 12, borderBottom: `1px solid ${D.line}` }}>
-                      <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
-                        {l.mockupNum || '—'}
-                      </Typography>
-                      <Typography sx={{ flex: 1, color: D.text, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {l.itemName || 'Untitled'}
-                      </Typography>
-                      <Typography sx={{ color: D.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'right' }}>
-                        #{l.projectNumber} · {l.projectCompany || '—'}
-                      </Typography>
-                      <Box sx={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
-                        color: l.via === 'base' ? D.green : '#60a5fa',
-                        border: `1px solid ${l.via === 'base' ? D.green : '#60a5fa'}`,
-                        borderRadius: 0.5, px: 0.5, py: 0.1, whiteSpace: 'nowrap' }}>
-                        {l.via === 'base' ? 'batch #' : 'name'}
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </>
-            )}
-
-            {ambiguous.length > 0 && (
-              <>
-                <Typography sx={{ color: '#fbbf24', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', mb: 0.6 }}>
-                  {ambiguous.length} ambiguous — link these by hand
-                </Typography>
-                <Box sx={{ maxHeight: 160, overflow: 'auto', ...scrollbar, border: `1px solid ${D.line}`, borderRadius: 1 }}>
-                  {ambiguous.map((a, i) => (
-                    <Box key={i} sx={{ px: 1.5, py: 0.8, fontSize: 12, borderBottom: `1px solid ${D.line}` }}>
-                      <Stack direction="row" alignItems="center" gap={1.5}>
-                        <Typography sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, minWidth: 78 }}>
-                          {a.mockupNum || '—'}
-                        </Typography>
-                        <Typography sx={{ flex: 1, color: D.text, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {a.itemName || 'Untitled'}
-                        </Typography>
-                      </Stack>
-                      <Typography sx={{ color: D.muted, fontSize: 10, mt: 0.3 }}>
-                        Matches: {(a.candidates || []).map(c => `#${c.projectNumber} ${c.companyName}`).join(' · ')}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </>
-            )}
-
-            {links.length === 0 && ambiguous.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 4, color: D.muted, fontSize: 12 }}>
-                Nothing to link — every library mockup is already attached. ✓
-              </Box>
-            )}
-          </>
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 2.5, pb: 2 }}>
-        <Button onClick={onClose} sx={{ color: D.muted }} disabled={applying}>Close</Button>
-        <Button onClick={onApply} variant="contained"
-          disabled={applying || loading || !summary || summary.proposed === 0}
-          sx={{ bgcolor: D.green, color: D.greenDk, fontWeight: 700 }}>
-          {applying ? <CircularProgress size={16} sx={{ color: D.greenDk }} />
-            : `Apply${summary && summary.proposed ? ` · ${summary.proposed}` : ''}`}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// Split a free-text field ("a@x.com, b@y.com  c@z.com") into a deduped list.
-// The backend re-validates and reports any address it couldn't use.
+// Split a free-text address box into a de-duplicated list of emails.
 function parseEmails(str) {
   const seen = new Set();
   return String(str || '')

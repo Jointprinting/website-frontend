@@ -7,6 +7,33 @@
 // the v2 editor's fixed 620×500 stage, so a preset drops the logo in the same spot
 // the classic editor did. Pure — no DOM.
 
+// The logical stage every surface in the lab shares. The canvas may be SHRUNK to
+// fit a phone (fabric setDimensions + setZoom), but these logical coordinates
+// never change — placements, presets and the ppi inch math are identical at
+// every screen size.
+export const STAGE_W = 620;
+export const STAGE_H = 500;
+export const BLANK_FIT = 0.93;          // legacy blankImg fit factor
+
+// Where the garment blank sits in the logical stage: fit ×0.93, centred. THE
+// single definition — the interactive canvas, the headless flatten, the editor
+// and the print-area guide all derive from this, so what you place on screen is
+// what bakes into the composite. (It used to be copy-pasted into three files;
+// fabric's canvas.centerObject() was a fourth, zoom-unaware, variant that landed
+// the blank left of centre on any shrunk canvas — i.e. every phone.)
+export function blankBox(natW, natH, stageW = STAGE_W, stageH = STAGE_H) {
+  if (!natW || !natH) return { scale: 1, dispW: 0, dispH: 0, originX: stageW / 2, originY: stageH / 2 };
+  const scale = Math.min(stageW / natW, stageH / natH) * BLANK_FIT;
+  const dispW = natW * scale, dispH = natH * scale;
+  return { scale, dispW, dispH, originX: (stageW - dispW) / 2, originY: (stageH - dispH) / 2 };
+}
+
+// Centre any already-scaled box in the logical stage. Used for the default logo
+// drop; same origin math as blankBox so nothing can drift.
+export function centerInStage(scaledW, scaledH, stageW = STAGE_W, stageH = STAGE_H) {
+  return { left: (stageW - scaledW) / 2, top: (stageH - scaledH) / 2 };
+}
+
 export const PRESETS = {
   lc: { label: 'L Chest',  xPct: 0.32, yPct: 0.28, wPct: 0.18 },
   cc: { label: 'Ctr Chest', xPct: 0.50, yPct: 0.34, wPct: 0.28 },

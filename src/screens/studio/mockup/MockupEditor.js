@@ -36,24 +36,15 @@ import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar, dropInput } from '../_shared';
 import { mockupToLibraryItem, hydratePages, emptyPos, emptyPage, pageToState } from './mockupModel';
-import { PRESETS, PRESET_ORDER, presetPos } from './printAreas';
+import { PRESETS, PRESET_ORDER, presetPos, blankBox, STAGE_W, STAGE_H } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
 
 const base = `${config.backendUrl}/api`;
-const STAGE_W = 620;
-const STAGE_H = 500;         // the legacy desktop canvas size — keep for interop
-const BLANK_FIT = 0.93;      // legacy blankImg fit factor
 
 const uid = () => (window.crypto && window.crypto.randomUUID)
   ? window.crypto.randomUUID()
   : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// The blank's box within the 620×500 stage — same fit/center math as the legacy tool.
-function blankBox(natW, natH) {
-  const scale = Math.min(STAGE_W / natW, STAGE_H / natH) * BLANK_FIT;
-  const dispW = natW * scale, dispH = natH * scale;
-  return { scale, dispW, dispH, originX: (STAGE_W - dispW) / 2, originY: (STAGE_H - dispH) / 2 };
-}
 
 const loadImg = (src) => new Promise((resolve) => {
   if (!src) { resolve(null); return; }

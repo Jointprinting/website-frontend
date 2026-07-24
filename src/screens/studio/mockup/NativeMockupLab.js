@@ -31,14 +31,13 @@ import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey } from '../_shared';
 import { emptyPage, hydratePages, mockupToLibraryItem, pageToState, pageFromState } from './mockupModel';
-import { PRESETS, PRESET_ORDER, PRINT_AREAS, CATEGORY_ORDER, printAreaRect } from './printAreas';
+import { PRESETS, PRESET_ORDER, PRINT_AREAS, CATEGORY_ORDER, printAreaRect, blankBox, STAGE_W, STAGE_H } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
 import { analyzeArtwork, isScreenPrintType, INK } from './inkDetect';
 import { detectSolidBg, removeBackground, recolorInk, fnvHash } from './artTools';
 import MockupCanvas from './MockupCanvas';
 
 const base = `${config.backendUrl}/api`;
-const STAGE_W = 620, STAGE_H = 500, FIT = 0.93;
 
 const uid = () => (window.crypto && window.crypto.randomUUID)
   ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -52,13 +51,9 @@ const loadImg = (src) => new Promise((resolve) => {
   im.onload = () => resolve(im); im.onerror = () => resolve(null); im.src = src;
 });
 
-// Headless flatten for save/PDF — the same fit + stage→natural mapping the
-// canvas uses, so every side (not just the one on screen) bakes identically.
-function blankBox(natW, natH) {
-  const scale = Math.min(STAGE_W / natW, STAGE_H / natH) * FIT;
-  const dispW = natW * scale, dispH = natH * scale;
-  return { dispW, dispH, originX: (STAGE_W - dispW) / 2, originY: (STAGE_H - dispH) / 2 };
-}
+// Headless flatten for save/PDF — uses the SHARED blankBox (printAreas.js), the
+// same one the interactive canvas and the print-area guide derive from, so every
+// side (not just the one on screen) bakes identically.
 async function flattenHeadless(blankSrc, logoSrc, pos) {
   const [blank, logo] = await Promise.all([loadImg(blankSrc), loadImg(logoSrc)]);
   if (!blank) return null;
@@ -738,7 +733,10 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         <Box sx={accentBar} />
         <IconButton onClick={onBack} size="small" sx={{ color: D.muted, '&:hover': { color: D.text } }}><ArrowBackIosNewIcon sx={{ fontSize: 15 }} /></IconButton>
         <Typography sx={{ ...mono, fontSize: 13, color: D.green, fontWeight: 800 }}>MOCKUP LAB</Typography>
-        {mockupNum && <Typography sx={{ ...mono, fontSize: 12, color: D.faint }}>#{mockupNum}</Typography>}
+        {/* mockupNum already carries its own '#' (formatMockupNum) — strip before
+            prefixing or the header reads '##000153B'. Same rule as the PDF name
+            and the history rows below. */}
+        {mockupNum && <Typography sx={{ ...mono, fontSize: 12, color: D.faint }}>#{String(mockupNum).replace(/^#/, '')}</Typography>}
         <Box sx={{ flexGrow: 1 }} />
         {(busy || cwBusy) && <Typography sx={{ fontSize: 12, maxWidth: 340, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: (busy + cwBusy).includes('✓') ? D.green : '#fbbf24' }}>{cwBusy || busy}</Typography>}
         {/* Autosave pill — no Ctrl+S in this lab; edits save themselves. */}
