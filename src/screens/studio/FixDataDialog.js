@@ -157,7 +157,7 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
       setLastBatch(r.data.batchId || '');
       const f = r.data.fixed || {};
       onToast?.(
-        `Fixed — refunds ${f.vendorRefunds || 0} · orders ${f.orders || 0} · names ${f.names || 0} · rows ${f.removedRows || 0}`,
+        `Fixed — refunds ${f.vendorRefunds || 0} · orders ${f.orders || 0} · names ${f.names || 0} · receipts ${f.receipts || 0} · rows ${f.removedRows || 0}`,
         'success',
       );
       await onApplied?.();
