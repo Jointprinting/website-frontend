@@ -85,6 +85,21 @@ const OVERFLOW_NAV = [
 ];
 const ALL_NAV = [...NAV, ...OVERFLOW_NAV];
 
+// Bring the ACTIVE tab into view in the scrolling sub-nav. Without this, opening
+// the CRM on a phone while the current view is one of the later tabs shows the
+// row scrolled to the start — the tab you're actually on is off-screen, which is
+// what made the tabs feel broken on mobile.
+function useScrollActiveTabIntoView(ref, view) {
+  React.useEffect(() => {
+    const row = ref.current;
+    if (!row || typeof row.querySelector !== 'function') return;
+    const el = row.querySelector(`[data-crm-tab="${view}"]`);
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    // 'nearest' so it never yanks the row when the tab is already visible.
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [ref, view]);
+}
+
 // First & last day (YYYY-MM-DD) of `month` of `year` — the calendar now renders a
 // CLEAN single-month grid (no adjacent-month spill cells), so we fetch exactly the
 // month's follow-ups. Built in UTC to match CalendarView's UTC grid (see the
@@ -170,6 +185,9 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   // Global search (F) — the command palette + the overflow menu anchor (J).
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [overflowAnchor, setOverflowAnchor] = React.useState(null);
+  // The scrolling sub-nav, so the active tab can be brought into view on a phone.
+  const navRef = React.useRef(null);
+  useScrollActiveTabIntoView(navRef, view);
 
   // Whether the one-time "Load / reconcile data" import has already run. Once it
   // has, that overflow entry auto-hides (it's a one-time tool); Clean up and
@@ -1445,18 +1463,30 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
         {/* Sub-nav — hidden while a company detail is open (its own back button
             returns to the list it came from). */}
         {!openKey && (
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ px: { xs: 1, sm: 2 }, pb: 0, overflowX: 'auto',
-            '&::-webkit-scrollbar': { height: 0 } }}>
+          <Stack ref={navRef} direction="row" spacing={0.5} alignItems="center"
+            sx={{ px: { xs: 1, sm: 2 }, pb: 0, overflowX: 'auto', position: 'relative',
+              '&::-webkit-scrollbar': { height: 0 }, scrollbarWidth: 'none',
+              // Scroll-snap so a swipe lands on a tab rather than mid-label.
+              scrollSnapType: { xs: 'x proximity', md: 'none' },
+              // The row scrolled on a phone with nothing to say so: tabs were
+              // clipped flush at the edge and read as broken rather than
+              // scrollable. A soft mask on the right edge shows there's more.
+              maskImage: { xs: 'linear-gradient(to right, #000 85%, transparent 100%)', md: 'none' },
+              WebkitMaskImage: { xs: 'linear-gradient(to right, #000 85%, transparent 100%)', md: 'none' },
+            }}>
             {NAV.map((n) => {
               const active = view === n.id;
               const Icon = n.Icon;
               return (
                 <Button
                   key={n.id} onClick={() => setView(n.id)}
+                  data-crm-tab={n.id}
                   startIcon={<Icon sx={{ fontSize: 17 }} />}
                   sx={{
                     textTransform: 'none', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap',
-                    color: active ? D.green : D.muted, borderRadius: 0, px: 1.5, py: 1,
+                    color: active ? D.green : D.muted, borderRadius: 0,
+                    px: 1.5, py: { xs: 1.35, md: 1 },    // ≥44px touch target on a phone
+                    scrollSnapAlign: 'center', flex: '0 0 auto',
                     borderBottom: `2px solid ${active ? D.green : 'transparent'}`,
                     '&:hover': { color: active ? D.green : D.text, bgcolor: 'rgba(255,255,255,0.03)' },
                   }}
