@@ -40,12 +40,16 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import config from '../../config.json';
-import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative } from './_shared';
+import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative, money0, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { TEMPLATES, getTemplate } from '../../webworks/templates';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/jpw/sites`;
+// Care plans are ordinary Subscriptions with brand:'webworks' — the same records
+// Finances rolls into MRR and the "record this month's plans" checklist. Webworks
+// gets its own view of them, not its own copy.
+const SUBS_API = `${config.backendUrl}/api/subscriptions`;
 // AI-credit guardrail snapshot — mirrors the Studio hub's Signal row, shown small
 // right by the Generate button so the spend is visible where it happens.
 const AI_USAGE_API = `${config.backendUrl}/api/jpw/ai-usage`;
@@ -685,6 +689,83 @@ export default function JpwSitesTab({ token }) {
   }, [authHdr]);
   React.useEffect(() => { load(); loadAiBudget(); }, [load, loadAiBudget]);
 
+  // ── The Webworks money line ────────────────────────────────────────────────
+  // Webworks is a subscription business, so the question that matters isn't "how
+  // many sites have I built" — it's "how much do they pay me, and did I bill it".
+  // Every site now arrives carrying its care plan, so this is a rollup, not a
+  // second fetch.
+  //
+  // DEDUPED BY PLAN ID, which is the whole trick: one subscription can attach to
+  // several of a company's sites (the companyKey fallback), and summing per-site
+  // would invent revenue that doesn't exist.
+  const plans = React.useMemo(() => {
+    const byId = new Map();
+    for (const s of sites) if (s.plan && !byId.has(s.plan.id)) byId.set(s.plan.id, s.plan);
+    return [...byId.values()];
+  }, [sites]);
+
+  const wwMoney = React.useMemo(() => {
+    const active = plans.filter((p) => p.status === 'active');
+    // Annual normalizes to monthly, the same way summarizeMrr does server-side.
+    const mrr = active.reduce((a, p) => a + (p.cadence === 'annual' ? p.amount / 12 : p.amount), 0);
+    const unbilled = active.filter((p) => !p.recordedThisPeriod);
+    return {
+      mrr,
+      earning: sites.filter((s) => s.plan && s.plan.status === 'active').length,
+      total: sites.length,
+      // Live sites with nothing behind them — work you're hosting for free.
+      freeloaders: sites.filter((s) => s.status === 'live' && !s.plan).length,
+      unbilled,
+      unbilledTotal: unbilled.reduce((a, p) => a + p.amount, 0),
+    };
+  }, [plans, sites]);
+
+  // Record this period's bill straight from the site card — the same endpoint
+  // the Finances checklist posts to, so a plan billed here disappears from there.
+  const [planBusy, setPlanBusy] = React.useState('');
+  const recordPlan = React.useCallback(async (plan) => {
+    setPlanBusy(plan.id);
+    try {
+      await axios.post(`${SUBS_API}/${plan.id}/record`, { period: plan.currentPeriod }, authHdr);
+      await load();
+    } catch (e) {
+      setLoadErr(e.response?.data?.message || 'Could not record that plan.');
+    } finally { setPlanBusy(''); }
+  }, [authHdr, load]);
+
+  // Attach a care plan to a site that has none. Carries siteId AND companyKey so
+  // the plan is explicitly linked (not a company guess) and still rolls into the
+  // company's CRM + Finances views.
+  const [planFor, setPlanFor] = React.useState(null);   // the site being given a plan
+  const [planDraft, setPlanDraft] = React.useState({ plan: 'Care Plan', amount: '', cadence: 'monthly' });
+  const openPlanDialog = (site) => {
+    setPlanDraft({ plan: 'Care Plan', amount: '', cadence: 'monthly' });
+    setPlanFor(site);
+  };
+  const createPlan = React.useCallback(async () => {
+    if (!planFor) return;
+    setPlanBusy('new');
+    try {
+      await axios.post(SUBS_API, {
+        brand: 'webworks',
+        // companyKey is REQUIRED by the API and is the ecosystem's join spine —
+        // derive it from the site name the same way every other Studio surface
+        // does, so a plan created here lands on the SAME company as the CRM
+        // record rather than forking a second one.
+        companyKey: planFor.companyKey || deriveCompanyKey(planFor.name),
+        companyName: planFor.name || '',
+        siteId: planFor._id,
+        plan: planDraft.plan || 'Care Plan',
+        amount: Number(planDraft.amount) || 0,
+        cadence: planDraft.cadence,
+      }, authHdr);
+      setPlanFor(null);
+      await load();
+    } catch (e) {
+      setLoadErr(e.response?.data?.message || 'Could not create that care plan.');
+    } finally { setPlanBusy(''); }
+  }, [authHdr, load, planFor, planDraft]);
+
   // ── Autosave (600ms debounce, single-flight, edit-sequence tracked) ─────────
   // Three guarantees the naive debounce version lacked:
   //   1. ORDER — PUTs are chained (single-flight), so two in-flight saves can
@@ -1182,6 +1263,41 @@ export default function JpwSitesTab({ token }) {
         </Stack>
       )}
 
+      {/* ── The money line ──────────────────────────────────────────────────
+          "How many sites have I built" is a vanity number; for a subscription
+          brand the real ones are what they pay and whether it's been billed.
+          Wraps on a phone rather than clipping. */}
+      {hasSites && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
+          <Paper elevation={0} sx={{ px: 1.75, py: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}`, minWidth: 118 }}>
+            <T sx={{ ...eyebrow, fontSize: 9.5, letterSpacing: 1.4, color: D.faint }}>MRR</T>
+            <T sx={{ ...mono, fontSize: 19, fontWeight: 800, color: D.green, lineHeight: 1.2 }}>{money0(wwMoney.mrr)}</T>
+            <T sx={{ ...mono, fontSize: 10.5, color: D.faint }}>{money0(wwMoney.mrr * 12)}/yr</T>
+          </Paper>
+          <Paper elevation={0} sx={{ px: 1.75, py: 1.25, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}`, minWidth: 118 }}>
+            <T sx={{ ...eyebrow, fontSize: 9.5, letterSpacing: 1.4, color: D.faint }}>Earning</T>
+            <T sx={{ ...mono, fontSize: 19, fontWeight: 800, color: D.text, lineHeight: 1.2 }}>
+              {wwMoney.earning}<Box component="span" sx={{ fontSize: 13, color: D.faint }}> / {wwMoney.total}</Box>
+            </T>
+            <T sx={{ ...mono, fontSize: 10.5, color: wwMoney.freeloaders ? '#fbbf24' : D.faint }}>
+              {wwMoney.freeloaders ? `${wwMoney.freeloaders} live, unpaid` : 'every live site pays'}
+            </T>
+          </Paper>
+          {/* Only shows when there IS something to bill — a clean month has no
+              nag sitting on the screen going stale. */}
+          {wwMoney.unbilled.length > 0 && (
+            <Paper elevation={0} sx={{ px: 1.75, py: 1.25, borderRadius: 2,
+              bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)', minWidth: 128 }}>
+              <T sx={{ ...eyebrow, fontSize: 9.5, letterSpacing: 1.4, color: '#fbbf24' }}>To bill</T>
+              <T sx={{ ...mono, fontSize: 19, fontWeight: 800, color: '#fbbf24', lineHeight: 1.2 }}>{money0(wwMoney.unbilledTotal)}</T>
+              <T sx={{ ...mono, fontSize: 10.5, color: D.faint }}>
+                {wwMoney.unbilled.length} plan{wwMoney.unbilled.length === 1 ? '' : 's'} · {wwMoney.unbilled[0].currentPeriod}
+              </T>
+            </Paper>
+          )}
+        </Stack>
+      )}
+
       {loading ? (
         <Box display="flex" justifyContent="center" py={8}>
           <JpLoader size={56} label="Loading sites…" />
@@ -1293,16 +1409,26 @@ export default function JpwSitesTab({ token }) {
                             {/* The bit that actually gets forgotten: is THIS
                                 period billed? Same answer the Finances "record
                                 this month's plans" checklist gives — one helper,
-                                so the two surfaces can't disagree. */}
+                                so the two surfaces can't disagree. And when it
+                                ISN'T billed, this is a button, not a label:
+                                seeing the problem and fixing it in the same
+                                place is the difference between a dashboard and
+                                a tool. Posts to the same endpoint the Finances
+                                checklist does, so it clears there too. */}
                             {s.plan.status === 'active' && (
                               s.plan.recordedThisPeriod ? (
                                 <T sx={{ ...mono, fontSize: 11, color: D.green }}>
                                   billed {s.plan.currentPeriod}
                                 </T>
                               ) : (
-                                <T sx={{ ...mono, fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>
-                                  not billed {s.plan.currentPeriod}
-                                </T>
+                                <Button size="small" disabled={planBusy === s.plan.id}
+                                  onClick={(e) => { e.stopPropagation(); recordPlan(s.plan); }}
+                                  sx={{ ...mono, fontSize: 11, fontWeight: 800, minHeight: 26, py: 0,
+                                    color: '#fbbf24', textTransform: 'none', borderRadius: 999, px: 1,
+                                    border: '1px solid rgba(251,191,36,0.45)',
+                                    '&:hover': { bgcolor: 'rgba(251,191,36,0.12)' } }}>
+                                  {planBusy === s.plan.id ? 'recording…' : `record ${s.plan.currentPeriod}`}
+                                </Button>
                               )
                             )}
                             <T sx={{ ...mono, fontSize: 11, color: D.faint }}>
@@ -1315,9 +1441,14 @@ export default function JpwSitesTab({ token }) {
                             )}
                           </>
                         ) : (
-                          <T sx={{ ...mono, fontSize: 11, color: '#fbbf24' }}>
-                            no care plan — this site isn&apos;t earning
-                          </T>
+                          // Not a scolding label — the fix, one tap away.
+                          <Button size="small" onClick={(e) => { e.stopPropagation(); openPlanDialog(s); }}
+                            sx={{ ...mono, fontSize: 11, fontWeight: 700, minHeight: 26, py: 0, px: 1,
+                              color: '#fbbf24', textTransform: 'none', borderRadius: 999,
+                              border: '1px solid rgba(251,191,36,0.45)',
+                              '&:hover': { bgcolor: 'rgba(251,191,36,0.12)' } }}>
+                            + add care plan
+                          </Button>
                         )}
                         {s.openEdits > 0 && (
                           <Box sx={{ ...mono, fontSize: 11, fontWeight: 700, color: '#60a5fa' }}>
@@ -1387,6 +1518,47 @@ export default function JpwSitesTab({ token }) {
 
       <NewSiteDialog open={newOpen} onClose={() => setNewOpen(false)} onCreate={createSite}
         busy={creating} preselect={preselectTpl} />
+
+      {/* Attach a care plan to a site that has none. It's an ordinary
+          Subscription with brand:'webworks' — the same record Finances rolls
+          into MRR — carrying siteId (so it's an explicit link, never a company
+          guess) and companyKey (so it lands on the same company as the CRM). */}
+      <Dialog open={!!planFor} onClose={() => setPlanFor(null)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}`, borderRadius: 2.5 } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 16, pb: 0.5 }}>
+          Care plan for {planFor?.name}
+        </DialogTitle>
+        <DialogContent>
+          <T sx={{ color: D.muted, fontSize: 13, mb: 2 }}>
+            What this site pays you every period. It shows up in Finances MRR and in
+            &ldquo;record this month&apos;s plans&rdquo; alongside your other subscriptions.
+          </T>
+          <Stack spacing={1.75}>
+            <TextField label="Plan name" size="small" fullWidth value={planDraft.plan}
+              onChange={(e) => setPlanDraft((d) => ({ ...d, plan: e.target.value }))}
+              sx={{ ...dropInput }} />
+            <Stack direction="row" spacing={1.5}>
+              <TextField label="Amount" size="small" fullWidth type="number" value={planDraft.amount}
+                onChange={(e) => setPlanDraft((d) => ({ ...d, amount: e.target.value }))}
+                placeholder="99" sx={{ ...dropInput }} />
+              <TextField label="Billed" size="small" fullWidth select value={planDraft.cadence}
+                onChange={(e) => setPlanDraft((d) => ({ ...d, cadence: e.target.value }))}
+                sx={{ ...dropInput }}>
+                <MenuItem value="monthly">Monthly</MenuItem>
+                <MenuItem value="annual">Annually</MenuItem>
+              </TextField>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setPlanFor(null)} sx={{ ...dropGhostBtn, px: 2 }}>Cancel</Button>
+          <Button variant="contained" onClick={createPlan}
+            disabled={planBusy === 'new' || !(Number(planDraft.amount) > 0)}
+            sx={{ ...dropPrimaryBtn, px: 2.5 }}>
+            {planBusy === 'new' ? <CircularProgress size={16} /> : 'Add plan'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={!!snack} autoHideDuration={4500} onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

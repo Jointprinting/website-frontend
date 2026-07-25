@@ -2229,7 +2229,9 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
   // inquiry item opens its brand's OWN inbox (the row carries the view — same
   // per-source mark-seen behavior as the hub tiles).
   const itemNav = (r, it) => {
-    if (r.kind === 'order') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
+    // A preorder drop lives on its order's drawer (that's where the link was
+    // minted and where it becomes a real order), so it navigates like an order.
+    if (r.kind === 'order' || r.kind === 'preorder') onNavigate && onNavigate({ view: 'clients', projectNumber: it.projectNumber || null, orderNumber: it.orderNumber || null });
     else if (r.kind === 'crm') onNavigate && onNavigate({ view: 'crm', companyKey: it.companyKey || null });
     else if (r.kind === 'lookbook') onNavigate && onNavigate({ view: 'lookbooks', companyKey: it.companyKey || null });
     else if (r.kind === 'inquiry') onPick && onPick(r.view);
@@ -2248,7 +2250,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
       if (!g || !g.count) continue;
       if (brandFilter && (g.brand || 'Joint Printing') !== brandFilter) continue;
       const items = Array.isArray(g.items) ? g.items : [];
-      const expandable = (g.kind === 'order' || g.kind === 'crm' || g.kind === 'lookbook' || g.kind === 'inquiry') && items.length > 0;
+      const expandable = (g.kind === 'order' || g.kind === 'preorder' || g.kind === 'crm' || g.kind === 'lookbook' || g.kind === 'inquiry') && items.length > 0;
       rows.push({
         key: g.id, tone: TONE[sev] || D.green, label: g.label, kind: g.kind, view: g.view, items, expandable,
         onClick: expandable ? null
@@ -2817,7 +2819,9 @@ function Hub({ onPick, onNavigate, signals, sweepNeeded, sweepBlocked, nextReset
   const ordersNeedingAction = (() => {
     const g = (signals && signals.groups) || {};
     return [...(g.critical || []), ...(g.warning || []), ...(g.info || [])]
-      .filter((x) => x && x.kind === 'order')
+      // Preorder drops that hit their minimum are Order Tracker work too — that's
+      // where the drop gets turned into a real order — so they badge the tile.
+      .filter((x) => x && (x.kind === 'order' || x.kind === 'preorder'))
       .reduce((n, x) => n + (Number(x.count) || 0), 0);
   })();
   const actionBadges = {
