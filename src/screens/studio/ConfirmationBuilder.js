@@ -1287,45 +1287,43 @@ function SmallField({ label, value, onChange, type = 'text' }) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// For a fresh confirmation seed: figure out which jpstudio mockups belong to
-// this project (by explicit mockupNumbers, falling back to client-name slug)
-// and return their #s in a sensible order so we can distribute them across
-// the seeded items. Mirrors OrderTracker.autoMockupsFor.
+// For a fresh confirmation seed: which mockups belong to this project, in a
+// sensible order, so they can be distributed across the seeded items.
+//
+// This used to fall back to matching the mockup's client name against the
+// project's — its own comment said it mirrored OrderTracker.autoMockupsFor —
+// with a substring test on top. That matcher is gone from the Order Tracker
+// because it attached every mockup a long-term client owned to every one of
+// their projects; leaving the mirror here was worse, because a confirmation is
+// the document the client approves and pays against. A mockup's project is a
+// real indexed field now, so this is a lookup.
 function inferMockupNumsFor(project, mockups) {
-  const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUpperCase();
-  const byNorm = {};
-  (mockups || []).forEach(m => {
-    const k = norm(m.pageState && m.pageState.mockupNum);
-    if (k) byNorm[k] = m;
-  });
   const out = [];
   const seen = new Set();
-  // 1) Explicit mockupNumbers come first, in the order saved on the project.
-  (project.mockupNumbers || []).forEach(n => {
+  // 1) The project's own list first, in the order the owner saved it — that
+  //    ordering is his curation and the confirmation should respect it.
+  (project.mockupNumbers || []).forEach((n) => {
     const k = norm(n);
     if (!k || seen.has(k)) return;
     seen.add(k);
     out.push(n);
   });
-  // 2) Auto-matched by client/title slug.
-  const projSlugs = [project.companyName, project.clientName].map(slug).filter(Boolean);
-  (mockups || []).forEach(m => {
-    const k = norm(m.pageState && m.pageState.mockupNum);
-    if (!k || seen.has(k)) return;
-    const mClient = slug((m.pageState && m.pageState.client) || m.client || '');
-    const mTitle  = slug(String(m.name || '').replace(/\s+merch\s*$/i, ''));
-    const exact = projSlugs.some(ps => ps && (ps === mClient || ps === mTitle));
-    const fuzzy = !exact && projSlugs.some(ps => {
-      if (!ps || ps.length < 4) return false;
-      const cand = [mClient, mTitle].filter(c => c && c.length >= 4);
-      return cand.some(c => ps.startsWith(c) || c.startsWith(ps) || ps.includes(c) || c.includes(ps));
-    });
-    if (exact || fuzzy) {
+  // 2) Anything else the API says belongs to THIS project. Covers a design made
+  //    or carried over since the list was last saved; never reaches another
+  //    project's work, whoever the client is.
+  const mine = String(project.projectNumber || '');
+  if (mine) {
+    (mockups || []).forEach((m) => {
+      const pn = String(m.projectNumber || m.pageState?.projectNumber || '');
+      if (pn !== mine) return;
+      const num = m.pageState && m.pageState.mockupNum;
+      const k = norm(num);
+      if (!k || seen.has(k)) return;
       seen.add(k);
-      out.push(m.pageState.mockupNum);
-    }
-  });
+      out.push(num);
+    });
+  }
   return out;
 }
 
