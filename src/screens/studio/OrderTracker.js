@@ -271,7 +271,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   // to reset to Overview on every open because nothing outside React knew.
   const openProject = useCallback((proj) => {
     setActiveProject(proj);
-    if (proj) patchStudioUrl({ view: 'clients', projectNumber: proj.projectNumber || '' }, { push: true });
+    if (proj) patchStudioUrl({ view: 'clients', projectNumber: proj.projectNumber || '' }, { push: true, overlay: true });
   }, []);
 
   const closeProject = useCallback(() => {
