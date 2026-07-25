@@ -21,6 +21,7 @@ import Contact from './screens/Contact';
 import FAQ from './screens/FAQ';
 import Terms from './screens/Terms';
 import Privacy from './screens/Privacy';
+import AppErrorBoundary from './common/AppErrorBoundary';
 
 const Product       = lazy(() => import('./screens/Product'));
 const Products      = lazy(() => import('./screens/Products'));
@@ -144,6 +145,10 @@ function AppShell() {
             single route whose internal navigation shouldn't remount — and on
             client-site previews, which own their whole viewport. */}
         <div key={isStudio ? 'studio' : pathname} className={bare ? undefined : 'route-fade'}>
+        {/* One render error used to blank the whole site — only the mockup lab
+            had a boundary. This covers every route, and shows a CLIENT a plain
+            apology with Nate's contact details rather than a stack trace. */}
+        <AppErrorBoundary pathname={pathname}>
         <Routes>
           <Route exact path="/" element={<Home />} />
           <Route exact path="/about" element={<About />} />
@@ -177,6 +182,7 @@ function AppShell() {
           <Route exact path="/webworks/p/:slug" element={<WebworksPreview />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </AppErrorBoundary>
         </div>
       </Suspense>
       {!bare && <Footer />}
