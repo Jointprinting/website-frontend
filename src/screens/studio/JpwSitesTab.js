@@ -1274,6 +1274,57 @@ export default function JpwSitesTab({ token }) {
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {(tpl?.label || s.templateId)} · {s.businessType || '—'} · updated {fmtRelative(s.updatedAt) || 'just now'}
                       </T>
+                      {/* The care plan that pays for this site. Webworks is a
+                          SUBSCRIPTION business, and the Studio could tell you a
+                          site was live but not whether it was earning — the one
+                          number that matters here. Subscription already carried
+                          siteId/companyKey for this join; nothing used them. */}
+                      <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.6 }}>
+                        {s.plan ? (
+                          <>
+                            <Box sx={{ ...mono, fontSize: 11.5, fontWeight: 800,
+                              color: s.plan.status === 'active' ? D.green : '#fbbf24',
+                              bgcolor: s.plan.status === 'active' ? 'rgba(74,222,128,0.10)' : 'rgba(251,191,36,0.10)',
+                              border: `1px solid ${s.plan.status === 'active' ? 'rgba(74,222,128,0.35)' : 'rgba(251,191,36,0.35)'}`,
+                              px: 0.75, py: 0.15, borderRadius: 999 }}>
+                              ${s.plan.amount}/{s.plan.cadence === 'annual' ? 'yr' : 'mo'}
+                              {s.plan.status !== 'active' ? ` · ${s.plan.status}` : ''}
+                            </Box>
+                            {/* The bit that actually gets forgotten: is THIS
+                                period billed? Same answer the Finances "record
+                                this month's plans" checklist gives — one helper,
+                                so the two surfaces can't disagree. */}
+                            {s.plan.status === 'active' && (
+                              s.plan.recordedThisPeriod ? (
+                                <T sx={{ ...mono, fontSize: 11, color: D.green }}>
+                                  billed {s.plan.currentPeriod}
+                                </T>
+                              ) : (
+                                <T sx={{ ...mono, fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>
+                                  not billed {s.plan.currentPeriod}
+                                </T>
+                              )
+                            )}
+                            <T sx={{ ...mono, fontSize: 11, color: D.faint }}>
+                              {s.plan.label}
+                              {s.plan.nextBillDate ? ` · next ${new Date(s.plan.nextBillDate).toLocaleDateString()}` : ''}
+                            </T>
+                            {s.plan.linkedBy === 'company' && (
+                              <T title="Matched by company, not linked to this site directly"
+                                sx={{ ...mono, fontSize: 10, color: D.faint, opacity: 0.75 }}>~matched</T>
+                            )}
+                          </>
+                        ) : (
+                          <T sx={{ ...mono, fontSize: 11, color: '#fbbf24' }}>
+                            no care plan — this site isn&apos;t earning
+                          </T>
+                        )}
+                        {s.openEdits > 0 && (
+                          <Box sx={{ ...mono, fontSize: 11, fontWeight: 700, color: '#60a5fa' }}>
+                            · {s.openEdits} open edit{s.openEdits === 1 ? '' : 's'}
+                          </Box>
+                        )}
+                      </Stack>
                     </Box>
                     <Stack direction="row" spacing={0.5} alignItems="center" flexShrink={0}>
                       {(s.status === 'preview' || s.status === 'live') && (

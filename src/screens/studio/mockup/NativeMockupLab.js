@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Stack, Typography, IconButton, Button, TextField, MenuItem, CircularProgress, Divider, Autocomplete,
-  Dialog, DialogTitle, DialogContent, Checkbox, Tooltip,
+  Dialog, DialogTitle, DialogContent, Checkbox, Tooltip, SwipeableDrawer, useMediaQuery,
 } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import LinkIcon from '@mui/icons-material/Link';
@@ -27,6 +27,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import TuneIcon from '@mui/icons-material/Tune';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
 import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey, useMobileFullScreen } from '../_shared';
@@ -103,6 +105,13 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   // Phone: dialogs take the whole screen (house pattern) — a PDF preview in a
   // margined box on a 390px screen is unreadable.
   const fsDialog = useMobileFullScreen();
+  // Phone layout: the canvas owns the screen and the tool panels live in a sheet
+  // you pull up. Stacking three columns meant the garment competed for space with
+  // a screenful of controls it was supposed to be the subject of.
+  // Matches the breakpoint the side panels hide at — one source of truth, so the
+  // dock can never appear on a screen that still has the panels (or vice versa).
+  const isPhone = useMediaQuery((t) => t.breakpoints.down('md'));
+  const [sheet, setSheet] = useState('');   // '' | 'tools' | 'info'
   const remoteIdRef = useRef(isNew ? `studio-${uid()}` : (String((item && item.remoteId) || mockup.remoteId || '') || `studio-${uid()}`));
   const p0extra = (!isNew && mockup.pages && mockup.pages[0] && mockup.pages[0]._extra) || {};
   const [meta, setMeta] = useState({
@@ -768,6 +777,232 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
     </Button>
   );
 
+  // The two side panels live as values, not inline JSX, because the SAME markup
+  // has to render in two places: the desktop three-column grid, and a bottom
+  // sheet on a phone. Duplicating them would guarantee they drift.
+  const toolsPanel = (
+    <>
+        <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>GARMENT · {side.toUpperCase()}</Typography>
+        <Stack direction="row" gap={1} sx={{ mb: 1 }}>{uploadBtn(sd.blank ? 'Blank ✓' : 'Blank', 'blank')}{uploadBtn(sd.logo ? 'Logo ✓' : 'Logo', 'logo')}</Stack>
+        {(bgState.offer || bgState.original) && (
+          <Button onClick={bgState.original ? undoBg : stripBg} disabled={bgState.busy} size="small" fullWidth
+            startIcon={bgState.busy ? <CircularProgress size={12} sx={{ color: D.green }} /> : <AutoFixHighIcon sx={{ fontSize: 14 }} />}
+            sx={{ mb: 1, color: bgState.original ? '#fbbf24' : D.green, textTransform: 'none', fontWeight: 700, fontSize: 11,
+              border: `1px solid ${D.line}`, borderRadius: 1.5, '&:hover': { borderColor: D.green } }}>
+            {bgState.original ? 'Undo background removal' : 'Remove solid background'}
+          </Button>
+        )}
+
+        <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.5, mb: 0.75 }}>S&amp;S FINDER</Typography>
+        <Stack direction="row" gap={0.75}>
+          <TextField value={ssStyle} onChange={(e) => setSsStyle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') searchSs(); }}
+            placeholder="Style (e.g. 3001)" size="small" fullWidth sx={{ ...dropInput }} />
+          <IconButton onClick={() => searchSs()} disabled={ssBusy} size="small" sx={{ color: D.green, border: `1px solid ${D.line}`, borderRadius: 1.5 }}>
+            {ssBusy ? <CircularProgress size={14} sx={{ color: D.green }} /> : <SearchIcon sx={{ fontSize: 17 }} />}
+          </IconButton>
+        </Stack>
+        <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 0.25 }}>
+          {ssStyle.trim() && (
+            <Typography component="a" href={`https://www.ssactivewear.com/ps/?q=${encodeURIComponent(ssStyle.trim())}`} target="_blank" rel="noreferrer"
+              sx={{ fontSize: 10, color: D.faint, textDecoration: 'none', '&:hover': { color: D.green } }}>Open on S&amp;S ↗</Typography>
+          )}
+          <Typography component="button" onClick={() => setSsManual((v) => !v)}
+            sx={{ background: 'none', border: 'none', p: 0, cursor: 'pointer', fontSize: 10, color: ssManual ? D.green : D.faint, fontWeight: 700 }}>
+            {ssManual ? 'auto search' : 'paste URLs'}
+          </Typography>
+        </Stack>
+        {ssManual && (
+          <Stack gap={0.6} sx={{ mt: 0.6 }}>
+            <TextField value={ssFrontUrl} onChange={(e) => setSsFrontUrl(e.target.value)} placeholder="Front image URL (right-click on S&S → copy image address)" size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 10.5 } }} />
+            <TextField value={ssBackUrl} onChange={(e) => setSsBackUrl(e.target.value)} placeholder="Back image URL" size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 10.5 } }} />
+            <Button onClick={applyManualUrls} disabled={!ssFrontUrl.trim() && !ssBackUrl.trim()} size="small"
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, border: `1px solid ${D.line}`, borderRadius: 1 }}>Apply to canvas</Button>
+          </Stack>
+        )}
+        {ssMsg && <Typography sx={{ fontSize: 10.5, color: ssMsg.startsWith('✗') ? '#f87171' : D.faint, mt: 0.5 }}>{ssMsg}</Typography>}
+        {ssColors && (
+          <Stack gap={0.4} sx={{ mt: 0.75, maxHeight: 200, overflowY: 'auto', ...scrollbar }}>
+            {ssColors.map((c, i) => (
+              <Stack key={i} direction="row" alignItems="center" gap={0.25}>
+                {c.pick === 'color' && (
+                  <Checkbox size="small" checked={!!cwPick[c.color || i]}
+                    onChange={(e) => setCwPick((m) => { const n = { ...m }; if (e.target.checked) n[c.color || i] = c; else delete n[c.color || i]; return n; })}
+                    title="Select for one-click colorways"
+                    sx={{ p: 0.25, color: D.faint, '&.Mui-checked': { color: D.green } }} />
+                )}
+                <Button onClick={() => (c.pick === 'style' ? searchSs(c.styleID) : applySsColor(c))} size="small" fullWidth
+                  sx={{ justifyContent: 'flex-start', color: D.text, textTransform: 'none', fontSize: 11, border: `1px solid ${D.line}`, borderRadius: 1, px: 1, '&:hover': { borderColor: D.green } }}>
+                  {(c.swatch1 || c.swatch) && <Box component="span" sx={{ width: 10, height: 10, borderRadius: '50%', mr: 0.75, flex: 'none', border: `1px solid ${D.line}`, bgcolor: c.swatch1 || c.swatch }} />}
+                  {c.pick === 'style' ? (c.label || c.styleName) : (c.color || 'color')}
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        )}
+        {cwCount > 0 && (
+          <Button onClick={makeColorways} disabled={!!cwBusy || !orderId || !sd.logo} fullWidth size="small"
+            title={!orderId ? 'Link a project first' : !sd.logo ? 'Place a logo first — colorways reuse this placement' : ''}
+            startIcon={cwBusy ? <CircularProgress size={12} sx={{ color: '#08130c' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
+            sx={{ mt: 0.75, bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, fontSize: 11, borderRadius: 1.5, '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>
+            Create {cwCount} colorway{cwCount === 1 ? '' : 's'} (A/B/C…)
+          </Button>
+        )}
+
+        <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>PRODUCT</Typography>
+        <TextField select size="small" fullWidth value={page.category || 'generic'}
+          onChange={(e) => setPageField('category', e.target.value)} sx={{ ...dropInput }}>
+          {CATEGORY_ORDER.map((k) => <MenuItem key={k} value={k}>{PRINT_AREAS[k].label}</MenuItem>)}
+        </TextField>
+        {area && (
+          <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.5 }}>
+            Max {area.maxWIn}″ × {area.maxHIn}″ · {area.method} · dashed box = printable
+          </Typography>
+        )}
+
+        {sd.logo && (
+          <>
+            <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>AUTO-PLACEMENT</Typography>
+            {area ? (
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6 }}>
+                {area.presets.map((p) => (
+                  <Button key={p.label} onClick={() => canvasRef.current && canvasRef.current.applyAreaPreset(p)} size="small"
+                    sx={ctl()}>
+                    {p.label} {p.wIn}″
+                  </Button>
+                ))}
+              </Box>
+            ) : (
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 0.6 }}>
+                {PRESET_ORDER.map((k) => (
+                  <Button key={k} onClick={() => canvasRef.current && canvasRef.current.applyPreset(PRESETS[k])} size="small"
+                    sx={ctl()}>{PRESETS[k].label}</Button>
+                ))}
+              </Box>
+            )}
+            <Stack direction="row" gap={0.5} alignItems="center" sx={{ mt: 1 }}>
+              <Typography sx={{ fontSize: 10, color: D.faint, fontWeight: 700 }}>Nudge</Typography>
+              {[['←', -2, 0], ['→', 2, 0], ['↑', 0, -2], ['↓', 0, 2]].map(([l, dx, dy]) => (
+                <Button key={l} onClick={() => canvasRef.current && canvasRef.current.nudge(dx, dy)} size="small"
+                  sx={ctl({ minWidth: { xs: 44, md: 30 }, fontSize: 15, fontWeight: 800, px: 0 })}>{l}</Button>
+              ))}
+              <Button onClick={() => canvasRef.current && canvasRef.current.resetPosition()} size="small"
+                sx={ctl({ minWidth: { xs: 44, md: 30 }, color: D.muted, fontSize: 14, fontWeight: 700, px: 0 })}>↺</Button>
+            </Stack>
+            {inchInfo && (
+              <Typography sx={{ ...mono, fontSize: 10.5, mt: 0.75, color: inchInfo.atMax ? '#fbbf24' : D.green }}>
+                {inchInfo.wIn.toFixed(2)}″ × {inchInfo.hIn.toFixed(2)}″
+                {inchInfo.atMax ? ` · at the ${inchInfo.method} max` : ''}
+              </Typography>
+            )}
+          </>
+        )}
+    </>
+  );
+
+  const infoPanel = (
+    <>
+        <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>MOCKUP INFO</Typography>
+        <Stack gap={1.25}>
+          <Autocomplete
+            size="small"
+            options={projects}
+            getOptionLabel={(o) => o.label || ''}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            value={projects.find((p) => p.id === proj.id) || (proj.id ? { id: proj.id, label: proj.label || `#${proj.projectNumber}` } : null)}
+            onChange={(_, v) => pickProject(v)}
+            renderInput={(params) => (
+              <TextField {...params} label="Project *" placeholder="Type a project — #133 Dredo, Bleu Leaf"
+                sx={{ ...dropInput }} error={!proj.id}
+                helperText={!proj.id ? 'Required — the number + order link come from it' : undefined} />
+            )}
+            slotProps={{ paper: { sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}` } } }}
+          />
+          {field('Client', meta.client, (v) => setMeta((m) => ({ ...m, client: v })))}
+          {field('Title', meta.title, (v) => setMeta((m) => ({ ...m, title: v })))}
+          {field('Subtitle', meta.subtitle, (v) => setMeta((m) => ({ ...m, subtitle: v })))}
+          <Stack direction="row" gap={1.25}>
+            <TextField label="Mockup # · auto" value={mockupNum || '— on save —'} size="small" fullWidth
+              InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
+            <TextField label="PDF · auto" value={mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : '—'} size="small" fullWidth
+              InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
+          </Stack>
+          {field('Notes', meta.notes, (v) => setMeta((m) => ({ ...m, notes: v })), { multiline: true })}
+          {field('Template', page.template, (v) => setPageField('template', Number(v)), { select: true, children: [<MenuItem key={1} value={1}>Front + Back</MenuItem>, <MenuItem key={2} value={2}>Front only</MenuItem>] })}
+          <Divider sx={{ borderColor: D.line }} />
+          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{side} print spec</Typography>
+          {field('Type', page.print[side].type, (v) => setPrint('type', v))}
+          <Stack direction="row" gap={0.5} alignItems="center">
+            <TextField label={`Dimensions${dimsLinked ? ' · linked to logo' : ''}`} size="small" fullWidth
+              value={dimsDraft != null ? dimsDraft : page.print[side].dims}
+              onChange={(e) => setDimsDraft(e.target.value)}
+              onFocus={() => setDimsDraft(page.print[side].dims)}
+              onBlur={() => { if (dimsDraft != null) applyDimsText(dimsDraft); setDimsDraft(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.target.blur(); } }}
+              placeholder={area ? 'e.g. 10 (inches wide)' : ''}
+              sx={{ ...dropInput }} />
+            <Tooltip title={dimsLinked
+              ? 'Linked: typing a size resizes the logo; moving the logo rewrites this text. Click to unlock and edit them separately.'
+              : 'Unlocked: this text and the logo size are independent. Click to re-link.'}>
+              <IconButton onClick={() => setDimsLinked((v) => !v)} size="small"
+                sx={{ color: dimsLinked ? D.green : '#fbbf24', border: `1px solid ${D.line}`, borderRadius: 1.5 }}>
+                {dimsLinked ? <LinkIcon sx={{ fontSize: 15 }} /> : <LinkOffIcon sx={{ fontSize: 15 }} />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          {field('Location', page.print[side].loc, (v) => setPrint('loc', v))}
+          <Divider sx={{ borderColor: D.line }} />
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{side} logo colors</Typography>
+            <Button onClick={autoDetect} disabled={inkBusy} size="small"
+              sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 1 }}>
+              {inkBusy ? <CircularProgress size={12} sx={{ color: D.green }} /> : '✨ Auto-detect'}
+            </Button>
+          </Stack>
+          {!isScreenPrintType(page.print[side].type) && (
+            <Typography sx={{ color: D.faint, fontSize: 10.5, mt: -0.75 }}>
+              {page.print[side].type} doesn't price by ink color — palette optional.
+            </Typography>
+          )}
+          {inkMsg && <Typography sx={{ color: D.muted, fontSize: 11, mt: -0.5 }}>{inkMsg}</Typography>}
+          {sideColors.map((c, i) => (
+            <Stack key={i} direction="row" gap={0.75} alignItems="center" sx={{ mt: i === 0 ? 0 : -0.75 }}>
+              <Box component="input" type="color" value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex : '#000000'}
+                onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
+                sx={{ width: 26, height: 26, p: 0, border: `1px solid ${D.line}`, borderRadius: 1, bgcolor: 'transparent', cursor: 'pointer' }} />
+              <TextField value={c.hex} onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
+                size="small" sx={{ ...dropInput, width: 92, '& input': { ...mono, fontSize: 11 } }} />
+              <TextField value={c.name} placeholder="name (shows in PDF)"
+                onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 11 } }} />
+              {sd.logo && isScreenPrintType(page.print[side].type) && (
+                <Tooltip title="Swap this ink across the actual artwork (screen print)">
+                  <IconButton onClick={() => startInkSwap(i)} size="small" sx={{ color: D.faint, '&:hover': { color: D.green } }}>
+                    <Typography component="span" sx={{ fontSize: 12, fontWeight: 800 }}>⇄</Typography>
+                  </IconButton>
+                </Tooltip>
+              )}
+              <IconButton onClick={() => setColors(sideColors.filter((_, j) => j !== i))} size="small" sx={{ color: D.faint, '&:hover': { color: '#f87171' } }}>
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Stack>
+          ))}
+          <Box component="input" type="color" ref={inkSwapRef}
+            onChange={(e) => finishInkSwap(e.target.value)}
+            sx={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
+          {sideColors.length < INK.maxInks && (
+            <Button onClick={() => setColors([...sideColors, { hex: '#000000', name: '' }])} size="small"
+              sx={{ color: D.faint, textTransform: 'none', fontWeight: 600, fontSize: 11, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
+              + Add a color
+            </Button>
+          )}
+          {canDuplicate && (
+            <Button onClick={duplicate} disabled={dupBusy} size="small" startIcon={dupBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <ContentCopyIcon sx={{ fontSize: 15 }} />}
+              sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, mt: 1, '&:hover': { borderColor: D.green, color: D.green } }}>Add a variation</Button>
+          )}
+        </Stack>
+    </>
+  );
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: D.bg, display: 'flex', flexDirection: 'column', ...scrollbar }}>
       {/* Header */}
@@ -819,12 +1054,14 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         <Button onClick={openPreview} disabled={pvBusy} size="small"
           startIcon={pvBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <VisibilityOutlinedIcon sx={{ fontSize: 15 }} />}
           sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5, '&:hover': { borderColor: D.green, color: D.green } }}>Preview</Button>
+        {/* PDF and Save live in the phone dock, always in reach — repeating them
+            up here just makes the header row scroll for no gain. */}
         <Button onClick={exportPdf} disabled={pdfBusy} size="small" startIcon={pdfBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
-          sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5, '&:hover': { borderColor: D.green, color: D.green } }}>PDF</Button>
+          sx={{ display: { xs: 'none', md: 'inline-flex' }, color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, px: 1.5, '&:hover': { borderColor: D.green, color: D.green } }}>PDF</Button>
         <Button onClick={save} disabled={saveState === 'saving' || !orderId}
           title={!orderId ? 'Pick a project first — the mockup number and order link come from it' : 'Autosave is on — this just saves right now'}
           startIcon={saveState === 'saving' ? <CircularProgress size={13} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 16 }} />}
-          sx={{ bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, whiteSpace: 'nowrap', '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>Save now</Button>
+          sx={{ display: { xs: 'none', md: 'inline-flex' }, bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, px: 2, borderRadius: 999, whiteSpace: 'nowrap', '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>Save now</Button>
         </Stack>
       </Stack>
 
@@ -835,153 +1072,47 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
           and leaves the desktop three-column layout exactly as it was. */}
       <Box sx={{ flex: 1, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '236px 1fr 300px' }, gap: 0, overflow: 'hidden' }}>
         {/* Left — garment / logo / S&S / auto-placement */}
-        <Box sx={{ borderRight: { md: `1px solid ${D.line}` }, p: 1.5, overflowY: 'auto',
-          order: { xs: 2, md: 0 }, ...scrollbar }}>
-          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>GARMENT · {side.toUpperCase()}</Typography>
-          <Stack direction="row" gap={1} sx={{ mb: 1 }}>{uploadBtn(sd.blank ? 'Blank ✓' : 'Blank', 'blank')}{uploadBtn(sd.logo ? 'Logo ✓' : 'Logo', 'logo')}</Stack>
-          {(bgState.offer || bgState.original) && (
-            <Button onClick={bgState.original ? undoBg : stripBg} disabled={bgState.busy} size="small" fullWidth
-              startIcon={bgState.busy ? <CircularProgress size={12} sx={{ color: D.green }} /> : <AutoFixHighIcon sx={{ fontSize: 14 }} />}
-              sx={{ mb: 1, color: bgState.original ? '#fbbf24' : D.green, textTransform: 'none', fontWeight: 700, fontSize: 11,
-                border: `1px solid ${D.line}`, borderRadius: 1.5, '&:hover': { borderColor: D.green } }}>
-              {bgState.original ? 'Undo background removal' : 'Remove solid background'}
-            </Button>
-          )}
+        <Box id="jp-lab-tools" sx={{ borderRight: { md: `1px solid ${D.line}` }, p: 1.5, overflowY: 'auto',
+          display: { xs: 'none', md: 'block' }, ...scrollbar }}>{toolsPanel}</Box>
 
-          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.5, mb: 0.75 }}>S&amp;S FINDER</Typography>
-          <Stack direction="row" gap={0.75}>
-            <TextField value={ssStyle} onChange={(e) => setSsStyle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') searchSs(); }}
-              placeholder="Style (e.g. 3001)" size="small" fullWidth sx={{ ...dropInput }} />
-            <IconButton onClick={() => searchSs()} disabled={ssBusy} size="small" sx={{ color: D.green, border: `1px solid ${D.line}`, borderRadius: 1.5 }}>
-              {ssBusy ? <CircularProgress size={14} sx={{ color: D.green }} /> : <SearchIcon sx={{ fontSize: 17 }} />}
-            </IconButton>
-          </Stack>
-          <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 0.25 }}>
-            {ssStyle.trim() && (
-              <Typography component="a" href={`https://www.ssactivewear.com/ps/?q=${encodeURIComponent(ssStyle.trim())}`} target="_blank" rel="noreferrer"
-                sx={{ fontSize: 10, color: D.faint, textDecoration: 'none', '&:hover': { color: D.green } }}>Open on S&amp;S ↗</Typography>
-            )}
-            <Typography component="button" onClick={() => setSsManual((v) => !v)}
-              sx={{ background: 'none', border: 'none', p: 0, cursor: 'pointer', fontSize: 10, color: ssManual ? D.green : D.faint, fontWeight: 700 }}>
-              {ssManual ? 'auto search' : 'paste URLs'}
-            </Typography>
-          </Stack>
-          {ssManual && (
-            <Stack gap={0.6} sx={{ mt: 0.6 }}>
-              <TextField value={ssFrontUrl} onChange={(e) => setSsFrontUrl(e.target.value)} placeholder="Front image URL (right-click on S&S → copy image address)" size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 10.5 } }} />
-              <TextField value={ssBackUrl} onChange={(e) => setSsBackUrl(e.target.value)} placeholder="Back image URL" size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 10.5 } }} />
-              <Button onClick={applyManualUrls} disabled={!ssFrontUrl.trim() && !ssBackUrl.trim()} size="small"
-                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, border: `1px solid ${D.line}`, borderRadius: 1 }}>Apply to canvas</Button>
-            </Stack>
-          )}
-          {ssMsg && <Typography sx={{ fontSize: 10.5, color: ssMsg.startsWith('✗') ? '#f87171' : D.faint, mt: 0.5 }}>{ssMsg}</Typography>}
-          {ssColors && (
-            <Stack gap={0.4} sx={{ mt: 0.75, maxHeight: 200, overflowY: 'auto', ...scrollbar }}>
-              {ssColors.map((c, i) => (
-                <Stack key={i} direction="row" alignItems="center" gap={0.25}>
-                  {c.pick === 'color' && (
-                    <Checkbox size="small" checked={!!cwPick[c.color || i]}
-                      onChange={(e) => setCwPick((m) => { const n = { ...m }; if (e.target.checked) n[c.color || i] = c; else delete n[c.color || i]; return n; })}
-                      title="Select for one-click colorways"
-                      sx={{ p: 0.25, color: D.faint, '&.Mui-checked': { color: D.green } }} />
-                  )}
-                  <Button onClick={() => (c.pick === 'style' ? searchSs(c.styleID) : applySsColor(c))} size="small" fullWidth
-                    sx={{ justifyContent: 'flex-start', color: D.text, textTransform: 'none', fontSize: 11, border: `1px solid ${D.line}`, borderRadius: 1, px: 1, '&:hover': { borderColor: D.green } }}>
-                    {(c.swatch1 || c.swatch) && <Box component="span" sx={{ width: 10, height: 10, borderRadius: '50%', mr: 0.75, flex: 'none', border: `1px solid ${D.line}`, bgcolor: c.swatch1 || c.swatch }} />}
-                    {c.pick === 'style' ? (c.label || c.styleName) : (c.color || 'color')}
-                  </Button>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-          {cwCount > 0 && (
-            <Button onClick={makeColorways} disabled={!!cwBusy || !orderId || !sd.logo} fullWidth size="small"
-              title={!orderId ? 'Link a project first' : !sd.logo ? 'Place a logo first — colorways reuse this placement' : ''}
-              startIcon={cwBusy ? <CircularProgress size={12} sx={{ color: '#08130c' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
-              sx={{ mt: 0.75, bgcolor: D.green, color: '#08130c', textTransform: 'none', fontWeight: 800, fontSize: 11, borderRadius: 1.5, '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>
-              Create {cwCount} colorway{cwCount === 1 ? '' : 's'} (A/B/C…)
-            </Button>
-          )}
-
-          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>PRODUCT</Typography>
-          <TextField select size="small" fullWidth value={page.category || 'generic'}
-            onChange={(e) => setPageField('category', e.target.value)} sx={{ ...dropInput }}>
-            {CATEGORY_ORDER.map((k) => <MenuItem key={k} value={k}>{PRINT_AREAS[k].label}</MenuItem>)}
-          </TextField>
-          {area && (
-            <Typography sx={{ color: D.faint, fontSize: 10, mt: 0.5 }}>
-              Max {area.maxWIn}″ × {area.maxHIn}″ · {area.method} · dashed box = printable
-            </Typography>
-          )}
-
-          {sd.logo && (
-            <>
-              <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>AUTO-PLACEMENT</Typography>
-              {area ? (
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6 }}>
-                  {area.presets.map((p) => (
-                    <Button key={p.label} onClick={() => canvasRef.current && canvasRef.current.applyAreaPreset(p)} size="small"
-                      sx={ctl()}>
-                      {p.label} {p.wIn}″
-                    </Button>
-                  ))}
-                </Box>
-              ) : (
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 0.6 }}>
-                  {PRESET_ORDER.map((k) => (
-                    <Button key={k} onClick={() => canvasRef.current && canvasRef.current.applyPreset(PRESETS[k])} size="small"
-                      sx={ctl()}>{PRESETS[k].label}</Button>
-                  ))}
-                </Box>
-              )}
-              <Stack direction="row" gap={0.5} alignItems="center" sx={{ mt: 1 }}>
-                <Typography sx={{ fontSize: 10, color: D.faint, fontWeight: 700 }}>Nudge</Typography>
-                {[['←', -2, 0], ['→', 2, 0], ['↑', 0, -2], ['↓', 0, 2]].map(([l, dx, dy]) => (
-                  <Button key={l} onClick={() => canvasRef.current && canvasRef.current.nudge(dx, dy)} size="small"
-                    sx={ctl({ minWidth: { xs: 44, md: 30 }, fontSize: 15, fontWeight: 800, px: 0 })}>{l}</Button>
-                ))}
-                <Button onClick={() => canvasRef.current && canvasRef.current.resetPosition()} size="small"
-                  sx={ctl({ minWidth: { xs: 44, md: 30 }, color: D.muted, fontSize: 14, fontWeight: 700, px: 0 })}>↺</Button>
-              </Stack>
-              {inchInfo && (
-                <Typography sx={{ ...mono, fontSize: 10.5, mt: 0.75, color: inchInfo.atMax ? '#fbbf24' : D.green }}>
-                  {inchInfo.wIn.toFixed(2)}″ × {inchInfo.hIn.toFixed(2)}″
-                  {inchInfo.atMax ? ` · at the ${inchInfo.method} max` : ''}
-                </Typography>
-              )}
-            </>
-          )}
-        </Box>
-
-        {/* Center — canvas + side/page controls */}
+        {/* Center — the STAGE. The garment is the subject of this screen, so it
+            gets a lit surface of its own and one control strip underneath.
+            Page pills used to sit above the canvas and the front/back toggle
+            below it, which split one decision ("which view am I looking at")
+            across two rows on opposite sides of the artwork. */}
         <Box sx={{ p: { xs: 1.5, md: 2 }, overflow: 'auto', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', order: { xs: 1, md: 0 },
-          // On a phone the canvas gets its own breathing room and a soft edge, so
-          // it reads as the work surface rather than another stacked panel.
-          borderBottom: { xs: `1px solid ${D.line}`, md: 'none' }, ...scrollbar }}>
-          <Stack direction="row" gap={0.75} sx={{ mb: 1 }} flexWrap="wrap" justifyContent="center">
-            {pages.map((_, i) => (
-              <Button key={i} onClick={() => { setPageIdx(i); setSide('front'); }} size="small"
-                sx={{ minWidth: 0, px: 1.25, fontWeight: 800, fontSize: 11, borderRadius: 1.5, color: i === pageIdx ? D.green : D.muted, bgcolor: i === pageIdx ? 'rgba(74,222,128,0.10)' : 'transparent', border: `1px solid ${i === pageIdx ? 'rgba(74,222,128,0.4)' : D.line}` }}>Pg {i + 1}</Button>
-            ))}
-            <IconButton onClick={addPage} size="small" sx={{ color: D.muted, border: `1px dashed ${D.line}`, borderRadius: 1.5 }}><AddIcon sx={{ fontSize: 14 }} /></IconButton>
-            {pages.length > 1 && <IconButton onClick={removePage} size="small" sx={{ color: D.muted, '&:hover': { color: '#f87171' } }}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>}
-          </Stack>
+          alignItems: 'center', justifyContent: { xs: 'center', md: 'flex-start' },
+          // Phone: the canvas IS the screen. Room left at the bottom for the
+          // dock, so the artwork is never hidden behind it.
+          minHeight: { xs: 'calc(100vh - 190px)', md: 'auto' },
+          pb: { xs: 9, md: 2 }, ...scrollbar }}>
           <Box ref={cvWrapRef} sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <Box sx={{ border: `1px solid ${D.line}`, borderRadius: 2, overflow: 'hidden' }}>
+            <Box sx={{
+              borderRadius: 3, overflow: 'hidden', border: `1px solid ${D.line}`,
+              // A soft top-lit surface rather than a flat bordered rectangle —
+              // the garment sits ON something instead of floating in the panel.
+              background: 'radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 60%)',
+              boxShadow: '0 18px 44px -22px rgba(0,0,0,0.85)',
+            }}>
               <MockupCanvas ref={canvasRef} key={canvasKey} width={STAGE_W} height={STAGE_H} displayScale={cvScale}
                 blankSrc={sd.blank || sd.composite || null} logoSrc={sd.logo || null} pos={sd.pos}
                 area={area} onChange={setPos} />
             </Box>
           </Box>
-          <Stack direction="row" gap={1} sx={{ mt: 1.5 }}>
+
+          {/* One strip: which side, then which page. Both are "what am I looking
+              at", so they belong together and below the thing they change. */}
+          <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" justifyContent="center" useFlexGap
+            sx={{ mt: 1.5, p: 0.6, borderRadius: 999, bgcolor: D.panel, border: `1px solid ${D.line}` }}>
             {['front', 'back'].map((s) => {
               const on = s === side;
               const sdx = page.sides[s];
               const hasArt = !!(sdx.blank || sdx.logo || sdx.composite);
               return (
                 <Button key={s} onClick={() => setSide(s)} size="small"
-                  sx={{ textTransform: 'capitalize', fontWeight: 800, fontSize: 12, px: 2, color: on ? '#08130c' : D.text, bgcolor: on ? D.green : 'transparent', border: `1px solid ${on ? D.green : D.line}`, borderRadius: 999, '&:hover': { bgcolor: on ? D.green : D.panelHi } }}>
+                  sx={{ textTransform: 'capitalize', fontWeight: 800, fontSize: 12, px: 2, minHeight: { xs: 38, md: 30 },
+                    color: on ? '#08130c' : D.text, bgcolor: on ? D.green : 'transparent',
+                    borderRadius: 999, '&:hover': { bgcolor: on ? D.green : D.panelHi } }}>
                   {s}
                   {/* dot = this side carries art — no surprise-empty flips */}
                   <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', ml: 0.75,
@@ -990,118 +1121,94 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
                 </Button>
               );
             })}
+            <Divider orientation="vertical" flexItem sx={{ borderColor: D.line, my: 0.5 }} />
+            {pages.map((_, i) => (
+              <Button key={i} onClick={() => { setPageIdx(i); setSide('front'); }} size="small"
+                sx={{ minWidth: 0, px: 1.25, minHeight: { xs: 38, md: 30 }, fontWeight: 800, fontSize: 11.5, borderRadius: 999,
+                  color: i === pageIdx ? D.green : D.muted,
+                  bgcolor: i === pageIdx ? 'rgba(74,222,128,0.12)' : 'transparent',
+                  '&:hover': { bgcolor: D.panelHi } }}>Pg {i + 1}</Button>
+            ))}
+            <IconButton onClick={addPage} size="small" title="Add a page"
+              sx={{ color: D.muted, borderRadius: 999, '&:hover': { color: D.green } }}><AddIcon sx={{ fontSize: 16 }} /></IconButton>
+            {pages.length > 1 && (
+              <IconButton onClick={removePage} size="small" title="Remove this page"
+                sx={{ color: D.muted, borderRadius: 999, '&:hover': { color: '#f87171' } }}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
+            )}
           </Stack>
+
           {!sd.logo && (
             <Typography sx={{ color: D.faint, fontSize: 12, mt: 1.5, textAlign: 'center', maxWidth: 340 }}>
-              {sd.composite ? 'This side has only the flattened image (synced). Upload the logo to re-place it, or use S&S to load a fresh blank.' : 'Upload a blank + logo (or use the S&S finder), then drag it on the garment.'}
+              {sd.composite
+                ? 'This side has only the flattened image (synced). Upload the logo to re-place it, or use S&S to load a fresh blank.'
+                : isPhone
+                  ? 'Tap Tools below to add a blank + logo (or find one on S&S), then drag it on the garment.'
+                  : 'Upload a blank + logo (or use the S&S finder), then drag it on the garment.'}
             </Typography>
           )}
         </Box>
 
         {/* Right — mockup info */}
-        <Box sx={{ borderLeft: { md: `1px solid ${D.line}` }, p: 1.75, overflowY: 'auto',
-          order: { xs: 3, md: 0 }, ...scrollbar }}>
-          <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>MOCKUP INFO</Typography>
-          <Stack gap={1.25}>
-            <Autocomplete
-              size="small"
-              options={projects}
-              getOptionLabel={(o) => o.label || ''}
-              isOptionEqualToValue={(o, v) => o.id === v.id}
-              value={projects.find((p) => p.id === proj.id) || (proj.id ? { id: proj.id, label: proj.label || `#${proj.projectNumber}` } : null)}
-              onChange={(_, v) => pickProject(v)}
-              renderInput={(params) => (
-                <TextField {...params} label="Project *" placeholder="Type a project — #133 Dredo, Bleu Leaf"
-                  sx={{ ...dropInput }} error={!proj.id}
-                  helperText={!proj.id ? 'Required — the number + order link come from it' : undefined} />
-              )}
-              slotProps={{ paper: { sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}` } } }}
-            />
-            {field('Client', meta.client, (v) => setMeta((m) => ({ ...m, client: v })))}
-            {field('Title', meta.title, (v) => setMeta((m) => ({ ...m, title: v })))}
-            {field('Subtitle', meta.subtitle, (v) => setMeta((m) => ({ ...m, subtitle: v })))}
-            <Stack direction="row" gap={1.25}>
-              <TextField label="Mockup # · auto" value={mockupNum || '— on save —'} size="small" fullWidth
-                InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
-              <TextField label="PDF · auto" value={mockupNum ? `${mockupNum.replace(/^#/, '')}.pdf` : '—'} size="small" fullWidth
-                InputProps={{ readOnly: true }} sx={{ ...dropInput, opacity: 0.8 }} />
-            </Stack>
-            {field('Notes', meta.notes, (v) => setMeta((m) => ({ ...m, notes: v })), { multiline: true })}
-            {field('Template', page.template, (v) => setPageField('template', Number(v)), { select: true, children: [<MenuItem key={1} value={1}>Front + Back</MenuItem>, <MenuItem key={2} value={2}>Front only</MenuItem>] })}
-            <Divider sx={{ borderColor: D.line }} />
-            <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{side} print spec</Typography>
-            {field('Type', page.print[side].type, (v) => setPrint('type', v))}
-            <Stack direction="row" gap={0.5} alignItems="center">
-              <TextField label={`Dimensions${dimsLinked ? ' · linked to logo' : ''}`} size="small" fullWidth
-                value={dimsDraft != null ? dimsDraft : page.print[side].dims}
-                onChange={(e) => setDimsDraft(e.target.value)}
-                onFocus={() => setDimsDraft(page.print[side].dims)}
-                onBlur={() => { if (dimsDraft != null) applyDimsText(dimsDraft); setDimsDraft(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.target.blur(); } }}
-                placeholder={area ? 'e.g. 10 (inches wide)' : ''}
-                sx={{ ...dropInput }} />
-              <Tooltip title={dimsLinked
-                ? 'Linked: typing a size resizes the logo; moving the logo rewrites this text. Click to unlock and edit them separately.'
-                : 'Unlocked: this text and the logo size are independent. Click to re-link.'}>
-                <IconButton onClick={() => setDimsLinked((v) => !v)} size="small"
-                  sx={{ color: dimsLinked ? D.green : '#fbbf24', border: `1px solid ${D.line}`, borderRadius: 1.5 }}>
-                  {dimsLinked ? <LinkIcon sx={{ fontSize: 15 }} /> : <LinkOffIcon sx={{ fontSize: 15 }} />}
-                </IconButton>
-              </Tooltip>
-            </Stack>
-            {field('Location', page.print[side].loc, (v) => setPrint('loc', v))}
-            <Divider sx={{ borderColor: D.line }} />
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{side} logo colors</Typography>
-              <Button onClick={autoDetect} disabled={inkBusy} size="small"
-                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11, minWidth: 0, px: 1 }}>
-                {inkBusy ? <CircularProgress size={12} sx={{ color: D.green }} /> : '✨ Auto-detect'}
-              </Button>
-            </Stack>
-            {!isScreenPrintType(page.print[side].type) && (
-              <Typography sx={{ color: D.faint, fontSize: 10.5, mt: -0.75 }}>
-                {page.print[side].type} doesn't price by ink color — palette optional.
-              </Typography>
-            )}
-            {inkMsg && <Typography sx={{ color: D.muted, fontSize: 11, mt: -0.5 }}>{inkMsg}</Typography>}
-            {sideColors.map((c, i) => (
-              <Stack key={i} direction="row" gap={0.75} alignItems="center" sx={{ mt: i === 0 ? 0 : -0.75 }}>
-                <Box component="input" type="color" value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex : '#000000'}
-                  onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
-                  sx={{ width: 26, height: 26, p: 0, border: `1px solid ${D.line}`, borderRadius: 1, bgcolor: 'transparent', cursor: 'pointer' }} />
-                <TextField value={c.hex} onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
-                  size="small" sx={{ ...dropInput, width: 92, '& input': { ...mono, fontSize: 11 } }} />
-                <TextField value={c.name} placeholder="name (shows in PDF)"
-                  onChange={(e) => setColors(sideColors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                  size="small" fullWidth sx={{ ...dropInput, '& input': { fontSize: 11 } }} />
-                {sd.logo && isScreenPrintType(page.print[side].type) && (
-                  <Tooltip title="Swap this ink across the actual artwork (screen print)">
-                    <IconButton onClick={() => startInkSwap(i)} size="small" sx={{ color: D.faint, '&:hover': { color: D.green } }}>
-                      <Typography component="span" sx={{ fontSize: 12, fontWeight: 800 }}>⇄</Typography>
-                    </IconButton>
-                  </Tooltip>
-                )}
-                <IconButton onClick={() => setColors(sideColors.filter((_, j) => j !== i))} size="small" sx={{ color: D.faint, '&:hover': { color: '#f87171' } }}>
-                  <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Stack>
-            ))}
-            <Box component="input" type="color" ref={inkSwapRef}
-              onChange={(e) => finishInkSwap(e.target.value)}
-              sx={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
-            {sideColors.length < INK.maxInks && (
-              <Button onClick={() => setColors([...sideColors, { hex: '#000000', name: '' }])} size="small"
-                sx={{ color: D.faint, textTransform: 'none', fontWeight: 600, fontSize: 11, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
-                + Add a color
-              </Button>
-            )}
-            {canDuplicate && (
-              <Button onClick={duplicate} disabled={dupBusy} size="small" startIcon={dupBusy ? <CircularProgress size={13} sx={{ color: D.green }} /> : <ContentCopyIcon sx={{ fontSize: 15 }} />}
-                sx={{ color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 12, border: `1px solid ${D.line}`, borderRadius: 999, mt: 1, '&:hover': { borderColor: D.green, color: D.green } }}>Add a variation</Button>
-            )}
-          </Stack>
-        </Box>
+        <Box id="jp-lab-info" sx={{ borderLeft: { md: `1px solid ${D.line}` }, p: 1.75, overflowY: 'auto',
+          display: { xs: 'none', md: 'block' }, ...scrollbar }}>{infoPanel}</Box>
       </Box>
+
+      {/* ── Phone dock ───────────────────────────────────────────────────────
+          The two side panels are ~220 lines of controls each. Stacked under the
+          canvas on a phone they buried the artwork; hidden with no way back
+          they'd be gone. So they move into a sheet reached from a fixed dock —
+          the canvas keeps the screen, the controls are one tap away, and the
+          dock also carries the two most-wanted actions (a mockup you can't
+          save or PDF from your phone is a mockup stuck on your phone). */}
+      <Stack direction="row" spacing={1} alignItems="center"
+        sx={{ display: { xs: 'flex', md: 'none' }, position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 1200,
+          px: 1.25, py: 1, bgcolor: D.panel, borderTop: `1px solid ${D.line}`,
+          // Clear of the iOS home indicator, or the buttons sit under it.
+          pb: 'calc(8px + env(safe-area-inset-bottom))',
+          boxShadow: '0 -10px 30px -18px rgba(0,0,0,0.9)' }}>
+        <Button onClick={() => setSheet('tools')} startIcon={<TuneIcon sx={{ fontSize: 17 }} />}
+          sx={{ flex: 1, minHeight: 44, color: D.text, textTransform: 'none', fontWeight: 700, fontSize: 13,
+            border: `1px solid ${D.line}`, borderRadius: 999 }}>Tools</Button>
+        <Button onClick={() => setSheet('info')} startIcon={<DescriptionOutlinedIcon sx={{ fontSize: 17 }} />}
+          sx={{ flex: 1, minHeight: 44, color: proj.id ? D.text : '#fbbf24', textTransform: 'none', fontWeight: 700, fontSize: 13,
+            border: `1px solid ${proj.id ? D.line : 'rgba(251,191,36,0.5)'}`, borderRadius: 999 }}>
+          {proj.id ? 'Details' : 'Details !'}
+        </Button>
+        <IconButton onClick={exportPdf} disabled={pdfBusy} title="Export PDF"
+          sx={{ minWidth: 44, minHeight: 44, color: D.text, border: `1px solid ${D.line}`, borderRadius: 999 }}>
+          {pdfBusy ? <CircularProgress size={16} sx={{ color: D.green }} /> : <PictureAsPdfOutlinedIcon sx={{ fontSize: 18 }} />}
+        </IconButton>
+        <IconButton onClick={save} disabled={saveState === 'saving' || !orderId} title="Save now"
+          sx={{ minWidth: 44, minHeight: 44, bgcolor: D.green, color: '#08130c', borderRadius: 999,
+            '&:hover': { bgcolor: '#3bd070' }, '&.Mui-disabled': { bgcolor: 'rgba(74,222,128,0.3)' } }}>
+          {saveState === 'saving' ? <CircularProgress size={16} sx={{ color: '#08130c' }} /> : <CheckIcon sx={{ fontSize: 18 }} />}
+        </IconButton>
+      </Stack>
+
+      {/* The sheet renders the SAME panel values the desktop grid does — one
+          definition, so the two can't drift. Mounted only on a phone so the
+          heavy panels aren't built twice on desktop. */}
+      {isPhone && (
+        <SwipeableDrawer anchor="bottom" open={!!sheet} onClose={() => setSheet('')} onOpen={() => {}}
+          disableSwipeToOpen disableDiscovery
+          PaperProps={{ sx: { bgcolor: D.bg, color: D.text, borderTop: `1px solid ${D.line}`,
+            borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '86vh' } }}>
+          {/* Grab handle — the affordance that says "drag me down to dismiss". */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1, pb: 0.5 }}>
+            <Box sx={{ width: 40, height: 4, borderRadius: 999, bgcolor: D.line }} />
+          </Box>
+          <Stack direction="row" alignItems="center" sx={{ px: 1.75, pb: 1, borderBottom: `1px solid ${D.line}` }}>
+            <Typography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 700, letterSpacing: 1, flex: 1 }}>
+              {sheet === 'tools' ? 'TOOLS' : 'MOCKUP DETAILS'}
+            </Typography>
+            <Button onClick={() => setSheet('')} size="small"
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, minHeight: 36 }}>Done</Button>
+          </Stack>
+          <Box sx={{ p: 1.75, overflowY: 'auto', pb: 'calc(20px + env(safe-area-inset-bottom))', ...scrollbar }}>
+            {sheet === 'tools' ? toolsPanel : sheet === 'info' ? infoPanel : null}
+          </Box>
+        </SwipeableDrawer>
+      )}
 
       {/* PDF sheet preview — the real export, rendered inline */}
       <Dialog open={!!pvUrl} onClose={closePreview} maxWidth="md" fullWidth fullScreen={fsDialog}
