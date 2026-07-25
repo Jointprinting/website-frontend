@@ -1817,6 +1817,33 @@ function PreorderSection({ order, authHdr, onToast }) {
     try { await navigator.clipboard.writeText(url); onToast('Customer link copied — the one your client shares with their people.', 'success'); }
     catch { onToast(url, 'success'); }
   };
+  // Roll a cleared drop's tally into the project's confirmation — the step the
+  // whole drop exists for. The server refuses to overwrite existing confirmation
+  // lines unless we say so, so a second roll-in asks first rather than silently
+  // erasing lines the owner already tuned.
+  const [rolling, setRolling] = React.useState('');
+  const rollIn = async (l, replace = false) => {
+    setRolling(l._id);
+    try {
+      const r = await axios.post(`${base}/preorders/${l._id}/to-order`, { replace }, authHdr);
+      onToast(r.data?.message || 'Rolled into the confirmation.', 'success');
+      load();
+    } catch (e) {
+      const d = e?.response?.data;
+      if (d?.needsConfirm) {
+        const ok = await confirmDialog({
+          title: 'Replace the confirmation lines?',
+          message: `This project already has ${d.existingLines} line(s). Rolling the drop in would replace them with ${d.wouldAdd} line(s) built from the tally.`,
+          confirmLabel: 'Replace them',
+          danger: true,
+        });
+        if (ok) return rollIn(l, true);
+      } else {
+        onToast(d?.message || 'Could not roll this drop in.', 'error');
+      }
+    } finally { setRolling(''); }
+  };
+
   const toggleClosed = async (l) => {
     try { await axios.patch(`${base}/preorders/${l._id}`, { revoke: !l.revokedAt }, authHdr); load(); }
     catch (e) { onToast(e?.response?.data?.message || 'Could not update the link.', 'error'); }
@@ -1934,6 +1961,13 @@ function PreorderSection({ order, authHdr, onToast }) {
                     sx={{ color: D.green, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Client link</Button>
                   <Button size="small" onClick={() => copyCustomer(l)} title="The fun commit page your client shares with their customers"
                     sx={{ color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>Customer link</Button>
+                  {l.tally.totalQty > 0 && (
+                    <Button size="small" disabled={rolling === l._id} onClick={() => rollIn(l)}
+                      title="Turn every commitment into confirmation lines — one line per product/colour with the size run under it"
+                      sx={{ color: D.green, fontSize: 10.5, fontWeight: 800, textTransform: 'none', minWidth: 0 }}>
+                      {rolling === l._id ? 'rolling…' : 'Roll into order'}
+                    </Button>
+                  )}
                   <Button size="small" onClick={() => toggleClosed(l)} sx={{ color: l.revokedAt ? D.green : D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0 }}>
                     {l.revokedAt ? 'Reopen' : 'Close'}
                   </Button>
