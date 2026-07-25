@@ -70,7 +70,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import config from '../config.json';
 import { D, accentBar, eyebrow, mono, BRAND, money0, money, fmtDate } from './studio/_shared';
-import { readStudioUrl, patchStudioUrl, onStudioNavigate } from './studio/_studioUrl';
+import { readStudioUrl, patchStudioUrl, onStudioNavigate, clearStudioRecord } from './studio/_studioUrl';
 import BrandCube, { BRAND_MARKS, brandAccent } from '../common/BrandCube';
 import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, countsBySource, effectiveSource, statusValuesFor } from './studio/_submissions';
 import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
@@ -3172,6 +3172,11 @@ function StudioBody({ token, onLogout }) {
     if (id === 'vendors') setVendorsEntry((p) => ({ vendorId: null, vendorName: null, nonce: p.nonce + 1 }));
     if (id === 'lookbooks') setLookbookEntry((p) => ({ companyKey: null, nonce: p.nonce + 1 }));
     if (id === 'outreach') setOutreachView(innerView || null);
+    // Entering a tool from the hub is a FRESH open — drop any record deep-link
+    // still sitting in the URL, exactly as the entry targets above are cleared.
+    // Without this, a project number left over from an earlier visit re-opened
+    // that project every time Orders was tapped.
+    clearStudioRecord();
     setView(id);
   };
 
@@ -3194,6 +3199,8 @@ function StudioBody({ token, onLogout }) {
       setCrmEntry((p) => ({ view: target.innerView || 'companies', companyKey: key, nonce: p.nonce + 1 }));
       setView('crm');
     } else if (v === 'clients') {
+      // A jump that names no project must not inherit one from the URL.
+      if (target.projectNumber == null && target.orderNumber == null) clearStudioRecord();
       setOrdersEntry((p) => ({
         orderNumber: target.orderNumber != null ? String(target.orderNumber) : null,
         projectNumber: target.projectNumber != null ? String(target.projectNumber) : null,

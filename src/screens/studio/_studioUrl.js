@@ -41,7 +41,11 @@ export function readStudioUrl() {
 // Merge a partial state into the URL. `null` or '' deletes a key. `push` adds a
 // history entry (so the back button steps back through it); the default replaces,
 // which is right for state the user didn't navigate to.
-export function patchStudioUrl(patch, { push = false } = {}) {
+//
+// `overlay: true` marks the pushed entry as one that OPENED something on top of a
+// tool (a project). closeStudioOverlay reads that marker to decide whether going
+// back is the right way to close — see the note there.
+export function patchStudioUrl(patch, { push = false, overlay = false } = {}) {
   if (!canUseDom()) return;
   const q = new URLSearchParams(window.location.search);
   for (const [field, key] of Object.entries(KEYS)) {
@@ -55,8 +59,15 @@ export function patchStudioUrl(patch, { push = false } = {}) {
   // Never stack an identical entry — an effect that re-runs shouldn't make the
   // back button need two presses to do one thing.
   if (url === `${window.location.pathname}${window.location.search}`) return;
-  if (push) window.history.pushState({ studio: true }, '', url);
-  else window.history.replaceState({ studio: true }, '', url);
+  if (push) {
+    window.history.pushState({ studio: true, overlay: !!overlay }, '', url);
+  } else {
+    // A replace must PRESERVE the overlay marker: switching panels inside an open
+    // project replaces the URL, and dropping the flag there would make the X stop
+    // closing the project properly.
+    const prev = (window.history.state && typeof window.history.state === 'object') ? window.history.state : {};
+    window.history.replaceState({ ...prev, studio: true, overlay: overlay || !!prev.overlay }, '', url);
+  }
 }
 
 // Subscribe to back/forward. Returns an unsubscribe. The callback receives the
@@ -68,15 +79,28 @@ export function onStudioNavigate(fn) {
   return () => window.removeEventListener('popstate', handler);
 }
 
-// Step back if we're the ones who pushed the current entry, else just patch the
-// URL. Used when closing a project: on a phone the back button and the X should
-// do the same thing, and neither should leave a dead entry behind that makes
-// back re-open what you just closed.
+// Close something that was opened ON TOP of a tool (a project drawer).
+//
+// Going back is only correct when WE pushed the entry that opened it — then back
+// lands on the tool underneath. If the thing was opened straight from the URL (a
+// shared link, or a refresh with ?p= already present) there is no such entry, and
+// stepping back leaves the tool entirely: from a project you'd land on the hub
+// rather than the orders board. So the marker has to be explicit; testing for
+// "is a studio entry" was too loose, because every studio URL write sets that.
 export function closeStudioOverlay(patch) {
   if (!canUseDom()) return;
-  if (window.history.state && window.history.state.studio) {
+  if (window.history.state && window.history.state.overlay) {
     window.history.back();
     return;
   }
   patchStudioUrl(patch);
+}
+
+// Entering a tool from the hub clears record-level deep links. Without this the
+// tool's own params survive the trip — tap Orders, and a project number left in
+// the URL from an earlier visit silently re-opens that project every single time.
+// (handlePick already clears the in-memory entry targets for exactly this reason;
+// the URL has to follow the same rule or it just re-supplies them.)
+export function clearStudioRecord() {
+  patchStudioUrl({ projectNumber: '', tab: '' });
 }

@@ -2,7 +2,7 @@
 // button closes a full-screen project on a phone, a project survives a refresh,
 // and two different owners writing the URL never clobber each other.
 
-import { readStudioUrl, patchStudioUrl, onStudioNavigate } from './_studioUrl';
+import { readStudioUrl, patchStudioUrl, onStudioNavigate, closeStudioOverlay, clearStudioRecord } from './_studioUrl';
 
 const setUrl = (search) => {
   window.history.replaceState({}, '', `/studio${search}`);
@@ -110,5 +110,66 @@ describe('onStudioNavigate', () => {
     window.dispatchEvent(new PopStateEvent('popstate'));
     expect(seen[0].projectNumber).toBe('');
     off();
+  });
+});
+
+describe('clearStudioRecord', () => {
+  it('drops the record deep-link but keeps the tool', () => {
+    // Tapping Orders from the hub must not re-open whatever project happened to
+    // be in the URL from an earlier visit.
+    setUrl('?v=clients&p=153&t=approval');
+    clearStudioRecord();
+    expect(readStudioUrl()).toMatchObject({ view: 'clients', projectNumber: '', tab: '' });
+  });
+
+  it('is safe when there is nothing to clear', () => {
+    setUrl('?v=finances');
+    clearStudioRecord();
+    expect(readStudioUrl().view).toBe('finances');
+  });
+});
+
+describe('closeStudioOverlay', () => {
+  it('steps BACK when we pushed the entry that opened the project', () => {
+    setUrl('?v=clients');
+    patchStudioUrl({ projectNumber: '153' }, { push: true, overlay: true });
+    expect(window.history.state.overlay).toBe(true);
+    const spy = jest.spyOn(window.history, 'back').mockImplementation(() => {});
+    closeStudioOverlay({ projectNumber: '', tab: '' });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('does NOT step back for a project opened straight from the URL', () => {
+    // A shared link or a refresh with ?p= already present pushed no entry, so
+    // back would leave the tool entirely — from a project you'd land on the hub
+    // instead of the orders board.
+    setUrl('?v=clients&p=153');
+    window.history.replaceState({ studio: true, overlay: false }, '', window.location.href);
+    const spy = jest.spyOn(window.history, 'back').mockImplementation(() => {});
+    closeStudioOverlay({ projectNumber: '', tab: '' });
+    expect(spy).not.toHaveBeenCalled();
+    expect(readStudioUrl()).toMatchObject({ view: 'clients', projectNumber: '' });
+    spy.mockRestore();
+  });
+
+  it('a plain studio entry is not treated as an overlay', () => {
+    // The old check tested "is this a studio entry", which every studio URL
+    // write sets — so closing always went back, and always overshot.
+    setUrl('?v=clients&p=153');
+    window.history.replaceState({ studio: true }, '', window.location.href);
+    const spy = jest.spyOn(window.history, 'back').mockImplementation(() => {});
+    closeStudioOverlay({ projectNumber: '', tab: '' });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('switching panels keeps the overlay marker alive', () => {
+    // Panel switches replace the URL; dropping the flag there would stop the X
+    // from closing the project properly.
+    setUrl('?v=clients');
+    patchStudioUrl({ projectNumber: '153' }, { push: true, overlay: true });
+    patchStudioUrl({ tab: 'approval' });
+    expect(window.history.state.overlay).toBe(true);
   });
 });
