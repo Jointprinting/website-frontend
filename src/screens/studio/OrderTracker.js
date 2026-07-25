@@ -419,6 +419,11 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     const list = projects.filter(p => {
       if (statusFilter === 'active') {
         if (p.status === 'delivered' || p.status === 'cancelled') return false;
+      } else if (statusFilter === 'late') {
+        // Virtual filter — the orders the attention feed has flagged as running
+        // long (2wk) or possibly late (3wk). Reached by tapping the stat.
+        const a = attention[p._id];
+        if (!a || (a.flag !== 'running_long' && a.flag !== 'possibly_late')) return false;
       } else if (statusFilter !== 'all' && p.status !== statusFilter) {
         return false;
       }
@@ -437,7 +442,14 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       sorted.sort((a, b) => (a.companyName || a.clientName || '').localeCompare(b.companyName || b.clientName || ''));
     } // else server's projectNumber order is the default
     return sorted;
-  }, [projects, search, statusFilter, sortMode]);
+  }, [projects, search, statusFilter, sortMode, attention]);
+
+  // How many orders the attention feed has flagged (running long / possibly
+  // late). Drives the conditional "Running late" stat — it stays off the strip
+  // entirely when nothing is late, so the strip never carries a zero.
+  const lateCount = useMemo(() => Object.values(attention || {})
+    .filter((a) => a && (a.flag === 'running_long' || a.flag === 'possibly_late')).length,
+  [attention]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -878,18 +890,31 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
           </Menu>
         </Stack>
 
-        {/* Stat strip */}
-        <Stack direction="row" gap={{ xs: 2.5, md: 4 }} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', rowGap: 1 }}>
-          {/* Collected = cash actually in (finance ledger, matches Finances tab).
-              Delivered = value of orders shipped this year (accrual). They differ
-              because you get paid up front — both are true, so both are shown. */}
-          {collectedThisYear != null &&
-            <Stat label="Collected this year" value={fmt(collectedThisYear)} accent={D.green} />}
-          <Stat label="Delivered this year"   value={fmt(stats.revenueThisYear)} />
-          <Stat label="Delivered this month"  value={fmt(stats.revenueThisMonth)} />
-          <Stat label="Open orders"           value={String(stats.openOrders || 0)} />
-          <Stat label="Open quotes"           value={String(stats.openQuotes || 0)} />
-          <Stat label="Unpaid"                value={fmt(stats.unpaidTotal)} accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined} />
+        {/* Stat strip — what's worth knowing at a glance, and nothing else.
+            It used to show six numbers including two ACCRUAL ones ("delivered
+            this year/month") sitting beside a CASH one ("collected"), unlabelled.
+            Because payment comes before the job starts, those measure different
+            moments and can't agree, so side by side they just read as broken.
+            Cash leads; the accrual figure survives as its subtitle. Counts are
+            tappable and set the board filter underneath — that's the quick link
+            to open quotes / a stage / what's running late. */}
+        <Stack direction="row" gap={{ xs: 1, md: 1.5 }} sx={{ mt: 1.5, pl: { xs: 0, md: 6 }, flexWrap: 'wrap', rowGap: 1 }}>
+          {collectedThisYear != null && (
+            <Stat label="Collected · cash in" value={fmt(collectedThisYear)} accent={D.green}
+              hint={stats.revenueThisYear ? `${fmt(stats.revenueThisYear)} delivered — order value, billed before it ships` : undefined} />
+          )}
+          <Stat label="Unpaid" value={fmt(stats.unpaidTotal)}
+            accent={stats.unpaidTotal > 0 ? '#fbbf24' : undefined}
+            hint={stats.unpaidTotal > 0 ? 'on orders still open' : undefined} />
+          <Stat label="In flight" value={String(stats.openOrders || 0)}
+            onClick={() => setStatusFilter('active')} active={statusFilter === 'active'} />
+          <Stat label="Quotes out" value={String(stats.openQuotes || 0)}
+            onClick={() => setStatusFilter('quoted')} active={statusFilter === 'quoted'} />
+          {lateCount > 0 && (
+            <Stat label="Running late" value={String(lateCount)} accent="#fbbf24"
+              hint="2wk+ since it was placed"
+              onClick={() => setStatusFilter('late')} active={statusFilter === 'late'} />
+          )}
         </Stack>
 
         {/* Status filter chips + sort */}
@@ -1314,9 +1339,24 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   );
 }
 
-function Stat({ label, value, accent, hint }) {
+// A stat. When it carries an onClick it's a real control — it filters the board
+// below — so it has to look and behave like one: pointer, hover, focus ring,
+// keyboard, and a lit state while its filter is the active one.
+function Stat({ label, value, accent, hint, onClick, active }) {
   return (
-    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2, px: 1.5, py: 1, minWidth: 116, flex: '0 0 auto' }}>
+    <Box
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-pressed={onClick ? !!active : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      sx={{ bgcolor: active ? 'rgba(74,222,128,0.10)' : D.panel,
+        border: `1px solid ${active ? D.green : D.line}`, borderRadius: 2,
+        px: 1.5, py: 1, minWidth: 116, flex: '0 0 auto',
+        cursor: onClick ? 'pointer' : 'default', outline: 'none',
+        transition: 'border-color .12s, background-color .12s',
+        '&:hover': onClick ? { borderColor: D.green } : undefined,
+        '&:focus-visible': onClick ? { borderColor: D.green, boxShadow: `0 0 0 2px rgba(74,222,128,0.35)` } : undefined }}>
       <Typography sx={{ color: D.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>
         {label}
       </Typography>

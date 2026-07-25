@@ -20,7 +20,7 @@
 import React from 'react';
 import {
   Dialog, DialogContent, DialogActions, Box, Typography, Button,
-  IconButton, CircularProgress, Checkbox, Collapse,
+  IconButton, CircularProgress, Checkbox, Collapse, Select, MenuItem,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CleaningServicesOutlinedIcon from '@mui/icons-material/CleaningServicesOutlined';
@@ -28,12 +28,28 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import UndoIcon from '@mui/icons-material/Undo';
 import axios from 'axios';
 import config from '../../config.json';
+import { Stack } from '@mui/material';
 import { D, mono, scrollbar, useMobileFullScreen } from './_shared';
 
 const base = `${config.backendUrl}/api`;
 
 // Each detection: how to identify a row, what to call it, and how to render one.
 const SECTIONS = [
+  {
+    key: 'vendorRefunds',
+    idField: 'txnId',
+    bodyKey: 'vendorRefunds',
+    title: 'Supplier refunds booked as customer refunds',
+    blurb: '“Refund” in a P&L means money handed back to a CUSTOMER, so it comes off '
+      + 'revenue. These came back from a SUPPLIER — a sample return, a refunded ticket — '
+      + 'which is a cost reduction. Booked as revenue they shrink your sales and leave '
+      + 'the cost overstated, which understates profit by twice the amount. Re-booking '
+      + 'each one as a credit against the category it came from puts it back where it '
+      + 'belongs. Pick the category; nothing is deleted and the undo restores it.',
+    // Rendered with the picker below — needs per-row state, so it opts out of
+    // the plain renderer.
+    picker: true,
+  },
   {
     key: 'orphans',
     idField: 'orderId',
@@ -82,6 +98,8 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
   const [openSections, setOpenSections] = React.useState({});
   const [busy, setBusy] = React.useState(false);
   const [lastBatch, setLastBatch] = React.useState('');
+  // txnId → the expense category the owner is re-booking that refund against.
+  const [refundCat, setRefundCat] = React.useState({});
 
   const load = React.useCallback(async () => {
     setPlan(null);
@@ -95,6 +113,10 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
         next[s.key] = new Set((r.data[s.key] || []).map((row) => String(row[s.idField])));
       }
       setPicked(next);
+      // Seed each supplier refund with the category its party's other spend uses.
+      const cats = {};
+      for (const row of (r.data.vendorRefunds || [])) cats[String(row.txnId)] = row.suggestedCategory || 'Other';
+      setRefundCat(cats);
       setOpenSections(SECTIONS.length ? { [SECTIONS[0].key]: true } : {});
     } catch (e) {
       setPlan({ counts: { total: 0 } });
@@ -124,12 +146,18 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
     setBusy(true);
     try {
       const body = { confirm: true };
-      for (const s of SECTIONS) body[s.bodyKey] = [...(picked[s.key] || [])];
+      for (const s of SECTIONS) {
+        const ids = [...(picked[s.key] || [])];
+        // The refund fix carries the chosen category with each id.
+        body[s.bodyKey] = s.key === 'vendorRefunds'
+          ? ids.map((id) => ({ txnId: id, category: refundCat[id] || 'Other' }))
+          : ids;
+      }
       const r = await axios.post(`${base}/crm/data-cleanup/apply`, body, authHdr);
       setLastBatch(r.data.batchId || '');
       const f = r.data.fixed || {};
       onToast?.(
-        `Fixed — orders ${f.orders || 0} · names ${f.names || 0} · receipts ${f.receipts || 0} · rows ${f.removedRows || 0}`,
+        `Fixed — refunds ${f.vendorRefunds || 0} · orders ${f.orders || 0} · names ${f.names || 0} · rows ${f.removedRows || 0}`,
         'success',
       );
       await onApplied?.();
@@ -216,7 +244,34 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
                         borderTop: `1px solid ${D.line}` }}>
                         <Checkbox size="small" checked={sel.has(id)} onChange={() => toggle(s.key, id)}
                           sx={{ p: 0.5, color: D.faint, '&.Mui-checked': { color: D.green } }} />
-                        <Box sx={{ minWidth: 0, flex: 1 }}>{s.render(r)}</Box>
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          {s.picker ? (
+                            <>
+                              <Typography sx={{ fontSize: 11.5, color: D.text }}>
+                                {r.party}
+                                <Box component="span" sx={{ ...mono, color: '#fbbf24', ml: 1 }}>${r.amount}</Box>
+                                {r.orderNumber ? <Box component="span" sx={{ ...mono, color: D.faint, ml: 1 }}>#{r.orderNumber}</Box> : null}
+                              </Typography>
+                              <Stack direction="row" alignItems="center" gap={0.75} sx={{ mt: 0.4 }}>
+                                <Typography sx={{ fontSize: 10, color: D.faint }}>credit against</Typography>
+                                <Select
+                                  value={refundCat[id] || 'Other'}
+                                  onChange={(e) => setRefundCat((p) => ({ ...p, [id]: e.target.value }))}
+                                  onClick={(e) => e.stopPropagation()}
+                                  size="small" variant="standard" disableUnderline
+                                  sx={{ fontSize: 11, color: D.green, fontWeight: 700,
+                                    '& .MuiSelect-select': { py: 0.2, pr: '18px !important' },
+                                    '& .MuiSelect-icon': { color: D.green, fontSize: 16 } }}
+                                  MenuProps={{ PaperProps: { sx: { bgcolor: D.panel, color: D.text, border: `1px solid ${D.line}` } } }}
+                                >
+                                  {(plan.expenseCategories || []).map((c) => (
+                                    <MenuItem key={c} value={c} sx={{ fontSize: 12 }}>{c}</MenuItem>
+                                  ))}
+                                </Select>
+                              </Stack>
+                            </>
+                          ) : s.render(r)}
+                        </Box>
                       </Box>
                     );
                   })}
