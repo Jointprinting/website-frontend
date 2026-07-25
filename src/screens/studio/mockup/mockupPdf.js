@@ -14,6 +14,7 @@
 // never touch the main bundle; they load only when Export PDF is pressed.
 
 import { JP_LOGO_B64, JP_GLOBE_B64, JP_INSTA_B64 } from './brandAssets';
+import { clientDesignName } from '../../../common/mockupNum';
 
 const PAGE_WIDTH = 720;
 const PAGE_HEIGHT = 1080;
@@ -239,7 +240,7 @@ async function renderTemplate2(lib, pdfDoc, page, pg) {
 
   const titlePad = 14;
   const tBaseY = PAGE_HEIGHT - HDR - titlePad;
-  if (pg.title) page.drawText(pg.title, { x: mS, y: tBaseY, size: 30, font: boldFont, color: rgb(0.08, 0.08, 0.08) });
+  if (clientDesignName(pg.title)) page.drawText(clientDesignName(pg.title), { x: mS, y: tBaseY, size: 30, font: boldFont, color: rgb(0.08, 0.08, 0.08) });
   if (pg.subtitle) page.drawText(pg.subtitle, { x: mS, y: tBaseY - 26, size: 15, font: titleFont, color: rgb(0.4, 0.4, 0.4) });
   const titleBottom = tBaseY - (pg.subtitle ? 26 + 15 : 0);
   const imgW = PAGE_WIDTH * 0.5, imgH = Math.min(imgW * 1.2, titleBottom - 80), imgX = (PAGE_WIDTH - imgW) / 2;
