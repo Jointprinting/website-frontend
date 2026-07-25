@@ -746,10 +746,24 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
       if (f === 'logo') fileLogoToClient(url);
     }
   };
+  // ONE control language for the tool panels. They had grown three different
+  // button treatments — dashed, outlined, pill — at 10-11.5px with sub-30px hit
+  // targets, which is most of why the lab read as cluttered and was fiddly to
+  // use with a thumb. Everything below is the same chip: same border, same
+  // radius, same green hover, and ≥40px tall on a phone.
+  const ctl = (extra = {}) => ({
+    color: D.text, textTransform: 'none', fontWeight: 600,
+    fontSize: { xs: 12, md: 11 },
+    minHeight: { xs: 40, md: 30 },
+    border: `1px solid ${D.line}`, borderRadius: 1.5, minWidth: 0, px: 0.75,
+    '&:hover': { borderColor: D.green, color: D.green },
+    ...extra,
+  });
+
   const uploadBtn = (label, f) => (
     <Button component="label" size="small" startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 14 }} />}
       onDragOver={(e) => e.preventDefault()} onDrop={dropFile(f)}
-      sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, border: `1px dashed ${D.line}`, borderRadius: 1.5, '&:hover': { color: D.green, borderColor: D.green } }}>
+      sx={ctl({ color: sd && (f === 'blank' ? sd.blank : sd.logo) ? D.green : D.muted, fontWeight: 700, flex: 1 })}>
       {label}<input type="file" hidden accept="image/*" onChange={onUpload(f)} />
     </Button>
   );
@@ -814,9 +828,15 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         </Stack>
       </Stack>
 
+      {/* On a phone the three columns stack, and the CANVAS used to land second —
+          below a full screen of settings. You scrolled past every control to see
+          the garment you were working on, which is backwards: the artwork is the
+          subject, the controls act on it. CSS order puts the canvas first on xs
+          and leaves the desktop three-column layout exactly as it was. */}
       <Box sx={{ flex: 1, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '236px 1fr 300px' }, gap: 0, overflow: 'hidden' }}>
         {/* Left — garment / logo / S&S / auto-placement */}
-        <Box sx={{ borderRight: { md: `1px solid ${D.line}` }, p: 1.5, overflowY: 'auto', ...scrollbar }}>
+        <Box sx={{ borderRight: { md: `1px solid ${D.line}` }, p: 1.5, overflowY: 'auto',
+          order: { xs: 2, md: 0 }, ...scrollbar }}>
           <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>GARMENT · {side.toUpperCase()}</Typography>
           <Stack direction="row" gap={1} sx={{ mb: 1 }}>{uploadBtn(sd.blank ? 'Blank ✓' : 'Blank', 'blank')}{uploadBtn(sd.logo ? 'Logo ✓' : 'Logo', 'logo')}</Stack>
           {(bgState.offer || bgState.original) && (
@@ -898,19 +918,19 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
             <>
               <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mt: 1.75, mb: 0.75 }}>AUTO-PLACEMENT</Typography>
               {area ? (
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.6 }}>
                   {area.presets.map((p) => (
                     <Button key={p.label} onClick={() => canvasRef.current && canvasRef.current.applyAreaPreset(p)} size="small"
-                      sx={{ color: D.text, fontSize: 10, textTransform: 'none', fontWeight: 600, border: `1px solid ${D.line}`, borderRadius: 1, minWidth: 0, px: 0.5, '&:hover': { borderColor: D.green, color: D.green } }}>
+                      sx={ctl()}>
                       {p.label} {p.wIn}″
                     </Button>
                   ))}
                 </Box>
               ) : (
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 0.6 }}>
                   {PRESET_ORDER.map((k) => (
                     <Button key={k} onClick={() => canvasRef.current && canvasRef.current.applyPreset(PRESETS[k])} size="small"
-                      sx={{ color: D.text, fontSize: 10, textTransform: 'none', fontWeight: 600, border: `1px solid ${D.line}`, borderRadius: 1, minWidth: 0, px: 0.5, '&:hover': { borderColor: D.green, color: D.green } }}>{PRESETS[k].label}</Button>
+                      sx={ctl()}>{PRESETS[k].label}</Button>
                   ))}
                 </Box>
               )}
@@ -918,10 +938,10 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
                 <Typography sx={{ fontSize: 10, color: D.faint, fontWeight: 700 }}>Nudge</Typography>
                 {[['←', -2, 0], ['→', 2, 0], ['↑', 0, -2], ['↓', 0, 2]].map(([l, dx, dy]) => (
                   <Button key={l} onClick={() => canvasRef.current && canvasRef.current.nudge(dx, dy)} size="small"
-                    sx={{ minWidth: 26, color: D.text, border: `1px solid ${D.line}`, borderRadius: 1, fontSize: 13, fontWeight: 800, '&:hover': { borderColor: D.green, color: D.green } }}>{l}</Button>
+                    sx={ctl({ minWidth: { xs: 44, md: 30 }, fontSize: 15, fontWeight: 800, px: 0 })}>{l}</Button>
                 ))}
                 <Button onClick={() => canvasRef.current && canvasRef.current.resetPosition()} size="small"
-                  sx={{ minWidth: 0, px: 1, color: D.muted, border: `1px solid ${D.line}`, borderRadius: 1, fontSize: 11, fontWeight: 700, '&:hover': { borderColor: D.green, color: D.green } }}>↺</Button>
+                  sx={ctl({ minWidth: { xs: 44, md: 30 }, color: D.muted, fontSize: 14, fontWeight: 700, px: 0 })}>↺</Button>
               </Stack>
               {inchInfo && (
                 <Typography sx={{ ...mono, fontSize: 10.5, mt: 0.75, color: inchInfo.atMax ? '#fbbf24' : D.green }}>
@@ -934,7 +954,11 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         </Box>
 
         {/* Center — canvas + side/page controls */}
-        <Box sx={{ p: 2, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', ...scrollbar }}>
+        <Box sx={{ p: { xs: 1.5, md: 2 }, overflow: 'auto', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', order: { xs: 1, md: 0 },
+          // On a phone the canvas gets its own breathing room and a soft edge, so
+          // it reads as the work surface rather than another stacked panel.
+          borderBottom: { xs: `1px solid ${D.line}`, md: 'none' }, ...scrollbar }}>
           <Stack direction="row" gap={0.75} sx={{ mb: 1 }} flexWrap="wrap" justifyContent="center">
             {pages.map((_, i) => (
               <Button key={i} onClick={() => { setPageIdx(i); setSide('front'); }} size="small"
@@ -975,7 +999,8 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
         </Box>
 
         {/* Right — mockup info */}
-        <Box sx={{ borderLeft: { md: `1px solid ${D.line}` }, p: 1.75, overflowY: 'auto', ...scrollbar }}>
+        <Box sx={{ borderLeft: { md: `1px solid ${D.line}` }, p: 1.75, overflowY: 'auto',
+          order: { xs: 3, md: 0 }, ...scrollbar }}>
           <Typography sx={{ ...mono, fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 1, mb: 1 }}>MOCKUP INFO</Typography>
           <Stack gap={1.25}>
             <Autocomplete
