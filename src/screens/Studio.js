@@ -160,7 +160,7 @@ const darkInputSx = {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Login
 // ─────────────────────────────────────────────────────────────────────────────
-function Login({ onAuthed }) {
+function Login({ onAuthed, expired = false }) {
   const [user, setUser] = React.useState('');
   const [pw, setPw] = React.useState('');
   const [show, setShow] = React.useState(false);
@@ -282,6 +282,15 @@ function Login({ onAuthed }) {
             >
               JP <Box component="span" sx={{ color: BRAND.green }}>STUDIO</Box>
             </MuiTypography>
+            {/* Landing here because the session lapsed, not because you signed
+                out — say so. Otherwise being dumped at a login screen mid-task
+                reads as "something broke". */}
+            {expired && (
+              <MuiTypography sx={{ color: BRAND.muted, fontSize: 12.5, textAlign: 'center', lineHeight: 1.6 }}>
+                Your session expired — sign in again to pick up where you left off.
+                Anything saved offline is still queued and will sync.
+              </MuiTypography>
+            )}
           </Stack>
           <form onSubmit={submit}>
             <Stack spacing={2}>
@@ -3634,7 +3643,43 @@ export default function Studio() {
     return startAutoFlush({ intervalMs: 20000 });
   }, [token]);
 
-  if (!token) return <Login onAuthed={handleAuthed} />;
+  // ── Session expiry, handled ONCE for the whole Studio ──────────────────────
+  // The token was verified at mount and then never again. When it lapsed
+  // mid-session — which it does, it's a fixed-lifetime token — every request
+  // started failing and each screen showed its own "could not load, is the
+  // backend awake?" That blames the server for what is actually "sign in
+  // again", and there was no 401 handling ANYWHERE in the app to say otherwise.
+  //
+  // One interceptor, installed while authed and ejected on unmount, drops back
+  // to the login gate with the real reason.
+  //
+  // Deliberately narrow, so it can't hijack unrelated failures:
+  //   • only responses from OUR backend;
+  //   • never /api/auth/* — those endpoints answer 401 as their normal "wrong
+  //     password" reply, and bouncing on that would fight the login form;
+  //   • the error still rejects, so each caller's own handling runs unchanged.
+  const [expired, setExpired] = React.useState(false);
+  React.useEffect(() => {
+    if (!token) return undefined;
+    const id = axios.interceptors.response.use(null, (err) => {
+      const status = err && err.response && err.response.status;
+      const url = String((err && err.config && err.config.url) || '');
+      if ((status === 401 || status === 403)
+        && url.startsWith(config.backendUrl)
+        && !url.includes('/api/auth/')) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(ROLE_KEY);
+        setExpired(true);
+        setToken(null);
+      }
+      return Promise.reject(err);
+    });
+    return () => axios.interceptors.response.eject(id);
+  }, [token]);
+
+  // Queued field writes are NOT lost by this — offlineQueue holds ops on a 401
+  // instead of dropping them, so they flush once this login succeeds.
+  if (!token) return <Login onAuthed={(t) => { setExpired(false); handleAuthed(t); }} expired={expired} />;
   // Agents get their own trimmed, self-scoped surface (leads + orders + goal);
   // they never load the owner's hub or tools. The PendingSyncBadge is fixed-
   // position and global, so it floats over whatever tool/view is open.

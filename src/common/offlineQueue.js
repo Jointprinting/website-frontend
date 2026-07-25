@@ -10,6 +10,14 @@
 // would wedge the queue — so those surface to the caller and are never queued.
 // 408/425/429/5xx and "no response at all" ARE transient and get retried.
 //
+// 401/403 is a THIRD thing, and treating it as a refusal was a data-loss bug:
+// the op is perfectly valid, the CREDENTIAL expired. A token that lapses while
+// you're out on the loop used to make the next flush drop every queued write as
+// "server refused" — silently destroying exactly the field capture this file
+// exists to protect. Auth failures now KEEP the op, don't burn its retry budget
+// (the failure isn't about the op), and stop the pass, because every following
+// op would 401 too. They flush for real after the next sign-in.
+//
 // The queue mechanics here are PURE and injectable (`flush` takes a `send` fn),
 // so they unit-test with no axios and no network. The axios wrapper + auto-flush
 // wiring live alongside in offlineSync.js (kept separate so this file stays
@@ -23,6 +31,18 @@ const listeners = new Set();
 // Statuses worth retrying: request timeout, too-early, rate-limit, and the 5xx
 // family (server hiccup). Anything else WITH a response is a definitive refusal.
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+// Expired / missing credentials. NOT a refusal of the op — the same write will
+// succeed once signed in again — so it must never cause a drop.
+const AUTH_STATUS = new Set([401, 403]);
+
+// Did this fail because we're not authenticated, rather than because the op is
+// bad? Checked BEFORE isTransient, since 401 is in neither retryable nor
+// "definitively refused".
+export function isAuthFailure(err) {
+  const status = err && err.response && err.response.status;
+  return AUTH_STATUS.has(status);
+}
 
 // Is this failure a connectivity/transient issue (keep + retry) rather than a
 // server refusal (drop)? `err.transient` wins when the caller pre-classified.
@@ -104,6 +124,14 @@ export async function flush(send, { maxTries = 12 } = {}) {
         await send(op);                          // eslint-disable-line no-await-in-loop
         sent += 1;
       } catch (err) {
+        // Signed out / token expired. The op is fine — keep it EXACTLY as it is
+        // (no retry burned; the failure isn't about this op) and stop the pass,
+        // since everything after it would 401 too. It flushes after sign-in.
+        if (isAuthFailure(err)) {
+          console.warn('[offlineQueue] auth expired — holding', q.length - i, 'op(s) for the next sign-in');
+          for (let j = i; j < q.length; j++) kept.push(q[j]);
+          break;
+        }
         if (!isTransient(err)) {                  // server refused → drop, keep draining
           dropped += 1;
           console.warn('[offlineQueue] dropping rejected op:', op.label, err && err.message);
