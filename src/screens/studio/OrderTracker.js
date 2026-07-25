@@ -2700,9 +2700,29 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
         <InlineSelect label="Status" value={local.status} savingHint={savingField === 'status'}
           options={STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
           onChange={v => { updateLocal({ status: v }); saveField('status', v); }} />
-        <InlineSelect label="Paid" value={local.paid ? 'yes' : 'no'} savingHint={savingField === 'paid'}
-          options={[{ value: 'no', label: 'Unpaid' }, { value: 'yes', label: 'Paid' }]}
-          onChange={v => { const b = v === 'yes'; updateLocal({ paid: b }); saveField('paid', b); }} />
+        {/* Money stage, not a yes/no. Invoicing is manual in QuickBooks AFTER
+            the client approves — approve → invoice → pay → production — so
+            "unpaid" hid two completely different situations: an invoice you
+            still owe them (your move, and the job is parked behind it) versus
+            one sent and waiting (their move, chase it). `paid` keeps its exact
+            old meaning so every downstream money calculation is untouched;
+            invoiceSentAt just splits the unpaid half in two. */}
+        <InlineSelect label="Money" savingHint={savingField === 'paid' || savingField === 'invoiceSentAt'}
+          value={local.paid ? 'paid' : local.invoiceSentAt ? 'sent' : 'none'}
+          options={[
+            { value: 'none', label: 'Invoice not sent' },
+            { value: 'sent', label: 'Invoice sent' },
+            { value: 'paid', label: 'Paid' },
+          ]}
+          onChange={v => {
+            if (v === 'paid') { updateLocal({ paid: true }); saveField('paid', true); return; }
+            // Stepping back from Paid must also clear it, or the order reads as
+            // paid and un-invoiced at once.
+            if (local.paid) { updateLocal({ paid: false }); saveField('paid', false); }
+            const at = v === 'sent' ? new Date().toISOString() : null;
+            updateLocal({ invoiceSentAt: at });
+            saveField('invoiceSentAt', at);
+          }} />
 
         {hasConfirmation(local.confirmation) ? (
           <>
