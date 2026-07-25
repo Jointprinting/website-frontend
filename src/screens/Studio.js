@@ -3330,6 +3330,7 @@ function StudioBody({ token, onLogout }) {
             projectNumber: mockupEntry.lensProjectNumber || '',
           }}
           onBack={() => setView('hub')}
+          onNavigate={navigate}
         />
       </LabErrorBoundary>
     );

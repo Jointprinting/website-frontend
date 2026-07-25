@@ -14,7 +14,7 @@ import NativeMockupLab from './NativeMockupLab';
 
 const base = `${config.backendUrl}/api`;
 
-export default function NativeMockupLabHost({ token, entry, onBack, onSaved }) {
+export default function NativeMockupLabHost({ token, entry, onBack, onSaved, onNavigate }) {
   const authHdr = React.useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const [state, setState] = React.useState({ loading: !!(entry && entry.editMockup), mockup: null, item: null });
 
@@ -56,6 +56,7 @@ export default function NativeMockupLabHost({ token, entry, onBack, onSaved }) {
       project={project}
       onBack={onBack}
       onSaved={onSaved}
+      onNavigate={onNavigate}
     />
   );
 }

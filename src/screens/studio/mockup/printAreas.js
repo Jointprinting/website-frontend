@@ -34,6 +34,37 @@ export function centerInStage(scaledW, scaledH, stageW = STAGE_W, stageH = STAGE
   return { left: (stageW - scaledW) / 2, top: (stageH - scaledH) / 2 };
 }
 
+// Move a placement so it stays on the SAME SPOT OF THE GARMENT when the blank
+// is swapped — the black-tee-to-white-tee case.
+//
+// A placement is stored in stage coordinates, which are absolute: they say
+// "260px across the 620px stage", not "a third of the way across the chest". Two
+// blanks whose images differ at all in size or aspect sit in a different box
+// within that stage, so the same stage coordinates land somewhere else on the
+// garment and the print visibly shifts. Re-anchoring to the blank's box makes
+// the swap invisible, which is the point of swapping.
+//
+// The scale rides along on the WIDTH ratio so the print keeps its proportion to
+// the garment (a chest print is sized against chest width, and blankBox fits
+// uniformly). Returns `pos` untouched when there's nothing sensible to remap to.
+export function remapPlacement(pos, oldBox, newBox) {
+  if (!pos || pos.x == null) return pos;
+  if (!oldBox || !newBox) return pos;
+  if (!oldBox.dispW || !oldBox.dispH || !newBox.dispW || !newBox.dispH) return pos;
+
+  const relX = (pos.x - oldBox.originX) / oldBox.dispW;
+  const relY = (pos.y - oldBox.originY) / oldBox.dispH;
+  const k = newBox.dispW / oldBox.dispW;
+
+  return {
+    ...pos,
+    x: newBox.originX + relX * newBox.dispW,
+    y: newBox.originY + relY * newBox.dispH,
+    w: (pos.w || 1) * k,
+    h: (pos.h || 1) * k,
+  };
+}
+
 export const PRESETS = {
   lc: { label: 'L Chest',  xPct: 0.32, yPct: 0.28, wPct: 0.18 },
   cc: { label: 'Ctr Chest', xPct: 0.50, yPct: 0.34, wPct: 0.28 },

@@ -36,7 +36,7 @@ import { exportMockupPdf } from './mockupPdf';
 import { analyzeArtwork, isScreenPrintType, INK } from './inkDetect';
 import { detectSolidBg, removeBackground, recolorInk, fnvHash } from './artTools';
 import MockupCanvas from './MockupCanvas';
-import { displayMockupNum } from '../../../common/mockupNum';
+import { displayMockupNum, clientDesignName } from '../../../common/mockupNum';
 
 const base = `${config.backendUrl}/api`;
 
@@ -86,7 +86,7 @@ const clonePages = (pages) => (pages || []).map((pg) => ({
   _extra: { ...pg._extra },
 }));
 
-export default function NativeMockupLab({ token, mode, mockup, item, project, onBack, onSaved }) {
+export default function NativeMockupLab({ token, mode, mockup, item, project, onBack, onSaved, onNavigate }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const isNew = mode === 'new' || !mockup;
 
@@ -106,7 +106,9 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const remoteIdRef = useRef(isNew ? `studio-${uid()}` : (String((item && item.remoteId) || mockup.remoteId || '') || `studio-${uid()}`));
   const p0extra = (!isNew && mockup.pages && mockup.pages[0] && mockup.pages[0]._extra) || {};
   const [meta, setMeta] = useState({
-    title: isNew ? '' : (mockup.name || p0extra.title || ''),
+    // Strip the internal "· v2" variation marker — seeding the TITLE from the
+    // library name is how it ended up printed on the client's PDF.
+    title: isNew ? '' : clientDesignName(mockup.name || p0extra.title || ''),
     subtitle: isNew ? '' : (p0extra.subtitle || ''),
     notes: isNew ? '' : (p0extra.notes || ''),
     client: isNew ? (project && project.client) || '' : (mockup.client || (project && project.client) || ''),
@@ -685,11 +687,33 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
 
   const [dupBusy, setDupBusy] = useState(false);
   const canDuplicate = !!orderId && !!mockupNum && !isNew;
+  // "Add a variation" — the next colour letter of this design, same artwork,
+  // opened ready to tweak.
+  //
+  // It used to POST and then just flash a line in the header: the variation was
+  // created but you stayed on the mockup you started from, so it read as doing
+  // nothing at all. Worse, it cloned from the STORED document while autosave was
+  // still on its 1.5s debounce, so edits made in the last moment silently didn't
+  // come across. Now it flushes the save first, then opens the new letter.
   const duplicate = async () => {
     if (!canDuplicate || dupBusy) return; setDupBusy(true);
+    setBusy('Saving, then duplicating…');
     try {
+      // Flush any pending autosave — the clone is made server-side from the
+      // stored doc, so anything not yet saved would be missing from it.
+      clearTimeout(saveTimer.current);
+      await performSave(false);
+
       const { data } = await axios.post(`${base}/orders/${orderId}/mockups/duplicate`, { remoteId: remoteIdRef.current, mockupNum }, authHdr);
-      setBusy(`Variation added · ${data.mockupNum}`); if (onSaved) onSaved();
+      if (onSaved) onSaved();
+
+      if (data && data.remoteId && onNavigate) {
+        // Land ON the variation — carrying on editing it is the whole point.
+        onNavigate({ view: 'mockup', editMockup: data.remoteId, client: meta.client || '' });
+      } else {
+        // No navigator (shouldn't happen in the Studio) — at least say what it did.
+        setBusy(`Variation added · ${data && data.mockupNum ? data.mockupNum : ''}`);
+      }
     } catch (e) { setBusy(e.response?.data?.message || 'Could not add a variation'); }
     finally { setDupBusy(false); }
   };

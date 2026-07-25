@@ -31,7 +31,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import axios from 'axios';
 import config from '../config.json';
 import JpLoader from '../common/JpLoader';
-import { displayMockupNum } from '../common/mockupNum';
+import { displayMockupNum, clientDesignName } from '../common/mockupNum';
 
 // Gentle ambient bob for the collage — each piece drifts on its own cadence so
 // everything gets its moment, never a static stack. Honors reduced-motion.
@@ -733,7 +733,7 @@ export default function LookbookView() {
                 <Box key={k} sx={{ mt: 1.5 }}><ProductImage src={src} alt={`${focusM.name} view ${k + 2}`} clean theme={theme} radius={3} /></Box>
               ))}
               <Box sx={{ textAlign: 'center', mt: 2 }}>
-                {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{focusM.name || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>{displayMockupNum(focusM.mockupNum)}</Box>}</Typography>}
+                {showLabels && <Typography sx={{ fontWeight: 900, fontSize: 20, letterSpacing: -0.4 }}>{clientDesignName(focusM.name) || 'Design'}{focusM.mockupNum && <Box component="span" sx={{ ...mono, color: theme.faint, fontSize: 13, fontWeight: 600, ml: 1 }}>{displayMockupNum(focusM.mockupNum)}</Box>}</Typography>}
                 {focusM.caption && <Typography sx={{ color: theme.muted, fontSize: 14, mt: 0.75, lineHeight: 1.6, maxWidth: 440, mx: 'auto' }}>{focusM.caption}</Typography>}
               </Box>
               {!me && <Box sx={{ mt: 2, maxWidth: 360, mx: 'auto' }}>{nameField}</Box>}

@@ -11,7 +11,7 @@
 
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { fabric } from 'fabric';
-import { blankBox, centerInStage } from './printAreas';
+import { blankBox, centerInStage, remapPlacement } from './printAreas';
 
 const DEFAULT_LOGO = 0.28;        // classic default logo scale (min(w,h)/max(logo)) ×0.28
 
@@ -200,6 +200,14 @@ const MockupCanvas = forwardRef(function MockupCanvas(
     let live = true;
     (async () => {
       const fc = fcRef.current; if (!fc) return;
+      // Where the OUTGOING blank sat, so a swap can keep the artwork on the same
+      // spot of the garment (see remapPlacement). Null on the first load.
+      const prevBox = blankRef.current ? {
+        originX: blankRef.current.left,
+        originY: blankRef.current.top,
+        dispW: blankRef.current.getScaledWidth(),
+        dispH: blankRef.current.getScaledHeight(),
+      } : null;
       if (blankRef.current) { fc.remove(blankRef.current); blankRef.current = null; }
       const img = await loadFabricImage(blankSrc);
       if (!live || !fcRef.current) return;
@@ -215,6 +223,22 @@ const MockupCanvas = forwardRef(function MockupCanvas(
         fc.add(img);
         if (typeof img.moveTo === 'function') img.moveTo(0);  // behind the logo
         blankRef.current = img;
+
+        // Swapping the blank (black tee → white tee, or a different garment)
+        // must not move the artwork. Stage coordinates are absolute, so without
+        // this the print lands somewhere else the moment the new image sits in
+        // a different box — which makes swapping colourways unusable.
+        const lg = logoRef.current;
+        if (lg && prevBox) {
+          const next = remapPlacement(
+            { x: lg.left, y: lg.top, w: lg.scaleX, h: lg.scaleY, angle: lg.angle || 0 },
+            prevBox, box,
+          );
+          lg.set({ left: next.x, top: next.y, scaleX: next.w, scaleY: next.h });
+          lg.setCoords();
+          clampToArea(lg);
+          emit();   // persist the remap, so a save keeps what's on screen
+        }
       }
       fc.requestRenderAll();
     })();

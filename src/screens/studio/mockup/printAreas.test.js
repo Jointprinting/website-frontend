@@ -7,7 +7,7 @@
 // logical space — so the blank landed at 310×scale instead of 310, i.e. left of
 // centre on every phone, and out of register with the print-area guide.
 
-import { blankBox, centerInStage, printAreaRect, STAGE_W, STAGE_H, BLANK_FIT } from './printAreas';
+import { blankBox, centerInStage, remapPlacement, printAreaRect, STAGE_W, STAGE_H, BLANK_FIT } from './printAreas';
 
 describe('blankBox', () => {
   it('centres the blank in the logical stage', () => {
@@ -78,5 +78,84 @@ describe('print-area guide registration', () => {
     expect(rect.top).toBeGreaterThanOrEqual(box.originY);
     expect(rect.left + rect.width).toBeLessThanOrEqual(box.originX + box.dispW + 0.001);
     expect(rect.top + rect.height).toBeLessThanOrEqual(box.originY + box.dispH + 0.001);
+  });
+});
+
+describe('remapPlacement — swapping the blank keeps the print on the garment', () => {
+  // A placement is stored in absolute stage coordinates, so two blanks whose
+  // images differ in size or aspect put the same coordinates on a different part
+  // of the garment. Swapping a black tee for a white one has to be invisible.
+  const posOn = (box, relX, relY, scale = 1) => ({
+    x: box.originX + relX * box.dispW,
+    y: box.originY + relY * box.dispH,
+    w: scale, h: scale, angle: 0,
+  });
+
+  it('keeps the same relative spot when the new blank is a different size', () => {
+    const oldBox = blankBox(1000, 1200);
+    const newBox = blankBox(1600, 1920);          // same aspect, bigger image
+    const pos = posOn(oldBox, 0.5, 0.3);
+    const out = remapPlacement(pos, oldBox, newBox);
+    expect((out.x - newBox.originX) / newBox.dispW).toBeCloseTo(0.5, 6);
+    expect((out.y - newBox.originY) / newBox.dispH).toBeCloseTo(0.3, 6);
+  });
+
+  it('is a no-op when the two blanks share dimensions', () => {
+    // The common colourway case — same garment photo, different colour.
+    const box = blankBox(1200, 1500);
+    const pos = posOn(box, 0.42, 0.27, 0.8);
+    const out = remapPlacement(pos, box, box);
+    expect(out.x).toBeCloseTo(pos.x, 6);
+    expect(out.y).toBeCloseTo(pos.y, 6);
+    expect(out.w).toBeCloseTo(pos.w, 6);
+  });
+
+  it('scales the print with the garment so it keeps its proportion', () => {
+    const oldBox = blankBox(1000, 1200);
+    const newBox = blankBox(2000, 2400);
+    const out = remapPlacement(posOn(oldBox, 0.5, 0.3, 1), oldBox, newBox);
+    expect(out.w).toBeCloseTo(newBox.dispW / oldBox.dispW, 6);
+    expect(out.h).toBeCloseTo(newBox.dispW / oldBox.dispW, 6);
+  });
+
+  it('handles a change of aspect ratio', () => {
+    const oldBox = blankBox(1000, 1000);   // square
+    const newBox = blankBox(1000, 1600);   // tall
+    const out = remapPlacement(posOn(oldBox, 0.5, 0.25), oldBox, newBox);
+    expect((out.x - newBox.originX) / newBox.dispW).toBeCloseTo(0.5, 6);
+    expect((out.y - newBox.originY) / newBox.dispH).toBeCloseTo(0.25, 6);
+  });
+
+  it('preserves rotation', () => {
+    const oldBox = blankBox(1000, 1200);
+    const newBox = blankBox(1400, 1680);
+    const out = remapPlacement({ ...posOn(oldBox, 0.5, 0.3), angle: 37 }, oldBox, newBox);
+    expect(out.angle).toBe(37);
+  });
+
+  it('returns the placement untouched when there is nothing to remap to', () => {
+    const box = blankBox(1000, 1200);
+    const pos = posOn(box, 0.5, 0.3);
+    expect(remapPlacement(pos, null, box)).toBe(pos);
+    expect(remapPlacement(pos, box, null)).toBe(pos);
+    expect(remapPlacement(pos, { originX: 0, originY: 0, dispW: 0, dispH: 0 }, box)).toBe(pos);
+    expect(remapPlacement(null, box, box)).toBe(null);
+  });
+
+  it('leaves an unplaced logo alone', () => {
+    const box = blankBox(1000, 1200);
+    const empty = { x: null };
+    expect(remapPlacement(empty, box, box)).toBe(empty);
+  });
+
+  it('round-trips — swapping back restores the original placement', () => {
+    const a = blankBox(1000, 1200);
+    const b = blankBox(1700, 1300);
+    const pos = posOn(a, 0.38, 0.22, 0.9);
+    const there = remapPlacement(pos, a, b);
+    const back = remapPlacement(there, b, a);
+    expect(back.x).toBeCloseTo(pos.x, 5);
+    expect(back.y).toBeCloseTo(pos.y, 5);
+    expect(back.w).toBeCloseTo(pos.w, 5);
   });
 });
