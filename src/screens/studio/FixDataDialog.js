@@ -4,11 +4,12 @@
 //
 // The API for this has existed for a while (GET/POST /api/crm/data-cleanup/*)
 // but nothing in the Studio ever called it, so four working detections had no
-// way to be run. This is that surface, and it's where the cross-project mockup
-// repair lands: the residue left by the old client-name matcher, which had been
-// attaching every mockup a long-term client owned to every one of their
-// projects — and showing that pile to the client on pre-confirmation approval
-// links.
+// way to be run. This is that surface.
+//
+// (It briefly carried a fifth: a one-time repair for mockups the old
+// company-name matcher had attached to the wrong project. That migration has
+// been run, so the section and its detector are gone — a one-time tool must not
+// leave a leftover button behind.)
 //
 // House rules for anything that touches live data (docs/ECOSYSTEM.md): preview
 // first, never apply without an explicit confirm, snapshot before mutating so
@@ -32,28 +33,7 @@ import { D, mono, scrollbar, useMobileFullScreen } from './_shared';
 const base = `${config.backendUrl}/api`;
 
 // Each detection: how to identify a row, what to call it, and how to render one.
-// Ordered by how much the owner will care — the mockup fix is the one with a
-// client-visible consequence, so it leads.
 const SECTIONS = [
-  {
-    key: 'crossProject',
-    idField: 'orderId',
-    bodyKey: 'crossProjectIds',
-    title: 'Mockups on the wrong project',
-    blurb: 'Designs attached to a project by the old company-name matcher. Removing them '
-      + 'means a client only sees the job in front of them. The mockups themselves are '
-      + 'never deleted — only unhooked from projects they never belonged to.',
-    render: (r) => (
-      <>
-        <Typography sx={{ ...mono, fontSize: 11, color: D.text, fontWeight: 700 }}>
-          #{r.projectNumber} · {r.companyName}
-        </Typography>
-        <Typography sx={{ fontSize: 11, color: D.faint }}>
-          removes {r.foreign.length}: {r.foreign.map((f) => `${f.mockupNum} (→ #${f.belongsTo})`).join(', ')}
-        </Typography>
-      </>
-    ),
-  },
   {
     key: 'orphans',
     idField: 'orderId',
@@ -115,7 +95,7 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
         next[s.key] = new Set((r.data[s.key] || []).map((row) => String(row[s.idField])));
       }
       setPicked(next);
-      setOpenSections({ crossProject: true });
+      setOpenSections(SECTIONS.length ? { [SECTIONS[0].key]: true } : {});
     } catch (e) {
       setPlan({ counts: { total: 0 } });
       onToast?.(e.response?.data?.message || e.message || 'Could not load the repair plan.', 'error');
@@ -149,7 +129,7 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
       setLastBatch(r.data.batchId || '');
       const f = r.data.fixed || {};
       onToast?.(
-        `Fixed — projects ${f.crossProject || 0} · orders ${f.orders || 0} · names ${f.names || 0} · rows ${f.removedRows || 0}`,
+        `Fixed — orders ${f.orders || 0} · names ${f.names || 0} · receipts ${f.receipts || 0} · rows ${f.removedRows || 0}`,
         'success',
       );
       await onApplied?.();

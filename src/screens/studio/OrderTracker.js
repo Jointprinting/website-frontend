@@ -862,7 +862,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
                 <ListItemIcon sx={{ color: D.green }}><HealingOutlinedIcon fontSize="small" /></ListItemIcon>
                 <ListItemText primaryTypographyProps={{ sx: { fontSize: 13, color: D.green, fontWeight: 700 } }}
                   secondaryTypographyProps={{ sx: { fontSize: 10, color: D.muted } }}
-                  secondary="Wrong-project mockups, unlinked orders — reversible">
+                  secondary="Unlinked orders, name splits, duplicate rows — reversible">
                   Fix data · {fixDataCount}
                 </ListItemText>
               </MenuItem>
