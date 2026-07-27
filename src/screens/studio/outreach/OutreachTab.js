@@ -24,6 +24,7 @@ import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import config from '../../../config.json';
 import { D, accentBar, mono } from '../_shared';
+import { reArmToast } from './_outreach';
 import OverviewView from './OverviewView';
 import CampaignsView from './CampaignsView';
 import QueueView from './QueueView';
@@ -189,8 +190,17 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   };
 
   const updateCampaign = async (id, patch) => {
+    // Growing a sequence is the fix for the one-touch burn: the API re-arms the
+    // leads the shorter sequence already ran dry on and reports the count, so
+    // the toast says what actually happened to the list, not just "saved".
+    const before = (overview?.campaigns || []).find((c) => String(c._id) === String(id));
     const { data } = await axios.patch(`${base}/campaigns/${id}`, patch, authHdr);
-    if (patch.status === 'active') flash('Campaign live — the engine takes it from here.');
+    const added = Array.isArray(patch.steps) && before
+      ? patch.steps.length - ((before.steps || []).length)
+      : 0;
+    const reArmMsg = reArmToast({ addedTouches: added, reArm: data.reArm });
+    if (reArmMsg) flash(reArmMsg);
+    else if (patch.status === 'active') flash('Campaign live — the engine takes it from here.');
     else if (patch.status === 'paused') flash('Campaign paused — nothing more sends until you resume.');
     else flash('Campaign saved.');
     await loadOverview();

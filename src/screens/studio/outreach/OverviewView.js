@@ -18,9 +18,13 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
+import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import { D, mono, fmtRelative } from '../_shared';
 import { EmptyState, Eyebrow } from '../crm/_crm';
-import { StatusChip, StatPill, campaignStatusMeta, enrollmentStatusMeta, DEFAULT_SEQUENCE } from './_outreach';
+import {
+  StatusChip, StatPill, TouchChip, campaignStatusMeta, enrollmentStatusMeta, DEFAULT_SEQUENCE,
+  DIAG_RED, replyPathView, replyIngestState, followUpsTile, sequenceDepth,
+} from './_outreach';
 
 // One campaign's funnel numbers as a compact strip.
 function FunnelStrip({ stats }) {
@@ -133,6 +137,65 @@ function WarmRow({ row, onOpenCompany, onMarkReplied, onStop, onNotAReply }) {
           )}
           <ChevronRightIcon sx={{ color: D.faint, fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
         </Stack>
+      </Stack>
+    </Box>
+  );
+}
+
+// One mailbox in the reply path, labelled — the two addresses side by side are
+// the whole story, so they get read as addresses (mono) not prose.
+function MailboxPill({ label, value, tone }) {
+  return (
+    <Box sx={{ px: 1.25, py: 0.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}`, minWidth: 0 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.9, textTransform: 'uppercase' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ ...mono, color: tone, fontSize: 12, fontWeight: 800, wordBreak: 'break-all' }}>{value}</Typography>
+    </Box>
+  );
+}
+
+// THE REPLY BLACK HOLE. Every other alert on this page says "nothing is going
+// out"; this one is the worse case — mail IS going out and every answer lands in
+// a mailbox nobody reads, so a zero reply count isn't a measurement at all. The
+// API decides it (engine.replyPath); this shouts at 'action', murmurs at 'warn',
+// and stays silent when the path is clean. Sits above everything, including the
+// setup wizard, because nothing else on the page matters until it's fixed.
+function ReplyPathBanner({ replyPath, onGoReplies }) {
+  const v = replyPathView(replyPath);
+  if (!v.show) return null;
+  const loud = v.level === 'action';
+  return (
+    <Box sx={{
+      borderRadius: 3, p: { xs: 1.75, sm: 2.25 },
+      bgcolor: loud ? 'rgba(248,113,113,0.10)' : 'rgba(251,191,36,0.08)',
+      border: `1px solid ${v.tone}${loud ? '88' : '4d'}`,
+      ...(loud ? { boxShadow: `0 0 0 3px ${v.tone}14` } : {}),
+    }}>
+      <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        <MarkEmailUnreadOutlinedIcon sx={{ color: v.tone, fontSize: loud ? 24 : 19, mt: '2px', flexShrink: 0 }} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ color: v.tone, fontWeight: 800, fontSize: loud ? 15.5 : 13.5, lineHeight: 1.35 }}>
+            {v.label || (loud ? 'Replies are not reaching you' : 'Check where replies land')}
+          </Typography>
+          {/* Name BOTH mailboxes — that they differ IS the failure. */}
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+            <MailboxPill label="Replies land in" value={v.destination || 'no sending address set'} tone={v.tone} />
+            <MailboxPill label="Studio reads" value={v.triageAddress || 'nothing connected'}
+              tone={v.monitored ? D.green : v.tone} />
+          </Stack>
+          {v.hint && (
+            <Typography sx={{ color: D.muted, fontSize: 12.5, mt: 1, lineHeight: 1.55 }}>{v.hint}</Typography>
+          )}
+          {loud && onGoReplies && (
+            <Button onClick={onGoReplies} size="small"
+              sx={{ mt: 1.25, color: v.tone, fontSize: 12, fontWeight: 800, textTransform: 'none',
+                border: `1px solid ${v.tone}55`, borderRadius: 999, px: 1.75, py: 0.3,
+                '&:hover': { bgcolor: 'rgba(248,113,113,0.12)' } }}>
+              Open replies →
+            </Button>
+          )}
+        </Box>
       </Stack>
     </Box>
   );
@@ -492,6 +555,10 @@ export default function OverviewView({
 
   return (
     <Stack spacing={3}>
+      {/* Above EVERYTHING: are the replies this engine produces reaching a
+          mailbox anyone reads? Silent when the path is clean. */}
+      <ReplyPathBanner replyPath={engine && engine.replyPath} onGoReplies={onGoReplies} />
+
       {/* First-run guide — self-checking "Launch in 3 steps"; hides when set up. */}
       <SetupWizard overview={overview} onGoCampaigns={onGoCampaigns} onGoImport={onGoImport} onTestSend={onTestSend} />
 
@@ -500,23 +567,37 @@ export default function OverviewView({
 
       {/* Today's plan — plain-English "here's what the engine is doing", so it can
           be trusted without babysitting. Only once it's actually running. */}
-      {anyActive && overview.plan && (
-        <Box>
-          <Eyebrow sx={{ mb: 1 }}>Today’s plan — warm follow-ups send first, then new</Eyebrow>
-          <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
-            <StatPill value={overview.plan.followUpsDue ?? 0} label="Follow-ups due" tone={D.green} />
-            <StatPill value={overview.plan.firstTouchesDue ?? 0} label="New first-touches due" tone={D.text} />
-            <StatPill value={overview.plan.inSequence ?? 0} label="In sequence" tone={D.text} />
-            <StatPill value={overview.plan.reserve ?? 0} label="Reserve (auto-enrolls)"
-              tone={(overview.plan.reserve ?? 0) > 0 ? D.green : D.muted} />
-          </Stack>
-          <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, mt: 0.9 }}>
-            {overview.plan.dueNow > 0
-              ? `${overview.plan.dueNow} queued to go now, paced under today’s ${overview.plan.dailyCap || '—'}/day cap (${overview.plan.sentToday || 0} sent). The rest drip as they come due — nothing to do.`
-              : `Nothing due this minute — ${overview.plan.inSequence || 0} leads mid-sequence will send as they come due, and the reserve keeps topping the pipeline up on its own.`}
-          </Typography>
-        </Box>
-      )}
+      {anyActive && overview.plan && (() => {
+        // The follow-up tile is the one that lied for weeks: a flat "0" next to
+        // 272 first-touches reads as "none ripe yet" when it actually meant
+        // "there is no second email, ever". followUpsTile() says which.
+        const fu = followUpsTile(overview.plan);
+        return (
+          <Box>
+            <Eyebrow sx={{ mb: 1 }}>Today’s plan — warm follow-ups send first, then new</Eyebrow>
+            <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+              <StatPill value={fu.value} label={fu.label} tone={fu.tone} alarm={fu.alarm} />
+              <StatPill value={overview.plan.firstTouchesDue ?? 0} label="New first-touches due" tone={D.text} />
+              <StatPill value={overview.plan.inSequence ?? 0} label="In sequence" tone={D.text} />
+              <StatPill value={overview.plan.reserve ?? 0} label="Reserve (auto-enrolls)"
+                tone={(overview.plan.reserve ?? 0) > 0 ? D.green : D.muted} />
+            </Stack>
+            {fu.alarm ? (
+              <Typography sx={{ color: DIAG_RED, fontSize: 12, mt: 0.9, lineHeight: 1.55, fontWeight: 600 }}>
+                Your live sequence has one email in it, so every lead is burned on a single touch and no follow-up
+                can ever send — and follow-ups are where cold-email replies come from. Add a day-3 and a day-7 touch
+                under Campaigns; saving a longer sequence re-arms the leads that already ran dry.
+              </Typography>
+            ) : (
+              <Typography sx={{ ...mono, color: D.faint, fontSize: 11.5, mt: 0.9 }}>
+                {overview.plan.dueNow > 0
+                  ? `${overview.plan.dueNow} queued to go now, paced under today’s ${overview.plan.dailyCap || '—'}/day cap (${overview.plan.sentToday || 0} sent). The rest drip as they come due — nothing to do.`
+                  : `Nothing due this minute — ${overview.plan.inSequence || 0} leads mid-sequence will send as they come due, and the reserve keeps topping the pipeline up on its own.`}
+              </Typography>
+            )}
+          </Box>
+        );
+      })()}
 
       {/* Setup guardrails — a safety net once the wizard is gone (dismissed or
           complete); while the wizard is showing it owns this messaging. */}
@@ -567,6 +648,21 @@ export default function OverviewView({
             {!engine.withinWindow ? closedWindowNote(engine.lastResult) : ''}
           </Typography>
         ) : null}
+        {/* The other half of the loop: which mailbox is being READ. Passive, from
+            the same engine.replyPath the banner uses — a dead ingest shows here
+            even on a day when nothing else is wrong. */}
+        {(() => {
+          const ingest = replyIngestState(engine.replyPath);
+          if (!ingest) return null;
+          return (
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.5 }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ingest.tone, flexShrink: 0 }} />
+              <Typography sx={{ ...mono, color: ingest.ok ? D.faint : ingest.tone, fontSize: 11.5 }}>
+                {ingest.text}
+              </Typography>
+            </Stack>
+          );
+        })()}
         {/* Sender pool — per-inbox headroom when more than one is configured. */}
         {Array.isArray(engine.senders) && engine.senders.length > 1 && (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
@@ -631,16 +727,27 @@ export default function OverviewView({
           />
         ) : (
           <Stack spacing={1.5}>
-            {campaigns.map((c) => (
+            {campaigns.map((c) => {
+              // How many touches this sequence really has — and whether anyone
+              // has ever reached touch 2. A one-touch campaign burns the list one
+              // email at a time, so it says so on the card, in red.
+              const depth = sequenceDepth(c);
+              return (
               <Box key={c._id} sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.25 }}>
                   <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5, flexGrow: 1, minWidth: 0 }}>
                     {c.name}
                   </Typography>
+                  <TouchChip depth={depth} />
                   <StatusChip meta={campaignStatusMeta(c.status)} />
                 </Stack>
                 <FunnelStrip stats={c.stats} />
                 <EnrollmentAccounting stats={c.stats} />
+                {depth.note && (
+                  <Typography sx={{ color: DIAG_RED, fontSize: 11.5, mt: 0.75, lineHeight: 1.5, fontWeight: 600 }}>
+                    {depth.note}
+                  </Typography>
+                )}
                 {/* Subject A/B results — appears once variant sends exist. */}
                 <AbStrip ab={c.abTest} />
                 {/* When a campaign is active but not sending, say exactly why —
@@ -658,7 +765,8 @@ export default function OverviewView({
                   </Box>
                 )}
               </Box>
-            ))}
+              );
+            })}
           </Stack>
         )}
         <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
