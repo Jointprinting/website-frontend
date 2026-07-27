@@ -30,7 +30,7 @@
 import { lazy } from 'react';
 import {
   TRADES_PALETTES, DINING_PALETTES, WELLNESS_PALETTES,
-  PROFESSIONAL_PALETTES, RETAIL_PALETTES,
+  PROFESSIONAL_PALETTES, RETAIL_PALETTES, TODD_REUBEN_PALETTES,
 } from './_meta';
 
 // Pickers only need the chips — strip the CSS role maps.
@@ -79,4 +79,63 @@ export const TEMPLATES = [
   },
 ];
 
-export const getTemplate = (id) => TEMPLATES.find((t) => t.id === id) || null;
+// ─────────────────────────────────────────────────────────────────────────────
+//  CUSTOM SITES — hand-built one-off client sites
+// ─────────────────────────────────────────────────────────────────────────────
+// The five TEMPLATES above are the on-the-fly kit: pick a look, fill the form,
+// send a preview link in ten minutes. A CUSTOM SITE is the other half of the
+// business — a site designed around ONE client, when the client is worth
+// hand-building for (or their trade fits none of the five).
+//
+// They are deliberately NOT in TEMPLATES: they must never headline the
+// new-site gallery as if they were a reusable look, and adding one must never
+// change what the template picker offers. But they are otherwise first-class —
+// same `data` contract, same lazy chunk, same palettes-in-_meta rule — and
+// getTemplate() resolves them, so the Studio editor's live preview,
+// /webworks/p/:slug and the client's connected domain all render them with no
+// special-casing anywhere downstream.
+//
+// Adding the next one: component in ./custom/, palettes in _meta.js, one entry
+// here. Nothing else in the app needs to know.
+export const CUSTOM_SITES = [
+  {
+    id: 'custom-todd-reuben',
+    label: 'Todd Reuben Sculptor',
+    description: 'Gallery one-pager for a stainless steel sculptor — work-first grid, catalogue ledger, phone-forward close.',
+    businessTypes: ['Sculptor', 'Artist', 'Fine art', 'Gallery', 'Metalwork'],
+    palettes: chips(TODD_REUBEN_PALETTES),
+    custom: true,
+    // Creating the site drops this straight into `data` (see seedData in the
+    // Studio's Websites tab) so the editor opens filled in from his intake
+    // answers rather than blank. Ordinary editable content — change anything.
+    //
+    // Every line traces to something he actually said. Nothing here invents a
+    // price, a year, a credential or a review, and `about` is deliberately
+    // EMPTY: he is sending his own bio, and the About section stays hidden
+    // until it is pasted in.
+    seedData: {
+      tagline: 'One-of-a-kind stainless steel sculpture, made in Woodstock, Vermont.',
+      heroHeadline: 'Stainless steel, shaped by hand',
+      ctaLabel: 'Call the studio',
+      phone: '(802) 356-9414',
+      email: 'scottiereuben@gmail.com',
+      serviceArea: 'Shipped worldwide',
+      address: 'Woodstock, Vermont',
+      hours: [],           // he keeps no posted hours — the section stays hidden
+      services: [
+        { name: 'Commissioned work', desc: 'A sculpture made for your space. Call to talk through scale, site and material.', price: '' },
+        { name: 'Available pieces', desc: 'Finished sculptures ready to go. Each one is the only one of its kind — call to ask what is in the studio now.', price: '' },
+        { name: 'Shipping', desc: 'Pieces have travelled well beyond Vermont. Crating and delivery arranged anywhere.', price: '' },
+      ],
+      about: '',           // his bio is coming — section hides until it lands
+      testimonials: [],
+      paletteId: 'steel',
+    },
+    Component: lazy(() => import('./custom/ToddReuben')),
+  },
+];
+
+// Anything that can render a site record, template or custom build.
+export const ALL_SITE_LOOKS = [...TEMPLATES, ...CUSTOM_SITES];
+
+export const getTemplate = (id) => ALL_SITE_LOOKS.find((t) => t.id === id) || null;

@@ -1,8 +1,10 @@
 // src/webworks/templates/templates.test.js
 //
-// Smoke coverage for the five JP Webworks site templates + the registry.
-// The templates are pure functions of the site `data` bag, so the contract
-// worth pinning is:
+// Smoke coverage for every JP Webworks site look + the registry — the five
+// on-the-fly templates AND the hand-built custom client sites, which render
+// through the same machinery and so must hold the same contract.
+// Every look is a pure function of the site `data` bag, so what's worth
+// pinning is:
 //   1. FULL data renders every section (nav, hero, services, about,
 //      testimonials, hours, contact) without crashing.
 //   2. EMPTY data renders WITHOUT crashing and WITHOUT empty section shells —
@@ -22,7 +24,7 @@
 
 import * as React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TEMPLATES, getTemplate } from './index';
+import { TEMPLATES, CUSTOM_SITES, ALL_SITE_LOOKS, getTemplate } from './index';
 import { topicOf } from './_kit';
 
 const FULL_DATA = {
@@ -77,9 +79,54 @@ describe('template registry', () => {
     expect(getTemplate('dining')?.label).toBe('Dining');
     expect(getTemplate('nope')).toBeNull();
   });
+
+  test('custom builds are registered, flagged, and resolvable — but never in the picker', () => {
+    // The picker renders TEMPLATES; a custom build appearing there would offer
+    // one client's hand-made site as if it were a reusable look.
+    const tplIds = TEMPLATES.map((t) => t.id);
+    for (const c of CUSTOM_SITES) {
+      expect(c.custom).toBe(true);
+      expect(tplIds).not.toContain(c.id);
+      expect(c.label).toBeTruthy();
+      expect(c.description).toBeTruthy();
+      expect(c.palettes.length).toBeGreaterThan(0);
+      expect(c.Component).toBeTruthy();
+      // …but it still resolves, or the editor preview / preview link / the
+      // client's own domain would all render nothing.
+      expect(getTemplate(c.id)).toBe(c);
+    }
+    expect(ALL_SITE_LOOKS).toHaveLength(TEMPLATES.length + CUSTOM_SITES.length);
+  });
+
+  test('Todd Reuben is the custom build on file, seeded from his intake', () => {
+    const todd = getTemplate('custom-todd-reuben');
+    expect(todd).toBeTruthy();
+    expect(todd.seedData.phone).toBe('(802) 356-9414');
+    expect(todd.seedData.email).toBe('scottiereuben@gmail.com');
+    // His bio is still to come — seeding placeholder prose would put words in
+    // an artist's mouth, so About stays empty (and therefore hidden).
+    expect(todd.seedData.about).toBe('');
+    expect(todd.seedData.testimonials).toEqual([]);
+    // He posts no hours; the default Mon–Fri row must not survive for him.
+    expect(todd.seedData.hours).toEqual([]);
+    // Nothing invented: no price, year or credential anywhere in the seed.
+    for (const s of todd.seedData.services) expect(s.price).toBe('');
+    expect(todd.seedData.established).toBeUndefined();
+    expect(todd.seedData.license).toBeUndefined();
+  });
+
+  test('a custom seed never overrides the name/type typed in the dialog', () => {
+    // seedData spreads OVER the base seed, so a stray businessName/businessType
+    // in a custom entry would silently beat what the owner just typed.
+    for (const c of CUSTOM_SITES) {
+      expect(c.seedData?.businessName).toBeUndefined();
+      expect(c.seedData?.businessType).toBeUndefined();
+    }
+  });
 });
 
-describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
+// Every look — templates AND custom builds — holds the same rendering contract.
+describe.each(ALL_SITE_LOOKS.map((t) => [t.id, t]))('%s', (id, tpl) => {
   test('renders full data: name, services, hours, quote, tel/mailto links', async () => {
     const { container } = renderTpl(tpl, { ...FULL_DATA, paletteId: tpl.palettes[1].id });
     // Business name shows (nav + footer at minimum).
@@ -155,12 +202,25 @@ describe.each(TEMPLATES.map((t) => [t.id, t]))('%s template', (id, tpl) => {
     const { container } = renderTpl(tpl, FULL_DATA);
     await screen.findAllByText(/Ironside Plumbing/);
     const img = container.querySelector('.jpw-ph img');
-    fireEvent.error(img);
-    // The wrapper flags the failure, unmounts the img, keeps the crafted fx.
+    // Looks that ship crafted defaults have no <img> to fail in the first
+    // place (an empty src would paint alt text over the crafted scene, so
+    // none is rendered); the ones with stock defaults get theirs killed.
+    if (img) fireEvent.error(img);
+    // The wrapper flags it, carries no img, and keeps the crafted fx.
     const failed = container.querySelector('.jpw-ph-noimg');
     expect(failed).toBeTruthy();
     expect(failed.querySelector('img')).toBeNull();
     expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
+  });
+
+  test('an empty photo slot renders no <img> at all', async () => {
+    const { container } = renderTpl(tpl, { ...FULL_DATA, photos: { hero: '', gallery: [''] } });
+    await screen.findAllByText(/Ironside Plumbing/);
+    // Empty slots fall back to the template's own defaults; whatever renders,
+    // no tile may carry a src-less img (that paints alt text / a broken glyph).
+    for (const el of container.querySelectorAll('.jpw-ph img')) {
+      expect(el.getAttribute('src')).toBeTruthy();
+    }
   });
 });
 

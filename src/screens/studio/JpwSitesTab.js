@@ -42,7 +42,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import config from '../../config.json';
 import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative, money0, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
-import { TEMPLATES, getTemplate } from '../../webworks/templates';
+import { TEMPLATES, CUSTOM_SITES, getTemplate } from '../../webworks/templates';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/jpw/sites`;
@@ -69,6 +69,11 @@ const previewUrl = (slug) => `${window.location.origin}/webworks/p/${slug}`;
 // Starter `data` bag for a new site — mirrors the backend JpwSite data shape.
 // businessName is seeded from the site name; everything else starts empty so
 // the templates hide those sections until the owner fills them in.
+//
+// EXCEPT for a custom build, which is designed around one client whose content
+// we already have — its registry entry carries `seedData`, and that lands on
+// top here so the editor opens filled in instead of making us retype an intake
+// form we already read. Still ordinary editable `data`; nothing is locked.
 const seedData = (businessName, template, businessType = '') => ({
   businessName,
   // Travels WITH the site so every template can render business-type-topical
@@ -87,6 +92,7 @@ const seedData = (businessName, template, businessType = '') => ({
   // Empty = the template paints its own crafted, on-brand TOPICAL scene (no
   // generic stock); owner photo URLs override slot-by-slot.
   photos: { hero: '', gallery: ['', '', ''] },
+  ...(template?.seedData || {}),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -535,6 +541,35 @@ function GenerateDialog({ open, onClose, onGenerate, busy }) {
   );
 }
 
+// One selectable look in the New Site dialog — mock-up thumb, name, palette
+// dots, description. Used for both the five templates and the custom builds,
+// so the two rows can never drift apart in style.
+function PickCard({ tpl, active, onPick }) {
+  return (
+    <Paper elevation={0}
+      onClick={onPick}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}
+      sx={{
+        p: 1.5, borderRadius: 2, cursor: 'pointer', bgcolor: D.inset,
+        border: `1px solid ${active ? D.lineHi : D.line}`,
+        outline: active ? `1px solid ${D.lineHi}` : 'none',
+        transition: 'border-color .15s, transform .15s',
+        '&:hover': { borderColor: D.lineHi, transform: 'translateY(-2px)' },
+        '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
+      }}>
+      <TemplateThumb tpl={tpl} />
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.25 }}>
+        <T sx={{ fontWeight: 800, fontSize: 13.5, color: active ? D.green : D.text }}>{tpl.label}</T>
+        <Stack direction="row" spacing={0.75}>
+          {tpl.palettes.map((p) => <SwatchDots key={p.id} swatches={p.swatches.slice(0, 2)} size={10} />)}
+        </Stack>
+      </Stack>
+      <T sx={{ color: D.muted, fontSize: 11.5, mt: 0.5, lineHeight: 1.45 }}>{tpl.description}</T>
+    </Paper>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  New Site dialog — template picker → business type → name
 // ─────────────────────────────────────────────────────────────────────────────
@@ -573,33 +608,34 @@ function NewSiteDialog({ open, onClose, onCreate, busy, preselect }) {
           display: 'grid', gap: 1.5,
           gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
         }}>
-          {TEMPLATES.map((t) => {
-            const active = t.id === tplId;
-            return (
-              <Paper key={t.id} elevation={0}
-                onClick={() => { setTplId(t.id); setBizType(''); }}
-                role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTplId(t.id); setBizType(''); } }}
-                sx={{
-                  p: 1.5, borderRadius: 2, cursor: 'pointer', bgcolor: D.inset,
-                  border: `1px solid ${active ? D.lineHi : D.line}`,
-                  outline: active ? `1px solid ${D.lineHi}` : 'none',
-                  transition: 'border-color .15s, transform .15s',
-                  '&:hover': { borderColor: D.lineHi, transform: 'translateY(-2px)' },
-                  '&:focus-visible': { outline: `2px solid ${D.green}`, outlineOffset: 2 },
-                }}>
-                <TemplateThumb tpl={t} />
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.25 }}>
-                  <T sx={{ fontWeight: 800, fontSize: 13.5, color: active ? D.green : D.text }}>{t.label}</T>
-                  <Stack direction="row" spacing={0.75}>
-                    {t.palettes.map((p) => <SwatchDots key={p.id} swatches={p.swatches.slice(0, 2)} size={10} />)}
-                  </Stack>
-                </Stack>
-                <T sx={{ color: D.muted, fontSize: 11.5, mt: 0.5, lineHeight: 1.45 }}>{t.description}</T>
-              </Paper>
-            );
-          })}
+          {TEMPLATES.map((t) => (
+            <PickCard key={t.id} tpl={t} active={t.id === tplId}
+              onPick={() => { setTplId(t.id); setBizType(''); }} />
+          ))}
         </Box>
+
+        {/* Custom builds — hand-made one-off client sites. Kept BELOW and
+            visually apart from the five templates: they're a real starting
+            point (a second sculptor, say) but they aren't the reusable kit. */}
+        {CUSTOM_SITES.length > 0 && (
+          <>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 2.5, mb: 1.25 }}>
+              <T sx={{ ...eyebrow, fontSize: 10, letterSpacing: 1.6, color: D.faint }}>
+                Custom builds
+              </T>
+              <Box sx={{ flex: 1, height: 1, bgcolor: D.line }} />
+            </Stack>
+            <Box sx={{
+              display: 'grid', gap: 1.5,
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+            }}>
+              {CUSTOM_SITES.map((t) => (
+                <PickCard key={t.id} tpl={t} active={t.id === tplId}
+                  onPick={() => { setTplId(t.id); setBizType(''); }} />
+              ))}
+            </Box>
+          </>
+        )}
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2.5 }}>
           <TextField
