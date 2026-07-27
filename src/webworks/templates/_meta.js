@@ -116,3 +116,30 @@ export const RETAIL_PALETTES = [
          pop: '#8fe3dc', popInk: '#1c1a1e', tint: '#fbdeeb' },
   },
 ];
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  CUSTOM CLIENT BUILDS
+//  Palettes for hand-built one-off client sites (registry's CUSTOM_SITES).
+//  They live here for the same reason the template palettes do: this file is
+//  pure data, so the Studio's Style section can paint swatches without pulling
+//  the client's lazy component chunk into the bundle.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Todd Reuben Sculptor — gallery-wall neutrals against polished metal ──────
+export const TODD_REUBEN_PALETTES = [
+  {
+    id: 'steel', label: 'Gallery White & Steel', swatches: ['#111315', '#7f8c96', '#f4f4f2'],
+    c: { bg: '#f4f4f2', surface: '#ffffff', ink: '#141618', sub: '#5d646a', line: '#e2e2de', soft: '#ebebe7',
+         accent: '#7f8c96', accentInk: '#ffffff', dark: '#111315', darkInk: '#f2f3f4', darkSub: 'rgba(242,243,244,0.72)' },
+  },
+  {
+    id: 'bronze', label: 'Ink & Bronze', swatches: ['#15130f', '#a97f45', '#f6f3ed'],
+    c: { bg: '#f6f3ed', surface: '#fffdf9', ink: '#1a1713', sub: '#665e52', line: '#e5dfd4', soft: '#efe9dd',
+         accent: '#a97f45', accentInk: '#fffaf2', dark: '#15130f', darkInk: '#f4f0e8', darkSub: 'rgba(244,240,232,0.72)' },
+  },
+  {
+    id: 'patina', label: 'Charcoal & Patina', swatches: ['#12181a', '#5f8f88', '#f1f4f3'],
+    c: { bg: '#f1f4f3', surface: '#ffffff', ink: '#141a1c', sub: '#586366', line: '#dde3e2', soft: '#e7ecea',
+         accent: '#5f8f88', accentInk: '#ffffff', dark: '#12181a', darkInk: '#eff4f3', darkSub: 'rgba(239,244,243,0.72)' },
+  },
+];

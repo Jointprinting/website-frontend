@@ -146,14 +146,22 @@ ${scope} .jpw-ph-fx svg{width:100%;height:100%;display:block;}
 // what the visitor sees while the photo loads; if the photo 404s/blocks, the
 // img unmounts (and the wrapper gains .jpw-ph-noimg) leaving a designed tile
 // instead of a broken-image glyph.
+//
+// An EMPTY slot renders no <img> at all. Templates that ship crafted defaults
+// instead of stock photos (Trades, the custom builds) pass src='' for every
+// slot, and `<img src="">` is not a no-op: the browser treats it as a failed
+// load and paints the alt text (or a broken glyph) straight over the crafted
+// scene. No src, no img.
 export function Ph({ src, alt, className = '', fx, style }) {
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => { setFailed(false); }, [src]);
+  const url = txt(src);
+  const showImg = !!url && !failed;
   return (
-    <figure className={`jpw-ph ${className}${failed ? ' jpw-ph-noimg' : ''}`} style={style}>
+    <figure className={`jpw-ph ${className}${showImg ? '' : ' jpw-ph-noimg'}`} style={style}>
       {fx ? <span className="jpw-ph-fx" aria-hidden="true">{fx}</span> : null}
-      {!failed && (
-        <img src={src} alt={alt || ''} loading="lazy" onError={() => setFailed(true)} />
+      {showImg && (
+        <img src={url} alt={alt || ''} loading="lazy" onError={() => setFailed(true)} />
       )}
     </figure>
   );
