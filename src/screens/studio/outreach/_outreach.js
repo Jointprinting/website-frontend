@@ -285,6 +285,102 @@ jointprinting.com`,
 // (The old FINDER_REGIONS mirror is gone: the lead engine's coverage map reads
 // region labels live from GET /find-leads/status, so nothing here to drift.)
 
+// ── Engine diagnostics ────────────────────────────────────────────────────────
+// The two failures a cold-email engine can run for weeks with and never show:
+// replies landing in a mailbox nobody reads, and a sequence with no second
+// touch. The API decides both (utils/replyPath.js + the overview's stepCount /
+// noFollowUpsPossible); everything here just turns that verdict into pixels, and
+// every reader tolerates the field being absent so the tab survives a deploy
+// where the API is still the older build.
+
+export const DIAG_RED = '#f87171';
+export const REPLY_PATH_TONE = { action: DIAG_RED, warn: D.amber, ok: D.green };
+
+// Read engine.replyPath defensively. An unknown/absent verdict is 'ok' with
+// nothing to show — same degrade-to-quiet rule the backend helper follows, so a
+// hiccup can never manufacture a scary banner.
+export function replyPathView(replyPath) {
+  const rp = replyPath && typeof replyPath === 'object' ? replyPath : null;
+  const level = rp && REPLY_PATH_TONE[rp.level] ? rp.level : 'ok';
+  return {
+    level,
+    tone: REPLY_PATH_TONE[level],
+    show: level !== 'ok',
+    label: (rp && rp.label) || '',
+    hint: (rp && rp.hint) || '',
+    destination: (rp && rp.destination) || '',
+    triageAddress: (rp && rp.triageAddress) || '',
+    monitored: !!(rp && rp.monitored),
+  };
+}
+
+// The passive "is anything actually ingesting replies?" readout. Same source as
+// the banner — no extra call — so a dead ingest is visible even when the banner
+// is quiet. Null = nothing known yet, render nothing.
+export function replyIngestState(replyPath) {
+  const v = replyPathView(replyPath);
+  if (!v.destination && !v.triageAddress) return null;
+  if (v.monitored) return { ok: true, tone: D.green, text: `reply sync reading ${v.triageAddress}` };
+  if (!v.triageAddress) return { ok: false, tone: DIAG_RED, text: 'reply sync — no mailbox connected' };
+  return { ok: false, tone: DIAG_RED, text: `reply sync reads ${v.triageAddress} — replies land in ${v.destination}` };
+}
+
+// Today's plan's follow-up tile. "0 follow-ups due" is two different facts: none
+// are ripe yet, or there is no second email in existence. plan.noFollowUpsPossible
+// says which, and the second one is an alarm, not a zero.
+export function followUpsTile(plan) {
+  const p = plan && typeof plan === 'object' ? plan : {};
+  const due = Number(p.followUpsDue) || 0;
+  if (p.noFollowUpsPossible) {
+    return { alarm: true, value: 'NONE', label: 'One-touch — no follow-ups exist', tone: DIAG_RED };
+  }
+  return { alarm: false, value: due, label: 'Follow-ups due', tone: due > 0 ? D.green : D.muted };
+}
+
+// How deep a campaign's sequence actually goes. `stepCount` is the length the
+// API reports; `everFollowedUp` is whether any enrollment has ever passed touch
+// 1 — a 4-step campaign nobody has reached step 2 on is, in practice, still a
+// one-touch campaign. Falls back to the embedded steps[] on an older payload.
+export function sequenceDepth(campaign) {
+  const c = campaign && typeof campaign === 'object' ? campaign : {};
+  const embedded = Array.isArray(c.steps) ? c.steps.length : 0;
+  const count = Number.isFinite(c.stepCount) ? c.stepCount : embedded;
+  const sent = (c.stats && Number(c.stats.sent)) || 0;
+  const thin = count < 2;
+  // Only meaningful once mail has actually gone out on a live campaign.
+  const neverFollowedUp = !thin && c.everFollowedUp === false && c.status === 'active' && sent > 0;
+  return {
+    count,
+    thin,
+    neverFollowedUp,
+    tone: thin || neverFollowedUp ? DIAG_RED : D.muted,
+    label: `${count} touch${count === 1 ? '' : 'es'}`,
+    note: thin
+      ? 'One touch only — every lead is burned on a single email and never hears from you again. Add a day-3 and a day-7 follow-up.'
+      : neverFollowedUp
+        ? `No lead has ever reached touch 2 — all ${sent} email${sent === 1 ? '' : 's'} sent so far are first touches.`
+        : '',
+  };
+}
+
+// The toast for a sequence that just GREW: the API re-arms the leads the shorter
+// sequence already ran dry on and reports the count (PATCH /campaigns/:id →
+// { reArm: { reArmed, candidates, skipped } }). Empty string = nothing to say.
+export function reArmToast({ addedTouches = 0, reArm = null } = {}) {
+  const r = reArm && typeof reArm === 'object' ? reArm : null;
+  if (!r) return '';
+  const reArmed = Number(r.reArmed) || 0;
+  const candidates = Number(r.candidates) || 0;
+  const added = Number(addedTouches) || 0;
+  const lead = added > 0 ? `Added ${added} touch${added === 1 ? '' : 'es'} — ` : '';
+  if (reArmed > 0) return `${lead}${reArmed} lead${reArmed === 1 ? '' : 's'} re-armed for follow-up.`;
+  if (candidates > 0) {
+    const blocked = (r.skipped && Number(r.skipped.blocked)) || 0;
+    return `${lead}no burned leads could be re-armed${blocked ? ` — ${blocked} are opted out or blocked` : ''}.`;
+  }
+  return lead ? `${lead}no burned leads were waiting on a follow-up.` : '';
+}
+
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 
 // Status pill for campaigns/enrollments — same shape as the CRM's StageChip.
@@ -301,15 +397,40 @@ export function StatusChip({ meta, size = 'small', sx = {} }) {
   );
 }
 
+// How many touches a sequence has, on the campaign card — "4 touches" in the
+// quiet meta tone, "1 touch" in red, because a sequence that can't follow up
+// (or never has) is the difference between a lead engine and a list-burner.
+// Feed it a sequenceDepth() result.
+export function TouchChip({ depth }) {
+  const d = depth || {};
+  const bad = !!(d.thin || d.neverFollowedUp);
+  return (
+    <Chip
+      label={d.label || '—'}
+      size="small"
+      sx={{
+        height: 22, fontSize: 11, fontWeight: 800, letterSpacing: 0.2,
+        color: bad ? DIAG_RED : D.muted,
+        bgcolor: bad ? 'rgba(248,113,113,0.14)' : D.inset,
+        border: `1px solid ${bad ? `${DIAG_RED}55` : D.line}`,
+      }}
+    />
+  );
+}
+
 // One stat block in a summary strip — same look as the CRM Today pills.
-export function StatPill({ value, label, tone = D.green }) {
+// `alarm` repaints it as a red call-out for a stat that is a FAILURE, not a
+// number (e.g. "no follow-ups exist"), so it can't read as a neutral zero.
+export function StatPill({ value, label, tone = D.green, alarm = false }) {
   return (
     <Box sx={{
-      flex: 1, minWidth: 96, px: 2, py: 1.4, borderRadius: 2.5,
-      bgcolor: D.inset, border: `1px solid ${D.line}`, textAlign: 'center',
+      flex: 1, minWidth: 96, px: 2, py: 1.4, borderRadius: 2.5, textAlign: 'center',
+      bgcolor: alarm ? 'rgba(248,113,113,0.10)' : D.inset,
+      border: `1px solid ${alarm ? 'rgba(248,113,113,0.45)' : D.line}`,
     }}>
       <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, color: tone, lineHeight: 1 }}>{value}</Typography>
-      <Typography sx={{ color: D.faint, fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', mt: 0.6 }}>
+      <Typography sx={{ color: alarm ? tone : D.faint, fontSize: 10.5, fontWeight: alarm ? 800 : 700,
+        letterSpacing: 1, textTransform: 'uppercase', mt: 0.6 }}>
         {label}
       </Typography>
     </Box>

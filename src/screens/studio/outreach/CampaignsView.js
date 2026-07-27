@@ -23,8 +23,8 @@ import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, useMobileFullScreen }
 import { confirmDialog } from '../_dialog';
 import { EmptyState, Eyebrow, StageChip } from '../crm/_crm';
 import {
-  StatusChip, campaignStatusMeta, renderPreview, hasSpintax, lintContent, SAMPLE_CONTEXT, MERGE_FIELDS,
-  DEFAULT_SEQUENCE, LEAD_VERTICALS, DEFAULT_VERTICAL_ID, verticalMeta,
+  StatusChip, TouchChip, campaignStatusMeta, renderPreview, hasSpintax, lintContent, SAMPLE_CONTEXT, MERGE_FIELDS,
+  DEFAULT_SEQUENCE, LEAD_VERTICALS, DEFAULT_VERTICAL_ID, verticalMeta, DIAG_RED, sequenceDepth,
 } from './_outreach';
 
 // ── AI sequence-draft dialog ──────────────────────────────────────────────────
@@ -572,12 +572,16 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
         <Stack spacing={1.5}>
           {campaigns.map((c) => {
             const active = c.status === 'active';
+            // Sequence depth — "1 touch" in red is the whole diagnosis on a card:
+            // no second email means every lead is spent on a single send.
+            const depth = sequenceDepth(c);
             return (
               <Box key={c._id} sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} alignItems={{ sm: 'center' }}>
                   <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                       <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5 }}>{c.name}</Typography>
+                      <TouchChip depth={depth} />
                       <StatusChip meta={campaignStatusMeta(c.status)} />
                       {/* Only badge non-default verticals — a dispensary campaign
                           (the common case) stays uncluttered. */}
@@ -587,10 +591,18 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                       )}
                     </Stack>
                     <Typography sx={{ color: D.faint, fontSize: 12, mt: 0.4 }}>
-                      {(c.steps || []).length} step{(c.steps || []).length === 1 ? '' : 's'} ·{' '}
+                      {/* The touch count moved up into the chip beside the name —
+                          it's a health signal now, not a stat. */}
                       {c.stats.enrolled} enrolled · {c.stats.sent} sent · {c.stats.replied} replied
                       {c.description ? ` — ${c.description}` : ''}
                     </Typography>
+                    {/* One touch, or nobody ever reached touch 2 — say it here,
+                        where the "Edit sequence" button is one click away. */}
+                    {depth.note && (
+                      <Typography sx={{ color: DIAG_RED, fontSize: 11.5, mt: 0.5, lineHeight: 1.5, fontWeight: 600 }}>
+                        {depth.note}
+                      </Typography>
+                    )}
                     {/* The "why isn't it sending?" signal — names the exact blocker
                         (e.g. "48 missing email") instead of leaving a wall of zeros. */}
                     {c.health && (
