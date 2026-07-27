@@ -43,7 +43,10 @@ const DEFAULT_PHOTOS = { hero: '', gallery: ['', '', ''] };
 // Todd-specific standing fact from his intake ("prefers calls, doesn't receive
 // texts"). Hard-coded because the shared `data` contract has no field for it —
 // if he ever starts texting, this line is the one place to change.
-const CALL_NOTE = 'Todd prefers a phone call — he doesn’t receive text messages.';
+//
+// FIRST PERSON, deliberately: this is his own site, so it speaks AS him. A
+// third-person "Todd prefers…" reads like an agency wrote the page about him.
+const CALL_NOTE = 'Please call — I don’t receive text messages.';
 
 // Crafted no-photo scene: brushed-steel field, a specular sweep, and one
 // polished abstract form on a plinth. This is what paints while a photo loads,
@@ -140,7 +143,9 @@ const css = (c, hero) => `
    raking highlight instead of the flat wash. */
 .jpwtr-hero{position:relative;background-color:${c.dark};color:${c.darkInk};overflow:hidden;
   background-image:${hero
-    ? `linear-gradient(103deg,${c.dark}f2 0%,${c.dark}d9 46%,${c.dark}9e 100%),url('${hero}'),`
+    /* Wash is heaviest where the type sits and thins out to the right, so his
+       photo actually reads instead of being flattened to near-black. */
+    ? `linear-gradient(103deg,${c.dark}f2 0%,${c.dark}d6 46%,${c.dark}80 100%),url('${hero}'),`
     : `radial-gradient(120% 96% at 76% 16%,color-mix(in srgb,${c.accent} 46%,transparent),transparent 60%),
        linear-gradient(103deg,${c.dark}f0 0%,${c.dark}c4 52%,${c.dark}82 100%),`}
     linear-gradient(140deg,${c.dark},color-mix(in srgb,${c.accent} 40%,${c.dark}) 58%,${c.dark});
@@ -153,7 +158,10 @@ const css = (c, hero) => `
 .jpwtr-hero h1{font-size:clamp(38px,7.4vw,78px);color:${c.darkInk};margin-top:20px;max-width:13ch;}
 .jpwtr-hero .jpwtr-tag{margin-top:22px;max-width:44ch;font-size:clamp(15.5px,2vw,18.5px);color:${c.darkSub};font-weight:300;overflow-wrap:anywhere;}
 .jpwtr-hero-ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:38px;}
-.jpwtr-btn{display:inline-block;white-space:nowrap;font-size:12px;letter-spacing:.2em;text-transform:uppercase;padding:15px 34px;border:1px solid ${c.darkInk};color:${c.darkInk};transition:background .18s,color .18s,border-color .18s;}
+.jpwtr-btn{display:inline-block;white-space:nowrap;text-align:center;font-size:12px;letter-spacing:.2em;text-transform:uppercase;padding:15px 34px;border:1px solid ${c.darkInk};color:${c.darkInk};transition:background .18s,color .18s,border-color .18s;}
+/* Once they stack, two buttons of different label lengths read as ragged —
+   match their widths so the pair looks placed rather than left over. */
+@media(max-width:480px){.jpwtr-hero-ctas{flex-direction:column;align-items:stretch;}}
 .jpwtr-btn:hover{background:${c.darkInk};color:${c.dark};}
 .jpwtr-btn-solid{background:${c.accent};border-color:${c.accent};color:${c.accentInk};}
 .jpwtr-btn-solid:hover{background:${c.darkInk};border-color:${c.darkInk};color:${c.dark};}
@@ -170,13 +178,24 @@ const css = (c, hero) => `
 .jpwtr-sec-head h2{font-size:clamp(28px,4.6vw,48px);margin-top:14px;}
 .jpwtr-sec-head p{margin-top:16px;font-size:clamp(15px,1.9vw,17px);color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
 
-/* Work — the spine. Editorial grid that takes ANY number of photos: every
-   fourth piece runs full width, the rest pair up. */
+/* Work — the spine. Editorial grid that takes ANY number of photos: a
+   full-width piece opens each run, the rest pair up.
+   The period is FIVE (one wide + four halves), not four: four leaves three
+   halves between wide tiles, an odd number, so one is always stranded alone
+   in a half-width slot with dead space beside it. And whatever the total, a
+   trailing half that would sit alone is promoted to full width — that's the
+   :last-child pair below, which covers every count (2 and 4 within each run).
+   Photo counts are the client's to decide, so no count may look broken. */
 .jpwtr-gal{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(12px,2.4vw,26px);}
 .jpwtr-gal .jpw-ph{grid-column:span 3;aspect-ratio:4/5;transition:transform .25s;}
-.jpwtr-gal .jpw-ph:nth-child(4n+1){grid-column:span 6;aspect-ratio:16/10;}
+.jpwtr-gal .jpw-ph:nth-child(5n+1),
+.jpwtr-gal .jpw-ph:last-child:nth-child(5n+2),
+.jpwtr-gal .jpw-ph:last-child:nth-child(5n+4){grid-column:span 6;aspect-ratio:16/10;}
 .jpwtr-gal .jpw-ph:hover{transform:translateY(-4px);}
-@media(max-width:700px){.jpwtr-gal .jpw-ph,.jpwtr-gal .jpw-ph:nth-child(4n+1){grid-column:span 6;aspect-ratio:4/5;}}
+@media(max-width:700px){.jpwtr-gal .jpw-ph,
+  .jpwtr-gal .jpw-ph:nth-child(5n+1),
+  .jpwtr-gal .jpw-ph:last-child:nth-child(5n+2),
+  .jpwtr-gal .jpw-ph:last-child:nth-child(5n+4){grid-column:span 6;aspect-ratio:4/5;}}
 
 /* Commissions + available work — a numbered catalogue ledger, not tiles */
 .jpwtr-cat{border-top:1px solid ${c.ink};}
@@ -347,9 +366,11 @@ export default function ToddReubenSite({ data }) {
       {about && (
         <section className="jpwtr-sec jpwtr-about" id="about">
           <div className="jpwtr-wrap in">
+            {/* Just "About" — the site speaks AS him, so "About <his name>"
+                would read as though someone else wrote the page about him. */}
             <div>
               <span className="jpwtr-cap">The artist</span>
-              <h2 className="jpwtr-serif">About {name}</h2>
+              <h2 className="jpwtr-serif">About</h2>
             </div>
             <p>{about}</p>
           </div>
