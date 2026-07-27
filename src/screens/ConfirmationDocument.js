@@ -283,11 +283,27 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
               const itemSubtotal = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0);
               const itemUnits = sizes.reduce((s, sz) => s + (Number(sz.qty) || 0), 0); // total pieces for this item
               const imgs = resolveImgs(it) || [];
+              // ONE mockup sits beside the details; TWO OR MORE become a full-width
+              // strip above them. This document always renders in a ~780px column
+              // (ApprovalView and the builder preview both cap at 780), so an item
+              // row only has ~618px to spend. A side-by-side media column of N
+              // fixed 168px tiles never yields — at three mockups it took 524px and
+              // left the size/price table 72px, overflowing the card by 75px: the
+              // title broke one word per line and the unit prices were clipped off
+              // the right edge. Going full-width above the details is also how the
+              // confirmation PDF lays the same item out (controllers/confirmationPdf.js
+              // draws the image strip, then the size table beneath at full width),
+              // so the three surfaces the client can see now agree.
+              const gallery = imgs.length > 1;
               return (
                 <Box key={idx} sx={{ border: `1px solid ${D.line}`, borderRadius: 2.5, p: { xs: 2, md: 2.5 }, bgcolor: D.inset }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} gap={{ xs: 2, sm: 2.5 }} alignItems="flex-start">
+                  <Stack direction={{ xs: 'column', sm: gallery ? 'column' : 'row' }} gap={{ xs: 2, sm: 2.5 }} alignItems="flex-start">
                     {imgs.length > 0 && (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>
+                      // maxWidth 100% is the backstop: however many mockups an item
+                      // carries, the strip wraps inside the card instead of pushing
+                      // past its edge.
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0, minWidth: 0,
+                        maxWidth: '100%', width: { xs: '100%', sm: gallery ? '100%' : 'auto' } }}>
                         {imgs.map((src, i) => (
                           // `contain` (not cover) so the WHOLE linked mockup shows,
                           // resized to fit instead of cropped; the lightbox opens the
@@ -316,8 +332,12 @@ export default function ConfirmationDocument({ conf, project = {}, logo, resolve
                         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
                           <thead>
                             <tr>
-                              {['Size', 'Qty', 'Unit price'].map((h, hi) => (
-                                <th key={h} style={{ textAlign: hi === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase',
+                              {/* tableLayout is `fixed`, so these first-row widths set
+                                  the columns. Without them the three split evenly and
+                                  the numbers drift far from their size labels once the
+                                  table has the full card width to spend. */}
+                              {[{ h: 'Size', w: 'auto' }, { h: 'Qty', w: '22%' }, { h: 'Unit price', w: '30%' }].map(({ h, w }, hi) => (
+                                <th key={h} style={{ width: w, textAlign: hi === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase',
                                   letterSpacing: '0.5px', color: D.faint, padding: '5px 8px', borderBottom: `1px solid ${D.line}` }}>{h}</th>
                               ))}
                             </tr>
