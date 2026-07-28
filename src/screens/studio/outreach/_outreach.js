@@ -233,15 +233,15 @@ export const SAMPLE_CONTEXT = {
 export const DEFAULT_SEQUENCE = [
   {
     offsetDays: 0,
-    subject: '{merch|custom merch} for {{companyName}}',
+    subject: '{merch line for|merch for} {{companyName}}',
     subjectB: 'quick one about {{companyName}}',
     body: `{{greeting}}
 
-Nate here, from Joint Printing — we do custom merch for dispensaries. Staff tees and hoodies, hats, and the counter stuff like lighters and grinders.
+Nate here, from Joint Printing. We set up merch and apparel lines for dispensaries — {basically we run it like your merch department|think of us as your merch department}. You tell us the vibe, we pull whichever blank brands you want, put the quote together, and make up mockups with your branding before anything's decided.
 
-If you send over a logo, I'll have mockups made up with {{companyName}}'s branding so you can actually see it {before spending anything|before any money comes into it}. If you like them, we go from there.
+The mockups are free. If you like them you order, if you don't you drop us — no commitment either way.
 
-Worth a look?
+Want me to put a few together for {{companyName}}?
 
 Nate
 jointprinting.com`,
@@ -251,9 +251,9 @@ jointprinting.com`,
     subject: 'mockups for {{companyName}}',
     body: `{{greeting}}
 
-{Floating this back up|Bumping this} in case it got buried — the free mockups are still on the table. Even just your logo and "show me hoodies" is enough for me to get started.
+{Floating this back up|Bumping this} in case it got buried. Your logo and a rough idea — "staff hoodies", or "something to sell at the counter" — is enough for me to run with.
 
-Some of our dispensary work if it helps to see it first: https://www.jointprinting.com/catalogs/dispo-promos.pdf
+We're not tied to one supplier, so if there's a brand your team actually wants to wear, we pull it. Some of our dispensary work if it helps to see it first: https://www.jointprinting.com/catalogs/dispo-promos.pdf
 
 Nate`,
   },
@@ -262,9 +262,11 @@ Nate`,
     subject: 'staff gear first?',
     body: `{{greeting}}
 
-Most shops we work with start small — staff apparel first, then a customer drop once they see how it lands. The staff stuff kind of pays for itself once the whole floor is wearing the brand.
+Most shops we work with start with staff apparel and add a customer drop once they see how it lands. The staff stuff kind of pays for itself once the whole floor is wearing the brand.
 
-Happy to mock up a few pieces for {{companyName}} so you've got something real to look at. {Still free|No charge for that}.
+Either way I do the legwork — {pull the brands, build the quote, make the mockups|brands, quote, mockups}. You just say yes or no when you're looking at it.
+
+Want a couple mocked up for {{companyName}}?
 
 Nate`,
   },
