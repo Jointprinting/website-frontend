@@ -249,6 +249,30 @@ export function confCogs(conf) {
   }, 0));
 }
 
+// True per-unit cost for ONE quote line: blank + print + that line's own setup
+// and shipping spread across its own quantity. The single source of truth the
+// Quoter uses for COGS, the margin tiers, and the footer totals — and the basis
+// for promo shipping pass-through, so it lives here with the other money
+// helpers rather than inside the builder.
+export function lineCogsPerUnit(l) {
+  const n = (v) => Number(v) || 0;
+  const q = n(l && l.qty);
+  const setupShip = Math.max(0, n(l && l.setupCost)) + Math.max(0, n(l && l.shippingCost));
+  return n(l && l.blankCost) + n(l && l.printCost) + (q > 0 ? setupShip / q : 0);
+}
+
+// The price a line actually goes out at: the committed unit price, else
+// cost x markup — the SAME fallback (markup default 1.4, never sell-at-cost)
+// the backend books with and the public quote page shows.
+// `noMarkup` is the promo case: the vendor catalog price already carries the
+// margin, so an un-priced promo cell auto-fills at COST (x1), never x1.4.
+export function lineCommitted(l) { return (Number(l && l.unitPrice) || 0) > 0; }
+export function lineEffectivePrice(l) {
+  if (lineCommitted(l)) return Number(l.unitPrice) || 0;
+  const m = (l && l.noMarkup) ? 1 : (Number(l && l.markup) || 1.4);
+  return lineCogsPerUnit(l) * m;
+}
+
 // Estimated COGS straight from the QUOTER's cost side — blank + print + setup +
 // shipping for the client-selected lines. This is the TRUE cost basis with NO
 // markup on it: the confirmation is the client-facing document and its unit
