@@ -577,8 +577,14 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
             const depth = sequenceDepth(c);
             return (
               <Box key={c._id} sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 2 }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} alignItems={{ sm: 'center' }}>
-                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                {/* The action row is flexShrink:0 and can carry NINE buttons once
+                    "Requeue dropped" and "Resume first-touches" both appear — that
+                    crushed the text column to ~100px and wrapped every line to one
+                    word. Actions now wrap instead of shrinking the copy, they align
+                    to the top rather than floating in the middle of a tall card, and
+                    the text keeps a real minimum width. */}
+                <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.25} alignItems={{ lg: 'flex-start' }}>
+                  <Box sx={{ flexGrow: 1, minWidth: { lg: 320 } }}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                       <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14.5 }}>{c.name}</Typography>
                       <TouchChip depth={depth} />
@@ -616,7 +622,8 @@ export default function CampaignsView({ overview, loading, autoEnrollCampaignId 
                       </Stack>
                     )}
                   </Box>
-                  <Stack direction="row" spacing={0.75} flexShrink={0}>
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap
+                    sx={{ rowGap: 0.75, flexShrink: 0, justifyContent: { xs: 'flex-start', lg: 'flex-end' }, maxWidth: { lg: '58%' } }}>
                     <Tooltip title="Enroll CRM leads into this sequence">
                       <Button onClick={() => setEnrollFor(c)} startIcon={<GroupAddOutlinedIcon sx={{ fontSize: 16 }} />}
                         sx={{ ...dropGhostBtn, px: 1.5, py: 0.4, fontSize: 12 }}>
