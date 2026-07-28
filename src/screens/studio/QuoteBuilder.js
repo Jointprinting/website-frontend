@@ -33,6 +33,9 @@ import {
   Dialog, DialogContent, FormControl, Select, MenuItem, Chip, CircularProgress, Checkbox,
 } from '@mui/material';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import config from '../../config.json';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
@@ -47,7 +50,10 @@ import LinkIcon                from '@mui/icons-material/Link';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import { D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen } from './_shared';
+import {
+  D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen,
+  lineCogsPerUnit, lineCommitted, lineEffectivePrice,
+} from './_shared';
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -116,27 +122,6 @@ function marginBg(pct) {
 // True per-unit cost for a line: blank + print + this option's full setup +
 // shipping spread across its own quantity. The single source of truth used for
 // COGS, the markup tiers, and the footer totals.
-function lineCogsPerUnit(l) {
-  const q = num(l.qty);
-  const setupShip = Math.max(0, num(l.setupCost)) + Math.max(0, num(l.shippingCost));
-  return num(l.blankCost) + num(l.printCost) + (q > 0 ? setupShip / q : 0);
-}
-
-// The price a line actually goes out at: the committed unit price, else
-// cost × markup — the SAME fallback (markup default 1.4, never sell-at-cost)
-// the backend books with and the public quote page shows, so the builder can
-// never display a different number than the client sees.
-function lineCommitted(l) { return num(l.unitPrice) > 0; }
-function lineEffectivePrice(l) {
-  if (lineCommitted(l)) return num(l.unitPrice);
-  // `noMarkup` is the promo case: the vendor catalog price already includes
-  // margin, so an un-priced cell auto-fills at COST (×1), never the ×1.4 default.
-  // COGS is unaffected (lineCogsPerUnit reads the cost fields regardless), so
-  // Finances/margins stay correct.
-  const m = l.noMarkup ? 1 : (num(l.markup) || 1.4);
-  return lineCogsPerUnit(l) * m;
-}
-
 function emptyLine() {
   return {
     qty: 1, styleCode: '', description: '',
@@ -223,6 +208,10 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   const [cardView,     setCardView]     = useState(() => new Set());
   // The promo catalog picker (vendor items with client price + net cost baked in).
   const [promoOpen,    setPromoOpen]    = useState(false);
+  // Last promo shipping estimate: { loading } | { loading:false, data } | { error }.
+  // Held so the UI can explain the number (weight, cartons, zone) instead of
+  // just asserting it.
+  const [shipEst,      setShipEst]      = useState(null);
   const [copyOpen,     setCopyOpen]     = useState(false);
   // What the CLIENT's link currently shows (signature of the pushed snapshot).
   // Autosave keeps edits owner-side; "Push to client" updates the link.
@@ -331,6 +320,12 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     setDirty(true);
   };
   const selectTier = (i, pct) => {
+    // A catalog-sourced promo price is LOCKED. Its margin is the vendor's
+    // client-vs-net spread, not a markup, so repricing it off COGS silently
+    // destroys the number the catalog gave us — and there was no undo. A
+    // mis-clicked margin chip is exactly how that happened. Unlock the row
+    // first if the override is deliberate.
+    if (lines[i] && lines[i].priceLocked) return;
     // 0% = the promo / fixed-price lane: nothing marked up — the price sits at
     // cost until the owner types the client price. Click again to leave.
     if (pct === 0) {
@@ -399,6 +394,69 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     setPromoOpen(false);
   };
 
+  // ── Promo shipping ──────────────────────────────────────────────────────────
+  // The vendor catalogs price the goods but NOT the freight, so a promo quote
+  // used to either guess or quietly eat it. The server estimates it from each
+  // item's weight, the run size, and the distance from Cannabis Promotions in
+  // St. Petersburg to the quote's ship-to state (backend:
+  // services/promoShipping.js + promoWeights.js).
+  //
+  // The estimate lands on BOTH sides of the line, which is what keeps the
+  // catalog margin whole:
+  //   • shippingCost  — the dollars, so lineCogsPerUnit sees the real cost
+  //   • unitPrice     — catalogUnitPrice + shipping/qty, passing it through
+  // Revenue and COGS each rise by shipping/qty, so they cancel exactly and the
+  // line's profit stays the vendor's client-vs-net spread. Owner's call: promo
+  // freight is passed through, not absorbed.
+  const promoLineIdxs = () => lines
+    .map((l, i) => ({ l, i }))
+    .filter(({ l }) => num(l.catalogUnitPrice) > 0)
+    .map(({ i }) => i);
+
+  const estimatePromoShipping = async () => {
+    const idxs = promoLineIdxs();
+    if (!idxs.length) return;
+    setShipEst({ loading: true });
+    try {
+      const { data } = await axios.post(`${config.backendUrl}/api/promo-products/shipping-estimate`, {
+        lines: idxs.map(i => ({
+          sku: lines[i].styleCode || '', name: lines[i].description || '', qty: num(lines[i].qty),
+        })),
+        destState: shipToState,
+      }, authHdr);
+      setLines(prev => prev.map((l, i) => {
+        const at = idxs.indexOf(i);
+        if (at < 0) return l;
+        const ship = Number((data.perLine || [])[at]?.shipping) || 0;
+        const q = num(l.qty);
+        const cat = num(l.catalogUnitPrice);
+        return {
+          ...l,
+          shippingCost: +ship.toFixed(2),
+          // Pass it through on top of the pristine catalog price. Recomputing
+          // from `catalogUnitPrice` (never from the current `unitPrice`) means
+          // re-running the estimate can't compound onto itself.
+          unitPrice: q > 0 && cat > 0 ? +(cat + ship / q).toFixed(2) : l.unitPrice,
+        };
+      }));
+      setDirty(true);
+      setShipEst({ loading: false, data });
+    } catch (e) {
+      setShipEst({ loading: false, error: e.response?.data?.message || 'Could not estimate shipping' });
+    }
+  };
+
+  // Drop the estimate back off the lines — restores each promo line to its
+  // pristine catalog price and zeroes the shipping it added.
+  const clearPromoShipping = () => {
+    const idxs = new Set(promoLineIdxs());
+    setLines(prev => prev.map((l, i) => (idxs.has(i)
+      ? { ...l, shippingCost: 0, unitPrice: num(l.catalogUnitPrice) || l.unitPrice }
+      : l)));
+    setShipEst(null);
+    setDirty(true);
+  };
+
   // Pull the lines of an EARLIER quote into this one — the repeat-client / standard-
   // job shortcut. Mirrors the backend duplicateOrder carry-list EXACTLY (the fields
   // that define a reusable quote line: qty, blanks, print spec, printer, prices),
@@ -414,6 +472,9 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
       printerKey: l.printerKey, printerName: l.printerName, printSpec: l.printSpec,
       setupCost: l.setupCost, shippingCost: l.shippingCost,
       markup: l.markup, noMarkup: l.noMarkup, unitPrice: l.unitPrice, turnaroundWeeks: l.turnaroundWeeks,
+      // Promo provenance rides along (mirrors the backend duplicateOrder list)
+      // so a copied catalog line stays protected from the margin chips.
+      catalogUnitPrice: l.catalogUnitPrice, priceLocked: l.priceLocked,
     }));
     if (!clean.length) return;
     const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
@@ -702,6 +763,55 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
               Copy from a past quote
             </Button>
           </Stack>
+        )}
+
+        {/* Promo freight — only offered when there are catalog lines to weigh.
+            The vendor catalog prices the goods but not the shipping, so this is
+            the one number a promo quote is otherwise missing. */}
+        {promoLineIdxs().length > 0 && (
+          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+              <Button onClick={estimatePromoShipping} disabled={shipEst?.loading}
+                startIcon={<LocalShippingOutlinedIcon sx={{ fontSize: 15 }} />}
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                  borderRadius: 999, px: 1.75, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                {shipEst?.loading ? 'Estimating…' : 'Estimate promo shipping'}
+              </Button>
+              {shipEst?.data && (
+                <Button onClick={clearPromoShipping}
+                  sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
+                    borderRadius: 999, px: 1.5, '&:hover': { color: D.text } }}>
+                  Clear
+                </Button>
+              )}
+              {!shipToState && (
+                <Typography sx={{ fontSize: 11, color: D.amber }}>
+                  Set the ship-to state above for a real zone — otherwise it assumes mid-range.
+                </Typography>
+              )}
+              {shipEst?.error && (
+                <Typography sx={{ fontSize: 11, color: '#f87171' }}>{shipEst.error}</Typography>
+              )}
+            </Stack>
+            {shipEst?.data && (
+              <Box sx={{ mt: 1 }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 800, color: D.text, ...mono }}>
+                  ~{fmt(shipEst.data.total)}
+                  <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, color: D.muted, ml: 1, ...mono }}>
+                    (range {fmt(shipEst.data.low)}–{fmt(shipEst.data.high)})
+                  </Typography>
+                </Typography>
+                {/* Show the reasoning, not just the number — an estimate the
+                    owner can't sanity-check is one he can't trust. */}
+                {(shipEst.data.basis || []).map((b, i) => (
+                  <Typography key={i} sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6 }}>· {b}</Typography>
+                ))}
+                <Typography sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6, mt: 0.5 }}>
+                  Added on top of the catalog price and into each line's shipping cost, so your catalog margin is unchanged. Edit any line's price to override.
+                </Typography>
+              </Box>
+            )}
+          </Box>
         )}
 
         <PromoPickerDialog open={promoOpen} onClose={() => setPromoOpen(false)}
@@ -1134,10 +1244,15 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // any other tier reprices every cell; you then type each client price.
   // Clicking again leaves promo mode and restores the plain ×1.4 auto default.
   const fixedPrice = all.length > 0 && all.every(i => lines[i] && lines[i].noMarkup);
-  const toggleFixed = () => onPatchIdxs(all, () => (
-    fixedPrice
-      ? { noMarkup: false, unitPrice: 0, markup: 1.4 }
-      : { noMarkup: true, unitPrice: 0, markup: 1 }
+  // Catalog-locked cells keep their price through this toggle. It used to patch
+  // `unitPrice: 0` across EVERY cell in both directions, so one click on a promo
+  // group zeroed every catalog price in it with no undo.
+  const toggleFixed = () => onPatchIdxs(all, (l) => (
+    l && l.priceLocked
+      ? {}
+      : (fixedPrice
+        ? { noMarkup: false, unitPrice: 0, markup: 1.4 }
+        : { noMarkup: true, unitPrice: 0, markup: 1 })
   ));
 
   const renameGroup = (name) => {
@@ -1650,6 +1765,31 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
                         InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
                         sx={cellTf} />
+                      {/* Catalog provenance: the vendor's price is protected from
+                          the margin chips (which used to overwrite it with no
+                          undo). The lock is the deliberate way out, and the
+                          catalog price is always one click back. */}
+                      {num(l.catalogUnitPrice) > 0 && (
+                        <Stack direction="row" alignItems="center" gap={0.4} sx={{ mt: -0.2 }}>
+                          <IconButton size="small" onClick={() => onSetLine(cell.idx, { priceLocked: !l.priceLocked })}
+                            title={l.priceLocked
+                              ? `Catalog price ${fmt(num(l.catalogUnitPrice))}/u is locked — margin chips skip this line. Click to unlock and price it yourself.`
+                              : 'Unlocked — the margin chips will overwrite this catalog price. Click to re-lock.'}
+                            sx={{ p: 0.2, color: l.priceLocked ? D.green : D.amber }}>
+                            {l.priceLocked
+                              ? <LockOutlinedIcon sx={{ fontSize: 12 }} />
+                              : <LockOpenOutlinedIcon sx={{ fontSize: 12 }} />}
+                          </IconButton>
+                          {Math.abs(num(l.unitPrice) - num(l.catalogUnitPrice)) > 0.005 && (
+                            <Typography onClick={() => onSetLine(cell.idx, { unitPrice: num(l.catalogUnitPrice), shippingCost: 0 })}
+                              title={`Restore the vendor's catalog price of ${fmt(num(l.catalogUnitPrice))}/u and clear the shipping added to this line`}
+                              sx={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.3, textTransform: 'uppercase',
+                                color: D.faint, cursor: 'pointer', '&:hover': { color: D.green } }}>
+                              restore {fmt(num(l.catalogUnitPrice))}
+                            </Typography>
+                          )}
+                        </Stack>
+                      )}
                       {/* Every number LABELED, per-unit AND total: what the client
                           is billed, what you make, what it costs you. All three
                           recompute live as margins are clicked. */}
@@ -2343,6 +2483,14 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
         printType: 'None', printDetails: picked.printMethod || '',
         turnaroundWeeks: promoWeeks(picked.turnaround),
         unitPrice: price, markup: 1, noMarkup: true,
+        // The catalog price, kept pristine and separate from `unitPrice`.
+        // `unitPrice` moves when shipping is passed through or the owner edits
+        // it; `catalogUnitPrice` is what "restore catalog price" restores, and
+        // what proves the vendor's baked-in margin is still intact.
+        catalogUnitPrice: price,
+        // Catalog-sourced money is protected from the margin chips — see
+        // selectTier / toggleFixed. The row's lock toggles it off.
+        priceLocked: true,
       };
     });
     onAdd(lines);
