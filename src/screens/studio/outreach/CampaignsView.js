@@ -194,13 +194,35 @@ function CampaignEditor({ open, campaign, onClose, onSave, verticals, onDraftSeq
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="stretch">
             {/* Steps */}
             <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
-              {/* AI draft — fills these editors for review; Save/Launch stay manual. */}
-              {onDraftSequence && (
-                <Button onClick={() => setAiOpen(true)}
-                  sx={{ ...dropGhostBtn, alignSelf: 'flex-start', px: 1.75, py: 0.5, fontSize: 12.5, color: '#c084fc' }}>
-                  ✨ Draft 4-touch sequence
-                </Button>
-              )}
+              {/* Both of these only fill the editors below — Save stays manual, so
+                  nothing goes out under Nate's name that he hasn't looked at. */}
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ alignSelf: 'flex-start' }}>
+                {onDraftSequence && (
+                  <Button onClick={() => setAiOpen(true)}
+                    sx={{ ...dropGhostBtn, px: 1.75, py: 0.5, fontSize: 12.5, color: '#c084fc' }}>
+                    ✨ Draft 4-touch sequence
+                  </Button>
+                )}
+                {/* DEFAULT_SEQUENCE only ever seeded a campaign with NO steps, so an
+                    existing campaign could never pick up an improved pitch — the copy
+                    it launched with was the copy it kept forever. */}
+                <Tooltip title="Replace the steps below with the current built-in dispensary sequence. Loads it into the editor only — review it, then Save.">
+                  <Button
+                    onClick={async () => {
+                      const dirty = steps.some((s) => String(s.subject || '').trim() || String(s.body || '').trim());
+                      if (dirty && !(await confirmDialog({
+                        title: 'Load the built-in sequence?',
+                        message: 'This replaces the steps in this editor with the current built-in dispensary sequence. Nothing sends until you hit Save.',
+                        confirmLabel: 'Load it',
+                      }))) return;
+                      setSteps(DEFAULT_SEQUENCE.map((s) => ({ ...s })));
+                      setPreviewIdx(0);
+                    }}
+                    sx={{ ...dropGhostBtn, px: 1.75, py: 0.5, fontSize: 12.5, color: D.green }}>
+                    ↻ Load built-in sequence
+                  </Button>
+                </Tooltip>
+              </Stack>
               {steps.map((s, i) => (
                 <Box key={i} onClick={() => setPreviewIdx(i)}
                   sx={{ p: 1.5, borderRadius: 2, bgcolor: D.panel, cursor: 'pointer',
