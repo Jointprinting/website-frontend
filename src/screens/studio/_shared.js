@@ -192,6 +192,17 @@ export const normOrderNo = (v) => String(v == null ? '' : v).replace(/[^0-9]/g, 
 export const deriveCompanyKey = (companyName, clientName = '') =>
   String(companyName || clientName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
+// The project-derived mockup TITLE — "<Company> Merch", the headline printed at
+// the top of a client's mockup sheet. Same argument order as deriveCompanyKey
+// (companyName first, contact name only as a fallback) because the title is the
+// company's merch line, not the contact person — the rule the classic /jpstudio
+// lab applied on every project change. Empty company → empty title, never a
+// bare "Merch".
+export const deriveMerchTitle = (companyName, clientName = '') => {
+  const co = String(companyName || clientName || '').trim();
+  return co ? `${co} Merch` : '';
+};
+
 // ── Confirmation-derived money ────────────────────────────────────────────────
 // The confirmation page (the APPROVED doc) is the source of truth for an order's
 // revenue + COGS — the quoter is just pre-approval options. Revenue = item size
