@@ -31,7 +31,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import axios from 'axios';
 import config from '../../../config.json';
-import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey, useMobileFullScreen } from '../_shared';
+import { D, mono, scrollbar, dropInput, accentBar, deriveCompanyKey, deriveMerchTitle, useMobileFullScreen } from '../_shared';
 import { emptyPage, hydratePages, mockupToLibraryItem, pageToState, pageFromState } from './mockupModel';
 import { PRESETS, PRESET_ORDER, PRINT_AREAS, CATEGORY_ORDER, printAreaRect, blankBox, STAGE_W, STAGE_H } from './printAreas';
 import { exportMockupPdf } from './mockupPdf';
@@ -114,13 +114,22 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const [sheet, setSheet] = useState('');   // '' | 'tools' | 'info'
   const remoteIdRef = useRef(isNew ? `studio-${uid()}` : (String((item && item.remoteId) || mockup.remoteId || '') || `studio-${uid()}`));
   const p0extra = (!isNew && mockup.pages && mockup.pages[0] && mockup.pages[0]._extra) || {};
+  // A project that arrives PRE-ATTACHED (the Order Tracker's mockup button deep-
+  // links with editProject) never passes through pickProject, so its title
+  // auto-fill never ran and the sheet exported with no headline at all. Derive it
+  // straight from the prop here so the Title field is right on open — before any
+  // network round-trip, and even if the project list fails to load.
+  const propAutoTitle = isNew ? deriveMerchTitle(project && project.client) : '';
   const [meta, setMeta] = useState({
     // Strip the internal "· v2" variation marker — seeding the TITLE from the
     // library name is how it ended up printed on the client's PDF.
-    title: isNew ? '' : clientDesignName(mockup.name || p0extra.title || ''),
+    title: isNew ? propAutoTitle : clientDesignName(mockup.name || p0extra.title || ''),
     subtitle: isNew ? '' : (p0extra.subtitle || ''),
     notes: isNew ? '' : (p0extra.notes || ''),
     client: isNew ? (project && project.client) || '' : (mockup.client || (project && project.client) || ''),
+    // Remembering what WE filled is what lets a later project switch re-derive
+    // instead of mistaking the auto value for something Nate typed.
+    _autoTitle: propAutoTitle,
   });
   // The linked project — state (not just props) so the typeahead can pick or
   // switch it, exactly like the classic lab's required Project field. Save is
@@ -132,8 +141,25 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   }));
   const orderId = proj.id;
   const projectNumber = proj.projectNumber;
+  // Read-only mirror so the project-list loader can see the CURRENT project
+  // without a setProj updater doing side effects (updaters must stay pure).
+  const projRef = useRef(proj);
+  projRef.current = proj;
   const prevStates = useMemo(() => (isNew ? [] : hydratePages(item)), [item, isNew]);
   const canvasRef = useRef(null);
+
+  // The ONE project → title rule, so picking a project in the dropdown and
+  // arriving with one already attached can never disagree: take "<Company> Merch"
+  // when the field is empty or still shows the PREVIOUS auto value, and never
+  // touch a title Nate typed himself.
+  const applyAutoTitle = useCallback((company) => {
+    const autoTitle = deriveMerchTitle(company);
+    if (!autoTitle) return;
+    setMeta((m) => {
+      const prevAuto = m._autoTitle && m.title === m._autoTitle;
+      return { ...m, title: (!m.title || prevAuto) ? autoTitle : m.title, _autoTitle: autoTitle };
+    });
+  }, []);
 
   // Project list for the typeahead — same endpoint + label the classic lab uses
   // ("#133 · Bleu Leaf"). Loaded once; resolves the current id to its label.
@@ -152,30 +178,29 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
           label: `#${p.projectNumber || '?'} · ${p.companyName || p.clientName || 'Untitled'}`,
         }));
         setProjects(list);
-        setProj((prev) => {
-          const hit = prev.id && list.find((p) => p.id === prev.id);
-          return hit ? { ...prev, projectNumber: hit.projectNumber || prev.projectNumber, label: hit.label } : prev;
-        });
+        const hit = projRef.current.id && list.find((p) => p.id === projRef.current.id);
+        if (!hit) return;
+        setProj((prev) => (prev.id === hit.id
+          ? { ...prev, projectNumber: hit.projectNumber || prev.projectNumber, label: hit.label }
+          : prev));
+        // Finish the pre-attached project's auto-fills the same way picking one
+        // does. The prop only carries a display name; the list is what resolves
+        // the real companyName/clientName pair, so this both corrects the seeded
+        // title and covers a deep link that arrived with no name at all.
+        setMeta((m) => ({ ...m, client: m.client || hit.client }));
+        applyAutoTitle(hit.company);
       } catch (_) { /* best-effort — typing still works, save gate still guards */ }
     })();
     return () => { live = false; };
-  }, [authHdr]);
+  }, [authHdr, applyAutoTitle]);
 
   const pickProject = (p) => {
     if (!p) { setProj({ id: '', projectNumber: '', label: '' }); return; }
     setProj({ id: p.id, projectNumber: p.projectNumber, label: p.label });
-    // Auto-fills, classic-style: client always follows the project; title
-    // "<Company> Merch" only when empty or still the previous auto value.
-    setMeta((m) => {
-      const autoTitle = `${p.company} Merch`;
-      const prevAuto = m._autoTitle && m.title === m._autoTitle;
-      return {
-        ...m,
-        client: p.client || m.client,
-        title: (!m.title || prevAuto) ? autoTitle : m.title,
-        _autoTitle: autoTitle,
-      };
-    });
+    // Auto-fills, classic-style: client always follows the project, title follows
+    // through the shared rule above.
+    setMeta((m) => ({ ...m, client: p.client || m.client }));
+    applyAutoTitle(p.company);
   };
 
   const page = pages[pageIdx] || pages[0];
@@ -640,7 +665,12 @@ export default function NativeMockupLab({ token, mode, mockup, item, project, on
   const mountedRef = useRef(false);
   useEffect(() => {
     if (!mountedRef.current) { mountedRef.current = true; return undefined; }
-    const hasSubstance = !isNew || meta.title
+    // A title we auto-derived from the project is NOT substance — only one Nate
+    // typed is. Without that distinction the project-seeded title would arm
+    // autosave the moment the lab opens and burn a mockup number on an empty doc,
+    // which is exactly what this gate exists to prevent.
+    const typedTitle = !!meta.title && meta.title !== meta._autoTitle;
+    const hasSubstance = !isNew || typedTitle
       || pages.some((pg) => ['front', 'back'].some((s) => pg.sides[s].blank || pg.sides[s].logo || pg.sides[s].composite));
     if (!orderId || !hasSubstance) return undefined;
     setSaveState('dirty');
