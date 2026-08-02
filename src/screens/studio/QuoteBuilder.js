@@ -724,6 +724,14 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
                   '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
                 Add promo item
               </Button>
+              {/* An empty quote is exactly when you reach for a blank, so this
+                  belongs here as much as in the toolbar below. */}
+              <Button onClick={() => setBlankOpen(true)} startIcon={<CheckroomOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
+                  px: 2, transition: 'background-color 0.18s, color 0.18s',
+                  '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                Find blanks
+              </Button>
               <Button onClick={() => setCopyOpen(true)} startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 15 }} />}
                 sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, borderRadius: 999,
                   px: 2, transition: 'background-color 0.18s, color 0.18s',
@@ -2449,6 +2457,12 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
   const fullScreen = useMobileFullScreen();
   const [q, setQ] = useState('tshirt');
   const [color, setColor] = useState('');
+  // Which sizes the quoted average covers. XS-2XL is the house rule
+  // (docs/ECOSYSTEM.md: one averaged price per item, no per-size upcharge), but
+  // 2XL prices well above the standard run — carrying it lifts the blank ~10%.
+  // On a client you know skews standard, S-XL prices the job honestly instead of
+  // padding it. 3XL+ is never averaged in: that would add ~37% and lose bids.
+  const [wide, setWide] = useState(true);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -2458,7 +2472,11 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
     try {
       const { data: r } = await axios.get(`${config.backendUrl}/api/products/blank-options`, {
         ...authHdr,
-        params: { q: q || 'tshirt', color: color || undefined },
+        params: {
+          q: q || 'tshirt',
+          color: color || undefined,
+          sizes: wide ? undefined : 'S,M,L,XL',
+        },
       });
       setData(r);
     } catch (e) {
@@ -2474,7 +2492,19 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Flipping the size window re-prices immediately — the number it changes is
+  // the whole point of the control.
+  useEffect(() => {
+    if (open && data) search();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide]);
+
   const money = (n) => (typeof n === 'number' ? `$${n.toFixed(2)}` : '—');
+  // Which tier the exact style-code hit landed in, so pinning it doesn't lose
+  // the "this is your mid option" context the tier list would have given.
+  const exactTier = data && data.exactStyleID != null
+    ? ['budget', 'mid', 'premium'].find((t) => data.tiers?.[t]?.styleID === data.exactStyleID)
+    : null;
 
   const OptionRow = ({ o, tier }) => {
     const short = o.stock && o.stock.known && o.stock.ok === false;
@@ -2533,18 +2563,43 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
       </Box>
 
       <DialogContent sx={{ p: 2, ...scrollbar }}>
-        <Stack direction="row" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
+        {/* Column on a phone: side by side, the two fields consumed the row and
+            left Search wrapped underneath reading as a stray link. */}
+        <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} sx={{ mb: 1.5 }}>
           <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
-            placeholder="tshirt, hoodie, polo, tank…" sx={{ ...dropInput, flex: 1, minWidth: 150 }} />
+            placeholder="tshirt, hoodie, or a style code"
+            sx={{ ...dropInput, flex: { sm: 1 }, minWidth: 0 }} />
           <TextField size="small" value={color} onChange={(e) => setColor(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
-            placeholder="color (optional)" sx={{ ...dropInput, width: 140 }} />
+            placeholder="color" sx={{ ...dropInput, width: { xs: '100%', sm: 120 } }} />
           <Button onClick={search} disabled={loading}
             sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12,
-              borderRadius: 999, px: 2, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              borderRadius: 999, px: 2, py: { xs: 1, sm: 0.5 },
+              width: { xs: '100%', sm: 'auto' }, flexShrink: 0,
+              border: { xs: `1px solid ${D.line}`, sm: 'none' },
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
             {loading ? 'Searching…' : 'Search'}
           </Button>
+        </Stack>
+
+        <Stack direction="row" gap={0.75} alignItems="center" sx={{ mb: 1.5, flexWrap: 'wrap' }}>
+          <Typography sx={{ fontSize: 10, color: D.faint, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+            Average over
+          </Typography>
+          {[[true, 'XS–2XL'], [false, 'S–XL']].map(([val, label]) => (
+            <Box key={label} onClick={() => setWide(val)}
+              title={val
+                ? 'The house rule — includes 2XL, which prices higher'
+                : 'Standard run only — about 10% cheaper per blank'}
+              sx={{ px: 1.1, py: 0.3, borderRadius: 999, cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
+                border: `1px solid ${wide === val ? D.green : D.line}`,
+                color: wide === val ? D.green : D.muted,
+                bgcolor: wide === val ? 'rgba(74,222,128,0.10)' : 'transparent',
+                '&:hover': { borderColor: D.green } }}>
+              {label}
+            </Box>
+          ))}
         </Stack>
 
         {error && <Typography sx={{ fontSize: 12, color: '#f87171', mb: 1 }}>{error}</Typography>}
@@ -2561,6 +2616,16 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
               {data.color ? ` · ${data.color}` : ''}
             </Typography>
 
+            {data.exact && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8,
+                  textTransform: 'uppercase', color: D.green, mb: 0.5 }}>
+                  Your style{exactTier ? ` · ${TIER_LABEL[exactTier]}` : ''}
+                </Typography>
+                <OptionRow o={data.exact} />
+              </Box>
+            )}
+
             {data.count === 0 ? (
               <Typography sx={{ fontSize: 12, color: D.muted, fontStyle: 'italic', py: 2 }}>
                 {data.note || 'Nothing came back. Try a different word.'}
@@ -2568,16 +2633,22 @@ function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
             ) : (
               <>
                 <Stack gap={1} sx={{ mb: 2 }}>
-                  {['budget', 'mid', 'premium'].map((t) => (
-                    data.tiers?.[t] ? <OptionRow key={t} o={data.tiers[t]} tier={t} /> : null
-                  ))}
+                  {['budget', 'mid', 'premium'].map((t) => {
+                    const o = data.tiers?.[t];
+                    if (!o) return null;
+                    // Already shown pinned above as "Your style · <tier>".
+                    if (data.exactStyleID != null && o.styleID === data.exactStyleID) return null;
+                    return <OptionRow key={t} o={o} tier={t} />;
+                  })}
                 </Stack>
                 <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8,
                   textTransform: 'uppercase', color: D.faint, mb: 0.75 }}>
                   Every match
                 </Typography>
                 <Stack gap={0.75}>
-                  {data.options.map((o) => <OptionRow key={o.styleID} o={o} />)}
+                  {data.options
+                    .filter((o) => o.styleID !== data.exactStyleID)
+                    .map((o) => <OptionRow key={o.styleID} o={o} />)}
                 </Stack>
               </>
             )}
