@@ -33,6 +33,7 @@ import {
   Dialog, DialogContent, FormControl, Select, MenuItem, Chip, CircularProgress, Checkbox,
 } from '@mui/material';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import CheckroomOutlinedIcon from '@mui/icons-material/CheckroomOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
@@ -208,6 +209,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   const [cardView,     setCardView]     = useState(() => new Set());
   // The promo catalog picker (vendor items with client price + net cost baked in).
   const [promoOpen,    setPromoOpen]    = useState(false);
+  const [blankOpen,    setBlankOpen]    = useState(false);
   // Last promo shipping estimate: { loading } | { loading:false, data } | { error }.
   // Held so the UI can explain the number (weight, cartons, zone) instead of
   // just asserting it.
@@ -394,6 +396,30 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     setPromoOpen(false);
   };
 
+  // Add a blank picked from the S&S chooser. Unlike promo, apparel blanks are
+  // a COST — the normal x1.4 markup lane applies, so nothing here touches
+  // unitPrice or noMarkup. The S&S link is built by the same suggestSupplierUrl
+  // the rest of the builder uses, so a picked blank is indistinguishable from
+  // one typed by hand.
+  const addBlankLine = (opt) => {
+    if (!opt) return;
+    const label = [opt.brand, opt.style].filter(Boolean).join(' ');
+    const line = {
+      ...emptyLine(),
+      group: label,
+      description: label,
+      styleCode: opt.style || '',
+      color: opt.color || '',
+      blankCost: opt.blankCost || 0,
+      // Carried so the apparel freight estimator can weigh the run without
+      // going back to S&S for something we already fetched.
+      blankWeightOz: opt.unitWeightOz || 0,
+    };
+    line.supplierUrl = suggestSupplierUrl(line);
+    appendLines([line]);
+    setBlankOpen(false);
+  };
+
   // ── Promo shipping ──────────────────────────────────────────────────────────
   // The vendor catalogs price the goods but NOT the freight, so a promo quote
   // used to either guess or quietly eat it. The server estimates it from each
@@ -470,7 +496,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
       supplier: l.supplier, supplierUrl: l.supplierUrl, blankCost: l.blankCost,
       printType: l.printType, printDetails: l.printDetails, printCost: l.printCost,
       printerKey: l.printerKey, printerName: l.printerName, printSpec: l.printSpec,
-      setupCost: l.setupCost, shippingCost: l.shippingCost,
+      setupCost: l.setupCost, shippingCost: l.shippingCost, blankWeightOz: l.blankWeightOz,
       markup: l.markup, noMarkup: l.noMarkup, unitPrice: l.unitPrice, turnaroundWeeks: l.turnaroundWeeks,
       // Promo provenance rides along (mirrors the backend duplicateOrder list)
       // so a copied catalog line stays protected from the margin chips.
@@ -756,6 +782,12 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
                 '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
               Add promo item
             </Button>
+            <Button onClick={() => setBlankOpen(true)} startIcon={<CheckroomOutlinedIcon sx={{ fontSize: 15 }} />}
+              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
+                '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.10)' } }}>
+              Find blanks
+            </Button>
             <Button onClick={() => setCopyOpen(true)} startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
               sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 12,
                 borderRadius: 999, px: 1.75, transition: 'background-color 0.18s, color 0.18s',
@@ -814,6 +846,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
           </Box>
         )}
 
+        <BlankPickerDialog open={blankOpen} onClose={() => setBlankOpen(false)}
+          authHdr={authHdr} onPick={addBlankLine} />
         <PromoPickerDialog open={promoOpen} onClose={() => setPromoOpen(false)}
           authHdr={authHdr} onAdd={addPromoLines} />
         <CopyQuoteDialog open={copyOpen} onClose={() => setCopyOpen(false)}
@@ -2392,6 +2426,165 @@ function QF({ label, children, sx }) {
       </Typography>
       {children}
     </Box>
+  );
+}
+
+// ── S&S blank picker ─────────────────────────────────────────────────────────
+//
+// Replaces the owner's manual loop: leave the Studio, ask an LLM for a budget /
+// mid / premium tee, hand-average XS-2XL, paste the number back as blankCost.
+// Type "tshirt", get three tiers priced off live S&S data, click one.
+//
+// The price shown is the XS-2XL average of the LIST piece price. That is
+// deliberate and matches how the owner quotes: when S&S runs a promo he keeps
+// the spread, so quoting off his discounted cost would hand his own margin to
+// the client. When a promo IS running the picker says so, since that is money
+// he is making rather than a number he should chase.
+//
+// Server: GET /api/products/blank-options (website-backend
+// services/blankOptions.js) — same detectCategory the product grid uses.
+const TIER_LABEL = { budget: 'Budget', mid: 'Mid', premium: 'Premium' };
+
+function BlankPickerDialog({ open, onClose, authHdr, onPick }) {
+  const fullScreen = useMobileFullScreen();
+  const [q, setQ] = useState('tshirt');
+  const [color, setColor] = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const search = async () => {
+    setLoading(true); setError(''); setData(null);
+    try {
+      const { data: r } = await axios.get(`${config.backendUrl}/api/products/blank-options`, {
+        ...authHdr,
+        params: { q: q || 'tshirt', color: color || undefined },
+      });
+      setData(r);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Could not reach S&S');
+    } finally { setLoading(false); }
+  };
+
+  // Search once on open so the dialog is never an empty box.
+  useEffect(() => {
+    if (open && !data && !loading) search();
+    // Intentionally keyed on `open` alone: this is the open-the-dialog kick, and
+    // depending on data/loading/search would re-fire it mid-search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const money = (n) => (typeof n === 'number' ? `$${n.toFixed(2)}` : '—');
+
+  const OptionRow = ({ o, tier }) => {
+    const short = o.stock && o.stock.known && o.stock.ok === false;
+    return (
+      <Box onClick={() => onPick(o)}
+        sx={{ p: 1.1, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}`,
+          cursor: 'pointer', transition: 'border-color 160ms ease, background-color 160ms ease',
+          '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={1}>
+          <Box sx={{ minWidth: 0 }}>
+            {tier && (
+              <Typography sx={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: D.green }}>
+                {TIER_LABEL[tier] || tier}
+              </Typography>
+            )}
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, overflowWrap: 'anywhere' }}>
+              {[o.brand, o.style].filter(Boolean).join(' ')}
+            </Typography>
+            <Typography sx={{ fontSize: 10.5, color: D.faint }}>
+              {o.sizesPriced?.length ? `avg of ${o.sizesPriced.join(', ')}` : 'no size pricing'}
+              {o.unitWeightOz ? ` · ${o.unitWeightOz} oz` : ''}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 800, ...mono }}>{money(o.blankCost)}</Typography>
+            <Typography sx={{ fontSize: 9.5, color: short ? D.amber : D.faint }}>
+              {!o.stock?.known ? 'stock unknown'
+                : short ? `short: ${o.stock.shortSizes.join(', ')}`
+                : 'in stock'}
+            </Typography>
+          </Box>
+        </Stack>
+        {o.sale?.known && o.sale.spread > 0 && (
+          <Typography sx={{ fontSize: 9.5, color: D.green, mt: 0.4 }}>
+            S&amp;S promo on — you buy at {money(o.sale.ownerAvg)}, so {money(o.sale.spread)}/unit extra is yours
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3, maxHeight: '86vh' } }}>
+      <Box sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={accentBar} />
+        <Typography sx={{ fontWeight: 800, fontSize: 14, flex: 1 }}>
+          Find blanks
+          <Typography component="span" sx={{ color: D.muted, fontSize: 11, fontWeight: 500, ml: 1 }}>
+            live S&amp;S pricing, averaged XS–2XL
+          </Typography>
+        </Typography>
+        <IconButton size="small" onClick={onClose} sx={{ color: D.muted, '&:hover': { color: D.text } }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+
+      <DialogContent sx={{ p: 2, ...scrollbar }}>
+        <Stack direction="row" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
+          <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
+            placeholder="tshirt, hoodie, polo, tank…" sx={{ ...dropInput, flex: 1, minWidth: 150 }} />
+          <TextField size="small" value={color} onChange={(e) => setColor(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
+            placeholder="color (optional)" sx={{ ...dropInput, width: 140 }} />
+          <Button onClick={search} disabled={loading}
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12,
+              borderRadius: 999, px: 2, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+            {loading ? 'Searching…' : 'Search'}
+          </Button>
+        </Stack>
+
+        {error && <Typography sx={{ fontSize: 12, color: '#f87171', mb: 1 }}>{error}</Typography>}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+            <CircularProgress sx={{ color: D.green }} size={26} />
+          </Box>
+        )}
+
+        {data && !loading && (
+          <>
+            <Typography sx={{ fontSize: 10.5, color: D.faint, mb: 1 }}>
+              Read as <b>{data.category}</b> · {data.count} priced of {data.considered} considered
+              {data.color ? ` · ${data.color}` : ''}
+            </Typography>
+
+            {data.count === 0 ? (
+              <Typography sx={{ fontSize: 12, color: D.muted, fontStyle: 'italic', py: 2 }}>
+                {data.note || 'Nothing came back. Try a different word.'}
+              </Typography>
+            ) : (
+              <>
+                <Stack gap={1} sx={{ mb: 2 }}>
+                  {['budget', 'mid', 'premium'].map((t) => (
+                    data.tiers?.[t] ? <OptionRow key={t} o={data.tiers[t]} tier={t} /> : null
+                  ))}
+                </Stack>
+                <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8,
+                  textTransform: 'uppercase', color: D.faint, mb: 0.75 }}>
+                  Every match
+                </Typography>
+                <Stack gap={0.75}>
+                  {data.options.map((o) => <OptionRow key={o.styleID} o={o} />)}
+                </Stack>
+              </>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
