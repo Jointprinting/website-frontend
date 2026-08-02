@@ -43,6 +43,7 @@ import config from '../../config.json';
 import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative, money0, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { TEMPLATES, CUSTOM_SITES, getTemplate } from '../../webworks/templates';
+import { gallerySlotCount, setHeroUrl, setGalleryUrl } from '../../webworks/photoSlots';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/jpw/sites`;
@@ -991,16 +992,13 @@ export default function JpwSitesTab({ token }) {
     const tpl = getTemplate(draft.templateId);
     const d = draft.data || {};
     // Photos are optional URL slots — empty keeps the template's curated
-    // placeholder set, so the form always shows hero + 3 gallery inputs.
+    // placeholder set. The slot rules (a growing list, never rebuilt at a fixed
+    // width) live in webworks/photoSlots so they can be unit-tested.
     const photos = d.photos && typeof d.photos === 'object' ? d.photos : {};
     const gallery = Array.isArray(photos.gallery) ? photos.gallery : [];
-    const setPhotoHero = (v) =>
-      setData('photos', { hero: v, gallery: [0, 1, 2].map((i) => gallery[i] || '') });
-    const setPhotoGallery = (i, v) => {
-      const g = [0, 1, 2].map((j) => gallery[j] || '');
-      g[i] = v;
-      setData('photos', { hero: photos.hero || '', gallery: g });
-    };
+    const gallerySlots = gallerySlotCount(photos);
+    const setPhotoHero = (v) => setData('photos', setHeroUrl(photos, v));
+    const setPhotoGallery = (i, v) => setData('photos', setGalleryUrl(photos, i, v));
     const isDraftStatus = draft.status === 'draft';
     const isPreview = draft.status === 'preview';
     const isLive = draft.status === 'live';
@@ -1200,10 +1198,10 @@ export default function JpwSitesTab({ token }) {
               />
             </Section>
 
-            <Section title="Photos" hint="Paste image links — leave empty to keep the template's placeholder photos.">
+            <Section title="Photos" hint="Paste image links — leave empty to keep the template's placeholder photos. Fill the last slot and another appears.">
               <F label="Hero photo URL" value={photos.hero} onChange={setPhotoHero}
                 placeholder="https://…/storefront.jpg" />
-              {[0, 1, 2].map((i) => (
+              {Array.from({ length: gallerySlots }, (_, i) => (
                 <F key={i} label={`Gallery photo ${i + 1} URL`} value={gallery[i]}
                   onChange={(v) => setPhotoGallery(i, v)} placeholder="https://…" />
               ))}
