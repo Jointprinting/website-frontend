@@ -78,7 +78,7 @@ export const TRIAGE_STATUS_META = {
   follow_up:        { label: 'Follow-up',      color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
   mockup_requested: { label: 'Mockup req.',    color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
   quote_requested:  { label: 'Quote req.',     color: '#a78bfa', bg: 'rgba(167,139,250,0.14)' },
-  not_interested:   { label: 'Not interested', color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
+  not_interested:   { label: 'Not a lead',     color: '#9ca3af', bg: 'rgba(156,163,175,0.14)' },
   do_not_contact:   { label: 'Do not contact', color: '#f87171', bg: 'rgba(248,113,113,0.14)' },
   ignored:          { label: 'Ignored',        color: '#6b7280', bg: 'rgba(107,114,128,0.16)' },
 };
@@ -97,12 +97,20 @@ export const WORKLIST_BUCKETS = [
 // The status actions offered on a reply row (menu label + the status it sets), in
 // workflow order. 'do_not_contact' also flips the matched company's doNotEmail and
 // stops its active sequences on the backend (the existing unsubscribe/bounce path).
+//
+// 'not_interested' is the one-click "this isn't a real lead" — the commonest
+// genuine reply to cold merch outreach is a polite no ("we already design our
+// own", "we use another printer"). It stops the sequence, flags the company so
+// no future campaign re-enrolls them, and closes the CRM stage to lost so they
+// leave the working pipeline. No follow-up date: there's nothing to follow up
+// on. The card and its history stay, and clearing doNotEmail re-opens them.
 export const TRIAGE_ACTIONS = [
-  { status: 'handled',          label: 'Mark handled' },
+  { status: 'not_interested',   label: 'Not a lead', primary: true,
+    hint: 'Stops the emails for good and clears them out of the pipeline. Keeps the card.' },
   { status: 'follow_up',        label: 'Follow-up needed' },
   { status: 'mockup_requested', label: 'Mockup requested' },
   { status: 'quote_requested',  label: 'Quote requested' },
-  { status: 'not_interested',   label: 'Not interested' },
+  { status: 'handled',          label: 'Mark handled' },
   { status: 'do_not_contact',   label: 'Do not contact' },
   { status: 'ignored',          label: 'Ignore' },
 ];
