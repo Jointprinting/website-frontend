@@ -115,19 +115,50 @@ export const CUSTOM_SITES = [
     // until it is pasted in.
     seedData: {
       tagline: 'One-of-a-kind stainless steel sculpture, made in Woodstock, Vermont.',
-      heroHeadline: 'Stainless steel, shaped by hand',
+      // His own words for what makes the work unique, from the artist's
+      // statement. Replaced "Stainless steel, shaped by hand", which asserted
+      // present-tense physical labour the source can't date — see the About
+      // note below. This line is timeless and can never go stale.
+      heroHeadline: 'A form that has never existed before',
       ctaLabel: 'Call the studio',
       phone: '(802) 356-9414',
       email: 'scottiereuben@gmail.com',
       serviceArea: 'Shipped worldwide',
       address: 'Woodstock, Vermont',
+      // CV: "1989–present Artist, Sculptor". A fixed anchor that never rots —
+      // it renders as "SINCE 1989" in the hero's origin strip beside the
+      // shipping line. 1992 dates only the move to Woodstock, not the career.
+      established: '1989',
       hours: [],           // he keeps no posted hours — the section stays hidden
       services: [
         { name: 'Commissioned work', desc: 'A sculpture made for your space. Call to talk through scale, site and material.', price: '' },
         { name: 'Available pieces', desc: 'Finished sculptures ready to go. Each one is the only one of its kind — call to ask what is in the studio now.', price: '' },
-        { name: 'Shipping', desc: 'Pieces have travelled well beyond Vermont. Crating and delivery arranged anywhere.', price: '' },
+        // Not "delivery arranged anywhere" — that promised logistics from a
+        // one-man shop that his answers never claimed. Same fact, no promise.
+        { name: 'Shipping', desc: 'Pieces have shipped well beyond Vermont. Call to talk through crating and delivery.', price: '' },
       ],
-      about: '',           // his bio is coming — section hides until it lands
+      // From the biography letter he sent, in his voice, and NOTHING beyond it.
+      // Order is deliberate: material, then process, then lineage, then why the
+      // work is free-form. With no photographs yet, the process paragraph is
+      // doing the photographs' job, so it runs second rather than last.
+      //
+      // Held back on purpose, each for a reason:
+      //   · "does not rust, retaining its quality forever" — a durability
+      //     warranty he never meant to give. Stainless pits; a Vermont winter
+      //     of road salt is exactly that exposure. Only "does not tarnish".
+      //   · "11 gauge" — 11ga is ~0.120", not the 1/8" the letter equates it
+      //     to. His own rounding, but a checkable spec. Thickness only.
+      //   · "renowned" (of Roy Gussow) — his characterisation in a private
+      //     letter; on a public page it becomes us asserting a third party's
+      //     stature. Named plainly, firmly in the past.
+      //   · Galleries, memberships, the 1981–82 teaching assistantship, the
+      //     Boonton studio, his age and street address — see the site brief.
+      about: [
+        'I work in stainless steel because, like gold, it is immutable — it does not tarnish. Polished to a high luster, the surface returns the light, and that reflection gives a piece its fluidity. What I am after is grace and elegance, and a harmonious relationship between all the elements, from whatever angle you see it.',
+        'A piece begins as a flat sheet an eighth of an inch thick. The pattern is cut with a plasma cutter; the flat planes are then worked into three dimensions by cold hammering and joined with an arc welder. What follows is arduous — the weld beads ground away, then twelve successive passes of sandpaper, each finer than the last, and a final polish with a felt pad charged with chromium oxide.',
+        'I took a Bachelor of Arts at Columbia University in 1980, and from 1982 to 1989 I was apprenticed to Roy Gussow, a sculptor in stainless steel in New York. In 1989 I began working on my own, leaving his forms behind to find my own, and in 1992 I moved my studio to Woodstock.',
+        'I chose free-form work over representational sculpture because what draws me is articulating a form that has never existed before. The pieces are titled by number, so the name suggests nothing the sculpture is not.',
+      ].join('\n\n'),
       testimonials: [],
       paletteId: 'steel',
     },

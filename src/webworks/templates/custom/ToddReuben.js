@@ -9,7 +9,9 @@
 // WHO IT IS FOR — every layout call traces back to his intake answers:
 //   • Stainless steel sculpture. Commissions + finished pieces for sale.
 //     No two alike — the artwork is the site, so the work grid is the spine
-//     and everything else is quiet around it.
+//     once his photos exist. Until then the spine is his ABOUT block: the
+//     lineage and the process are the only things that do the photographs'
+//     job, which is why the process paragraph runs near-whole and second.
 //   • "Professional and high end" — gallery-wall neutrals, Marcellus display
 //     serif, wide letterspacing, a lot of air. Reads like a catalogue, not a
 //     services page.
@@ -20,10 +22,10 @@
 //   • Ships worldwide from Vermont — serviceArea/address ride together as one
 //     "made here, shipped anywhere" line rather than a service-area pitch.
 //
-// PHOTOS are crafted-by-default (same choice as Trades: DEFAULT_PHOTOS are
-// empty strings, so the fail-safe stack paints a crafted polished-steel scene
-// instead of stock photography). Deliberate — stock photos of somebody else's
-// sculpture would misrepresent his portfolio. His real photos drop into
+// PHOTOS: no stock photography, and — unlike every other look — no crafted
+// gallery placeholders either. See DEFAULT_PHOTOS below; the short version is
+// that on a sculptor's page a drawn form in a "Selected work" grid is an
+// invented artwork, not a texture. His real photos drop into
 // data.photos.{hero,gallery} from the Studio with no deploy, and the work grid
 // takes any number of them.
 //
@@ -37,8 +39,20 @@ import {
 } from '../_kit';
 import { TODD_REUBEN_PALETTES } from '../_meta';
 
-// Crafted-only defaults — no stock art on an artist's portfolio. See header.
-const DEFAULT_PHOTOS = { hero: '', gallery: ['', '', ''] };
+// NO default gallery — an empty work grid is correct until his photos arrive.
+//
+// The other looks ship three empty slots so the crafted tile paints a decorative
+// scene. That reasoning does NOT transfer here: on a plumber's page a crafted
+// tile is a texture, but on a sculptor's page anything in a grid headed
+// "Selected work" reads as one of his sculptures. Painting invented forms there
+// fabricates the very thing the site exists to sell — the same objection that
+// rules out stock photography, one step worse, because at least a stock photo is
+// somebody's real work. So the grid, its nav link and the hero's "See the work"
+// button all stay hidden until data.photos.gallery has real entries.
+//
+// The hero band still uses a crafted backdrop: it is an abstract ground behind
+// the type, not a depiction of a piece.
+const DEFAULT_PHOTOS = { hero: '', gallery: [] };
 
 // Todd-specific standing fact from his intake ("prefers calls, doesn't receive
 // texts"). Hard-coded because the shared `data` contract has no field for it —
@@ -211,6 +225,9 @@ const css = (c, hero) => `
 /* About — bio block, hairline rule, portrait-free by design */
 .jpwtr-about{background:${c.soft};}
 .jpwtr-about .in{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:clamp(24px,5vw,64px);align-items:start;}
+/* The heading column is short and the bio is long, so it would otherwise sit
+   above a tall void. Sticking it alongside the prose reads as placed. */
+@media(min-width:761px){.jpwtr-about .in>div:first-child{position:sticky;top:96px;}}
 .jpwtr-about h2{font-size:clamp(26px,4vw,42px);margin-top:14px;}
 .jpwtr-about p{font-size:clamp(15.5px,2vw,17.5px);color:color-mix(in srgb,${c.ink} 82%,${c.sub});font-weight:300;white-space:pre-line;overflow-wrap:anywhere;}
 @media(max-width:760px){.jpwtr-about .in{grid-template-columns:1fr;}}

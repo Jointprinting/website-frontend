@@ -101,18 +101,112 @@ describe('template registry', () => {
   test('Todd Reuben is the custom build on file, seeded from his intake', () => {
     const todd = getTemplate('custom-todd-reuben');
     expect(todd).toBeTruthy();
+    // Nate's contact values win over the ones on the (older) letterhead.
     expect(todd.seedData.phone).toBe('(802) 356-9414');
     expect(todd.seedData.email).toBe('scottiereuben@gmail.com');
-    // His bio is still to come — seeding placeholder prose would put words in
-    // an artist's mouth, so About stays empty (and therefore hidden).
-    expect(todd.seedData.about).toBe('');
     expect(todd.seedData.testimonials).toEqual([]);
     // He posts no hours; the default Mon–Fri row must not survive for him.
     expect(todd.seedData.hours).toEqual([]);
-    // Nothing invented: no price, year or credential anywhere in the seed.
+    // Nothing invented: no price anywhere, and the only year is the one his
+    // CV states plainly ("1989–present Artist, Sculptor").
     for (const s of todd.seedData.services) expect(s.price).toBe('');
-    expect(todd.seedData.established).toBeUndefined();
+    expect(todd.seedData.established).toBe('1989');
     expect(todd.seedData.license).toBeUndefined();
+  });
+
+  // His biography arrived as a 3-page letter. These pin the specific lines that
+  // were held back from it — each one was a real call, and each is the kind of
+  // thing a later "let's use more of the bio" edit would quietly undo.
+  describe('Todd Reuben — what the bio copy may and may not say', () => {
+    const about = () => getTemplate('custom-todd-reuben').seedData.about;
+
+    test('speaks as him, in his own voice', () => {
+      expect(about()).toMatch(/\bI\b/);
+      // The letter is third-person ("Mr. Reuben", "Todd Reuben is a graduate").
+      // One escaped third-person reference and the whole block reads as though
+      // an agency wrote the page about him.
+      expect(about()).not.toMatch(/Mr\. Reuben|Todd Reuben is|his sculptures/i);
+    });
+
+    test('keeps the facts that earn their place', () => {
+      const a = about();
+      expect(a).toContain('Roy Gussow');          // the one checkable credential
+      expect(a).toContain('1982');                // apprenticeship, as fixed dates
+      expect(a).toContain('1989');
+      expect(a).toContain('Columbia University');
+      expect(a).toContain('chromium oxide');      // the process, kept concrete
+      expect(a).toContain('twelve successive passes');
+      expect(a).toContain('immutable');
+    });
+
+    test('makes no durability promise', () => {
+      // "it does not tarnish or rust, retaining its quality forever" is a
+      // warranty he never meant to give — stainless pits, and a Vermont winter
+      // of road salt is exactly that exposure. Only "does not tarnish" survives.
+      expect(about()).toContain('does not tarnish');
+      expect(about()).not.toMatch(/rust|forever|never needs|maintenance-free/i);
+    });
+
+    test('states no spec it cannot stand behind, and no claim about anyone else', () => {
+      // 11-gauge stainless is ~0.120", not the 1/8" the letter equates it to.
+      expect(about()).not.toMatch(/\b11 gauge\b|\bgauge\b/i);
+      expect(about()).toContain('an eighth of an inch');
+      // "renowned" is his word for his teacher inside a private letter; on a
+      // public page it becomes us asserting a third party's stature.
+      expect(about()).not.toMatch(/renowned|famous|celebrated|master/i);
+    });
+
+    test('claims no gallery representation, membership or award', () => {
+      const a = about();
+      // His CV files every gallery under "Former" — the site must not imply
+      // current representation, and past-tensing four names still reads as it.
+      for (const g of ['Gallery North Star', 'Simon Gallery', 'Zaccheo', 'Fine Art Firm']) {
+        expect(a).not.toContain(g);
+      }
+      expect(a).not.toMatch(/represented by|on view at|exhibit|award|prize|juried/i);
+      expect(a).not.toMatch(/Southern Vermont Artists|Vermont Arts Council/i);
+    });
+
+    test('leaks nothing private from the letterhead', () => {
+      const seed = JSON.stringify(getTemplate('custom-todd-reuben').seedData);
+      expect(seed).not.toContain('100 Brown Rd');      // his home workshop
+      expect(seed).not.toContain('1956');              // date of birth
+      expect(seed).not.toContain('Rochester');         // place of birth
+      expect(seed).not.toContain('457-4172');          // the letter's phone
+      expect(seed).not.toContain('457-4903');          // fax
+      expect(seed).not.toContain('toddreuben56');      // the letter's email
+    });
+  });
+
+  // The whole point of the work grid is that it shows HIS sculptures.
+  describe('Todd Reuben — the work grid never invents a sculpture', () => {
+    const todd = () => getTemplate('custom-todd-reuben');
+
+    test('with no photos there is no work grid, and nothing points at one', async () => {
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      // The crafted tile is a texture on a plumber's page. Here it would be a
+      // drawing of a sculpture in a grid headed "Selected work" — an invented
+      // artwork, which is the one thing an artist's portfolio must never show.
+      expect(container.querySelectorAll('.jpw-ph').length).toBe(0);
+      expect(container.querySelector('#work')).toBeNull();
+      expect(screen.queryByText(/Selected work/i)).toBeNull();
+      // …and no nav link or hero button left pointing at the missing section.
+      expect(container.querySelector('a[href="#work"]')).toBeNull();
+      expect(screen.queryByText(/See the work/i)).toBeNull();
+    });
+
+    test('his real photos bring the whole section back', async () => {
+      const { container } = renderTpl(todd(), {
+        businessName: 'Todd Reuben Sculptor',
+        ...todd().seedData,
+        photos: { hero: '', gallery: ['https://example.com/1.jpg', 'https://example.com/2.jpg'] },
+      });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelectorAll('.jpw-ph').length).toBe(2);
+      expect(container.querySelector('#work')).toBeTruthy();
+      expect(container.querySelector('a[href="#work"]')).toBeTruthy();
+    });
   });
 
   test('a custom seed never overrides the name/type typed in the dialog', () => {
@@ -166,21 +260,21 @@ describe.each(ALL_SITE_LOOKS.map((t) => [t.id, t]))('%s', (id, tpl) => {
     expect((await screen.findAllByText(/Ironside Plumbing/)).length).toBeGreaterThan(0);
   });
 
-  test('default photos render through the fail-safe crafted stack', async () => {
+  test('any default photo tile carries its crafted underlayer', async () => {
     const { container } = renderTpl(tpl, FULL_DATA); // no data.photos → defaults
     await screen.findAllByText(/Ironside Plumbing/);
-    // Fail-safe tiles exist, each with its crafted underlayer in place — the
-    // contract that keeps a photo-less draft looking finished.
+    // A look MAY ship no default gallery at all (see the custom-build test
+    // below — an invented artwork is worse than an empty page). What it may
+    // never do is render a tile without the crafted underlayer behind it.
     const tiles = container.querySelectorAll('.jpw-ph');
-    expect(tiles.length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('.jpw-ph-fx').length).toBeGreaterThan(0);
-    // The default photo state is EITHER the template's stock set (Unsplash) OR —
-    // for templates that ship crafted TOPICAL defaults instead of generic stock
-    // (e.g. Trades) — an empty src that collapses to the crafted tile. When a
-    // real default src is present, it must be the curated Unsplash one.
-    const img = container.querySelector('.jpw-ph img');
-    if (img && img.getAttribute('src')) {
-      expect(img.getAttribute('src')).toContain('images.unsplash.com');
+    if (tiles.length) {
+      expect(container.querySelectorAll('.jpw-ph-fx').length).toBeGreaterThan(0);
+      // A real default src must be the curated Unsplash one; the alternative is
+      // an empty src that collapses to the crafted tile (e.g. Trades).
+      const img = container.querySelector('.jpw-ph img');
+      if (img && img.getAttribute('src')) {
+        expect(img.getAttribute('src')).toContain('images.unsplash.com');
+      }
     }
   });
 
@@ -206,11 +300,14 @@ describe.each(ALL_SITE_LOOKS.map((t) => [t.id, t]))('%s', (id, tpl) => {
     // place (an empty src would paint alt text over the crafted scene, so
     // none is rendered); the ones with stock defaults get theirs killed.
     if (img) fireEvent.error(img);
-    // The wrapper flags it, carries no img, and keeps the crafted fx.
+    // The wrapper flags it, carries no img, and keeps the crafted fx. Skipped
+    // entirely for a look that ships no default gallery — there is no tile.
     const failed = container.querySelector('.jpw-ph-noimg');
-    expect(failed).toBeTruthy();
-    expect(failed.querySelector('img')).toBeNull();
-    expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
+    if (container.querySelector('.jpw-ph')) {
+      expect(failed).toBeTruthy();
+      expect(failed.querySelector('img')).toBeNull();
+      expect(failed.querySelector('.jpw-ph-fx')).toBeTruthy();
+    }
   });
 
   test('an empty photo slot renders no <img> at all', async () => {
