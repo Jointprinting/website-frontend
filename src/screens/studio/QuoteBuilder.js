@@ -328,8 +328,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     // mis-clicked margin chip is exactly how that happened. Unlock the row
     // first if the override is deliberate.
     if (lines[i] && lines[i].priceLocked) return;
-    // 0% = the promo / fixed-price lane: nothing marked up — the price sits at
-    // cost until the owner types the client price. Click again to leave.
+    // pct 0 = the AT COST / fixed-price lane: nothing marked up — the price sits
+    // at cost until the owner types the client price. Click again to leave.
     if (pct === 0) {
       setLine(i, lines[i].noMarkup
         ? { noMarkup: false }
@@ -1280,9 +1280,9 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
     return { min: Math.min(t.min, p), max: Math.max(t.max, p) };
   }, { min: Infinity, max: 0 });
 
-  // Promo / fixed-price (the 0% chip): the vendor catalog already has margin
-  // baked in, so this design carries no markup. Clicking 0% resets EVERY cell
-  // to its own COGS (auto, 0% margin — "same as cost") exactly like clicking
+  // Promo / fixed-price (the AT COST chip): the vendor catalog already has margin
+  // baked in, so this design carries no markup. Clicking AT COST resets EVERY cell
+  // to its own COGS ("same as cost") exactly like clicking
   // any other tier reprices every cell; you then type each client price.
   // Clicking again leaves promo mode and restores the plain ×1.4 auto default.
   const fixedPrice = all.length > 0 && all.every(i => lines[i] && lines[i].noMarkup);
@@ -1786,7 +1786,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   const cogs = lineCogsPerUnit(l);
                   const profit = eff - cogs;
                   const pct = eff > 0 ? (profit / eff) * 100 : 0;
-                  // 0% promo lane with no typed price yet: sitting AT COST is the
+                  // AT COST lane with no typed price yet: sitting at cost is the
                   // expected state, not an underpricing accident — no red ⚠.
                   const promoAuto = !!l.noMarkup && !committed;
                   // Only an actual LOSS is alarming (owner: anything above $0 is great).
@@ -1844,14 +1844,14 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                           <Typography sx={cellLabel}>Profit</Typography>
                           <Typography sx={{ ...cellVal, color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct) }}
                             title={promoAuto
-                              ? `0% margin — the price sits at COGS until you type the client price`
+                              ? `At cost — the price sits at COGS until you type the client price`
                               : lowMargin
                                 ? `⚠ Below cost — you'd lose ${fmt(-profit)}/u. Raise the price or check the costs.`
                                 : `${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}% margin`}>
-                            {promoAuto ? 'at cost' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u`}
+                            {promoAuto ? 'AT COST' : `${lowMargin ? '⚠ ' : ''}${fmt(profit)}/u`}
                           </Typography>
                           <Typography sx={{ ...cellVal, color: lowMargin ? '#f87171' : promoAuto ? D.amber : marginColor(pct), fontWeight: 800 }}>
-                            {promoAuto ? '0%' : `${fmt(profit * q)} · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
+                            {promoAuto ? 'AT COST' : `${fmt(profit * q)} · ${pct < 25 ? pct.toFixed(1) : pct.toFixed(0)}%`}
                           </Typography>
                           <Typography sx={cellLabel}>COGS</Typography>
                           <Typography sx={{ ...cellVal, color: D.muted }}
@@ -2005,13 +2005,18 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
 
       {/* One markup strip for the whole design: each cell gets the markup applied
           over its OWN unit cost, so every option/quantity prices correctly from a
-          single click. Typing in a cell overrides just that cell. "0%" is the
+          single click. Typing in a cell overrides just that cell. "AT COST" is the
           promo / fixed-price lane: nothing is marked up — you type each client
-          price (catalog price already carries the margin); COGS stays honest. */}
+          price (catalog price already carries the margin); COGS stays honest.
+          Naming note: clicking AT COST resets every cell to its own COGS, so the
+          label is literally true at the moment of use. A promo/catalog line can
+          later sit in this lane WITH a typed price above cost — there the lane
+          means "no markup added, I set the price", which is what the strip's
+          caption says. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="center" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: fixedPrice ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            {fixedPrice ? 'Margin 0% · you set the prices' : 'Margin · all options'}
+            {fixedPrice ? 'At cost · you set the prices' : 'Margin · all options'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10, flex: 1, minWidth: 120 }}>
             {fixedPrice
@@ -2025,16 +2030,16 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
           borderRadius: 2.5, p: 0.5, display: 'flex',
           overflowX: 'auto', ...scrollbar }}>
           <Box onClick={toggleFixed}
-            title="No markup — promo / catalog items whose price already includes your margin; you type each client price"
+            title="At cost — no markup added. Promo / catalog items whose price already includes your margin; you type each client price"
             sx={{
-              cursor: 'pointer', flex: '1 0 56px', minWidth: 56, textAlign: 'center',
+              cursor: 'pointer', flex: '1 0 78px', minWidth: 78, textAlign: 'center',
               py: 0.95, px: 0.5, borderRadius: 1.75,
               bgcolor: fixedPrice ? D.amber : 'transparent',
               transition: 'background-color 0.18s ease, transform 0.15s ease',
               '&:hover': fixedPrice ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
             }}>
-            <Typography sx={{ color: fixedPrice ? D.ink : D.muted, fontSize: 13, fontWeight: 800, ...mono }}>
-              0%
+            <Typography sx={{ color: fixedPrice ? D.ink : D.muted, fontSize: 11, fontWeight: 800, letterSpacing: 0.4, ...mono }}>
+              AT COST
             </Typography>
           </Box>
           {TIERS.map(pct => {
@@ -2293,12 +2298,12 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
       {/* Markup strip — a segmented control on an inset darker track. Each chip
           reads "+markup%" over the PRICE this line would sell at ("markup, then
           the cost at that number"). Only the SELECTED tier wears the brand green.
-          "0%" is the promo / fixed-price lane: no markup added, you type the
+          "AT COST" is the promo / fixed-price lane: no markup added, you type the
           client price. Profit/unit + margin land in the footer on selection. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.5 }}>
         <Stack direction="row" alignItems="baseline" gap={1} mb={0.75} flexWrap="wrap">
           <Typography sx={{ color: line.noMarkup ? D.amber : D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-            {line.noMarkup ? 'Margin 0% · you set the price' : 'Margin'}
+            {line.noMarkup ? 'At cost · you set the price' : 'Margin'}
           </Typography>
           <Typography sx={{ color: D.muted, fontSize: 10 }}>
             COGS {fmt(cogsPerUnit)}/unit
@@ -2315,16 +2320,16 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
             borderRadius: 2.5, p: 0.5, display: 'flex',
             overflowX: 'auto', ...scrollbar }}>
             <Box onClick={() => onSelectTier(0)}
-              title="No markup — promo / catalog price already includes your margin; type the client price"
+              title="At cost — no markup added. Promo / catalog price already includes your margin; type the client price"
               sx={{
-                cursor: 'pointer', flex: '1 0 64px', minWidth: 64, textAlign: 'center',
+                cursor: 'pointer', flex: '1 0 72px', minWidth: 72, textAlign: 'center',
                 py: 0.7, px: 0.5, borderRadius: 1.75,
                 bgcolor: line.noMarkup ? D.amber : 'transparent',
                 transition: 'background-color 0.18s ease, transform 0.15s ease',
                 '&:hover': line.noMarkup ? {} : { bgcolor: 'rgba(255,255,255,0.06)', transform: 'translateY(-1px)' },
               }}>
-              <Typography sx={{ color: line.noMarkup ? D.ink : D.muted, fontSize: 10, fontWeight: 700 }}>
-                0%
+              <Typography sx={{ color: line.noMarkup ? D.ink : D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.3 }}>
+                AT COST
               </Typography>
               <Typography sx={{ color: line.noMarkup ? D.ink : D.text, fontSize: 13, fontWeight: 800, ...mono }}>
                 {fmt(cogsPerUnit)}
@@ -2839,7 +2844,7 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
                 Add to quote · {qtys.size} run size{qtys.size === 1 ? '' : 's'}
               </Button>
               <Typography sx={{ color: D.faint, fontSize: 11 }}>
-                Prices land committed at 0% markup — the catalog price already includes your margin.
+                Prices land committed with no markup added — the catalog price already includes your margin.
               </Typography>
             </Stack>
           </Box>
