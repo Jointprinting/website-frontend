@@ -178,6 +178,34 @@ describe('template registry', () => {
     });
   });
 
+  // He confirmed he is taking commissions AND has finished pieces for sale, so
+  // those two are the structure of the page rather than rows in a service list.
+  describe('Todd Reuben — the two offers are the spine', () => {
+    const todd = () => getTemplate('custom-todd-reuben');
+
+    test('exactly two offers, both open right now', () => {
+      const names = todd().seedData.services.map((s) => s.name);
+      expect(names).toEqual(['Commissioned work', 'Available pieces']);
+    });
+
+    test('they render as equal panels, not a numbered ledger', async () => {
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelectorAll('.jpwtr-offer').length).toBe(2);
+      // The old 01/02/03 numerals are gone on purpose: they read as a trades
+      // price list beside artwork, and his sculptures are titled BY NUMBER, so
+      // the only numerals on the page must not be labelling services.
+      expect(container.querySelector('.jpwtr-crow')).toBeNull();
+      expect(screen.queryByText('01')).toBeNull();
+      expect(screen.queryByText('02')).toBeNull();
+    });
+
+    test('shipping makes no promise his answers never supported', () => {
+      const seed = JSON.stringify(todd().seedData);
+      expect(seed).not.toMatch(/arranged anywhere|worldwide delivery|we ship anywhere/i);
+    });
+  });
+
   // The whole point of the work grid is that it shows HIS sculptures.
   describe('Todd Reuben — the work grid never invents a sculpture', () => {
     const todd = () => getTemplate('custom-todd-reuben');
