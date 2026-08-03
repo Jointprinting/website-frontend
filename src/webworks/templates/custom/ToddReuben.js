@@ -211,16 +211,21 @@ const css = (c, hero) => `
   .jpwtr-gal .jpw-ph:last-child:nth-child(5n+2),
   .jpwtr-gal .jpw-ph:last-child:nth-child(5n+4){grid-column:span 6;aspect-ratio:4/5;}}
 
-/* Commissions + available work — a numbered catalogue ledger, not tiles */
-.jpwtr-cat{border-top:1px solid ${c.ink};}
-.jpwtr-crow{display:grid;grid-template-columns:auto minmax(0,4fr) minmax(0,6fr) minmax(0,2fr);gap:8px 26px;align-items:baseline;padding:26px 4px;border-bottom:1px solid ${c.line};transition:background .18s;}
-.jpwtr-crow:hover{background:${c.surface};}
-.jpwtr-crow .no{font-size:11px;letter-spacing:.18em;color:${c.accent};font-variant-numeric:tabular-nums;padding-top:6px;}
-.jpwtr-crow h3{font-family:'Marcellus',Georgia,serif;font-weight:400;font-size:clamp(20px,2.6vw,26px);line-height:1.24;overflow-wrap:anywhere;}
-.jpwtr-crow .d{font-size:15.5px;color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
-.jpwtr-crow .p{text-align:right;font-size:13.5px;letter-spacing:.08em;white-space:nowrap;}
-@media(max-width:760px){.jpwtr-crow{grid-template-columns:auto minmax(0,1fr);}
-  .jpwtr-crow .d,.jpwtr-crow .p{grid-column:2 / -1;text-align:left;}}
+/* Commissions + available work — the two things he actually sells, side by
+   side and equally weighted, because those two ARE the offer.
+   Deliberately not the numbered ledger this used to be: 01/02/03 line-items
+   read as a trades price list beside artwork, and his sculptures are titled
+   BY NUMBER, so the only numerals on the page must not label services. */
+.jpwtr-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:clamp(20px,3.6vw,48px);border-top:1px solid ${c.ink};padding-top:clamp(26px,4vw,48px);}
+.jpwtr-offer + .jpwtr-offer{border-left:1px solid ${c.line};padding-left:clamp(20px,3.6vw,48px);}
+.jpwtr-offer h3{font-family:'Marcellus',Georgia,serif;font-weight:400;font-size:clamp(21px,2.9vw,30px);line-height:1.2;overflow-wrap:anywhere;}
+.jpwtr-offer p{margin-top:14px;font-size:15.5px;color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
+.jpwtr-offer .price{margin-top:14px;display:inline-block;font-size:13px;letter-spacing:.1em;}
+/* An odd last panel would sit alone in half the row — let it take the width. */
+.jpwtr-offers .jpwtr-offer:last-child:nth-child(odd){grid-column:1 / -1;border-left:none;padding-left:0;}
+@media(max-width:720px){.jpwtr-offers{grid-template-columns:1fr;gap:30px;}
+  .jpwtr-offer + .jpwtr-offer{border-left:none;padding-left:0;border-top:1px solid ${c.line};padding-top:30px;}}
 
 /* About — bio block, hairline rule, portrait-free by design */
 .jpwtr-about{background:${c.soft};}
@@ -363,16 +368,15 @@ export default function ToddReubenSite({ data }) {
         <section className="jpwtr-sec" id="commissions">
           <div className="jpwtr-wrap">
             <div className="jpwtr-sec-head">
-              <span className="jpwtr-cap">Commissions &amp; available work</span>
-              <h2 className="jpwtr-serif">How to own a piece</h2>
+              <span className="jpwtr-cap">Enquiries welcome</span>
+              <h2 className="jpwtr-serif">Commissions &amp; available work</h2>
             </div>
-            <div className="jpwtr-cat">
+            <div className="jpwtr-offers">
               {pieces.map((p, i) => (
-                <div className="jpwtr-crow" key={i}>
-                  <span className="no">{String(i + 1).padStart(2, '0')}</span>
+                <div className="jpwtr-offer" key={i}>
                   <h3>{txt(p.name)}</h3>
-                  <span className="d">{txt(p.desc)}</span>
-                  <span className="p">{txt(p.price)}</span>
+                  {txt(p.desc) && <p>{txt(p.desc)}</p>}
+                  {txt(p.price) && <span className="price">{txt(p.price)}</span>}
                 </div>
               ))}
             </div>
@@ -434,8 +438,11 @@ export default function ToddReubenSite({ data }) {
       {hasContact && (
         <section className="jpwtr-sec jpwtr-contact" id="contact">
           <div className="jpwtr-wrap">
+            {/* Covers both halves of what he sells — "Commission a piece"
+                ignored the finished work, now that the offers section names
+                them side by side. And it says the actual next step. */}
             <span className="jpwtr-cap">Enquiries</span>
-            <h2 className="jpwtr-serif">Commission a piece</h2>
+            <h2 className="jpwtr-serif">Start with a phone call</h2>
             {phone && (
               <>
                 <a className="jpwtr-phone jpwtr-serif" href={telHref(phone)}>{phone}</a>

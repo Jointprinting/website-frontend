@@ -114,7 +114,9 @@ export const CUSTOM_SITES = [
     // EMPTY: he is sending his own bio, and the About section stays hidden
     // until it is pasted in.
     seedData: {
-      tagline: 'One-of-a-kind stainless steel sculpture, made in Woodstock, Vermont.',
+      // "by hand" confirmed with him — he still does the cutting, hammering,
+      // welding and sanding himself, which is what the process paragraph rests on.
+      tagline: 'One-of-a-kind stainless steel sculpture, made by hand in Woodstock, Vermont.',
       // His own words for what makes the work unique, from the artist's
       // statement. Replaced "Stainless steel, shaped by hand", which asserted
       // present-tense physical labour the source can't date — see the About
@@ -130,12 +132,19 @@ export const CUSTOM_SITES = [
       // shipping line. 1992 dates only the move to Woodstock, not the career.
       established: '1989',
       hours: [],           // he keeps no posted hours — the section stays hidden
+      // The two things he actually sells, both confirmed open right now: he is
+      // taking commissions, and he has finished pieces available. They render
+      // side by side and equally weighted — this IS the offer, so it is the
+      // structure rather than a list of services.
+      //
+      // "Shipping" used to be a third row. It came out: an unqualified
+      // "delivery arranged anywhere" promised logistics his answers never
+      // claimed, the fact already appears twice (the hero strip and the contact
+      // band both say "Shipped worldwide"), and crating only matters once
+      // somebody is buying a finished piece — so it lives in that panel now.
       services: [
-        { name: 'Commissioned work', desc: 'A sculpture made for your space. Call to talk through scale, site and material.', price: '' },
-        { name: 'Available pieces', desc: 'Finished sculptures ready to go. Each one is the only one of its kind — call to ask what is in the studio now.', price: '' },
-        // Not "delivery arranged anywhere" — that promised logistics from a
-        // one-man shop that his answers never claimed. Same fact, no promise.
-        { name: 'Shipping', desc: 'Pieces have shipped well beyond Vermont. Call to talk through crating and delivery.', price: '' },
+        { name: 'Commissioned work', desc: 'A sculpture made for your space, worked out with you. Call to talk through scale, site and material.', price: '' },
+        { name: 'Available pieces', desc: 'Finished sculptures ready to go, each the only one of its kind. Call to ask what is in the studio now, and about crating and delivery.', price: '' },
       ],
       // From the biography letter he sent, in his voice, and NOTHING beyond it.
       // Order is deliberate: material, then process, then lineage, then why the
