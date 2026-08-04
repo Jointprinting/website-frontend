@@ -18,7 +18,7 @@ import AddIcon            from '@mui/icons-material/Add';
 import CloseIcon          from '@mui/icons-material/Close';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import {
-  D, mono, eyebrow, money0, fmtDate, fmtRelative, ymd,
+  D, mono, eyebrow, money, money0, fmtDate, fmtRelative, ymd,
   dropInput, dropPrimaryBtn, dropGhostBtn, scrollbar, STATUS_META,
 } from '../_shared';
 import { STAGE_META, CRM_STAGES, telHref, smsHref } from '../crm/_crm';
@@ -77,6 +77,198 @@ const TONE = {
   warn:  { fg: D.amber, bar: D.amber, glow: 'rgba(251,191,36,0.12)' },
   muted: { fg: D.faint, bar: 'rgba(255,255,255,0.25)', glow: 'rgba(255,255,255,0.04)' },
 };
+
+// ── My Earnings ──────────────────────────────────────────────────────────────
+//
+// The agent is paid a share of each order's PROFIT — a number every other screen
+// here deliberately hides. Showing it back to them, for their own orders only,
+// is what makes the deal verifiable instead of something they have to take on
+// faith. The server sends ONE cost figure per order, never the vendor lines.
+//
+// Tone: honest first, motivating second. Money already earned is the headline;
+// what's still in flight is clearly labelled a forecast, not a balance. The tier
+// bar is the only "game" element — it's real progress against real thresholds,
+// so it motivates without pretending.
+
+// Why an order pays what it pays, in the agent's own words.
+const KIND_META = {
+  self:          { label: 'You found them', color: D.green },
+  reorder:       { label: 'Reorder',        color: D.green },
+  house:         { label: 'Company lead',   color: '#60a5fa' },
+  house_reorder: { label: 'House account',  color: D.faint },
+};
+
+function EarningsRow({ row }) {
+  const kind = KIND_META[row.kind] || KIND_META.house;
+  const earned = row.state === 'earned';
+  return (
+    <Box sx={{
+      bgcolor: D.panel, border: `1px solid ${earned ? 'rgba(74,222,128,0.28)' : D.line}`,
+      borderRadius: 2.5, p: 1.5,
+    }}>
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1.5}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{ color: D.text, fontWeight: 700, fontSize: 14, lineHeight: 1.3,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {row.companyName || 'Untitled'}
+          </Typography>
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: 0.4, flexWrap: 'wrap' }}>
+            <Typography sx={{ ...mono, color: kind.color, fontSize: 10.5, fontWeight: 700 }}>
+              {kind.label}
+            </Typography>
+            <Typography sx={{ color: D.faint, fontSize: 10.5 }}>·</Typography>
+            <Typography sx={{ color: D.faint, fontSize: 11 }}>{fmtDate(row.orderDate)}</Typography>
+            {row.basis === 'fast start' && (
+              <Chip size="small" label="Fast start" sx={{ height: 16, fontSize: 9, fontWeight: 800,
+                bgcolor: 'rgba(251,191,36,0.16)', color: D.amber }} />
+            )}
+          </Stack>
+        </Box>
+        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+          <Typography sx={{ ...mono, color: earned ? D.green : D.muted, fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>
+            {money(row.commission)}
+          </Typography>
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 10, mt: 0.2 }}>
+            {row.ratePct}% of {money0(row.profit)}
+          </Typography>
+        </Box>
+      </Stack>
+      {/* The verification line — what the client paid, what the job cost, what
+          was left. One cost figure, never the breakdown. */}
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mt: 1, pt: 0.9, borderTop: `1px solid ${D.line}`, flexWrap: 'wrap' }}>
+        {[['Client paid', money0(row.revenue)], ['Job cost', money0(row.cost)], ['Profit', money0(row.profit)]].map(([k, v]) => (
+          <Stack key={k} direction="row" spacing={0.5} alignItems="baseline">
+            <Typography sx={{ color: D.faint, fontSize: 10 }}>{k}</Typography>
+            <Typography sx={{ ...mono, color: D.muted, fontSize: 11.5, fontWeight: 700 }}>{v}</Typography>
+          </Stack>
+        ))}
+        <Box sx={{ flex: 1 }} />
+        <Chip size="small"
+          label={earned ? 'Earned' : row.ratePct === 0 ? 'No commission' : 'In progress'}
+          sx={{ height: 18, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3,
+            bgcolor: earned ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)',
+            color: earned ? D.green : D.faint }} />
+      </Stack>
+      {(row.costIsEstimate || row.costUnknown) && (
+        <Typography sx={{ color: D.amber, fontSize: 10.5, mt: 0.8 }}>
+          {row.costUnknown
+            ? 'Costs not entered yet — this figure will change once the bills are in.'
+            : 'Estimated from the quote — final once the printer and blank invoices are booked.'}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function EarningsPanel({ data }) {
+  if (!data) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 5, color: D.faint }}>
+        <Typography sx={{ fontSize: 14 }}>Loading your earnings…</Typography>
+      </Box>
+    );
+  }
+  if (!data.enabled) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 5, color: D.faint }}>
+        <Typography sx={{ fontSize: 14 }}>Your commission terms aren’t set up yet.</Typography>
+        <Typography sx={{ fontSize: 12.5, mt: 0.5 }}>
+          Once Nate switches them on, every order you close shows up here with exactly what you earned on it.
+        </Typography>
+      </Box>
+    );
+  }
+
+  const r = data.rollup || {};
+  const tier = r.tier || {};
+  const next = r.nextTier;
+
+  return (
+    <Stack spacing={1.5}>
+      {/* Headline — earned money only. A forecast never sits in the big number. */}
+      <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, p: { xs: 1.75, md: 2.25 } }}>
+        <Typography sx={{ ...eyebrow, fontSize: 10 }}>Earned this month</Typography>
+        <Typography sx={{ ...mono, color: D.green, fontWeight: 800, fontSize: 34, lineHeight: 1.05, mt: 0.5 }}>
+          {money(r.earnedThisMonth)}
+        </Typography>
+        <Stack direction="row" spacing={2.5} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+          {[
+            ['All time', money(r.earnedAllTime)],
+            ['In progress', money(r.pendingForecast)],
+            ['Orders paid out', String(r.ordersEarned || 0)],
+          ].map(([k, v]) => (
+            <Box key={k}>
+              <Typography sx={{ color: D.faint, fontSize: 10.5 }}>{k}</Typography>
+              <Typography sx={{ ...mono, color: D.text, fontWeight: 700, fontSize: 15 }}>{v}</Typography>
+            </Box>
+          ))}
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11, mt: 1.25, lineHeight: 1.5 }}>
+          Commission is earned once an order is <b>delivered and paid in full</b>. Anything still in
+          progress is a forecast, not a balance.
+        </Typography>
+      </Box>
+
+      {/* The ladder — the one motivating element, and it's real. */}
+      <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, p: { xs: 1.75, md: 2.25 } }}>
+        <Stack direction="row" alignItems="baseline" justifyContent="space-between" spacing={1}>
+          <Box>
+            <Typography sx={{ ...eyebrow, fontSize: 10 }}>Your rate</Typography>
+            <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, mt: 0.3 }}>
+              {tier.name} · <Box component="span" sx={{ ...mono, color: D.green }}>{tier.selfPct}%</Box>
+            </Typography>
+          </Box>
+          <Typography sx={{ ...mono, color: D.faint, fontSize: 11, textAlign: 'right' }}>
+            {money0(r.lifetimeProfit)}<br />profit generated
+          </Typography>
+        </Stack>
+
+        {next ? (
+          <Box sx={{ mt: 1.5 }}>
+            <Box sx={{ height: 7, borderRadius: 999, bgcolor: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${Math.round((next.progress || 0) * 100)}%`,
+                bgcolor: D.green, borderRadius: 999, transition: 'width .5s ease' }} />
+            </Box>
+            <Typography sx={{ color: D.muted, fontSize: 11.5, mt: 0.8 }}>
+              <b>{money0(next.remaining)}</b> more profit to reach <b>{next.name}</b> — {next.selfPct}% on
+              clients you find. It only goes up: a slow month never drops you back.
+            </Typography>
+          </Box>
+        ) : (
+          <Typography sx={{ color: D.green, fontSize: 11.5, mt: 1.25 }}>
+            Top tier. You’re at the best rate there is.
+          </Typography>
+        )}
+
+        {r.fastStartRemaining > 0 && (
+          <Typography sx={{ color: D.amber, fontSize: 11.5, mt: 1 }}>
+            Fast start: your next {r.fastStartRemaining} order{r.fastStartRemaining === 1 ? '' : 's'} you
+            source pay at a boosted rate.
+          </Typography>
+        )}
+      </Box>
+
+      {/* Per-order statement */}
+      {(data.orders || []).length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 4, color: D.faint }}>
+          <Typography sx={{ fontSize: 14 }}>Nothing to show yet.</Typography>
+          <Typography sx={{ fontSize: 12.5, mt: 0.5 }}>Your first closed order will appear here with the maths behind it.</Typography>
+        </Box>
+      ) : (
+        <>
+          <Typography sx={{ ...eyebrow, fontSize: 10, mt: 0.5 }}>Order by order</Typography>
+          {(data.orders || []).map((row) => <EarningsRow key={row.id} row={row} />)}
+          {r.estimatedRows > 0 && (
+            <Typography sx={{ color: D.faint, fontSize: 11, textAlign: 'center', pt: 0.5 }}>
+              {r.estimatedRows} order{r.estimatedRows === 1 ? '' : 's'} still using estimated costs.
+              Figures firm up as the bills come in.
+            </Typography>
+          )}
+        </>
+      )}
+    </Stack>
+  );
+}
 
 // ── Goal dashboard hero ──────────────────────────────────────────────────────
 function GoalHero({ me }) {
@@ -426,6 +618,7 @@ export default function AgentHome({ token, onLogout }) {
   const [me, setMe] = useState(null);
   const [leads, setLeads] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [earnings, setEarnings] = useState(null);
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -437,24 +630,31 @@ export default function AgentHome({ token, onLogout }) {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [meR, leadsR, ordersR] = await Promise.all([
+      const [meR, leadsR, ordersR, earnR] = await Promise.all([
         fetch(`${base}/me`, { headers: authHdr }),
         fetch(`${base}/leads`, { headers: authHdr }),
         fetch(`${base}/orders`, { headers: authHdr }),
+        fetch(`${base}/earnings`, { headers: authHdr }),
       ]);
       if (!meR.ok) throw new Error(`HTTP ${meR.status}`);
       setMe(await meR.json());
       setLeads(leadsR.ok ? (await leadsR.json()).leads || [] : []);
       setOrders(ordersR.ok ? (await ordersR.json()).orders || [] : []);
+      // Earnings failing must never take the dashboard down with it — the tab
+      // just reads as not-set-up rather than the whole screen erroring.
+      setEarnings(earnR.ok ? await earnR.json() : { enabled: false, orders: [], rollup: null });
     } catch (e) { setError('Could not load your dashboard. Pull to refresh or try again.'); }
     finally { setLoading(false); }
   }, [authHdr]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Refresh /me (stats) after any write so the goal dashboard stays live.
+  // Refresh /me (stats) after any write so the goal dashboard stays live — and
+  // /earnings with it, because moving an order to delivered/paid is exactly what
+  // flips a forecast into money earned.
   const refreshMe = useCallback(async () => {
     try { const r = await fetch(`${base}/me`, { headers: authHdr }); if (r.ok) setMe(await r.json()); } catch (_) {}
+    try { const e = await fetch(`${base}/earnings`, { headers: authHdr }); if (e.ok) setEarnings(await e.json()); } catch (_) {}
   }, [authHdr]);
 
   const saveLead = useCallback(async (companyKey, body) => {
@@ -505,6 +705,11 @@ export default function AgentHome({ token, onLogout }) {
   }
 
   const first = (me?.displayName || me?.username || '').split(' ')[0];
+  // The Earnings tab only exists once terms are switched on. If the owner turns
+  // them off while the agent is sitting on it, fall back rather than leaving
+  // Tabs pointed at an index that no longer renders.
+  const showEarnings = !!earnings?.enabled;
+  const safeTab = tab === 2 && !showEarnings ? 0 : tab;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text,
@@ -534,20 +739,28 @@ export default function AgentHome({ token, onLogout }) {
 
         {/* Tabs */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 3, mb: 1.5 }}>
-          <Tabs value={tab} onChange={(_e, v) => setTab(v)}
+          <Tabs value={safeTab} onChange={(_e, v) => setTab(v)}
             sx={{ minHeight: 0, '& .MuiTab-root': { minHeight: 0, textTransform: 'none', fontWeight: 700, color: D.muted, fontSize: 14 },
               '& .Mui-selected': { color: `${D.green} !important` }, '& .MuiTabs-indicator': { bgcolor: D.green } }}>
             <Tab label={`My Leads${leads.length ? ` (${leads.length})` : ''}`} />
             <Tab label={`My Orders${orders.length ? ` (${orders.length})` : ''}`} />
+            {/* Only offered once the owner has actually agreed terms — an empty
+                money tab would read as "you've earned nothing". */}
+            {showEarnings && <Tab label="Earnings" />}
           </Tabs>
-          <Button size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={() => (tab === 0 ? setAddLead(true) : setAddOrder(true))}
-            sx={{ ...dropPrimaryBtn, py: 0.4, px: 1.5, fontSize: 12.5 }}>
-            {tab === 0 ? 'Add lead' : 'Log sale'}
-          </Button>
+          {/* The earnings tab is a statement, not a place to create anything. */}
+          {safeTab !== 2 && (
+            <Button size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={() => (safeTab === 0 ? setAddLead(true) : setAddOrder(true))}
+              sx={{ ...dropPrimaryBtn, py: 0.4, px: 1.5, fontSize: 12.5 }}>
+              {safeTab === 0 ? 'Add lead' : 'Log sale'}
+            </Button>
+          )}
         </Stack>
 
         {/* Lists */}
-        {tab === 0 ? (
+        {safeTab === 2 ? (
+          <EarningsPanel data={earnings} />
+        ) : safeTab === 0 ? (
           leads.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 5, color: D.faint }}>
               <Typography sx={{ fontSize: 14 }}>No leads yet.</Typography>

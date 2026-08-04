@@ -182,6 +182,30 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const [archived, setArchived] = React.useState([]);
   const [archivedLoading, setArchivedLoading] = React.useState(false);
 
+  // WHOSE book is on screen. The owner sees their OWN companies by default so
+  // an agent's pipeline doesn't bulk out the board they work every day; this
+  // switches to one agent's, or everyone's. Sent as ?agentId= on every CRM read
+  // and enforced server-side by middleware/scope.visibleFilter — an agent's own
+  // token is hard-locked to their records and can never widen it.
+  //
+  // The picker only exists once an agent has actually been onboarded; with a
+  // solo owner the roster is empty and nothing renders, so the CRM looks and
+  // behaves exactly as it always has.
+  const [whose, setWhose] = React.useState('me');    // 'me' | <agentId> | 'all'
+  const [roster, setRoster] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    axios.get(`${config.backendUrl}/api/admin/agents`, authHdr)
+      .then((r) => { if (!cancelled) setRoster((r.data?.agents || []).map((a) => ({ id: a.id, label: a.displayName || a.username }))); })
+      .catch(() => { /* agent token or no roster — the picker just stays hidden */ });
+    return () => { cancelled = true; };
+  }, [authHdr]);
+  // Appended to every CRM read. 'me' is the server's default, so it's omitted.
+  const scopeParams = React.useCallback(
+    () => (whose && whose !== 'me' ? { agentId: whose } : {}),
+    [whose],
+  );
+
   // Global search (F) — the command palette + the overflow menu anchor (J).
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [overflowAnchor, setOverflowAnchor] = React.useState(null);
@@ -259,33 +283,33 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const loadDashboard = React.useCallback(async () => {
     setDashboardLoading(true);
     try {
-      const res = await axios.get(`${base}/dashboard`, authHdr);
+      const res = await axios.get(`${base}/dashboard`, { ...authHdr, params: scopeParams() });
       setDashboard(res.data || null);
     } catch (e) {
       flash('Could not load the dashboard.', 'error');
     } finally { setDashboardLoading(false); }
-  }, [authHdr, flash]);
+  }, [authHdr, flash, scopeParams]);
 
   const loadToday = React.useCallback(async () => {
     setTodayLoading(true);
     try {
-      const res = await axios.get(`${base}/today`, authHdr);
+      const res = await axios.get(`${base}/today`, { ...authHdr, params: scopeParams() });
       setToday({ summary: res.data?.summary || {}, rows: res.data?.rows || [] });
     } catch (e) {
       flash('Could not load today’s calls.', 'error');
     } finally { setTodayLoading(false); }
-  }, [authHdr, flash]);
+  }, [authHdr, flash, scopeParams]);
 
   const loadCalendar = React.useCallback(async (cursor) => {
     setCalLoading(true);
     try {
       const { from, to } = gridRange(cursor.year, cursor.month);
-      const res = await axios.get(`${base}/calendar`, { ...authHdr, params: { from, to } });
+      const res = await axios.get(`${base}/calendar`, { ...authHdr, params: { from, to, ...scopeParams() } });
       setCalEvents(res.data?.events || []);
     } catch (e) {
       flash('Could not load the calendar.', 'error');
     } finally { setCalLoading(false); }
-  }, [authHdr, flash]);
+  }, [authHdr, flash, scopeParams]);
 
   // The whole non-archived book (scoped only by search + tag); the segment split
   // (Clients / leads / everyone) is applied client-side in CompaniesView, so
@@ -293,7 +317,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
   const loadCompanies = React.useCallback(async (q, tag) => {
     setCompaniesLoading(true);
     try {
-      const params = {};
+      const params = { ...scopeParams() };
       if (q && q.trim()) params.q = q.trim();
       if (tag && tag !== 'all') params.tag = tag;
       const res = await axios.get(base, { ...authHdr, params });
@@ -301,12 +325,12 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     } catch (e) {
       flash('Could not load companies.', 'error');
     } finally { setCompaniesLoading(false); }
-  }, [authHdr, flash]);
+  }, [authHdr, flash, scopeParams]);
 
   const loadPipeline = React.useCallback(async (q, tag) => {
     setPipelineLoading(true);
     try {
-      const params = {};
+      const params = { ...scopeParams() };
       if (q && q.trim()) params.q = q.trim();
       if (tag && tag !== 'all') params.tag = tag;
       const res = await axios.get(`${base}/pipeline`, { ...authHdr, params });
@@ -319,7 +343,7 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
     } catch (e) {
       flash('Could not load the pipeline.', 'error');
     } finally { setPipelineLoading(false); }
-  }, [authHdr, flash]);
+  }, [authHdr, flash, scopeParams]);
 
   const loadDetail = React.useCallback(async (key) => {
     setDetailLoading(true);
@@ -1442,6 +1466,33 @@ export default function CrmTab({ token, onBack, initialView, initialCompanyKey, 
             </>
           )}
           <Box sx={{ flexGrow: 1 }} />
+          {/* WHOSE book. Only rendered once an agent exists — a solo owner never
+              sees it, so nothing about the CRM changes until there's someone to
+              separate from. Defaults to "Mine": the owner's board stays exactly
+              as clean as it was before hiring. */}
+          {roster.length > 0 && !openKey && (
+            <Stack direction="row" alignItems="center" spacing={0.4}
+              sx={{ border: `1px solid ${D.line}`, borderRadius: 999, p: 0.3, mr: 0.5 }}>
+              {[{ id: 'me', label: 'Mine' }, ...roster, { id: 'all', label: 'All' }].map((o) => {
+                const active = whose === o.id;
+                return (
+                  <Box key={o.id} onClick={() => setWhose(o.id)} role="button" tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWhose(o.id); } }}
+                    title={o.id === 'me' ? 'Your own companies' : o.id === 'all' ? 'Everyone’s' : `${o.label}’s book`}
+                    sx={{
+                      cursor: 'pointer', px: 1.1, py: 0.35, borderRadius: 999,
+                      fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1.4,
+                      bgcolor: active ? D.green : 'transparent',
+                      color: active ? D.ink : D.muted,
+                      transition: 'background-color .15s ease, color .15s ease',
+                      '&:hover': active ? {} : { color: D.text, bgcolor: 'rgba(255,255,255,0.05)' },
+                    }}>
+                    {o.label}
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
           {/* Global search — the Notion-style command palette (⌘K). Reachable from
               every view, including Calendar (owner's specific ask). */}
           <Button
