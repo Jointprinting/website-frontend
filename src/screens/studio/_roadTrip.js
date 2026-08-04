@@ -13,9 +13,13 @@ export function deriveCompanyKey(name) {
 
 // ── Market segments (MIRRORS services/dispensaryStates.js SEGMENTS /
 // deriveSegment on the backend — keep ids in sync). The map's clickers:
-//   rec  — licensed adult-use dispensaries (24 roster states)
-//   med  — licensed medical-only dispensaries (14 roster states — PA, FL, OK…
-//          license-loaded server-side just like the rec markets)
+//   rec  — licensed adult-use dispensaries (23 roster states; VA is the 24th
+//          adult-use state but has no rec retail until ~mid-2027)
+//   med  — licensed medical-only dispensaries (17 roster states — PA, FL, OK,
+//          plus VA / DC / PR — license-loaded server-side just like the rec
+//          markets. VA and DC have live medical storefronts even though their
+//          adult-use retail doesn't exist yet; PR is a ~100-store territory
+//          market seeded by sweep rather than a license roll.)
 //   hemp — hemp-derived-THC retail ("bodega THC": delta-8/THCA smoke, vape
 //          and CBD shops in states with no legal marijuana retail)
 // The server derives a pin's segment from its state + source; '' (unknown)
@@ -140,6 +144,9 @@ export const STATE_CENTROIDS = {
   VA: { lat: 37.5,  lng: -78.9  }, WA: { lat: 47.4,  lng: -120.5 },
   WV: { lat: 38.6,  lng: -80.6  }, WI: { lat: 44.6,  lng: -90.0  },
   WY: { lat: 43.0,  lng: -107.6 },
+  // Territory with a licensed medical market on the Field Map. Without a
+  // centroid, printer-distance ranking returns NaN and sorts it last.
+  PR: { lat: 18.2,  lng: -66.5  },
 };
 
 // Great-circle miles between two US state centroids (case/space-insensitive

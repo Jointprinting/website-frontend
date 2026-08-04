@@ -137,8 +137,11 @@ describe('haversineMi', () => {
 });
 
 describe('stateDistanceMi (nexus-aware printer ordering)', () => {
-  it('has a centroid for every US state + DC (51 entries)', () => {
-    expect(Object.keys(STATE_CENTROIDS)).toHaveLength(51);
+  it('has a centroid for every US state + DC + PR (52 entries)', () => {
+    // PR carries a licensed medical market on the Field Map, so it needs a
+    // centroid too — without one, printer-distance ranking returns NaN for it.
+    expect(Object.keys(STATE_CENTROIDS)).toHaveLength(52);
+    expect(STATE_CENTROIDS.PR).toBeDefined();
   });
 
   it('is 0 for a state against itself', () => {

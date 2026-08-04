@@ -837,6 +837,39 @@ export default function RoadTripTab({ token, onNavigate }) {
   const scanOsmAreaRef = React.useRef(scanOsmArea);
   React.useEffect(() => { scanOsmAreaRef.current = scanOsmArea; }, [scanOsmArea]);
 
+  // "This state says 0 LICENSED — is the pipe broken, or is it just empty here?"
+  // The map can't tell those apart, and standing in a strange state with no pins
+  // is exactly when you need the answer. Probes the state's roster URL (and the
+  // shared fallback aggregate) and reports back in one toast.
+  const [diagnosing, setDiagnosing] = React.useState(false);
+  const diagnoseSources = React.useCallback(async () => {
+    const st = coverage?.state;
+    if (!st || diagnosing) return;
+    setDiagnosing(true);
+    try {
+      const r = await axios.get(
+        `${api}/api/roadtrip/dispensaries/source-health?state=${encodeURIComponent(st)}`, authHdr,
+      );
+      const row = (r.data?.states || [])[0];
+      const agg = r.data?.aggregate;
+      if (!row) {
+        showToast(`${st} has no license roll to load — it fills from map sweeps as you pan.`, 'info');
+      } else if (row.ok && !row.looksHtml) {
+        showToast(`${st} roster source is ALIVE (HTTP ${row.status}). Re-run the ingest for ${st}; if pins still don't show, try the CHAINS clicker.`, 'success');
+      } else {
+        showToast(
+          `${st} roster source is DOWN — ${row.error || `HTTP ${row.status}`}. `
+          + `Shared fallback is ${agg?.ok ? 'alive (ingest should still work)' : 'ALSO down — every state is on OSM data only'}.`,
+          'error',
+        );
+      }
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Source check failed.', 'error');
+    } finally {
+      setDiagnosing(false);
+    }
+  }, [api, authHdr, coverage, diagnosing, showToast]);
+
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -2426,6 +2459,24 @@ export default function RoadTripTab({ token, onNavigate }) {
             </Box>
           )}
         </Box>
+        {/* The viewport's state SHOULD have a license roll but holds zero rows.
+            That's either a still-loading ingest or a dead source — one tap says
+            which, instead of leaving it to vibes while you're parked outside. */}
+        {coverage && coverage.rosterState && coverage.rosterRows === 0 && (
+          <Chip
+            label={diagnosing ? 'CHECKING…' : 'WHY EMPTY?'}
+            size="small"
+            onClick={diagnoseSources}
+            disabled={diagnosing}
+            sx={{
+              height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
+              letterSpacing: 1, borderRadius: 0.5, cursor: 'pointer',
+              bgcolor: 'transparent', color: TERM.amber,
+              border: `1px dashed ${TERM.amber}`,
+              '&:hover': { bgcolor: `${TERM.amber}1a` },
+            }}
+          />
+        )}
         {!chainsOn && chainCount > 0 && (
           <Chip
             label={`+${chainCount} CHAINS`}
