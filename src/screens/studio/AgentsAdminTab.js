@@ -27,6 +27,7 @@ import VisibilityOffIcon     from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon       from '@mui/icons-material/CheckCircle';
 import KeyOutlinedIcon       from '@mui/icons-material/KeyOutlined';
 import ExpandMoreIcon        from '@mui/icons-material/ExpandMore';
+import MoveDownIcon          from '@mui/icons-material/MoveDown';
 import {
   D, mono, eyebrow, money0, fmtRelative, fmtDate, dropInput, dropPrimaryBtn, dropGhostBtn, scrollbar, STATUS_META,
 } from './_shared';
@@ -269,7 +270,245 @@ function AgentBook({ agentId, token }) {
   );
 }
 
-function AgentCard({ agent, token, onPatch, onReset }) {
+// ── Commission block ─────────────────────────────────────────────────────────
+//
+// The agent's deal, editable in place. Percentages are of an order's GROSS
+// PROFIT — mirrors services/commission.js on the server, which is the single
+// source of the math; this is only the editor. Switching `enabled` on is what
+// reveals the agent's own Earnings tab, so it stays off until terms are real.
+function CommissionBlock({ agent, onPatch }) {
+  const live = agent.commission || {};
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(live.tiers || [])));
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Re-seed the editor whenever the server's copy changes underneath it, so a
+  // save elsewhere (or a reload) doesn't leave stale numbers in the fields.
+  useEffect(() => { setDraft(JSON.parse(JSON.stringify(agent.commission?.tiers || []))); }, [agent.commission]);
+
+  const setCell = (i, key, v) => setDraft((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: v } : r)));
+
+  const save = async () => {
+    setBusy(true);
+    const ok = await onPatch(agent.id, {
+      commission: {
+        tiers: draft.map((t) => ({
+          name: t.name,
+          minLifetimeProfit: Number(t.minLifetimeProfit) || 0,
+          selfPct: Number(t.selfPct) || 0,
+          housePct: Number(t.housePct) || 0,
+          reorderPct: Number(t.reorderPct) || 0,
+        })),
+      },
+    });
+    setBusy(false);
+    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2200); }
+  };
+
+  const toggleEnabled = async () => {
+    setBusy(true);
+    await onPatch(agent.id, { commission: { enabled: !live.enabled } });
+    setBusy(false);
+  };
+
+  const numCell = (i, key, adorn) => (
+    <TextField
+      value={draft[i]?.[key] ?? ''} onChange={(e) => setCell(i, key, e.target.value.replace(/[^0-9.]/g, ''))}
+      size="small"
+      InputProps={adorn === '$'
+        ? { startAdornment: <InputAdornment position="start" sx={{ color: D.faint, fontSize: 11 }}>$</InputAdornment> }
+        : { endAdornment: <InputAdornment position="end" sx={{ color: D.faint, fontSize: 11 }}>%</InputAdornment> }}
+      sx={{ ...dropInput, width: adorn === '$' ? 108 : 88,
+        '& .MuiInputBase-input': { py: 0.4, fontSize: 12.5, color: D.text, ...mono } }}
+    />
+  );
+
+  return (
+    <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${D.line}` }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} flexWrap="wrap" useFlexGap>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography sx={{ color: D.muted, fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            Commission
+          </Typography>
+          <Chip size="small" label={live.enabled ? 'On' : 'Off'}
+            sx={{ height: 18, fontSize: 10, fontWeight: 800,
+              color: live.enabled ? D.green : D.faint,
+              bgcolor: live.enabled ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.05)' }} />
+          {live.enabled && (
+            <Typography sx={{ ...mono, color: D.faint, fontSize: 11 }}>
+              {live.tiers?.[0]?.selfPct}% → {live.tiers?.[live.tiers.length - 1]?.selfPct}% of profit
+            </Typography>
+          )}
+        </Stack>
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Button size="small" onClick={() => setOpen((v) => !v)}
+            sx={{ color: D.green, textTransform: 'none', fontSize: 11.5, fontWeight: 700, minWidth: 'auto', p: 0.3 }}>
+            {open ? 'Done' : 'Edit rates'}
+          </Button>
+          <Switch checked={!!live.enabled} onChange={toggleEnabled} disabled={busy} size="small"
+            sx={{ '& .Mui-checked': { color: D.green }, '& .Mui-checked + .MuiSwitch-track': { bgcolor: `${D.green} !important` } }} />
+        </Stack>
+      </Stack>
+
+      {!live.enabled && (
+        <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.5 }}>
+          Off — {agent.displayName || agent.username} sees no Earnings tab until you switch this on.
+        </Typography>
+      )}
+
+      {open && (
+        <Box sx={{ mt: 1.25, bgcolor: D.inset, border: `1px solid ${D.line}`, borderRadius: 2, p: 1.5 }}>
+          <Typography sx={{ color: D.faint, fontSize: 11, mb: 1.25, lineHeight: 1.5 }}>
+            All percentages are of an order’s <b>gross profit</b> (what the client paid, minus blanks,
+            print, shipping, art and the card/ACH fee) — never of revenue. The ladder is lifetime
+            cumulative, so it never drops back.
+          </Typography>
+          <Box sx={{ overflowX: 'auto', ...scrollbar }}>
+            <Stack spacing={1} sx={{ minWidth: 460 }}>
+              <Stack direction="row" spacing={1}>
+                {['Tier', 'Unlocks at', 'They found', 'You gave', 'Reorder'].map((h, i) => (
+                  <Typography key={h} sx={{ ...eyebrow, fontSize: 9.5, width: i === 0 ? 96 : i === 1 ? 108 : 88 }}>{h}</Typography>
+                ))}
+              </Stack>
+              {draft.map((t, i) => (
+                <Stack key={i} direction="row" spacing={1} alignItems="center">
+                  <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700, width: 96 }}>{t.name}</Typography>
+                  {numCell(i, 'minLifetimeProfit', '$')}
+                  {numCell(i, 'selfPct')}
+                  {numCell(i, 'housePct')}
+                  {numCell(i, 'reorderPct')}
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+          {/* The two policy switches. Both change what an order pays, so they
+              live next to the rates rather than in a settings screen. */}
+          <Stack spacing={1} sx={{ mt: 1.75, pt: 1.25, borderTop: `1px solid ${D.line}` }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700 }}>Pay on repeat house orders</Typography>
+                <Typography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.45 }}>
+                  Off: a lead you handed them pays on the first order only — after that the account is yours.
+                </Typography>
+              </Box>
+              <Switch size="small" checked={!!live.houseReordersPay} disabled={busy}
+                onChange={async () => { setBusy(true); await onPatch(agent.id, { commission: { houseReordersPay: !live.houseReordersPay } }); setBusy(false); }}
+                sx={{ '& .Mui-checked': { color: D.green }, '& .Mui-checked + .MuiSwitch-track': { bgcolor: `${D.green} !important` } }} />
+            </Stack>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ color: D.text, fontSize: 12.5, fontWeight: 700 }}>Fast start</Typography>
+                <Typography sx={{ color: D.faint, fontSize: 11, lineHeight: 1.45 }}>
+                  Their first few self-sourced orders pay at the second tier’s rate. 0 turns it off.
+                </Typography>
+              </Box>
+              <TextField
+                value={String(live.fastStartOrders ?? 0)}
+                onChange={async (e) => {
+                  const v = Math.max(0, Number(e.target.value.replace(/[^0-9]/g, '')) || 0);
+                  setBusy(true); await onPatch(agent.id, { commission: { fastStartOrders: v } }); setBusy(false);
+                }}
+                size="small" disabled={busy}
+                sx={{ ...dropInput, width: 68, flexShrink: 0,
+                  '& .MuiInputBase-input': { py: 0.4, fontSize: 12.5, textAlign: 'center', color: D.text, ...mono } }}
+              />
+            </Stack>
+          </Stack>
+
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mt: 1.5 }}>
+            <Button size="small" onClick={save} disabled={busy} sx={{ ...dropPrimaryBtn, py: 0.35, px: 1.75, fontSize: 12 }}>
+              Save rates
+            </Button>
+            {saved && <Typography sx={{ color: D.green, fontSize: 11.5, fontWeight: 700 }}>Saved</Typography>}
+          </Stack>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── Move book ────────────────────────────────────────────────────────────────
+//
+// One button, for when an agent leaves: hand their whole book — leads AND
+// orders — to the owner or another agent. It moves who WORKS each record and
+// deliberately never touches who SOURCED it, so the departed agent's earned
+// commission history stays intact and the new owner doesn't inherit credit for
+// sales they didn't make. That guarantee is stated on the dialog, because it's
+// the thing that makes the button safe to press.
+function MoveBookDialog({ agent, agents, token, onClose, onDone }) {
+  const [to, setTo] = useState('');       // '' = the owner
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+
+  const others = (agents || []).filter((a) => a.id !== agent.id && a.active);
+
+  const go = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch(`${base}/agents/${agent.id}/reassign`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.message || `HTTP ${r.status}`);
+      setResult(data);
+      onDone();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const who = agent.displayName || agent.username;
+
+  return (
+    <Box sx={{ mt: 1.5, bgcolor: D.inset, border: `1px solid ${D.lineHi}`, borderRadius: 2, p: 1.75 }}>
+      {result ? (
+        <>
+          <Typography sx={{ color: D.green, fontWeight: 800, fontSize: 14 }}>
+            Moved to {result.movedToLabel}
+          </Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12.5, mt: 0.5 }}>
+            {result.leads} lead{result.leads === 1 ? '' : 's'} and {result.orders} order{result.orders === 1 ? '' : 's'} now sit with {result.movedToLabel}.
+            {who}’s name stays on everything they originally sourced, so their commission history is unchanged.
+          </Typography>
+          <Button size="small" onClick={onClose} sx={{ ...dropGhostBtn, py: 0.35, px: 1.5, fontSize: 12, mt: 1.25 }}>Close</Button>
+        </>
+      ) : (
+        <>
+          <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 14 }}>Move {who}’s book</Typography>
+          <Typography sx={{ color: D.muted, fontSize: 12.5, mt: 0.5, lineHeight: 1.55 }}>
+            Hands every lead and order they currently hold to someone else.
+            <b> Who sourced each one is never changed</b> — {who} stays credited for their sales, and
+            their earned commission is unaffected.
+          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ mt: 1.25, flexWrap: 'wrap' }} useFlexGap>
+            <Chip label="You (the owner)" onClick={() => setTo('')} size="small"
+              sx={{ fontWeight: 700, fontSize: 11.5, cursor: 'pointer',
+                bgcolor: to === '' ? D.green : 'rgba(255,255,255,0.05)',
+                color: to === '' ? D.ink : D.muted }} />
+            {others.map((a) => (
+              <Chip key={a.id} label={a.displayName || a.username} onClick={() => setTo(a.id)} size="small"
+                sx={{ fontWeight: 700, fontSize: 11.5, cursor: 'pointer',
+                  bgcolor: to === a.id ? D.green : 'rgba(255,255,255,0.05)',
+                  color: to === a.id ? D.ink : D.muted }} />
+            ))}
+          </Stack>
+          {err && <Alert severity="error" sx={{ mt: 1.25 }}>{err}</Alert>}
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+            <Button size="small" onClick={go} disabled={busy} sx={{ ...dropPrimaryBtn, py: 0.35, px: 1.75, fontSize: 12 }}>
+              {busy ? 'Moving…' : 'Move the book'}
+            </Button>
+            <Button size="small" onClick={onClose} disabled={busy} sx={{ ...dropGhostBtn, py: 0.35, px: 1.5, fontSize: 12 }}>Cancel</Button>
+          </Stack>
+        </>
+      )}
+    </Box>
+  );
+}
+
+function AgentCard({ agent, agents, token, onPatch, onReset, onReload }) {
   const s = agent.stats || {};
   const [showBook, setShowBook] = useState(false);
   const pace = paceRead(s);
@@ -278,6 +517,7 @@ function AgentCard({ agent, token, onPatch, onReset }) {
   const [goalDraft, setGoalDraft] = useState(String(agent.monthlyGoal || ''));
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(null); // { password } after a reset
+  const [moving, setMoving] = useState(false);
 
   const saveGoal = async () => {
     setBusy(true);
@@ -386,8 +626,20 @@ function AgentCard({ agent, token, onPatch, onReset }) {
             sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
             Reset password
           </Button>
+          <Button size="small" startIcon={<MoveDownIcon sx={{ fontSize: 15 }} />} onClick={() => setMoving((v) => !v)} disabled={busy}
+            title="Hand this agent's whole book to you or another agent — without changing who sourced it"
+            sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
+            Move book
+          </Button>
         </Stack>
       </Stack>
+
+      <CommissionBlock agent={agent} onPatch={onPatch} />
+
+      {moving && (
+        <MoveBookDialog agent={agent} agents={agents} token={token}
+          onClose={() => setMoving(false)} onDone={onReload} />
+      )}
 
       {showBook && <AgentBook agentId={agent.id} token={token} />}
 
@@ -579,7 +831,8 @@ export default function AgentsAdminTab({ token, onBack }) {
         ) : (
           <Stack spacing={1.5} sx={{ ...scrollbar }}>
             {agents.map((a) => (
-              <AgentCard key={a.id} agent={a} token={token} onPatch={patchAgent} onReset={resetPassword} />
+              <AgentCard key={a.id} agent={a} agents={agents} token={token}
+                onPatch={patchAgent} onReset={resetPassword} onReload={load} />
             ))}
           </Stack>
         )}
