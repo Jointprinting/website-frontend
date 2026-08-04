@@ -842,33 +842,70 @@ export default function RoadTripTab({ token, onNavigate }) {
   // is exactly when you need the answer. Probes the state's roster URL (and the
   // shared fallback aggregate) and reports back in one toast.
   const [diagnosing, setDiagnosing] = React.useState(false);
+  const [diag, setDiag] = React.useState(null);   // last diagnosis, drives the LOAD ROSTER offer
   const diagnoseSources = React.useCallback(async () => {
     const st = coverage?.state;
     if (!st || diagnosing) return;
     setDiagnosing(true);
     try {
       const r = await axios.get(
-        `${api}/api/roadtrip/dispensaries/source-health?state=${encodeURIComponent(st)}`, authHdr,
+        `${api}/api/roadtrip/dispensaries/diagnose?state=${encodeURIComponent(st)}`, authHdr,
       );
-      const row = (r.data?.states || [])[0];
-      const agg = r.data?.aggregate;
-      if (!row) {
-        showToast(`${st} has no license roll to load — it fills from map sweeps as you pan.`, 'info');
-      } else if (row.ok && !row.looksHtml) {
-        showToast(`${st} roster source is ALIVE (HTTP ${row.status}). Re-run the ingest for ${st}; if pins still don't show, try the CHAINS clicker.`, 'success');
-      } else {
-        showToast(
-          `${st} roster source is DOWN — ${row.error || `HTTP ${row.status}`}. `
-          + `Shared fallback is ${agg?.ok ? 'alive (ingest should still work)' : 'ALSO down — every state is on OSM data only'}.`,
-          'error',
-        );
-      }
+      const d = r.data || {};
+      setDiag(d);
+      const li = d.lastIngest;
+      const c = d.counts || {};
+      // Say the actual cause. Every one of these used to look like "no pins".
+      const msg = {
+        'never-loaded': `${st} has never been loaded. Tap LOAD ROSTER to pull its license roll now.`,
+        'ingest-failed': `${st} ingest FAILED: ${li?.error || 'unknown error'}. Source reads ${d.source?.ok ? 'alive' : 'down'} — tap LOAD ROSTER to retry.`,
+        'filtered-out': `${st}: fetched ${li?.fetchedRows ?? '?'} license rows and imported 0 — the roster's type/status columns aren't being read right. Tap LOAD ROSTER to retry with the relaxed gate.`,
+        'ungeocoded': `${st} has ${c.fromRoster} licensed rows but NONE have coordinates${li?.geocodeNote ? ` — ${li.geocodeNote}` : ' (geocoding failed)'}. They can't render until that's fixed.`,
+        'chains-only': `${st}: all ${c.mapped} mapped stores here are chains. Turn on the CHAINS clicker — the data is fine.`,
+        'osm-only': `${st} has ${c.fromOsm} stores from OpenStreetMap but no license roll. Tap LOAD ROSTER to pull the real one.`,
+        ok: `${st} looks healthy: ${c.independents} independents of ${c.total} active. This ground is just sparse — try zooming out.`,
+      }[d.verdict] || `${st}: ${d.verdict}`;
+      showToast(msg, d.verdict === 'ok' || d.verdict === 'chains-only' ? 'info' : 'error');
     } catch (e) {
-      showToast(e?.response?.data?.message || 'Source check failed.', 'error');
+      showToast(e?.response?.data?.message || 'Diagnose failed.', 'error');
     } finally {
       setDiagnosing(false);
     }
   }, [api, authHdr, coverage, diagnosing, showToast]);
+
+  // Run the license-roll ingest for the viewport's state right now and report
+  // what it actually did. The endpoint already returned this detail; nothing on
+  // the map ever showed it, which is how a state could sit empty indefinitely.
+  const [loadingRoster, setLoadingRoster] = React.useState(false);
+  const loadRosterNow = React.useCallback(async () => {
+    const st = coverage?.state;
+    if (!st || loadingRoster) return;
+    setLoadingRoster(true);
+    showToast(`Loading ${st}'s license roster — big states take a minute.`, 'info');
+    try {
+      const r = await axios.post(`${api}/api/roadtrip/dispensaries/ingest/${encodeURIComponent(st)}`, {}, authHdr);
+      const d = r.data || {};
+      if (d.imported > 0) {
+        showToast(
+          `${st}: imported ${d.imported} licensed stores (${d.created} new), ${d.totalActive} active`
+          + `${d.relaxedFallback ? ' — via relaxed type gate' : ''}.`,
+          'success',
+        );
+        loadAreaRef.current();
+      } else {
+        showToast(
+          `${st}: fetched ${d.fetchedRows} rows, filtered out ${d.filteredOut}, imported 0. `
+          + `Columns read: ${Object.entries(d.headerMap || {}).map(([k, v]) => `${k}→${v}`).join(', ') || 'none'}.`,
+          'error',
+        );
+      }
+      setDiag(null);
+    } catch (e) {
+      showToast(e?.response?.data?.message || `${st} roster load failed.`, 'error');
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [api, authHdr, coverage, loadingRoster, showToast]);
 
   React.useEffect(() => {
     const map = mapRef.current;
@@ -2454,8 +2491,14 @@ export default function RoadTripTab({ token, onNavigate }) {
           {coverage && (
             <Box component="span" sx={{ color: TERM.muted }}>
               · {coverage.state}{' '}
+              {/* "LOADING ROSTER" is only honest while an ingest hasn't
+                  reported back. Once one has run and imported nothing, say so —
+                  the old text claimed it was loading forever. */}
               {coverage.rosterRows > 0 ? `${coverage.rosterRows} LICENSED`
-                : coverage.rosterState ? 'LOADING ROSTER' : 'NO LICENSED MARKET'}
+                : !coverage.rosterState ? 'NO LICENSED MARKET'
+                  : coverage.lastIngest && coverage.lastIngest.ok === false ? 'ROSTER FAILED'
+                    : coverage.lastIngest && coverage.lastIngest.imported === 0 ? 'ROSTER EMPTY'
+                      : 'LOADING ROSTER'}
             </Box>
           )}
         </Box>
@@ -2474,6 +2517,23 @@ export default function RoadTripTab({ token, onNavigate }) {
               bgcolor: 'transparent', color: TERM.amber,
               border: `1px dashed ${TERM.amber}`,
               '&:hover': { bgcolor: `${TERM.amber}1a` },
+            }}
+          />
+        )}
+        {/* Offered once a diagnosis says the roster is the problem — running it
+            is the fix, and the result reports what it actually imported. */}
+        {diag && ['never-loaded', 'ingest-failed', 'filtered-out', 'osm-only'].includes(diag.verdict) && (
+          <Chip
+            label={loadingRoster ? 'LOADING…' : 'LOAD ROSTER'}
+            size="small"
+            onClick={loadRosterNow}
+            disabled={loadingRoster}
+            sx={{
+              height: 18, fontFamily: MONO, fontSize: 9, fontWeight: 800,
+              letterSpacing: 1, borderRadius: 0.5, cursor: 'pointer',
+              bgcolor: 'transparent', color: TERM.cyan,
+              border: `1px solid ${TERM.cyan}`,
+              '&:hover': { bgcolor: `${TERM.cyan}1a` },
             }}
           />
         )}
