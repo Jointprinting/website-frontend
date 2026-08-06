@@ -392,6 +392,25 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     return data;
   };
 
+  // One tap from "they replied" to "this is a job": the SAME handoff the CRM's
+  // Start new job runs (project + deal card + CRM promotion), reached from the
+  // reply that earned it — and it stops the sequence, which doing it by hand in
+  // the CRM never did, so a shop we're quoting can't still get cold touch 3.
+  // `enrollment: true` for the worklist's bridge rows — those are enrollments
+  // marked replied before a triage row ever existed, so they convert through the
+  // outreach side. Both routes run the identical server-side handoff.
+  const startJobFromReply = async (id, { enrollment = false } = {}) => {
+    const url = enrollment
+      ? `${base}/enrollments/${id}/start-job`
+      : `${triageBase}/replies/${id}/start-job`;
+    const { data } = await axios.post(url, {}, authHdr);
+    const pn = data?.projectNumber || '';
+    flash(`Job started${pn ? ` — Project #${pn}` : ''}${data?.stoppedSequences ? ' · outreach stopped' : ''}. Off to mockups & the quote →`);
+    await refreshTriage();
+    if (onNavigate && pn) onNavigate({ view: 'clients', projectNumber: pn });
+    return data;
+  };
+
   const syncGmail = async () => {
     const { data } = await axios.post(`${triageBase}/sync`, {}, authHdr);
     flash(data.message || 'Sync complete.', data.configured ? 'success' : 'warning');
@@ -490,6 +509,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
             worklist={worklist} worklistLoading={worklistLoading}
             showIgnored={showIgnored} onToggleIgnored={toggleIgnored}
             onSetStatus={setReplyStatus}
+            onStartJob={startJobFromReply}
             onNotAReply={notAReply}
             onAddReply={addReply}
             onSync={syncGmail}
