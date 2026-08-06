@@ -215,6 +215,18 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
                           {canOpen && <OpenInNewOutlinedIcon sx={{ fontSize: 12, ml: 0.4, verticalAlign: '-2px' }} />}
                         </Typography>
                         {!bridge && r.category && <StatusChip meta={triageCategoryMeta(r.category)} />}
+                        {/* This shop wrote more than once. The card shows their most
+                            actionable message; the rest are in All replies. Without
+                            this the same company appeared as two separate cards in
+                            two buckets, which read as double-counting. */}
+                        {r.alsoWaiting > 0 && (
+                          <Chip
+                            size="small"
+                            label={`+${r.alsoWaiting} more`}
+                            sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: D.inset,
+                              color: D.muted, border: `1px solid ${D.line}` }}
+                          />
+                        )}
                       </Stack>
                       {bridge ? (
                         <Typography sx={{ fontSize: 11.5, color: D.muted, mt: 0.3 }}>
