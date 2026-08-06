@@ -2234,6 +2234,15 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
   // brand's accent so each page's feed reads in its own vibe.
   const TONE = { critical: '#f87171', warning: D.amber, info: accent };
 
+  // Emphasis for an expanded item's right-hand metric. The server sends a semantic
+  // level (it's the side that knows what the number means); the palette is applied
+  // here. 'danger' = something has already broken or lapsed, 'warn' = a clock is
+  // about to run out, absent = neutral supporting detail. Generic across groups, so
+  // any source can opt in — e.g. quote rows mark a dead approval link red, which is
+  // the difference between "the client is ignoring us" and "the client physically
+  // cannot open the page".
+  const METRIC_TONE = { danger: '#f87171', warn: D.amber };
+
   // Deep-link one expanded item to its exact record, by the row's kind. An
   // inquiry item opens its brand's OWN inbox (the row carries the view — same
   // per-source mark-seen behavior as the hub tiles).
@@ -2365,7 +2374,7 @@ function SignalsPanel({ signals, onNavigate, onPick, brandFilter, accent = D.gre
                         : null}
                       <MuiTypography sx={{ color: D.muted, fontSize: 12.5, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name || '—'}</MuiTypography>
                       {it.metric
-                        ? <MuiTypography sx={{ ...mono, color: D.faint, fontSize: 11.5 }}>{it.metric}</MuiTypography>
+                        ? <MuiTypography sx={{ ...mono, color: METRIC_TONE[it.metricLevel] || D.faint, fontSize: 11.5, flexShrink: 0 }}>{it.metric}</MuiTypography>
                         : null}
                     </Box>
                   );
