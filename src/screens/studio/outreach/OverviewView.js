@@ -210,11 +210,22 @@ function ReplyPathBanner({ replyPath, onGoReplies }) {
 // last-result line (mirrors services/outreachEngine.js recordRun wording).
 function closedWindowNote(lastResult = '') {
   const r = String(lastResult || '');
+  // "9a ET" is the earliest market opening, not the owner's clock — say so, or a
+  // reader on Mountain time sees "closed" at 3pm and reads it as a broken clock.
+  const resumes = ' · resumes next weekday when the first market opens (9a ET)';
   if (/^held/i.test(r) && !/daily cap reached/i.test(r)) {
     const reason = r.replace(/^held:?\s*/i, '').split(/[—(]/)[0].trim().slice(0, 70);
-    return ` · window closed — last run was HELD${reason ? ` (${reason})` : ''} · resumes next weekday 9a ET`;
+    return ` · every market closed — last run was HELD${reason ? ` (${reason})` : ''}${resumes}`;
   }
-  return ' · window closed — healthy, resumes next weekday 9a ET';
+  return ` · every market closed — healthy${resumes}`;
+}
+
+// Which markets are inside their own business hours right now. Sending follows
+// the RECIPIENT's local morning, so at 6pm Eastern the West Coast is still being
+// mailed — a single "Open/Closed" pill couldn't express that.
+function openMarketsNote(zones = []) {
+  if (!zones.length) return '';
+  return ` · sending to ${zones.join(' · ')} right now`;
 }
 
 const ACTION_TONE = { action: '#f87171', warm: '#4ade80', info: '#60a5fa', ok: '#9ca3af' };
@@ -619,12 +630,14 @@ export default function OverviewView({
 
       {/* Engine status */}
       <Box>
-        <Eyebrow sx={{ mb: 1 }}>Engine — Mon–Fri 9a–5p ET, warm-up capped</Eyebrow>
+        <Eyebrow sx={{ mb: 1 }}>Engine — Mon–Fri 9a–5p in each lead&#39;s own timezone, warm-up capped</Eyebrow>
         <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
           <StatPill value={`${engine.sentToday}/${engine.dailyCap}`} label="Sent today"
             tone={engine.remainingToday > 0 ? D.green : D.amber} />
           <StatPill value={`wk ${engine.rampWeek}`} label={`Ramp → ${engine.dailyCapMax}/day`} tone={D.text} />
-          <StatPill value={engine.withinWindow ? 'Open' : 'Closed'} label="Send window"
+          <StatPill
+            value={engine.withinWindow ? ((engine.openZones || []).join(' ') || 'Open') : 'Closed'}
+            label="Markets open now"
             tone={engine.withinWindow ? D.green : D.muted} />
           {/* Sender + auth pills are one-time setup confirmations — once they're
               green they're just noise, so only surface them when there's actually
@@ -645,7 +658,7 @@ export default function OverviewView({
             {/* Outside Mon–Fri 9a–5p the engine holds — so "last run" naturally
                 reads stale over a weekend. Say it's healthy, not dead — unless
                 the last in-window run was genuinely held (closedWindowNote). */}
-            {!engine.withinWindow ? closedWindowNote(engine.lastResult) : ''}
+            {engine.withinWindow ? openMarketsNote(engine.openZones) : closedWindowNote(engine.lastResult)}
           </Typography>
         ) : null}
         {/* The other half of the loop: which mailbox is being READ. Passive, from
