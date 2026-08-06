@@ -15,6 +15,7 @@ import {
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import { D, mono, fmtDate, dropInput, dropGhostBtn } from '../_shared';
 import { StatusChip, StatPill, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTIONS } from './_outreach';
 
@@ -112,7 +113,7 @@ function DraftReplyBox({ row, text, onChangeText, onDraftReply, onError }) {
   );
 }
 
-export default function WorklistPanel({ worklist, loading, onSetStatus, onNotAReply, onOpenCompany, onDraftReply, onError }) {
+export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJob, onNotAReply, onOpenCompany, onDraftReply, onError }) {
   const [menu, setMenu] = React.useState(null); // { anchor, row }
   const [dismissing, setDismissing] = React.useState({}); // enrollmentId → busy
   // The owner's in-progress draft edits, keyed by reply _id. Lives HERE (not in
@@ -122,6 +123,17 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onNotARe
   const [draftEdits, setDraftEdits] = React.useState({});
   const setDraftEdit = (id, text) => setDraftEdits((prev) => ({ ...prev, [id]: text }));
   const closeMenu = () => setMenu(null);
+  const [starting, setStarting] = React.useState({});     // reply _id → busy
+
+  // The conversion the whole engine exists to produce.
+  const runStartJob = async (row, enrollment = false) => {
+    closeMenu();
+    if (!row || !row.companyKey) return;
+    setStarting((p) => ({ ...p, [row._id]: true }));
+    try { await onStartJob?.(enrollment ? row.enrollmentId : row._id, { enrollment }); }
+    catch (e) { onError?.(e.response?.data?.message || 'Could not start the job'); }
+    finally { setStarting((p) => ({ ...p, [row._id]: false })); }
+  };
 
   const pickStatus = async (row, next, extra) => {
     closeMenu();
@@ -234,6 +246,13 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onNotARe
                     </Box>
                     {bridge ? (
                       <Stack spacing={0.25} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+                        {canOpen && onStartJob && (
+                          <Button size="small" disabled={!!starting[r._id]}
+                            onClick={() => runStartJob(r, true)}
+                            sx={{ color: D.green, fontSize: 11, fontWeight: 800, textTransform: 'none' }}>
+                            {starting[r._id] ? 'Starting…' : 'Start a job →'}
+                          </Button>
+                        )}
                         {canOpen && (
                           <Button size="small" onClick={() => onOpenCompany(r.companyKey)}
                             sx={{ color: D.muted, fontSize: 11, fontWeight: 700, textTransform: 'none', '&:hover': { color: D.green } }}>
@@ -268,6 +287,10 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onNotARe
         PaperProps={{ sx: { bgcolor: D.panelHi, border: `1px solid ${D.line}`, color: D.text, minWidth: 190 } }}
       >
         {menu?.row?.matched && menu?.row?.companyKey && [
+          <MenuItem key="job" onClick={() => runStartJob(menu.row)}
+            sx={{ fontSize: 13, fontWeight: 800, color: D.green }}>
+            <RocketLaunchOutlinedIcon sx={{ fontSize: 16, mr: 1 }} /> Start a job →
+          </MenuItem>,
           <MenuItem key="crm" onClick={() => { const k = menu.row.companyKey; closeMenu(); onOpenCompany(k); }}
             sx={{ fontSize: 13, fontWeight: 700, color: D.green }}>
             <OpenInNewOutlinedIcon sx={{ fontSize: 16, mr: 1 }} /> Open in CRM

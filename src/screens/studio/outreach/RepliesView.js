@@ -19,6 +19,7 @@ import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
+import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import MarkEmailUnreadOutlinedIcon from '@mui/icons-material/MarkEmailUnreadOutlined';
 import { D, mono, dropInput, dropPrimaryBtn, dropGhostBtn, fmtDate, useMobileFullScreen } from '../_shared';
 import {
@@ -35,7 +36,7 @@ const headSx = { color: D.faint, borderColor: D.line, fontSize: 10.5, fontWeight
 export default function RepliesView({
   replies = [], loading, showIgnored, onToggleIgnored,
   worklist, worklistLoading,
-  onSetStatus, onNotAReply, onAddReply, onSync, onOpenCompany, onDraftReply, onError,
+  onSetStatus, onStartJob, onNotAReply, onAddReply, onSync, onOpenCompany, onDraftReply, onError,
 }) {
   const fullScreen = useMobileFullScreen();
   const [mode, setMode] = React.useState('worklist'); // 'worklist' = command center, 'all' = full inbox
@@ -60,6 +61,13 @@ export default function RepliesView({
   const pickStatus = async (row, next) => {
     closeMenu();
     try { await onSetStatus(row._id, next); } catch (e) { onError?.(e.response?.data?.message || 'Could not update the reply'); }
+  };
+
+  // Lead → real customer. The API mints the project + deal card and stops the
+  // sequence; the container navigates into the project.
+  const runStartJob = async (row) => {
+    closeMenu();
+    try { await onStartJob?.(row._id); } catch (e) { onError?.(e.response?.data?.message || 'Could not start the job'); }
   };
 
   const runSync = async () => {
@@ -105,7 +113,7 @@ export default function RepliesView({
       {mode === 'worklist' && (
         <WorklistPanel
           worklist={worklist} loading={worklistLoading}
-          onSetStatus={onSetStatus} onNotAReply={onNotAReply} onOpenCompany={onOpenCompany}
+          onSetStatus={onSetStatus} onStartJob={onStartJob} onNotAReply={onNotAReply} onOpenCompany={onOpenCompany}
           onDraftReply={onDraftReply} onError={onError}
         />
       )}
@@ -231,6 +239,10 @@ export default function RepliesView({
         PaperProps={{ sx: { bgcolor: D.panelHi, border: `1px solid ${D.line}`, color: D.text, minWidth: 190 } }}
       >
         {menu?.row?.matched && menu?.row?.companyKey && [
+          <MenuItem key="job" onClick={() => runStartJob(menu.row)}
+            sx={{ fontSize: 13, fontWeight: 800, color: D.green }}>
+            <RocketLaunchOutlinedIcon sx={{ fontSize: 16, mr: 1 }} /> Start a job →
+          </MenuItem>,
           <MenuItem key="crm" onClick={() => { const k = menu.row.companyKey; closeMenu(); onOpenCompany(k); }}
             sx={{ fontSize: 13, fontWeight: 700, color: D.green }}>
             <OpenInNewOutlinedIcon sx={{ fontSize: 16, mr: 1 }} /> Open in CRM
