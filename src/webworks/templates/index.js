@@ -169,7 +169,25 @@ export const CUSTOM_SITES = [
         'I chose free-form work over representational sculpture because what draws me is articulating a form that has never existed before. The pieces are titled by number, so the name suggests nothing the sculpture is not.',
       ].join('\n\n'),
       testimonials: [],
+      // One row per sculpture, added as his photos come in. Photo and details
+      // ride together so a caption can never end up under the wrong piece.
+      works: [],
       paletteId: 'steel',
+    },
+    // Extra editor section for this build only — the five templates never see
+    // it. A portfolio needs a per-piece list; a plumber's site does not.
+    worksEditor: {
+      key: 'works',
+      title: 'Sculptures',
+      hint: 'One row per piece. Upload the photo now — the title, description and price can stay empty until he gives them to you.',
+      addLabel: 'Add a sculpture',
+      blank: { photo: '', title: '', note: '', price: '' },
+      photoKey: 'photo',
+      fields: [
+        { key: 'title', label: 'Title / number', placeholder: 'No. 270' },
+        { key: 'price', label: 'Price', narrow: true, placeholder: 'blank = says nothing' },
+        { key: 'note', label: 'Description', wide: true, minRows: 2, placeholder: 'Stainless steel, 34 in.' },
+      ],
     },
     Component: lazy(() => import('./custom/ToddReuben')),
   },

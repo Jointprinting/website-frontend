@@ -62,67 +62,6 @@ const DEFAULT_PHOTOS = { hero: '', gallery: [] };
 // third-person "Todd prefers…" reads like an agency wrote the page about him.
 const CALL_NOTE = 'Please call — I don’t receive text messages.';
 
-// Crafted no-photo scene: brushed-steel field, a specular sweep, and one
-// polished abstract form on a plinth. This is what paints while a photo loads,
-// if a photo fails, and on every empty slot before his photos arrive.
-function SteelFx({ c, form }) {
-  const uid = React.useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  return (
-    <svg viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id={`sg-${uid}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={c.dark} />
-          <stop offset=".52" stopColor={c.accent} stopOpacity=".55" />
-          <stop offset="1" stopColor={c.dark} />
-        </linearGradient>
-        <linearGradient id={`sw-${uid}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#fff" stopOpacity="0" />
-          <stop offset=".46" stopColor="#fff" stopOpacity=".22" />
-          <stop offset=".54" stopColor="#fff" stopOpacity=".05" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-        <pattern id={`br-${uid}`} width="3" height="500" patternUnits="userSpaceOnUse">
-          <rect width="1" height="500" fill="#fff" opacity=".05" />
-        </pattern>
-      </defs>
-
-      <rect width="400" height="500" fill={`url(#sg-${uid})`} />
-      <rect width="400" height="500" fill={`url(#br-${uid})`} />
-      <rect width="400" height="500" fill={`url(#sw-${uid})`} />
-
-      {/* the piece — polished stroke, catching light on one edge */}
-      <g transform="translate(200 250)" fill="none" stroke={c.darkInk}
-        strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" opacity=".82">
-        {form === 'ribbon' && (<>
-          <path d="M-52 116C-52 40 52 40 52 -36C52 -96 -18 -108 -40 -64" />
-          <path d="M-16 116C-16 56 68 44 68 -18" opacity=".45" />
-        </>)}
-        {form === 'arc' && (<>
-          <path d="M-70 116C-70 -4 70 -4 70 116" />
-          <path d="M-34 116C-34 44 34 44 34 116" opacity=".45" />
-        </>)}
-        {form === 'monolith' && (<>
-          <path d="M-30 116L-14 -104L26 -78L40 116z" />
-          <path d="M-14 -104L40 116" opacity=".4" />
-        </>)}
-        {form === 'orbit' && (<>
-          <circle cx="0" cy="-16" r="62" />
-          <ellipse cx="0" cy="-16" rx="62" ry="24" opacity=".45" />
-          <path d="M0 46v70" />
-        </>)}
-      </g>
-
-      {/* plinth */}
-      <g opacity=".5">
-        <path d="M118 366h164l16 34H102z" fill={c.dark} />
-        <path d="M102 400h296" stroke={c.darkInk} strokeWidth="1.5" opacity=".35" />
-      </g>
-    </svg>
-  );
-}
-
-const FORMS = ['ribbon', 'arc', 'monolith', 'orbit'];
-
 const css = (c, hero) => `
 .jpwtr{--max:1120px;font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:${c.bg};color:${c.ink};line-height:1.7;font-weight:400;overflow-x:clip;min-height:100%;}
 .jpwtr *,.jpwtr *::before,.jpwtr *::after{box-sizing:border-box;margin:0;padding:0;}
@@ -192,24 +131,38 @@ const css = (c, hero) => `
 .jpwtr-sec-head h2{font-size:clamp(28px,4.6vw,48px);margin-top:14px;}
 .jpwtr-sec-head p{margin-top:16px;font-size:clamp(15px,1.9vw,17px);color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
 
-/* Work — the spine. Editorial grid that takes ANY number of photos: a
-   full-width piece opens each run, the rest pair up.
-   The period is FIVE (one wide + four halves), not four: four leaves three
-   halves between wide tiles, an odd number, so one is always stranded alone
-   in a half-width slot with dead space beside it. And whatever the total, a
-   trailing half that would sit alone is promoted to full width — that's the
-   :last-child pair below, which covers every count (2 and 4 within each run).
-   Photo counts are the client's to decide, so no count may look broken. */
-.jpwtr-gal{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(12px,2.4vw,26px);}
-.jpwtr-gal .jpw-ph{grid-column:span 3;aspect-ratio:4/5;transition:transform .25s;}
-.jpwtr-gal .jpw-ph:nth-child(5n+1),
-.jpwtr-gal .jpw-ph:last-child:nth-child(5n+2),
-.jpwtr-gal .jpw-ph:last-child:nth-child(5n+4){grid-column:span 6;aspect-ratio:16/10;}
-.jpwtr-gal .jpw-ph:hover{transform:translateY(-4px);}
-@media(max-width:700px){.jpwtr-gal .jpw-ph,
-  .jpwtr-gal .jpw-ph:nth-child(5n+1),
-  .jpwtr-gal .jpw-ph:last-child:nth-child(5n+2),
-  .jpwtr-gal .jpw-ph:last-child:nth-child(5n+4){grid-column:span 6;aspect-ratio:4/5;}}
+/* Work — the spine.
+   His photographs are studio shots: one piece alone on a white plinth against
+   white seamless, and they arrive in BOTH orientations — tall thin forms whose
+   tip nearly touches the top of the frame, and low wide ones. So nothing here
+   crops. An editorial grid of fixed-ratio cover tiles decapitated the tall
+   pieces and cut the plinths off the wide ones; on a sculptor's page the
+   silhouette IS the work, and a cropped sculpture is a misrepresented one.
+   Every photo is CONTAINED, whole, inside a square tile.
+   The tile is a shade darker than his backdrops on purpose: his six whites
+   differ slightly shot to shot, and against a mat each photo reads as a light
+   panel placed on it rather than six near-matches failing to line up.
+   Flex, not grid, so any number of pieces centres its last row instead of
+   leaving a hole — he may send a seventh or sell one at any time. */
+.jpwtr-gal{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(16px,2.6vw,32px);}
+.jpwtr-work{flex:0 1 clamp(220px,30%,340px);min-width:0;margin:0;display:flex;flex-direction:column;}
+/* No drawn border: the mat is a step DARKER than the tile's surroundings, so a
+   c.line rule (lighter than the mat) would ring every piece in an inner glow.
+   The mat/page step is the edge. Hover still needs an affordance. */
+.jpwtr-gal .jpw-ph{aspect-ratio:1/1;border:1px solid transparent;
+  transition:border-color .25s,transform .25s;}
+.jpwtr-work:hover .jpw-ph{transform:translateY(-3px);border-color:${c.accent};}
+/* Three across, then two, then one. Without the middle stage three-up held all
+   the way down to ~775px, where each sculpture is a 220px thumbnail, and then
+   dropped straight to one — the two-up stage is where a phone-sized tablet
+   actually lives. */
+@media(max-width:1000px){.jpwtr-work{flex:0 1 clamp(240px,46%,360px);}}
+/* Caption: appears only when he has told us what a piece is called. */
+.jpwtr-cap-work{display:flex;flex-direction:column;gap:4px;padding:14px 2px 0;}
+.jpwtr-cap-work b{font-family:'Marcellus',Georgia,serif;font-weight:400;font-size:16.5px;overflow-wrap:anywhere;}
+.jpwtr-cap-work span{font-size:14px;color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
+.jpwtr-cap-work em{font-style:normal;font-size:13px;letter-spacing:.08em;color:${c.ink};}
+@media(max-width:640px){.jpwtr-work{flex:0 1 min(100%,420px);}}
 
 /* Commissions + available work — the two things he actually sells, side by
    side and equally weighted, because those two ARE the offer.
@@ -273,7 +226,19 @@ export default function ToddReubenSite({ data }) {
   const pal = resolvePalette(TODD_REUBEN_PALETTES, d.paletteId);
   const photos = React.useMemo(() => mergePhotos(d.photos, DEFAULT_PHOTOS), [d.photos]);
   const style = React.useMemo(
-    () => css(pal.c, photos.hero) + PH_CSS('.jpwtr', `linear-gradient(150deg,${pal.c.dark},color-mix(in srgb,${pal.c.accent} 30%,${pal.c.dark}))`),
+    () => css(pal.c, photos.hero)
+      // A light MAT, not the dark crafted tile the other looks use: these tiles
+      // hold contained photographs on a pale page, so a dark ground would read as
+      // a hole punched in it. One clear step darker than his backdrops, though —
+      // his six whites vary shot to shot, and against too close a tone that
+      // variance reads as six near-matches failing to line up rather than six lit
+      // panels on a board.
+      + PH_CSS('.jpwtr', `color-mix(in srgb,${pal.c.ink} 8%,${pal.c.soft})`)
+      // Must come AFTER PH_CSS, which sets object-fit:cover — see the grid
+      // comment above for why nothing in this gallery may be cropped. The
+      // padding keeps a piece off the tile edge; box-sizing is border-box, so
+      // `contain` fits inside the padded box.
+      + `.jpwtr .jpwtr-gal .jpw-ph>img{object-fit:contain;padding:clamp(10px,4%,30px);}`,
     [pal, photos.hero]
   );
 
@@ -287,6 +252,23 @@ export default function ToddReubenSite({ data }) {
   const established = txt(d.established);
   const license = txt(d.license);
   const pieces = rows(d.services, 'name');
+
+  // One row per sculpture: its photo, and its details WHEN THEY EXIST. Photo
+  // and caption live in the same row on purpose — a parallel captions array
+  // would drift the moment a piece is reordered or sold, and a caption under
+  // the wrong sculpture is worse than no caption at all.
+  //
+  // Falls back to the plain photo list, so a site built before `works` existed
+  // (and the shared contract suite) renders exactly as it did.
+  const works = React.useMemo(() => {
+    const listed = rows(d.works, 'photo', 'title');
+    if (listed.length) {
+      return listed.map((w) => ({
+        photo: txt(w.photo), title: txt(w.title), note: txt(w.note), price: txt(w.price),
+      }));
+    }
+    return photos.gallery.map((photo) => ({ photo, title: '', note: '', price: '' }));
+  }, [d.works, photos]);
   const hours = rows(d.hours, 'days', 'hours');
   const quotes = rows(d.testimonials, 'quote');
 
@@ -303,7 +285,7 @@ export default function ToddReubenSite({ data }) {
     .filter(Boolean).filter((t) => t !== eyebrow);
 
   const navLinks = [
-    photos.gallery.length && ['#work', 'Work'],
+    works.length && ['#work', 'Work'],
     pieces.length && ['#commissions', 'Commissions'],
     about && ['#about', 'About'],
     hasContact && ['#contact', 'Contact'],
@@ -335,7 +317,7 @@ export default function ToddReubenSite({ data }) {
             {ctaHref && (
               <div className="jpwtr-hero-ctas">
                 <a className="jpwtr-btn jpwtr-btn-solid" href={ctaHref}>{ctaLabel}</a>
-                {photos.gallery.length > 0 && <a className="jpwtr-btn" href="#work">See the work</a>}
+                {works.length > 0 && <a className="jpwtr-btn" href="#work">See the work</a>}
               </div>
             )}
           </div>
@@ -347,7 +329,7 @@ export default function ToddReubenSite({ data }) {
         )}
       </header>
 
-      {photos.gallery.length > 0 && (
+      {works.length > 0 && (
         <section className="jpwtr-sec" id="work">
           <div className="jpwtr-wrap">
             <div className="jpwtr-sec-head">
@@ -355,9 +337,29 @@ export default function ToddReubenSite({ data }) {
               <h2 className="jpwtr-serif">Selected work</h2>
             </div>
             <div className="jpwtr-gal">
-              {photos.gallery.map((src, i) => (
-                <Ph key={i} src={src} alt={`${name} — sculpture`}
-                  fx={<SteelFx c={pal.c} form={FORMS[i % FORMS.length]} />} />
+              {works.map((w, i) => (
+                <figure className="jpwtr-work" key={i}>
+                  {/* No crafted underlayer here, for two reasons that point the
+                      same way. Visually, a contained photo leaves the tile
+                      showing around it, so an fx becomes a frame rather than a
+                      backdrop — a metallic one framed every piece in fake metal.
+                      And a crafted scene in this grid draws a SCULPTURE: if a
+                      photo failed to load, a drawn one would stand in for his
+                      real work. An empty mat is the honest failure. */}
+                  <Ph src={w.photo}
+                    alt={w.title ? `${w.title} — ${name}` : `${name} — sculpture ${i + 1} of ${works.length}`} />
+                  {/* The caption only exists once he has told us what a piece is
+                      called. Until then the photograph stands on its own rather
+                      than under a blank line — and no piece is ever labelled
+                      with anything he did not say. */}
+                  {(w.title || w.note || w.price) && (
+                    <figcaption className="jpwtr-cap-work">
+                      {w.title && <b>{w.title}</b>}
+                      {w.note && <span>{w.note}</span>}
+                      {w.price && <em>{w.price}</em>}
+                    </figcaption>
+                  )}
+                </figure>
               ))}
             </div>
           </div>
