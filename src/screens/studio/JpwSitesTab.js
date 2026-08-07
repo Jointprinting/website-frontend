@@ -290,6 +290,57 @@ function F({ label, value, onChange, multiline, minRows, placeholder, type }) {
   );
 }
 
+// A photo slot: the URL field it always was, plus the step that was missing —
+// pick a file and get a hosted URL back. Until this existed the owner had to
+// host a client's photos somewhere himself before they could go on their site,
+// which for a portfolio (a sculptor with a dozen pieces) was the whole job.
+function PhotoField({ label, value, onChange, onUpload, placeholder }) {
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const inputRef = React.useRef(null);
+
+  const pick = async (file) => {
+    if (!file) return;
+    setErr('');
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ''));
+        fr.onerror = () => reject(new Error('Could not read that file'));
+        fr.readAsDataURL(file);
+      });
+      onChange(await onUpload(dataUrl));
+    } catch (e) {
+      setErr(e.message || 'Upload failed');
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = ''; // same file twice still fires
+    }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} alignItems="flex-start">
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <F label={label} value={value} onChange={onChange} placeholder={placeholder} />
+        </Box>
+        {value ? (
+          <Box component="img" src={value} alt=""
+            sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1, border: `1px solid ${D.line}`, flex: '0 0 auto', bgcolor: D.inset }} />
+        ) : null}
+        <Button size="small" disabled={busy} onClick={() => inputRef.current?.click()}
+          sx={{ ...dropGhostBtn, flex: '0 0 auto', fontSize: 12, px: 1.5, py: 0.6, whiteSpace: 'nowrap' }}>
+          {busy ? 'Uploading…' : 'Upload'}
+        </Button>
+      </Stack>
+      <input ref={inputRef} type="file" accept="image/*" hidden
+        onChange={(e) => pick(e.target.files && e.target.files[0])} />
+      {err && <T sx={{ color: '#f87171', fontSize: 11.5, mt: 0.5 }}>{err}</T>}
+    </Box>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Live preview — the actual template component, scaled to fit its pane
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,7 +403,7 @@ function ScaledPreview({ templateId, data, device }) {
 // One generic list editor: `fields` describes the inputs per row; rows with a
 // `wide` field put it on its own line. Remove is always available; templates
 // simply hide empty rows so a half-filled row never breaks the preview.
-function RowsEditor({ rows, onChange, fields, addLabel, blank }) {
+function RowsEditor({ rows, onChange, fields, addLabel, blank, photoKey, onUpload }) {
   const list = Array.isArray(rows) ? rows : [];
   const setRow = (i, key, v) => {
     const next = list.map((r, idx) => (idx === i ? { ...r, [key]: v } : r));
@@ -368,6 +419,15 @@ function RowsEditor({ rows, onChange, fields, addLabel, blank }) {
         }}>
           <Stack direction="row" spacing={1} alignItems="flex-start">
             <Box sx={{ flex: 1, minWidth: 0 }}>
+              {/* The photo leads the row: it is what identifies the piece, and
+                  it is the part that exists before any of the words do. */}
+              {photoKey && (
+                <Box sx={{ mb: 1 }}>
+                  <PhotoField label="Photo" value={r[photoKey]}
+                    onChange={(v) => setRow(i, photoKey, v)} onUpload={onUpload}
+                    placeholder="Upload a photo, or paste a link" />
+                </Box>
+              )}
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                 {fields.filter((f) => !f.wide).map((f) => (
                   <TextField
@@ -999,6 +1059,13 @@ export default function JpwSitesTab({ token }) {
     const gallerySlots = gallerySlotCount(photos);
     const setPhotoHero = (v) => setData('photos', setHeroUrl(photos, v));
     const setPhotoGallery = (i, v) => setData('photos', setGalleryUrl(photos, i, v));
+    // Hand a file to the API, get a hosted URL back. Falls back to the inline
+    // data URL when the server has no bucket configured — heavier, but it works.
+    const uploadPhoto = async (dataUrl) => {
+      const { data: out } = await axios.post(`${API}/${draft._id}/photo`, { dataUrl }, authHdr);
+      if (out && out.hosted === false) flash('Uploaded, but image hosting is off — stored inline for now', 'info');
+      return (out && out.url) || '';
+    };
     const isDraftStatus = draft.status === 'draft';
     const isPreview = draft.status === 'preview';
     const isLive = draft.status === 'live';
@@ -1198,14 +1265,32 @@ export default function JpwSitesTab({ token }) {
               />
             </Section>
 
-            <Section title="Photos" hint="Paste image links — leave empty to keep the template's placeholder photos. Fill the last slot and another appears.">
-              <F label="Hero photo URL" value={photos.hero} onChange={setPhotoHero}
-                placeholder="https://…/storefront.jpg" />
-              {Array.from({ length: gallerySlots }, (_, i) => (
-                <F key={i} label={`Gallery photo ${i + 1} URL`} value={gallery[i]}
-                  onChange={(v) => setPhotoGallery(i, v)} placeholder="https://…" />
+            <Section title="Photos" hint={tpl?.worksEditor
+              ? 'The banner photo. The pieces themselves go in the section below.'
+              : "Upload a file or paste a link — leave empty to keep the template's placeholder photos. Fill the last slot and another appears."}>
+              <PhotoField label="Hero photo" value={photos.hero} onChange={setPhotoHero}
+                onUpload={uploadPhoto} placeholder="https://…/storefront.jpg" />
+              {/* A look with its own per-piece list owns the gallery — showing
+                  loose slots as well would give two places to put the same
+                  photo, and the one you didn't use wins silently. */}
+              {!tpl?.worksEditor && Array.from({ length: gallerySlots }, (_, i) => (
+                <PhotoField key={i} label={`Gallery photo ${i + 1}`} value={gallery[i]}
+                  onChange={(v) => setPhotoGallery(i, v)} onUpload={uploadPhoto} placeholder="https://…" />
               ))}
             </Section>
+
+            {/* Per-piece list, declared by the look (see worksEditor in the
+                registry). A portfolio needs one; a plumber's site does not. */}
+            {tpl?.worksEditor && (
+              <Section title={tpl.worksEditor.title} hint={tpl.worksEditor.hint}>
+                <RowsEditor
+                  rows={d[tpl.worksEditor.key]} onChange={(v) => setData(tpl.worksEditor.key, v)}
+                  blank={tpl.worksEditor.blank} addLabel={tpl.worksEditor.addLabel}
+                  fields={tpl.worksEditor.fields}
+                  photoKey={tpl.worksEditor.photoKey} onUpload={uploadPhoto}
+                />
+              </Section>
+            )}
 
             <Section title="Style" hint={`${tpl ? tpl.label : 'Template'} palettes — the whole site recolors instantly.`}>
               <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>

@@ -224,6 +224,46 @@ describe('template registry', () => {
       expect(screen.queryByText(/See the work/i)).toBeNull();
     });
 
+    test('a piece is captioned only with what he actually said', async () => {
+      const works = [
+        { photo: 'https://example.com/1.jpg', title: 'No. 270', note: 'Stainless steel, 34 in.', price: '$4,800' },
+        { photo: 'https://example.com/2.jpg', title: '', note: '', price: '' },
+      ];
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData, works });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelectorAll('.jpwtr-work').length).toBe(2);
+      expect(screen.getByText('No. 270')).toBeTruthy();
+      expect(screen.getByText('$4,800')).toBeTruthy();
+      // The uncaptioned piece gets NO caption block — not a blank line, not a
+      // placeholder. A photograph standing on its own is the honest state.
+      expect(container.querySelectorAll('.jpwtr-cap-work').length).toBe(1);
+    });
+
+    test('each piece gets its own alt text', async () => {
+      const works = [
+        { photo: 'https://example.com/1.jpg', title: 'No. 270' },
+        { photo: 'https://example.com/2.jpg', title: '' },
+      ];
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData, works });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      const alts = [...container.querySelectorAll('.jpw-ph img')].map((i) => i.getAttribute('alt'));
+      // Identical alt on every plate is not a catalogue; a titled piece is
+      // named, an untitled one is at least numbered in the set.
+      expect(new Set(alts).size).toBe(alts.length);
+      expect(alts[0]).toContain('No. 270');
+      expect(alts[1]).toMatch(/2 of 2/);
+    });
+
+    test('the plain photo list still renders for a site built before works existed', async () => {
+      const { container } = renderTpl(todd(), {
+        businessName: 'Todd Reuben Sculptor', ...todd().seedData,
+        photos: { hero: '', gallery: ['https://example.com/a.jpg', 'https://example.com/b.jpg'] },
+      });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelectorAll('.jpw-ph').length).toBe(2);
+      expect(container.querySelectorAll('.jpwtr-cap-work').length).toBe(0);
+    });
+
     test('his real photos bring the whole section back', async () => {
       const { container } = renderTpl(todd(), {
         businessName: 'Todd Reuben Sculptor',
