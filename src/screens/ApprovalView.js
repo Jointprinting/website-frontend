@@ -33,6 +33,7 @@ import { detectGridRows } from '../common/quoteGrid';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
+import { mockupViewList } from '../common/mockupViews';
 
 // Processing-fee rates by payment method (decimals) — mirrors the backend
 // Order.PAYMENT_FEES single source of truth. Shown to the client for
@@ -559,7 +560,10 @@ export default function ApprovalView() {
   // byNorm — every renderer now resolves the exact same source.
   const mockupByNum = {};
   mockups.forEach(m => {
-    const entry = { front: m.thumbnail, back: m.back, extraViews: m.extraViews || [] };
+    const entry = {
+      front: m.thumbnail, back: m.back,
+      extraViews: m.extraViews || [], extraBackViews: m.extraBackViews || [],
+    };
     const kn = _norm(m.mockupNum);
     if (kn) mockupByNum[kn] = entry;
     const knm = _norm(m.name);
@@ -573,11 +577,12 @@ export default function ApprovalView() {
     if (snaps.length) return snaps;
     if (it.customMockupDataUrl) return [it.customMockupDataUrl];
     const lib = it.mockupNum ? mockupByNum[_norm(it.mockupNum)] : null;
-    // Back side only when the admin opted in on the item (showBack) — matches
-    // the builder preview and the PDF.
-    // Extra views (pages 2+ of a multi-page mockup — e.g. shoulder prints on
-    // the sideways garment) always show: the client should see every angle.
-    return lib ? [lib.front, it.showBack ? lib.back : null, ...(lib.extraViews || [])].filter(Boolean) : [];
+    // Backs only when the admin opted in on the item (showBack) — page 1's and
+    // every extra page's alike. Extra views (pages 2+ of a multi-page mockup —
+    // e.g. shoulder prints on the sideways garment) always show: the client
+    // should see every angle. One shared builder (common/mockupViews) so this,
+    // the owner's builder preview and the PDF stay identical.
+    return lib ? mockupViewList(lib, { includeBack: !!it.showBack }) : [];
   };
 
   const openLightbox = (src) => setLightbox(src);
@@ -792,7 +797,9 @@ export default function ApprovalView() {
             grouped per design (front/back/extra angles never interleave). */}
         {!hasConf && mockups.length > 0 && (() => {
           const withViews = mockups
-            .map((m) => ({ m, views: [m.thumbnail, m.back, ...(m.extraViews || [])].filter(Boolean) }))
+            // Every side of every page — there's no showBack opt-in at this
+            // stage, because reviewing the designs IS the stage.
+            .map((m) => ({ m, views: mockupViewList(m) }))
             .filter((x) => x.views.length);
           if (!withViews.length) return null;
           const COLLAPSE_AT = 3;                       // show this many designs before collapsing

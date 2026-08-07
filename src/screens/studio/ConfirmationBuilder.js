@@ -26,6 +26,7 @@ import config from '../../config.json';
 import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
 import { alertDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
+import { mockupViewList } from '../../common/mockupViews';
 import ConfirmationDocument, { DOC } from '../ConfirmationDocument';
 
 // Resize + JPEG-recompress uploaded mockup images before stuffing them into
@@ -428,11 +429,12 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
     if (it.customMockupDataUrl) return [it.customMockupDataUrl];
     const m = it.mockupNum ? (mockupMap[it.mockupNum] || mockupMap[normMockupKey(it.mockupNum)]) : null;
     if (!m) return [];
-    // Front + (back only when showBack) + every additional view (sleeve, extra
-    // designs, alternate angles). extraViews are R2 URLs the summary feed now
-    // carries; mirrors ApprovalView.confItemImages exactly so the builder
-    // preview and the live client page stay pixel-identical (invariant H1).
-    return [m.thumbnail, it.showBack ? m.data : null, ...(m.extraViews || [])].filter(Boolean);
+    // Front + every additional view (sleeve, extra designs, alternate angles),
+    // with the BACKS — page 1's and each extra page's — gated on showBack.
+    // extraViews/extraBackViews are R2 URLs the summary feed carries, aligned
+    // as a pair server-side. Shares ApprovalView's list builder outright so the
+    // builder preview and the live client page stay pixel-identical (H1).
+    return mockupViewList(m, { includeBack: !!it.showBack });
   };
 
   return (
