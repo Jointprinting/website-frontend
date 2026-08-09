@@ -22,7 +22,7 @@ const dueLabel = (iso) => {
   return `in ${Math.round(h / 24)}d`;
 };
 
-export default function QueueView({ queue, loading, engine, onStop, onOpenCompany }) {
+export default function QueueView({ queue, queueTotal, dueNowTotal, loading, engine, onStop, onOpenCompany }) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -31,14 +31,21 @@ export default function QueueView({ queue, loading, engine, onStop, onOpenCompan
     );
   }
 
-  const dueNow = queue.filter((r) => r.nextSendAt && new Date(r.nextSendAt) <= new Date()).length;
+  // Counted server-side over the WHOLE set. Deriving these from `queue` counted
+  // a 100-row page, so "In sequences" read 100 next to an "In sequence" of 350
+  // on the same screen — two numbers for one thing, one of them a page size
+  // wearing a total's label. Fall back to the page only if the API is older.
+  const pageDueNow = queue.filter((r) => r.nextSendAt && new Date(r.nextSendAt) <= new Date()).length;
+  const dueNow = Number.isFinite(dueNowTotal) ? dueNowTotal : pageDueNow;
+  const inSequences = Number.isFinite(queueTotal) ? queueTotal : queue.length;
+  const truncated = inSequences > queue.length;
   const windowOpen = !!(engine && engine.withinWindow);
 
   return (
     <Stack spacing={2.5}>
       <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
         <StatPill value={dueNow} label="Due now" tone={dueNow > 0 ? D.amber : D.muted} />
-        <StatPill value={queue.length} label="In sequences" tone={D.text} />
+        <StatPill value={inSequences} label="In sequences" tone={D.text} />
         {engine && (
           <StatPill value={`${engine.sentToday}/${engine.dailyCap}`} label="Sent today"
             tone={engine.remainingToday > 0 ? D.green : D.amber} />
@@ -54,6 +61,11 @@ export default function QueueView({ queue, loading, engine, onStop, onOpenCompan
         </Typography>
       </Stack>
 
+      {truncated && (
+        <Typography sx={{ fontSize: 11, color: D.faint }}>
+          showing the {queue.length} soonest of {inSequences} — the rest drip as they come due
+        </Typography>
+      )}
       {queue.length === 0 ? (
         <EmptyState icon={<ScheduleOutlinedIcon />} title="Queue is empty"
           hint="Enroll leads into an active campaign and they'll line up here." />

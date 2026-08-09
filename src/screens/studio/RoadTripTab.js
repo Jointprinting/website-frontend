@@ -1028,9 +1028,13 @@ export default function RoadTripTab({ token, onNavigate }) {
   const refreshCatQueue = React.useCallback(async () => {
     try {
       const r = await axios.get(`${api}/api/roadtrip/catalog-queue`, authHdr);
-      setCatQueue({ rows: r.data?.rows || [], loaded: true });
+      setCatQueue({ rows: r.data?.rows || [], loaded: true, error: false });
     } catch {
-      setCatQueue((prev) => ({ ...prev, loaded: true }));
+      // A failed fetch is NOT an empty queue. Flipping `loaded` with rows still
+      // [] rendered the reassuring green "no catalogs owed ✓" — so a weak
+      // connection or a 500 told the owner his evening was clear on exactly the
+      // night six shops were waiting on catalogs he'd promised them in person.
+      setCatQueue((prev) => ({ ...prev, loaded: true, error: true }));
     }
   }, [api, authHdr]);
 
@@ -1955,6 +1959,16 @@ export default function RoadTripTab({ token, onNavigate }) {
       {todayHdr(`CATALOGS TO SEND TONIGHT${catQueue.rows.length ? ` · ${catQueue.rows.filter((r) => !r.sent).length || '✓'}` : ''}`)}
       {!catQueue.loaded ? (
         <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1 }}>loading…</Typography>
+      ) : catQueue.error ? (
+        <Box
+          role="button" tabIndex={0}
+          onClick={refreshCatQueue}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') refreshCatQueue(); }}
+          sx={{ fontFamily: MONO, fontSize: 10, color: TERM.amber || '#fbbf24', p: 1, cursor: 'pointer',
+            border: `1px solid ${TERM.amber || '#fbbf24'}`, borderRadius: 0.5 }}
+        >
+          couldn&#39;t load tonight&#39;s queue — tap to retry. (This is NOT &quot;nothing owed&quot;.)
+        </Box>
       ) : !catQueue.rows.length ? (
         <Typography sx={{ fontFamily: MONO, fontSize: 10, color: TERM.muted, p: 1, border: `1px solid ${TERM.borderDim}`, borderRadius: 0.5 }}>
           no catalogs owed ✓ — log a visit with an email and it lands here for tonight's send
