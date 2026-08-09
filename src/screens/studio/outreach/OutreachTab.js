@@ -65,6 +65,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
   const [overviewLoading, setOverviewLoading] = React.useState(true);
 
   const [queue, setQueue] = React.useState([]);
+  const [queueTotals, setQueueTotals] = React.useState({});
   const [queueLoading, setQueueLoading] = React.useState(true);
 
   const [analytics, setAnalytics] = React.useState(null);
@@ -108,6 +109,9 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
     try {
       const { data } = await axios.get(`${base}/queue`, authHdr);
       setQueue(data.queue || []);
+      // Totals for the pills come from the API, which counts the whole set —
+      // the rows are only the soonest page.
+      setQueueTotals({ queueTotal: data.queueTotal, dueNowTotal: data.dueNowTotal });
     } catch (e) {
       if (!silent) flash(e.response?.data?.message || 'Could not load the queue', 'error');
     } finally {
@@ -464,6 +468,7 @@ export default function OutreachTab({ token, onBack, onNavigate, initialView }) 
               <MuiTypography sx={{ ...mono, fontSize: 11, color: D.faint, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', mb: 1 }}>Send queue</MuiTypography>
               <QueueView
                 queue={queue} loading={queueLoading} engine={overview?.engine}
+                queueTotal={queueTotals.queueTotal} dueNowTotal={queueTotals.dueNowTotal}
                 onStop={stopEnrollment}
                 onOpenCompany={openCompany}
               />
