@@ -261,7 +261,11 @@ export default function ToddReubenSite({ data }) {
   // Falls back to the plain photo list, so a site built before `works` existed
   // (and the shared contract suite) renders exactly as it did.
   const works = React.useMemo(() => {
-    const listed = rows(d.works, 'photo', 'title');
+    // A row earns a place on the page by having a PHOTO, not a title. The rows
+    // are seeded with his piece names ahead of the pictures, so keying off the
+    // title would put six empty mats on the public site while the photographs
+    // are still being uploaded.
+    const listed = rows(d.works, 'photo');
     if (listed.length) {
       return listed.map((w) => ({
         photo: txt(w.photo), title: txt(w.title), note: txt(w.note), price: txt(w.price),
