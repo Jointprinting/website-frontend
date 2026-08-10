@@ -169,9 +169,24 @@ export const CUSTOM_SITES = [
         'I chose free-form work over representational sculpture because what draws me is articulating a form that has never existed before. The pieces are titled by number, so the name suggests nothing the sculpture is not.',
       ].join('\n\n'),
       testimonials: [],
-      // One row per sculpture, added as his photos come in. Photo and details
-      // ride together so a caption can never end up under the wrong piece.
-      works: [],
+      // The six pieces he named, with the material he gave for each, in the
+      // order he read them out. Titles are his own: he numbers his sculptures
+      // rather than naming them, which the biography letter says is deliberate.
+      //
+      // PHOTOS DELIBERATELY EMPTY. The picture files are named to match these
+      // numbers, so the person uploading pairs them — nobody else can do it
+      // safely, and a photograph captioned with the wrong piece is worse than
+      // an uncaptioned one. A row renders on the public page only once it HAS a
+      // photo, so these six sit waiting in the editor without putting six empty
+      // frames on the site.
+      works: [
+        { photo: '', title: 'SC 265', note: 'Stainless steel', price: '' },
+        { photo: '', title: 'SC 262', note: 'Stainless steel', price: '' },
+        { photo: '', title: 'SC 220', note: 'Stainless steel', price: '' },
+        { photo: '', title: 'SC 261', note: 'Gold plated', price: '' },
+        { photo: '', title: 'SC 230', note: 'Stainless steel', price: '' },
+        { photo: '', title: 'SC 203', note: 'Stainless steel', price: '' },
+      ],
       paletteId: 'steel',
     },
     // Extra editor section for this build only — the five templates never see

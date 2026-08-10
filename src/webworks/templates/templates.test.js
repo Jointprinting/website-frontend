@@ -224,6 +224,27 @@ describe('template registry', () => {
       expect(screen.queryByText(/See the work/i)).toBeNull();
     });
 
+    test('the six named pieces are seeded, with no photos guessed for them', () => {
+      const works = todd().seedData.works;
+      expect(works.map((w) => w.title)).toEqual(['SC 265', 'SC 262', 'SC 220', 'SC 261', 'SC 230', 'SC 203']);
+      expect(works.find((w) => w.title === 'SC 261').note).toBe('Gold plated');
+      // Every photo empty: the image files are named to match these numbers, so
+      // whoever uploads does the pairing. Guessing which photograph is which
+      // sculpture is the one mistake this structure exists to prevent.
+      for (const w of works) expect(w.photo).toBe('');
+      for (const w of works) expect(w.price).toBe('');
+    });
+
+    test('a titled row with no photo puts nothing on the page', async () => {
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      // Six seeded rows, no photographs yet — the work section must stay away
+      // entirely rather than showing six captioned empty frames.
+      expect(container.querySelectorAll('.jpwtr-work').length).toBe(0);
+      expect(container.querySelector('#work')).toBeNull();
+      expect(screen.queryByText('SC 265')).toBeNull();
+    });
+
     test('a piece is captioned only with what he actually said', async () => {
       const works = [
         { photo: 'https://example.com/1.jpg', title: 'No. 270', note: 'Stainless steel, 34 in.', price: '$4,800' },
