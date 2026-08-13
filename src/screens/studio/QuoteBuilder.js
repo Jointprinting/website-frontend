@@ -214,6 +214,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
   // Held so the UI can explain the number (weight, cartons, zone) instead of
   // just asserting it.
   const [shipEst,      setShipEst]      = useState(null);
+  // Same, for the apparel leg (printer -> client).
+  const [apparelEst,   setApparelEst]   = useState(null);
   const [copyOpen,     setCopyOpen]     = useState(false);
   // What the CLIENT's link currently shows (signature of the pushed snapshot).
   // Autosave keeps edits owner-side; "Push to client" updates the link.
@@ -480,6 +482,55 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
       ? { ...l, shippingCost: 0, unitPrice: num(l.catalogUnitPrice) || l.unitPrice }
       : l)));
     setShipEst(null);
+    setDirty(true);
+  };
+
+  // ── Apparel shipping ────────────────────────────────────────────────────────
+  // The printer who decorates the job ships it straight to the client, billed
+  // third-party to the owner's UPS account (docs/ECOSYSTEM.md step 9) — so it is
+  // the same rate engine as promo with the printer's state as the origin.
+  // Blanks moving supplier -> printer are NOT priced: those come freight-free.
+  //
+  // Unlike promo, apparel shipping is NOT passed through at cost. It lands in
+  // shippingCost only, which lineCogsPerUnit spreads across the run and the
+  // markup then multiplies — exactly the pricing formula the business already
+  // documents. So the client pays it the same way they pay for blanks and print.
+  const apparelLineIdxs = () => lines
+    .map((l, i) => ({ l, i }))
+    .filter(({ l }) => !num(l.catalogUnitPrice) && (num(l.blankWeightOz) > 0 || num(l.blankCost) > 0))
+    .map(({ i }) => i);
+
+  const estimateApparelShipping = async () => {
+    const idxs = apparelLineIdxs();
+    if (!idxs.length) return;
+    setApparelEst({ loading: true });
+    try {
+      const { data } = await axios.post(`${config.backendUrl}/api/products/apparel-shipping-estimate`, {
+        lines: idxs.map(i => ({
+          label: lines[i].description || lines[i].styleCode || 'Blank',
+          weightOz: num(lines[i].blankWeightOz),
+          qty: num(lines[i].qty),
+        })),
+        printerName,
+        destState: shipToState,
+      }, authHdr);
+      setLines(prev => prev.map((l, i) => {
+        const at = idxs.indexOf(i);
+        if (at < 0) return l;
+        const ship = Number((data.perLine || [])[at]?.shipping) || 0;
+        return { ...l, shippingCost: +ship.toFixed(2) };
+      }));
+      setDirty(true);
+      setApparelEst({ loading: false, data });
+    } catch (e) {
+      setApparelEst({ loading: false, error: e.response?.data?.message || 'Could not estimate shipping' });
+    }
+  };
+
+  const clearApparelShipping = () => {
+    const idxs = new Set(apparelLineIdxs());
+    setLines(prev => prev.map((l, i) => (idxs.has(i) ? { ...l, shippingCost: 0 } : l)));
+    setApparelEst(null);
     setDirty(true);
   };
 
@@ -856,6 +907,52 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
 
         <BlankPickerDialog open={blankOpen} onClose={() => setBlankOpen(false)}
           authHdr={authHdr} onPick={addBlankLine} />
+        {/* Apparel freight — the printer ships the decorated job to the client.
+            Offered whenever there are non-promo lines to weigh. */}
+        {apparelLineIdxs().length > 0 && (
+          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: D.inset, border: `1px solid ${D.line}` }}>
+            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+              <Button onClick={estimateApparelShipping} disabled={apparelEst?.loading}
+                startIcon={<LocalShippingOutlinedIcon sx={{ fontSize: 15 }} />}
+                sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 12,
+                  borderRadius: 999, px: 1.75, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+                {apparelEst?.loading ? 'Estimating…' : 'Estimate apparel shipping'}
+              </Button>
+              {apparelEst?.data && (
+                <Button onClick={clearApparelShipping}
+                  sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
+                    borderRadius: 999, px: 1.5, '&:hover': { color: D.text } }}>
+                  Clear
+                </Button>
+              )}
+              {!printerName && (
+                <Typography sx={{ fontSize: 11, color: D.amber }}>
+                  Pick the printer above — its state is where the job ships from.
+                </Typography>
+              )}
+              {apparelEst?.error && (
+                <Typography sx={{ fontSize: 11, color: '#f87171' }}>{apparelEst.error}</Typography>
+              )}
+            </Stack>
+            {apparelEst?.data && (
+              <Box sx={{ mt: 1 }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 800, color: D.text, ...mono }}>
+                  ~{fmt(apparelEst.data.total)}
+                  <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, color: D.muted, ml: 1, ...mono }}>
+                    (range {fmt(apparelEst.data.low)}–{fmt(apparelEst.data.high)})
+                  </Typography>
+                </Typography>
+                {(apparelEst.data.basis || []).map((b, i) => (
+                  <Typography key={i} sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6 }}>· {b}</Typography>
+                ))}
+                <Typography sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6, mt: 0.5 }}>
+                  Added to each line's shipping cost, so it flows through your markup like blanks and print do. Edit any line's shipping in its ⌄ drawer to override.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+
         <PromoPickerDialog open={promoOpen} onClose={() => setPromoOpen(false)}
           authHdr={authHdr} onAdd={addPromoLines} />
         <CopyQuoteDialog open={copyOpen} onClose={() => setCopyOpen(false)}
