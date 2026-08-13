@@ -17,7 +17,7 @@ import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import { D, mono, fmtDate, dropInput, dropGhostBtn } from '../_shared';
-import { StatusChip, StatPill, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTIONS } from './_outreach';
+import { StatusChip, triageCategoryMeta, WORKLIST_BUCKETS, TRIAGE_ACTIONS } from './_outreach';
 
 // One row's AI-draft workspace. The button asks the API for a suggested reply
 // (persisted server-side as aiDraft, so it shows immediately on later loads);
@@ -156,10 +156,16 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: D.green }} /></Box>;
   }
 
-  const counts = worklist?.counts || {};
-  const total = counts.total || 0;
+  // ONE list. The five buckets were five places to look for the same question —
+  // "who is waiting on me?" — and the reader now answers that on its own (it
+  // watches the Sent folder, so a conversation you've answered clears itself and
+  // comes back when they write again). What's left doesn't need sorting into
+  // boxes; it needs an order. Bucket order is that order: new buying signals
+  // first, then the work you owe people, oldest-waiting inside each — which is
+  // exactly how the server already sorted them.
+  const rows = WORKLIST_BUCKETS.flatMap((b) => (worklist?.[b.key] || []).map((r) => ({ ...r, _bucket: b })));
 
-  if (!total) {
+  if (!rows.length) {
     return (
       <Box sx={{ textAlign: 'center', py: 8, border: `1px dashed ${D.line}`, borderRadius: 3, bgcolor: D.panel }}>
         <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 40, color: D.green }} />
@@ -173,30 +179,23 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
 
   return (
     <Stack spacing={2}>
-      {/* Bucket counts */}
-      <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
-        {WORKLIST_BUCKETS.map((b) => (
-          <StatPill key={b.key} value={counts[b.key] || 0} label={b.label} tone={(counts[b.key] || 0) > 0 ? b.tone : D.muted} />
-        ))}
-      </Stack>
+      <Box>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: D.green }} />
+          <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 }}>
+            Your turn
+          </Typography>
+          <Chip label={rows.length} size="small" sx={{ height: 18, fontSize: 10.5, fontWeight: 800, bgcolor: `${D.green}22`, color: D.green }} />
+        </Stack>
+        <Typography sx={{ color: D.faint, fontSize: 11.5, mb: 1 }}>
+          Conversations where they spoke last — buying signals first. Answer in Gmail and the card clears itself;
+          it comes back the moment they write again.
+        </Typography>
 
-      {WORKLIST_BUCKETS.map((b) => {
-        const items = (worklist[b.key] || []);
-        if (!items.length) return null;
-        const bridge = b.key === 'untriagedReplied';
-        return (
-          <Box key={b.key}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: b.tone }} />
-              <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 }}>
-                {b.label}
-              </Typography>
-              <Chip label={items.length} size="small" sx={{ height: 18, fontSize: 10.5, fontWeight: 800, bgcolor: `${b.tone}22`, color: b.tone }} />
-            </Stack>
-            <Typography sx={{ color: D.faint, fontSize: 11.5, mb: 1 }}>{b.hint}</Typography>
-
-            <Stack spacing={0.75}>
-              {items.map((r) => {
+        <Stack spacing={0.75}>
+          {rows.map((r) => {
+                const b = r._bucket;
+                const bridge = b.key === 'untriagedReplied';
                 const canOpen = r.matched && r.companyKey;
                 return (
                   <Stack
@@ -215,6 +214,17 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
                           {canOpen && <OpenInNewOutlinedIcon sx={{ fontSize: 12, ml: 0.4, verticalAlign: '-2px' }} />}
                         </Typography>
                         {!bridge && r.category && <StatusChip meta={triageCategoryMeta(r.category)} />}
+                        {/* On a single list the bucket is no longer a heading, so
+                            the state the OWNER set has to ride on the card — a
+                            quote he owes someone must not read like a new reply. */}
+                        {b.key !== 'needsResponse' && (
+                          <Chip
+                            size="small"
+                            label={b.label}
+                            sx={{ height: 18, fontSize: 10, fontWeight: 800, bgcolor: `${b.tone}22`,
+                              color: b.tone, border: `1px solid ${b.tone}44` }}
+                          />
+                        )}
                         {/* This shop wrote more than once. The card shows their most
                             actionable message; the rest are in All replies. Without
                             this the same company appeared as two separate cards in
@@ -288,11 +298,9 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
                     )}
                   </Stack>
                 );
-              })}
-            </Stack>
-          </Box>
-        );
-      })}
+          })}
+        </Stack>
+      </Box>
 
       <Menu
         anchorEl={menu?.anchor} open={!!menu} onClose={closeMenu}
