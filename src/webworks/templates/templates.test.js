@@ -296,6 +296,49 @@ describe('template registry', () => {
       expect(container.querySelectorAll('.jpwtr-cap-work').length).toBe(0);
     });
 
+    test('a sculpture opens for a closer look, with the number to call about it', async () => {
+      const works = [
+        { photo: 'https://example.com/1.jpg', title: 'SC 265', note: 'Stainless steel', price: '' },
+        { photo: 'https://example.com/2.jpg', title: 'SC 262', note: 'Stainless steel', price: '' },
+      ];
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData, works });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelector('.jpwtr-viewer')).toBeNull();
+
+      fireEvent.click(screen.getByLabelText('Look closer at SC 265'));
+      const viewer = container.querySelector('.jpwtr-viewer');
+      expect(viewer).toBeTruthy();
+      // The point of opening a piece is to see it and to know how to buy it, so
+      // the number is in here rather than back up the page.
+      const call = viewer.querySelector('a[href^="tel:"]');
+      expect(call).toBeTruthy();
+      expect(call.textContent).toContain('SC 265');
+      expect(call.textContent).toContain('(802) 356-9414');
+      // Photo shown whole, same rule as the grid — never cropped.
+      expect(viewer.querySelector('.jpwtr-vimg').getAttribute('src')).toBe('https://example.com/1.jpg');
+    });
+
+    test('the viewer steps between pieces and closes on Escape', async () => {
+      const works = [
+        { photo: 'https://example.com/1.jpg', title: 'SC 265' },
+        { photo: 'https://example.com/2.jpg', title: 'SC 262' },
+      ];
+      const { container } = renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData, works });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+
+      fireEvent.click(screen.getByLabelText('Look closer at SC 265'));
+      fireEvent.click(screen.getByLabelText('Next sculpture'));
+      expect(container.querySelector('.jpwtr-vimg').getAttribute('src')).toBe('https://example.com/2.jpg');
+      // Wraps around rather than dead-ending on the last piece.
+      fireEvent.click(screen.getByLabelText('Next sculpture'));
+      expect(container.querySelector('.jpwtr-vimg').getAttribute('src')).toBe('https://example.com/1.jpg');
+
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(container.querySelector('.jpwtr-viewer')).toBeNull();
+      // The scroll lock must come back off, or the page is stuck after closing.
+      expect(document.body.style.overflow).not.toBe('hidden');
+    });
+
     test('his real photos bring the whole section back', async () => {
       const { container } = renderTpl(todd(), {
         businessName: 'Todd Reuben Sculptor',

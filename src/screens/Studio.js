@@ -3067,6 +3067,11 @@ function StudioBody({ token, onLogout }) {
   const [lookbookEntry, setLookbookEntry] = React.useState({ companyKey: null, companyName: null, projectNumber: null, newLookbook: false, nonce: 0 });
   const isHub = view === 'hub';
   const currentTool = HUB_TOOLS.find((t) => t.id === view);
+  // The colour of the business you are currently inside — green for Joint
+  // Printing, blue for Webworks, violet for Atom. The hub already tinted its
+  // cards per business; the tool chrome stayed green everywhere, so opening a
+  // Webworks screen still looked like Joint Printing.
+  const accent = brandAccent(currentTool?.brand);
   // Role gates the owner-only surfaces (the Team/Admin tile + its view). Read from
   // the stored role hint; the server still enforces access (requireOwner) — this
   // is purely so an agent never even SEES the tile. Missing/owner → owner.
@@ -3485,7 +3490,7 @@ function StudioBody({ token, onLogout }) {
                   {/* Wordmark takes the same brand colour as the cube beside it,
                       so the header reads as one mark rather than a blue cube
                       next to a green word. */}
-                  JP <Box component="span" sx={{ color: brandAccent(currentTool?.brand) }}>STUDIO</Box>
+                  JP <Box component="span" sx={{ color: accent }}>STUDIO</Box>
                 </MuiTypography>
                 {isHub && (
                   <MuiTypography sx={{ ...eyebrow, color: D.faint, fontSize: 9.5, letterSpacing: 2, mt: 0.2 }}>
@@ -3531,11 +3536,12 @@ function StudioBody({ token, onLogout }) {
                   sx={{
                     textTransform: 'none', color: D.muted, fontWeight: 600,
                     minWidth: 'auto', px: 1, fontSize: 12, borderRadius: 999,
-                    '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' },
+                    // Breadcrumb takes the business's colour, like the mark.
+                    '&:hover': { color: accent, bgcolor: `${accent}0f` },
                   }}
                 >Studio</Button>
                 <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: D.faint }} />
-                <MuiTypography sx={{ color: D.green, fontWeight: 700, fontSize: 13, ...mono,
+                <MuiTypography sx={{ color: accent, fontWeight: 700, fontSize: 13, ...mono,
                   minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentTool?.label}
                 </MuiTypography>
