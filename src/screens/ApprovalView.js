@@ -29,7 +29,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
-import { detectGridRows } from '../common/quoteGrid';
+import { detectGridRows, groupPickModes } from '../common/quoteGrid';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
@@ -482,30 +482,46 @@ export default function ApprovalView() {
         : `Please approve ${when} — ${noun.toLowerCase()} is held for you until then.` };
   })();
 
-  // Current selection for a group. Explicit picks state wins (null = the client
-  // deselected/skipped it); otherwise fall back to any server-accepted line so a
-  // re-pick opens on what they had. undefined = nothing chosen for this group.
-  const pickFor = (g) => {
-    if (Object.prototype.hasOwnProperty.call(picks, g)) return picks[g] == null ? undefined : picks[g];
-    const acc = quoteLines.findIndex(l => l.group === g && l.accepted);
-    return acc >= 0 ? acc : undefined;
+  // How many options each group allows — the SHARED rule, mirrored server-side
+  // in utils/quoteGroups and enforced there on submit. `one_of` groups are
+  // alternatives (brands, print variants). `any_of` groups are colourways: "50
+  // black AND 50 white of the same design" is two runs the client wants both of,
+  // and capping that at one is what left a client's second 50 unsellable.
+  const pickModes = groupPickModes(quoteLines);
+  const isAnyOf = (g) => pickModes[g] === 'any_of';
+
+  // Current selection for a group, ALWAYS as an array of line indexes (empty =
+  // skipped). A one_of group simply never holds more than one. Explicit picks
+  // state wins ([] = the client deselected/skipped it); otherwise fall back to
+  // the server-accepted lines so a re-pick opens on what they had.
+  const pickedIdxs = (g) => {
+    if (Object.prototype.hasOwnProperty.call(picks, g)) return picks[g] || [];
+    const acc = [];
+    quoteLines.forEach((l, i) => { if (l.group === g && l.accepted) acc.push(i); });
+    return isAnyOf(g) ? acc : acc.slice(0, 1);
   };
-  // Toggle: click the selected option again to skip the whole group. Clients are
-  // NOT required to pick every group — pitch 10, keep the 5 you want.
+  const isPicked = (g, idx) => pickedIdxs(g).includes(idx);
+  // Toggle. In a one_of group, clicking another option MOVES the pick and
+  // clicking the lit one skips the group. In an any_of group each option is
+  // independent — clients are never required to take a whole group.
   const togglePick = (g, idx) => setPicks(prev => {
-    const has = Object.prototype.hasOwnProperty.call(prev, g);
-    const cur = has ? prev[g] : (() => { const a = quoteLines.findIndex(l => l.group === g && l.accepted); return a >= 0 ? a : null; })();
-    return { ...prev, [g]: cur === idx ? null : idx };
+    const cur = Object.prototype.hasOwnProperty.call(prev, g) ? (prev[g] || []) : pickedIdxs(g);
+    if (isAnyOf(g)) {
+      const next = cur.includes(idx) ? cur.filter(i => i !== idx) : [...cur, idx];
+      return { ...prev, [g]: next.sort((a, b) => a - b) };
+    }
+    return { ...prev, [g]: cur.includes(idx) ? [] : [idx] };
   });
-  const pickedGroupCount = groupNames.filter(g => pickFor(g) !== undefined).length;
+  const allPickedIdxs = groupNames.flatMap(g => pickedIdxs(g));
+  const pickedGroupCount = groupNames.filter(g => pickedIdxs(g).length > 0).length;
   // Ready to continue when they've kept at least one option — or the quote
   // carries standalone lines that are always part of the order.
   const canSubmitPicks = pickedGroupCount > 0 || standaloneLines.length > 0;
   // Live total of what they've kept so far (chosen options + standalone lines).
+  // An any_of group contributes EVERY option taken, so a 50-black + 50-white
+  // pick reads as the full 100-piece order rather than half of it.
   const selectionTotal =
-    groupNames.reduce((s, g) => {
-      const idx = pickFor(g);
-      if (idx === undefined) return s;
+    allPickedIdxs.reduce((s, idx) => {
       const l = quoteLines[idx] || {};
       return s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
     }, 0) +
@@ -520,8 +536,7 @@ export default function ApprovalView() {
       // ids survive owner-side edits/reorders between pushes, indexes don't.
       // Index fallback keeps very old payloads working.
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`,
-        { picks: groupNames.map(g => pickFor(g)).filter(i => i !== undefined)
-            .map(i => (quoteLines[i] && quoteLines[i].lid) || i) });
+        { picks: allPickedIdxs.map(i => (quoteLines[i] && quoteLines[i].lid) || i) });
       setRepicking(false);
       await refresh();
     } catch (e) {
@@ -861,20 +876,35 @@ export default function ApprovalView() {
                 You're just choosing here; nothing's final yet.
               </Box>
             </Typography>
-            {groupNames.map((g, gi) => (
+            {groupNames.map((g, gi) => {
+              const gPicked = pickedIdxs(g);
+              const gAny = isAnyOf(g);
+              // An any_of group is a set of colourways of one design. Say so
+              // plainly — "pick one" on a colour set is exactly the instruction
+              // that made a client take 50 shirts when they wanted 100.
+              const gUnits = gPicked.reduce((s, i) => s + (Number(quoteLines[i]?.qty) || 0), 0);
+              return (
               <Box key={g} sx={{ mb: 3.5 }}>
                 <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
                   <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, ...mono,
-                    color: pickFor(g) !== undefined ? T.onAccent : T.green,
-                    bgcolor: pickFor(g) !== undefined ? T.green : 'transparent',
+                    color: gPicked.length ? T.onAccent : T.green,
+                    bgcolor: gPicked.length ? T.green : 'transparent',
                     border: `2px solid ${T.green}`, transition: 'all 180ms ease' }}>
-                    {pickFor(g) !== undefined ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
+                    {gPicked.length ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
                   </Box>
                   <Typography sx={{ fontWeight: 800, fontSize: 17 }}>{g}</Typography>
                   <Box component="span" sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>
-                    Pick one · optional
+                    {gAny ? 'Take any — colours add up' : 'Pick one'} · optional
                   </Box>
+                  {/* Running units for a colour set, so "50 black + 50 white"
+                      reads as the 100 pieces it is while they're choosing. */}
+                  {gAny && gUnits > 0 && (
+                    <Box component="span" sx={{ ...mono, fontSize: 11, fontWeight: 800, color: T.green,
+                      px: 1, py: 0.3, borderRadius: 999, border: `1px solid ${T.lineHi}` }}>
+                      {gUnits} units selected
+                    </Box>
+                  )}
                 </Stack>
                 {(() => {
                   const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
@@ -891,7 +921,7 @@ export default function ApprovalView() {
                         const rDesc = [f.description, f.styleCode && `(${f.styleCode})`, f.color].filter(Boolean).join(' ');
                         const rDetail = [f.printType, f.printDetails].filter(Boolean).join(' · ');
                         const rWeeks = Number(f.turnaroundWeeks) || 0;
-                        const rowSel = row.some(c => pickFor(g) === c.idx);
+                        const rowSel = row.some(c => isPicked(g, c.idx));
                         return (
                           <Box key={`${f.idx}`} sx={{ p: { xs: 1.5, sm: 1.75 }, borderRadius: 2.5,
                             border: `1.5px solid ${rowSel ? T.green : T.line}`, bgcolor: rowSel ? T.panelHi : T.inset,
@@ -923,7 +953,7 @@ export default function ApprovalView() {
                             </Box>
                             <Stack direction="row" gap={1} flexWrap="wrap">
                               {row.map((cell) => {
-                                const sel = pickFor(g) === cell.idx;
+                                const sel = isPicked(g, cell.idx);
                                 const cUnit = Number(cell.unitPrice) || 0;
                                 const cQty = Number(cell.qty) || 0;
                                 return (
@@ -959,7 +989,7 @@ export default function ApprovalView() {
                   return (
                 <Stack gap={1.25}>
                   {entries.map((l) => {
-                    const sel = pickFor(g) === l.idx;
+                    const sel = isPicked(g, l.idx);
                     const unit = Number(l.unitPrice) || 0;
                     const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
                     const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
@@ -975,7 +1005,12 @@ export default function ApprovalView() {
                           transition: 'border-color 180ms ease, background 180ms ease, box-shadow 220ms ease, transform 160ms ease',
                           '&:hover': { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)', transform: 'translateY(-1px)' },
                           '&:focus-visible': { outline: `2px solid ${T.green}`, outlineOffset: 2 } }}>
-                        <Box sx={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex',
+                        {/* A colour set is multi-select, so it wears a CHECKBOX;
+                            alternatives keep the radio circle. The shape is the
+                            only cue a client gets that they may take both — the
+                            round "pick one" affordance is what made a client
+                            stop at 50 shirts when they wanted 100. */}
+                        <Box sx={{ width: 26, height: 26, borderRadius: gAny ? 1.4 : '50%', flexShrink: 0, display: 'flex',
                           alignItems: 'center', justifyContent: 'center',
                           bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}`,
                           transition: 'all 160ms ease' }}>
@@ -1029,7 +1064,8 @@ export default function ApprovalView() {
                   );
                 })()}
               </Box>
-            ))}
+              );
+            })}
             {standaloneLines.length > 0 && (
               <Box sx={{ mb: 2.5 }}>
                 <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>Always included</Typography>
