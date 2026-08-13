@@ -120,8 +120,10 @@ describe('template registry', () => {
   describe('Todd Reuben — what the bio copy may and may not say', () => {
     const about = () => getTemplate('custom-todd-reuben').seedData.about;
 
-    test('speaks as him, in his own voice', () => {
+    test('speaks as him, in his own voice, and names him', () => {
       expect(about()).toMatch(/\bI\b/);
+      // The About block introduces the man, not just the material.
+      expect(about()).toContain('Todd Reuben');
       // The letter is third-person ("Mr. Reuben", "Todd Reuben is a graduate").
       // One escaped third-person reference and the whole block reads as though
       // an agency wrote the page about him.
@@ -135,8 +137,17 @@ describe('template registry', () => {
       expect(a).toContain('1989');
       expect(a).toContain('Columbia University');
       expect(a).toContain('chromium oxide');      // the process, kept concrete
-      expect(a).toContain('twelve successive passes');
-      expect(a).toContain('immutable');
+      expect(a).toContain('twelve passes');
+    });
+
+    test('stays in plain words an older man would actually say', () => {
+      // He asked for this directly. These are the words a visitor has to stop
+      // and parse, and they were in the first draft.
+      expect(about()).not.toMatch(/immutable|arduous|luster|fluidity|harmonious|articulating/i);
+      // …without losing the facts the plain version still has to carry.
+      expect(about()).toContain('chromium oxide');
+      expect(about()).toContain('twelve passes');
+      expect(about()).toContain('Roy Gussow');
     });
 
     test('makes no durability promise', () => {

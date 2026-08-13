@@ -162,11 +162,16 @@ export const CUSTOM_SITES = [
       //     stature. Named plainly, firmly in the past.
       //   · Galleries, memberships, the 1981–82 teaching assistantship, the
       //     Boonton studio, his age and street address — see the site brief.
+      // Plain words. He is an older man talking about his own work, so the copy
+      // reads the way he would say it out loud — no "immutable", no "arduous",
+      // no words a visitor has to stop and parse. Every fact still traces to his
+      // letter; only the vocabulary changed. He is named in the first line so
+      // the About block introduces the man, not just the material.
       about: [
-        'I work in stainless steel because, like gold, it is immutable — it does not tarnish. Polished to a high luster, the surface returns the light, and that reflection gives a piece its fluidity. What I am after is grace and elegance, and a harmonious relationship between all the elements, from whatever angle you see it.',
-        'A piece begins as a flat sheet an eighth of an inch thick. The pattern is cut with a plasma cutter; the flat planes are then worked into three dimensions by cold hammering and joined with an arc welder. What follows is arduous — the weld beads ground away, then twelve successive passes of sandpaper, each finer than the last, and a final polish with a felt pad charged with chromium oxide.',
-        'I took a Bachelor of Arts at Columbia University in 1980, and from 1982 to 1989 I was apprenticed to Roy Gussow, a sculptor in stainless steel in New York. In 1989 I began working on my own, leaving his forms behind to find my own, and in 1992 I moved my studio to Woodstock.',
-        'I chose free-form work over representational sculpture because what draws me is articulating a form that has never existed before. The pieces are titled by number, so the name suggests nothing the sculpture is not.',
+        'My name is Todd Reuben. I work in stainless steel because it lasts — like gold, it does not tarnish. Polished to a high shine, the surface catches the light, and that reflection becomes part of the piece. What I am after is grace and balance, so a sculpture looks right from any angle you see it.',
+        'A piece starts as a flat sheet of steel, an eighth of an inch thick. I cut the shape with a plasma cutter, hammer the flat pieces into three dimensions, and weld them together. Then comes the long part: grinding the welds away, twelve passes of sandpaper, each finer than the last, and a final polish with a felt pad and chromium oxide.',
+        'I earned a Bachelor of Arts at Columbia University in 1980, and from 1982 to 1989 I was apprenticed to Roy Gussow, a sculptor in stainless steel in New York. In 1989 I began working on my own, leaving his shapes behind to find my own, and in 1992 I moved my studio to Woodstock.',
+        'I make free-form work rather than sculptures of things, because what interests me is finding a shape that has never existed before. I title each piece by number, so the name does not suggest something the sculpture is not.',
       ].join('\n\n'),
       testimonials: [],
       // The six pieces he named, with the material he gave for each, in the

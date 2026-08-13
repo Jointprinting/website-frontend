@@ -62,6 +62,13 @@ const DEFAULT_PHOTOS = { hero: '', gallery: [] };
 // third-person "Todd prefers…" reads like an agency wrote the page about him.
 const CALL_NOTE = 'Please call — I don’t receive text messages.';
 
+// The nav mark: up to THREE initials, so "Todd Reuben Sculptor" reads TRS.
+// Derived rather than hard-coded, so renaming the site in the Studio moves the
+// mark with it instead of leaving a stale monogram in the corner.
+const markOf = (name) => String(name || '')
+  .trim().split(/\s+/).filter(Boolean).slice(0, 3)
+  .map((w) => w[0].toUpperCase()).join('') || '—';
+
 const css = (c, hero) => `
 .jpwtr{--max:1120px;font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:${c.bg};color:${c.ink};line-height:1.7;font-weight:400;overflow-x:clip;min-height:100%;}
 .jpwtr *,.jpwtr *::before,.jpwtr *::after{box-sizing:border-box;margin:0;padding:0;}
@@ -301,7 +308,10 @@ export default function ToddReubenSite({ data }) {
 
       <nav className="jpwtr-nav">
         <div className="jpwtr-wrap jpwtr-nav-in">
-          <span className="jpwtr-mark" aria-hidden="true">{initialsOf(name)}</span>
+          {/* Three letters, not the shared two: his mark is TRS. initialsOf()
+              gives "TR" from the first two words, which drops the S and reads
+              like somebody's initials rather than a studio mark. */}
+          <span className="jpwtr-mark" aria-hidden="true">{markOf(name)}</span>
           <div className="jpwtr-brand">{name}</div>
           {navLinks.length > 0 && (
             <div className="jpwtr-links">
