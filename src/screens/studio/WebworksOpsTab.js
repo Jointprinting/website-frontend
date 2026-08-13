@@ -24,6 +24,7 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, mono, eyebrow, scrollbar, dropInput } from './_shared';
+import { brandAccent } from '../../common/BrandCube';
 
 const base = `${config.backendUrl}/api`;
 
@@ -43,6 +44,12 @@ const NEXT_STATUS = { open: 'in_progress', in_progress: 'done', done: 'open' };
 const NEXT_LABEL = { open: 'Start', in_progress: 'Mark done', done: 'Reopen' };
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+
+// This is a JP Webworks screen, so its chrome is Webworks blue. Status colours
+// are deliberately NOT derived from this: green on a health dot or a "Live"
+// pill means good, not Joint Printing, and recolouring those by business would
+// turn a working site's indicator blue and a broken one's meaning to mush.
+const ACCENT = brandAccent('JP Webworks');
 
 export default function WebworksOpsTab({ token, onBack, onNavigate }) {
   const authHdr = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
@@ -134,7 +141,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
             <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
           </IconButton>
         )}
-        <LanguageOutlinedIcon sx={{ color: D.green, fontSize: 20 }} />
+        <LanguageOutlinedIcon sx={{ color: ACCENT, fontSize: 20 }} />
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 18, flex: 1 }}>
           Client Manager <Box component="span" sx={{ color: D.faint, fontWeight: 600, fontSize: 13 }}>· JP Webworks</Box>
         </Typography>
@@ -146,7 +153,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
       {busy && <Typography sx={{ color: busy.includes('✓') ? D.green : D.amber || '#fbbf24', fontSize: 12, mb: 1 }}>{busy}</Typography>}
 
       {sites === null ? (
-        <Box display="flex" justifyContent="center" py={8}><CircularProgress size={28} sx={{ color: D.green }} /></Box>
+        <Box display="flex" justifyContent="center" py={8}><CircularProgress size={28} sx={{ color: ACCENT }} /></Box>
       ) : list.length === 0 ? (
         <Typography sx={{ color: D.faint, fontSize: 13, py: 4, textAlign: 'center' }}>
           No client sites yet — build one in the Websites tool and it shows up here to manage.
@@ -190,19 +197,19 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                     <Stack direction="row" flexWrap="wrap" alignItems="center" gap={1} sx={{ mb: 1.5, mt: 1 }}>
                       <Button component="a" href={previewHref} target="_blank" rel="noreferrer" size="small"
                         endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
-                        sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>Preview</Button>
+                        sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: ACCENT } }}>Preview</Button>
                       {liveHref && (
                         <Button component="a" href={liveHref} target="_blank" rel="noreferrer" size="small"
                           endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}
-                          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>Visit live</Button>
+                          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: ACCENT } }}>Visit live</Button>
                       )}
                       {s.companyKey && onNavigate && (
                         <Button onClick={() => onNavigate({ view: 'crm', companyKey: s.companyKey })} size="small"
-                          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open company →</Button>
+                          sx={{ color: ACCENT, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Open company →</Button>
                       )}
                       {s.status === 'live' && (
                         <Button onClick={() => runHealth(s._id)} disabled={working} size="small" startIcon={<FavoriteBorderOutlinedIcon sx={{ fontSize: 14 }} />}
-                          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: D.green } }}>
+                          sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11.5, '&:hover': { color: ACCENT } }}>
                           Health check
                         </Button>
                       )}
@@ -222,7 +229,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                           onChange={(e) => setDraftKey((p) => ({ ...p, [s._id]: e.target.value }))}
                           sx={{ ...dropInput, flex: 1 }} InputLabelProps={{ sx: { color: D.muted } }} />
                         <Button onClick={() => linkCompany(s._id)} disabled={working || !(draftKey[s._id] || '').trim()} size="small"
-                          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Link</Button>
+                          sx={{ color: ACCENT, textTransform: 'none', fontWeight: 700, fontSize: 11.5 }}>Link</Button>
                       </Stack>
                     )}
 
@@ -247,7 +254,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                               </Typography>
                             </Box>
                             <Button onClick={() => advanceEdit(s._id, e)} disabled={working} size="small"
-                              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 10.5, minWidth: 0, px: 0.75, flexShrink: 0, '&:hover': { color: D.green } }}>
+                              sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 10.5, minWidth: 0, px: 0.75, flexShrink: 0, '&:hover': { color: ACCENT } }}>
                               {NEXT_LABEL[e.status]}
                             </Button>
                           </Stack>
@@ -261,7 +268,7 @@ export default function WebworksOpsTab({ token, onBack, onNavigate }) {
                         sx={{ ...dropInput, flex: 1 }} InputLabelProps={{ sx: { color: D.muted } }} />
                       <Button onClick={() => addEdit(s._id)} disabled={working || !(draftEdit[s._id] || '').trim()} size="small"
                         startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />}
-                        sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 11.5 }}>Add</Button>
+                        sx={{ color: ACCENT, textTransform: 'none', fontWeight: 800, fontSize: 11.5 }}>Add</Button>
                     </Stack>
                   </Box>
                 </Collapse>

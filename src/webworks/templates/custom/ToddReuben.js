@@ -164,6 +164,47 @@ const css = (c, hero) => `
    dropped straight to one — the two-up stage is where a phone-sized tablet
    actually lives. */
 @media(max-width:1000px){.jpwtr-work{flex:0 1 clamp(240px,46%,360px);}}
+/* The tile is a button: a sculpture is worth looking at closely, so the whole
+   plate is the target. Reset the UA button chrome, keep a visible focus ring. */
+.jpwtr-open{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;font:inherit;color:inherit;}
+.jpwtr-open:focus-visible{outline:2px solid ${c.accent};outline-offset:3px;}
+
+/* Closer look — dark room, the piece lit in the middle of it, and the number
+   to call right underneath so nobody has to scroll back to find it. */
+.jpwtr-viewer{position:fixed;inset:0;z-index:200;background:color-mix(in srgb,${c.dark} 94%,#000);
+  display:flex;align-items:center;justify-content:center;padding:clamp(16px,4vw,56px);
+  animation:jpwtr-fade .18s ease-out;}
+@keyframes jpwtr-fade{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.jpwtr-viewer{animation:none;}}
+.jpwtr-vinner{display:flex;flex-direction:column;align-items:center;gap:clamp(14px,2.4vw,26px);
+  max-width:min(1100px,100%);max-height:100%;}
+.jpwtr-vimg{max-width:100%;max-height:min(68vh,760px);object-fit:contain;display:block;}
+.jpwtr-vmeta{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;max-width:56ch;}
+.jpwtr-vmeta b{font-weight:400;font-size:clamp(19px,2.6vw,26px);color:${c.darkInk};}
+.jpwtr-vmeta span{font-size:14.5px;color:${c.darkSub};font-weight:300;overflow-wrap:anywhere;}
+.jpwtr-vmeta em{font-style:normal;font-size:13.5px;letter-spacing:.1em;color:${c.darkInk};}
+.jpwtr-vcall{margin-top:8px;display:inline-block;background:${c.accent};color:${c.accentInk};
+  font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;padding:14px 30px;
+  transition:background .18s,color .18s;overflow-wrap:anywhere;}
+.jpwtr-vcall:hover{background:${c.darkInk};color:${c.dark};}
+.jpwtr-vnote{font-size:12.5px;color:${c.darkSub};}
+.jpwtr-vclose,.jpwtr-vnav{position:absolute;background:none;border:0;color:${c.darkSub};cursor:pointer;
+  font-family:'Marcellus',Georgia,serif;line-height:1;padding:10px 16px;transition:color .15s;}
+.jpwtr-vclose:hover,.jpwtr-vnav:hover{color:${c.darkInk};}
+.jpwtr-vclose:focus-visible,.jpwtr-vnav:focus-visible{outline:2px solid ${c.accent};outline-offset:2px;}
+.jpwtr-vclose{top:clamp(6px,1.6vw,18px);right:clamp(6px,1.6vw,18px);font-size:34px;}
+.jpwtr-vnav{top:50%;transform:translateY(-50%);font-size:44px;}
+.jpwtr-vnav.prev{left:clamp(0px,1vw,14px);}
+.jpwtr-vnav.next{right:clamp(0px,1vw,14px);}
+/* On a phone the photo fills the width, so side arrows get squeezed into the
+   gutter and end up half off-screen. Drop them to the bottom, clear of the
+   plate, with a real tap target. */
+@media(max-width:640px){.jpwtr-vimg{max-height:50vh;}
+  .jpwtr-vnav{top:auto;bottom:10px;transform:none;font-size:30px;padding:8px 22px;
+    background:color-mix(in srgb,${c.darkInk} 10%,transparent);border-radius:999px;}
+  .jpwtr-vnav.prev{left:18px;}.jpwtr-vnav.next{right:18px;}
+  .jpwtr-vinner{padding-bottom:46px;}}
+
 /* Caption: appears only when he has told us what a piece is called. */
 .jpwtr-cap-work{display:flex;flex-direction:column;gap:4px;padding:14px 2px 0;}
 .jpwtr-cap-work b{font-family:'Marcellus',Georgia,serif;font-weight:400;font-size:16.5px;overflow-wrap:anywhere;}
@@ -283,6 +324,34 @@ export default function ToddReubenSite({ data }) {
   const hours = rows(d.hours, 'days', 'hours');
   const quotes = rows(d.testimonials, 'quote');
 
+  // Which piece is open in the closer look. -1 is closed.
+  const [viewing, setViewing] = React.useState(-1);
+  const openPiece = viewing >= 0 && viewing < works.length ? works[viewing] : null;
+  const closeViewer = React.useCallback(() => setViewing(-1), []);
+  const stepViewer = React.useCallback(
+    (delta) => setViewing((n) => (n < 0 ? n : (n + delta + works.length) % works.length)),
+    [works.length]
+  );
+
+  // Escape closes, arrows move along the row — a visitor looking at sculptures
+  // should be able to go through them without returning to the grid each time.
+  // The scroll lock stops the page drifting behind the overlay on a phone.
+  React.useEffect(() => {
+    if (!openPiece) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeViewer();
+      else if (e.key === 'ArrowRight') stepViewer(1);
+      else if (e.key === 'ArrowLeft') stepViewer(-1);
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [openPiece, closeViewer, stepViewer]);
+
   const headline = txt(d.heroHeadline) || tagline || name;
   const ctaLabel = txt(d.ctaLabel) || 'Call the studio';
   const ctaHref = phone ? telHref(phone) : (email ? `mailto:${email}` : null);
@@ -360,8 +429,11 @@ export default function ToddReubenSite({ data }) {
                       And a crafted scene in this grid draws a SCULPTURE: if a
                       photo failed to load, a drawn one would stand in for his
                       real work. An empty mat is the honest failure. */}
-                  <Ph src={w.photo}
-                    alt={w.title ? `${w.title} — ${name}` : `${name} — sculpture ${i + 1} of ${works.length}`} />
+                  <button type="button" className="jpwtr-open" onClick={() => setViewing(i)}
+                    aria-label={w.title ? `Look closer at ${w.title}` : `Look closer at sculpture ${i + 1}`}>
+                    <Ph src={w.photo}
+                      alt={w.title ? `${w.title} — ${name}` : `${name} — sculpture ${i + 1} of ${works.length}`} />
+                  </button>
                   {/* The caption only exists once he has told us what a piece is
                       called. Until then the photograph stands on its own rather
                       than under a blank line — and no piece is ever labelled
@@ -479,6 +551,42 @@ export default function ToddReubenSite({ data }) {
       <footer className="jpwtr-foot">
         © {year} {name}{license ? ` · ${license}` : ''}
       </footer>
+
+      {/* The closer look. A visitor who taps a sculpture wants two things: to
+          see it properly, and to know how to get one — so the phone number is
+          in here rather than making them scroll back to find it. The photo is
+          contained, never cropped, for the same reason the grid contains it. */}
+      {openPiece && (
+        <div className="jpwtr-viewer" role="dialog" aria-modal="true"
+          aria-label={openPiece.title ? `${openPiece.title}, closer look` : 'Sculpture, closer look'}
+          onClick={closeViewer}>
+          <button type="button" className="jpwtr-vclose" onClick={closeViewer} aria-label="Close">×</button>
+          {works.length > 1 && (
+            <>
+              <button type="button" className="jpwtr-vnav prev"
+                onClick={(e) => { e.stopPropagation(); stepViewer(-1); }} aria-label="Previous sculpture">‹</button>
+              <button type="button" className="jpwtr-vnav next"
+                onClick={(e) => { e.stopPropagation(); stepViewer(1); }} aria-label="Next sculpture">›</button>
+            </>
+          )}
+          {/* Clicks inside the plate must not close it — only the backdrop does. */}
+          <div className="jpwtr-vinner" onClick={(e) => e.stopPropagation()}>
+            <img className="jpwtr-vimg" src={openPiece.photo}
+              alt={openPiece.title ? `${openPiece.title} — ${name}` : `${name} — sculpture`} />
+            <div className="jpwtr-vmeta">
+              {openPiece.title && <b className="jpwtr-serif">{openPiece.title}</b>}
+              {openPiece.note && <span>{openPiece.note}</span>}
+              {openPiece.price && <em>{openPiece.price}</em>}
+              {phone && (
+                <a className="jpwtr-vcall" href={telHref(phone)}>
+                  {openPiece.title ? `Call about ${openPiece.title} — ${phone}` : `Call about this piece — ${phone}`}
+                </a>
+              )}
+              {phone && <span className="jpwtr-vnote">{CALL_NOTE}</span>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
