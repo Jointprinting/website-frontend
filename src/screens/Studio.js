@@ -3467,8 +3467,12 @@ function StudioBody({ token, onLogout }) {
           >
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
               {/* Transparent brand mark — no tile behind it (the box is already a
-                  clean cube on transparent). */}
-              <BrandCube brand="Joint Printing" size={34} />
+                  clean cube on transparent).
+                  It follows the tool you are IN: green in Joint Printing, blue in
+                  Webworks, violet in Atom. Pinned to "Joint Printing" it showed a
+                  green JP cube over the header of every Webworks and Atom screen,
+                  which is the wrong business staring back at you. */}
+              <BrandCube brand={currentTool?.brand || 'Joint Printing'} size={34} />
 
               <Box sx={{ minWidth: 0 }}>
                 <MuiTypography
@@ -3478,7 +3482,10 @@ function StudioBody({ token, onLogout }) {
                     color: D.text, letterSpacing: 1, lineHeight: 1.1,
                   }}
                 >
-                  JP <Box component="span" sx={{ color: D.green }}>STUDIO</Box>
+                  {/* Wordmark takes the same brand colour as the cube beside it,
+                      so the header reads as one mark rather than a blue cube
+                      next to a green word. */}
+                  JP <Box component="span" sx={{ color: brandAccent(currentTool?.brand) }}>STUDIO</Box>
                 </MuiTypography>
                 {isHub && (
                   <MuiTypography sx={{ ...eyebrow, color: D.faint, fontSize: 9.5, letterSpacing: 2, mt: 0.2 }}>

@@ -43,7 +43,7 @@ import config from '../../config.json';
 import { D, mono, eyebrow, dropInput, dropPrimaryBtn, dropGhostBtn, fmtRelative, money0, deriveCompanyKey } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { TEMPLATES, CUSTOM_SITES, getTemplate } from '../../webworks/templates';
-import { gallerySlotCount, setHeroUrl, setGalleryUrl } from '../../webworks/photoSlots';
+import { gallerySlotCount, setHeroUrl, setGalleryUrl, fitWithin, MAX_PHOTO_EDGE } from '../../webworks/photoSlots';
 import JpLoader from '../../common/JpLoader';
 
 const API = `${config.backendUrl}/api/jpw/sites`;
@@ -290,6 +290,42 @@ function F({ label, value, onChange, multiline, minRows, placeholder, type }) {
   );
 }
 
+// Shrink a picked photo to web size BEFORE it is uploaded. A phone camera shot
+// is ~4000px and several megabytes; nothing on a client site renders bigger
+// than a full-width band, so the rest is only bytes a visitor waits for — and
+// it is what pushes an upload past the server's size cap. Re-encoded as JPEG
+// on a white ground, because these are photographs, not logos with alpha.
+//
+// Every failure path returns the ORIGINAL: a browser without canvas, a file the
+// decoder rejects, anything unexpected. Shrinking is an optimisation, and it is
+// never allowed to be the reason a photo doesn't make it onto a client's site.
+async function shrinkForWeb(dataUrl, maxEdge = MAX_PHOTO_EDGE, quality = 0.85) {
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('decode failed'));
+      el.src = dataUrl;
+    });
+    const fit = fitWithin(img.naturalWidth || img.width, img.naturalHeight || img.height, maxEdge);
+    if (!fit.width) return dataUrl;
+    // Already small AND already modest in bytes — leave it exactly as it is.
+    if (!fit.scaled && dataUrl.length < 900 * 1024) return dataUrl;
+    const canvas = document.createElement('canvas');
+    canvas.width = fit.width;
+    canvas.height = fit.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, fit.width, fit.height);
+    ctx.drawImage(img, 0, 0, fit.width, fit.height);
+    const out = canvas.toDataURL('image/jpeg', quality);
+    return out && out.length < dataUrl.length ? out : dataUrl;
+  } catch (_) {
+    return dataUrl;
+  }
+}
+
 // A photo slot: the URL field it always was, plus the step that was missing —
 // pick a file and get a hosted URL back. Until this existed the owner had to
 // host a client's photos somewhere himself before they could go on their site,
@@ -304,13 +340,13 @@ function PhotoField({ label, value, onChange, onUpload, placeholder }) {
     setErr('');
     setBusy(true);
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
+      const raw = await new Promise((resolve, reject) => {
         const fr = new FileReader();
         fr.onload = () => resolve(String(fr.result || ''));
         fr.onerror = () => reject(new Error('Could not read that file'));
         fr.readAsDataURL(file);
       });
-      onChange(await onUpload(dataUrl));
+      onChange(await onUpload(await shrinkForWeb(raw)));
     } catch (e) {
       setErr(e.message || 'Upload failed');
     } finally {
@@ -1063,7 +1099,6 @@ export default function JpwSitesTab({ token }) {
     // data URL when the server has no bucket configured — heavier, but it works.
     const uploadPhoto = async (dataUrl) => {
       const { data: out } = await axios.post(`${API}/${draft._id}/photo`, { dataUrl }, authHdr);
-      if (out && out.hosted === false) flash('Uploaded, but image hosting is off — stored inline for now', 'info');
       return (out && out.url) || '';
     };
     const isDraftStatus = draft.status === 'draft';

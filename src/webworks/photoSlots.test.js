@@ -1,4 +1,31 @@
-import { gallerySlotCount, setHeroUrl, setGalleryUrl } from './photoSlots';
+import { gallerySlotCount, setHeroUrl, setGalleryUrl, fitWithin, MAX_PHOTO_EDGE } from './photoSlots';
+
+describe('photo sizing', () => {
+  test('a camera shot is scaled down to the long edge', () => {
+    // A phone portrait: 3024x4032 → the 4032 side becomes MAX_PHOTO_EDGE.
+    const fit = fitWithin(3024, 4032);
+    expect(fit.scaled).toBe(true);
+    expect(Math.max(fit.width, fit.height)).toBe(MAX_PHOTO_EDGE);
+    // Aspect ratio survives, or the sculpture arrives distorted.
+    expect(fit.width / fit.height).toBeCloseTo(3024 / 4032, 3);
+  });
+
+  test('landscape and portrait are both handled by the long edge', () => {
+    expect(fitWithin(4032, 3024).width).toBe(MAX_PHOTO_EDGE);
+    expect(fitWithin(3024, 4032).height).toBe(MAX_PHOTO_EDGE);
+  });
+
+  test('an already-small photo is left alone, never upscaled', () => {
+    expect(fitWithin(800, 600)).toEqual({ width: 800, height: 600, scaled: false });
+    expect(fitWithin(MAX_PHOTO_EDGE, MAX_PHOTO_EDGE).scaled).toBe(false);
+  });
+
+  test('junk dimensions report nothing to do rather than throwing', () => {
+    for (const bad of [[0, 0], [NaN, 100], [-5, 10], [undefined, undefined]]) {
+      expect(fitWithin(bad[0], bad[1])).toEqual({ width: 0, height: 0, scaled: false });
+    }
+  });
+});
 
 describe('photo slots', () => {
   test('always trails one empty slot, never fewer than three', () => {

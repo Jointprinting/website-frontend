@@ -24,6 +24,23 @@ const heroOf = (photos) => {
   return typeof p.hero === 'string' ? p.hero : '';
 };
 
+// Longest edge a site photo is stored at. Camera shots come off a phone at
+// 4000px and several megabytes; nothing on these pages renders larger than a
+// full-width band, so anything past this is bytes the visitor waits for.
+export const MAX_PHOTO_EDGE = 2000;
+
+// Scale a WxH down to fit MAX_PHOTO_EDGE, never up. Pure so the arithmetic is
+// testable without a canvas.
+export function fitWithin(width, height, maxEdge = MAX_PHOTO_EDGE) {
+  const w = Number(width) > 0 ? Number(width) : 0;
+  const h = Number(height) > 0 ? Number(height) : 0;
+  if (!w || !h) return { width: 0, height: 0, scaled: false };
+  const longest = Math.max(w, h);
+  if (longest <= maxEdge) return { width: Math.round(w), height: Math.round(h), scaled: false };
+  const k = maxEdge / longest;
+  return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)), scaled: true };
+}
+
 // How many gallery inputs to render: always one empty slot past the last one,
 // so filling the last row makes another appear without an "add" button.
 export function gallerySlotCount(photos) {
