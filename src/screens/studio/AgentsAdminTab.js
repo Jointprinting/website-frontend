@@ -270,6 +270,221 @@ function AgentBook({ agentId, token }) {
   );
 }
 
+// ── Scorecard strip ──────────────────────────────────────────────────────────
+//
+// The six numbers that drive a keep / coach / cut call, and nothing else. No
+// login-count leaderboard, no all-time totals, no team average — those describe
+// the past without changing a decision.
+//
+// Net contribution leads because it is the only figure that already accounts for
+// what this person costs: profit alone flatters anyone whose seat costs more
+// than they sell.
+function ScorecardStrip({ card }) {
+  if (!card) return null;
+  const Cell = ({ k, v, sub, tone }) => (
+    <Box sx={{ minWidth: 92 }}>
+      <Typography sx={{ color: D.faint, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>{k}</Typography>
+      <Typography sx={{ ...mono, color: tone || D.text, fontSize: 14, fontWeight: 800, lineHeight: 1.3 }}>{v}</Typography>
+      {sub && <Typography sx={{ color: D.faint, fontSize: 9.5 }}>{sub}</Typography>}
+    </Box>
+  );
+  const net = card.netContribution;
+  return (
+    <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${D.line}` }}>
+      <Stack direction="row" gap={2.5} flexWrap="wrap" useFlexGap>
+        <Cell k="Net contribution" v={money0(net)} tone={net >= 0 ? D.green : '#f87171'}
+          sub="after commission + carry" />
+        <Cell k="Profit sourced" v={money0(card.grossProfitSourced)} sub={`${card.ordersEarned} paid order${card.ordersEarned === 1 ? '' : 's'}`} />
+        <Cell k="Commission" v={money0(card.commissionEarned)} sub={card.tier ? card.tier.name : ''} />
+        <Cell k="Cost to carry" v={money0(card.carryCost)}
+          sub={card.supportMinutes ? `${Math.round(card.supportMinutes / 60)}h support` : 'no support logged'} />
+        <Cell k="Ramp"
+          v={card.daysToFirstSale == null ? '—' : `${card.daysToFirstSale}d`}
+          sub={card.daysToFirstSale == null ? 'no first sale yet' : 'to first sale'} />
+        <Cell k="Margin held"
+          v={card.medianMarginPct == null ? '—' : `${card.medianMarginPct}%`}
+          sub="median on their orders" />
+      </Stack>
+      {card.disengaged && (
+        <Typography sx={{ color: D.amber, fontSize: 11, mt: 0.9 }}>
+          Quiet — {card.daysSinceLogin != null ? `${card.daysSinceLogin}d since sign-in` : 'no sign-in recorded'}
+          {card.daysSinceOrder != null ? `, ${card.daysSinceOrder}d since an order` : ''}. Worth a call.
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+// ── Roster header ────────────────────────────────────────────────────────────
+//
+// The team-level read. Every figure here is derived server-side by
+// services/agentAnalytics.js, which SUPPRESSES any rate its denominator can't
+// support — so this component's job is to render the suppression honestly
+// rather than to reach for a number. A churn percentage on two reps isn't a
+// small number, it's a meaningless one, and printing it would make everything
+// else on the screen less believable.
+function RosterHeader({ summary }) {
+  if (!summary) return null;
+  const h = summary.headcount || {};
+  const u = summary.unlocks || {};
+
+  const Tile = ({ k, v, sub, tone }) => (
+    <Box sx={{ bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 2.5, p: 1.5, flex: '1 1 150px', minWidth: 150 }}>
+      <Typography sx={{ ...eyebrow, fontSize: 9.5 }}>{k}</Typography>
+      <Typography sx={{ ...mono, color: tone || D.text, fontWeight: 800, fontSize: 22, lineHeight: 1.15, mt: 0.4 }}>{v}</Typography>
+      {sub && <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.3, lineHeight: 1.4 }}>{sub}</Typography>}
+    </Box>
+  );
+
+  const net = summary.netContributionTotal;
+  return (
+    <Box sx={{ mb: 2.5 }}>
+      <Stack direction="row" gap={1.25} flexWrap="wrap" useFlexGap>
+        <Tile
+          k="Net contribution"
+          v={money0(net)}
+          tone={net >= 0 ? D.green : '#f87171'}
+          sub="profit they sourced, less commission and cost to carry"
+        />
+        <Tile
+          k="On the roster"
+          v={`${h.active || 0}`}
+          sub={[
+            h.onboarding ? `${h.onboarding} onboarding` : null,
+            h.paused ? `${h.paused} paused` : null,
+            h.departed ? `${h.departed} departed` : null,
+          ].filter(Boolean).join(' · ') || 'active'}
+        />
+        <Tile
+          k="Median ramp"
+          v={summary.medianDaysToFirstSale == null ? '—' : `${summary.medianDaysToFirstSale}d`}
+          sub={summary.rampSample
+            ? `to first sale · ${summary.rampSample} rep${summary.rampSample === 1 ? '' : 's'}`
+            : 'nobody has closed a first sale yet'}
+        />
+        {/* Churn deliberately renders as EXPOSURE, not a rate, until there is
+            enough of it. The rule-of-three bound is the honest statement while
+            no one has left: it says what you can and cannot yet conclude. */}
+        <Tile
+          k="Churn"
+          v={summary.churn && !summary.churn.suppressed ? `${summary.churn.value}%` : '—'}
+          sub={summary.churn && summary.churn.suppressed
+            ? (summary.departures === 0
+              ? `${summary.departures} departures in ${summary.exposureRepMonths} rep-months${summary.churnUpperBound != null ? ` — can't rule out ${summary.churnUpperBound}%/mo yet` : ''}`
+              : `${summary.departures} in ${summary.exposureRepMonths} rep-months — too little to rate`)
+            : 'per rep-month'}
+        />
+      </Stack>
+
+      {(!u.peerComparison || summary.supportMinutesLogged === 0) && (
+        <Typography sx={{ color: D.faint, fontSize: 11, mt: 1, lineHeight: 1.6 }}>
+          {!u.peerComparison && (
+            <>Team comparisons and retention curves stay hidden until there are {u.minRosterPeer || 5}+ reps —
+            with fewer, an average is one person's week. </>
+          )}
+          {summary.supportMinutesLogged === 0 && (
+            <>Support time isn't tracked yet, so “cost to carry” is missing your own hours — log a few check-ins to make it real.</>
+          )}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+// ── Onboarding checklist ─────────────────────────────────────────────────────
+//
+// Renders the server's canonical stages (services/agentLifecycle.js). A locked
+// stage is genuinely locked — you cannot tick ahead — because each stage guards
+// a real risk rather than being a to-do list. The two gates are printed as
+// plain sentences: what this person may and may not do right now, and why.
+function OnboardingPanel({ agentId, token, data, onChange }) {
+  const [busy, setBusy] = useState('');
+  if (!data) return null;
+  const { checklist, gates } = data;
+
+  const toggle = async (key, done) => {
+    setBusy(key);
+    try {
+      const r = await fetch(`${base}/agents/${agentId}/onboarding`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, done }),
+      });
+      if (r.ok) onChange(await r.json());
+    } finally { setBusy(''); }
+  };
+
+  const GateLine = ({ label, gate }) => (
+    <Stack direction="row" alignItems="flex-start" spacing={0.75} sx={{ mb: 0.4 }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: '50%', mt: 0.7, flexShrink: 0,
+        bgcolor: gate.ok ? D.green : D.amber }} />
+      <Typography sx={{ fontSize: 11.5, color: gate.ok ? D.muted : D.text, lineHeight: 1.5 }}>
+        <b>{label}:</b> {gate.ok ? 'yes' : gate.why}
+      </Typography>
+    </Stack>
+  );
+
+  return (
+    <Box sx={{ mt: 1.5, bgcolor: D.inset, border: `1px solid ${D.line}`, borderRadius: 2, p: 1.75 }}>
+      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography sx={{ ...eyebrow, fontSize: 10 }}>Onboarding</Typography>
+        <Typography sx={{ ...mono, color: checklist.complete ? D.green : D.faint, fontSize: 11.5, fontWeight: 700 }}>
+          {checklist.requiredDone}/{checklist.requiredTotal} required
+        </Typography>
+      </Stack>
+
+      <Box sx={{ mb: 1.5, p: 1.25, borderRadius: 1.5, bgcolor: 'rgba(255,255,255,0.03)' }}>
+        <GateLine label="May sell" gate={gates.maySell} />
+        <GateLine label="May be paid" gate={gates.mayBePaid} />
+        <GateLine label="Commission can go on" gate={gates.mayEnableCommission} />
+      </Box>
+
+      <Stack spacing={1.5}>
+        {checklist.stages.map((stage) => (
+          <Box key={stage.key} sx={{ opacity: stage.locked ? 0.45 : 1 }}>
+            <Stack direction="row" alignItems="center" spacing={0.75}>
+              <Typography sx={{ color: stage.complete ? D.green : D.text, fontSize: 12.5, fontWeight: 800 }}>
+                {stage.label}
+              </Typography>
+              {stage.locked && (
+                <Typography sx={{ ...mono, color: D.faint, fontSize: 9.5, fontWeight: 700 }}>
+                  LOCKED — finish the step above
+                </Typography>
+              )}
+            </Stack>
+            <Typography sx={{ color: D.faint, fontSize: 10.5, mb: 0.6 }}>{stage.blurb}</Typography>
+            <Stack spacing={0.5}>
+              {stage.steps.map((st) => (
+                <Stack key={st.key} direction="row" alignItems="flex-start" spacing={1}>
+                  <Box
+                    onClick={() => { if (!stage.locked && busy !== st.key) toggle(st.key, !st.done); }}
+                    role="checkbox" aria-checked={st.done} tabIndex={stage.locked ? -1 : 0}
+                    onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !stage.locked) { e.preventDefault(); toggle(st.key, !st.done); } }}
+                    sx={{
+                      width: 15, height: 15, mt: 0.35, flexShrink: 0, borderRadius: 0.75,
+                      border: `1.5px solid ${st.done ? D.green : D.line}`,
+                      bgcolor: st.done ? D.green : 'transparent',
+                      cursor: stage.locked ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                    {st.done && <CheckCircleIcon sx={{ fontSize: 12, color: D.ink }} />}
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 12, color: st.done ? D.muted : D.text, fontWeight: st.required ? 700 : 500 }}>
+                      {st.label}{!st.required && <Box component="span" sx={{ color: D.faint, fontWeight: 500 }}> · optional</Box>}
+                    </Typography>
+                    <Typography sx={{ color: D.faint, fontSize: 10.5, lineHeight: 1.45 }}>{st.help}</Typography>
+                  </Box>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
 // ── Commission block ─────────────────────────────────────────────────────────
 //
 // The agent's deal, editable in place. Percentages are of an order's GROSS
@@ -508,7 +723,7 @@ function MoveBookDialog({ agent, agents, token, onClose, onDone }) {
   );
 }
 
-function AgentCard({ agent, agents, token, onPatch, onReset, onReload }) {
+function AgentCard({ agent, agents, token, onPatch, onReset, onReload, card }) {
   const s = agent.stats || {};
   const [showBook, setShowBook] = useState(false);
   const pace = paceRead(s);
@@ -518,6 +733,21 @@ function AgentCard({ agent, agents, token, onPatch, onReset, onReload }) {
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(null); // { password } after a reset
   const [moving, setMoving] = useState(false);
+  const [detail, setDetail] = useState(null);   // { checklist, gates } once opened
+  const [showOnboard, setShowOnboard] = useState(false);
+
+  // Loaded on demand — the roster read already carries the summary numbers, so
+  // the full checklist is only fetched when someone actually opens it.
+  const openOnboarding = async () => {
+    const next = !showOnboard;
+    setShowOnboard(next);
+    if (next && !detail) {
+      try {
+        const r = await fetch(`${base}/agents/${agent.id}/scorecard`, { headers: { Authorization: `Bearer ${token}` } });
+        if (r.ok) setDetail(await r.json());
+      } catch (_) { /* the panel just stays closed */ }
+    }
+  };
 
   const saveGoal = async () => {
     setBusy(true);
@@ -634,6 +864,25 @@ function AgentCard({ agent, agents, token, onPatch, onReset, onReload }) {
         </Stack>
       </Stack>
 
+      {card && <ScorecardStrip card={card} />}
+
+      <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+        <Button size="small" onClick={openOnboarding}
+          sx={{ ...dropGhostBtn, py: 0.4, px: 1.4, fontSize: 12 }}>
+          {showOnboard ? 'Hide onboarding' : 'Onboarding'}
+          {card && !card.onboardingComplete && (
+            <Box component="span" sx={{ ...mono, ml: 0.75, color: D.amber, fontSize: 11 }}>
+              {Math.round((card.onboardingProgress || 0) * 100)}%
+            </Box>
+          )}
+        </Button>
+      </Stack>
+
+      {showOnboard && (
+        <OnboardingPanel agentId={agent.id} token={token} data={detail}
+          onChange={(d) => { setDetail((cur) => ({ ...(cur || {}), ...d })); onReload(); }} />
+      )}
+
       <CommissionBlock agent={agent} onPatch={onPatch} />
 
       {moving && (
@@ -655,6 +904,10 @@ function AgentCard({ agent, agents, token, onPatch, onReset, onReload }) {
 export default function AgentsAdminTab({ token, onBack }) {
   const authHdr = { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } };
   const [agents, setAgents] = useState([]);
+  // The derived roster payload (summary + per-agent scorecards + survival lanes).
+  // Separate from `agents` because that list is the ACCOUNT shape the create /
+  // reset / goal writes round-trip; this is the analytics view over it.
+  const [roster, setRoster] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -671,10 +924,20 @@ export default function AgentsAdminTab({ token, onBack }) {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${base}/agents`, { headers: { Authorization: `Bearer ${token}` } });
+      // Two reads: the account list (create/reset/goal live off this shape) and
+      // the roster rollup, which is where every derived number comes from. The
+      // rollup is ONE request whose cost doesn't grow with the roster — see
+      // controllers/agentRoster.js — so this stays a two-call page at any size.
+      const [res, rosterRes] = await Promise.all([
+        fetch(`${base}/agents`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${base}/agents/roster`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
       if (!res.ok) { let m = `HTTP ${res.status}`; try { const j = await res.json(); if (j.message) m = j.message; } catch (_) {} throw new Error(m); }
       const data = await res.json();
       setAgents(Array.isArray(data.agents) ? data.agents : []);
+      // A failed rollup must not blank the page — the account list still works,
+      // the derived numbers just don't render.
+      setRoster(rosterRes.ok ? await rosterRes.json() : null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [token]);
@@ -724,6 +987,10 @@ export default function AgentsAdminTab({ token, onBack }) {
   };
 
   const activeCount = agents.filter((a) => a.active).length;
+  const cardById = React.useMemo(
+    () => Object.fromEntries(((roster && roster.agents) || []).map((c) => [c.id, c])),
+    [roster],
+  );
 
   return (
     <Box data-ctx-chrome sx={{ minHeight: '100vh', bgcolor: D.bg, color: D.text, p: { xs: 2, md: 4 },
@@ -749,6 +1016,10 @@ export default function AgentsAdminTab({ token, onBack }) {
         </Stack>
 
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+
+        {/* The team-level read. Only once someone is actually on the roster —
+            a summary of nobody is noise. */}
+        {agents.length > 0 && roster && <RosterHeader summary={roster.summary} />}
 
         {/* First-agent migration reminder — only until an agent exists */}
         {!loading && agents.length === 0 && <FirstAgentSetupNote />}
@@ -832,7 +1103,8 @@ export default function AgentsAdminTab({ token, onBack }) {
           <Stack spacing={1.5} sx={{ ...scrollbar }}>
             {agents.map((a) => (
               <AgentCard key={a.id} agent={a} agents={agents} token={token}
-                onPatch={patchAgent} onReset={resetPassword} onReload={load} />
+                onPatch={patchAgent} onReset={resetPassword} onReload={load}
+                card={cardById[a.id]} />
             ))}
           </Stack>
         )}
