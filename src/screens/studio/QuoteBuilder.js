@@ -41,6 +41,7 @@ import config from '../../config.json';
 import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import PaletteOutlinedIcon    from '@mui/icons-material/PaletteOutlined';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
 import KeyboardArrowUpIcon     from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon   from '@mui/icons-material/KeyboardArrowDown';
@@ -57,8 +58,9 @@ import {
 } from './_shared';
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
-import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
+import { quoteRowKey, detectGridRows, groupPickMode } from '../../common/quoteGrid';
 import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
+import { shadeChangeFor } from '../../common/garmentShade';
 import { stateDistanceMi } from './_roadTrip';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
@@ -1210,6 +1212,9 @@ function SupplierLink({ line, onPatch, tf, sx }) {
 //     option/quantity prices correctly from one click)
 function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
   const [openRows, setOpenRows] = useState(() => new Set());   // row cost-drawers (by row POSITION — stable across renames)
+  // What the last "another colour" copy did — shown inline under the row actions.
+  // Repricing for a shade change is real money moving, so it is stated, never silent.
+  const [colourNote, setColourNote] = useState('');
   // REHYDRATE the spec panel from what was saved on this design (4C). Every cell
   // carries the same printSpec, so seed off the first line. This component is
   // keyed by group, so it remounts per design — a lazy initializer runs once and
@@ -1490,6 +1495,78 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   const toggleRowHidden = (b) => {
     const hide = !(b.first && b.first.hiddenFromClient);
     onPatchIdxs(b.idxs, { hiddenFromClient: hide, ...(hide ? { accepted: false } : {}) });
+  };
+
+  // "Same design, another colour" — duplicate this whole option ROW across every
+  // run size, keeping all of its quote info, and change only the garment colour.
+  //
+  // This is the job that used to mean re-typing a row: an order of 50 black + 50
+  // white of one design had to be built as two hand-copied rows, and the client
+  // could then only take ONE of them. Both halves are fixed here — the copy is a
+  // button, and rows that differ only by colour derive an `any_of` group so the
+  // client takes both (see common/quoteGrid.groupPickMode).
+  //
+  // The costs are NOT copied blindly. A garment colour implies a print SHADE, and
+  // the shade is a real money difference: dark reads the light-ink-on-dark grid
+  // and carries a white underbase (an extra colour and an extra screen per
+  // location). So when the new colour changes the lane, the copy is REPRICED off
+  // the same printer's catalog at each run size rather than inheriting the source
+  // colour's print cost. Quantities are never combined into a better tier —
+  // per the owner, two shades are two runs and price separately.
+  const duplicateRowInColour = async (b) => {
+    const srcColour = (b.first && b.first.color) || '';
+    const colour = await promptDialog({
+      title: 'Same design, another colour',
+      message: `Copy this option at every run size and change the garment colour.${srcColour ? ` Currently ${srcColour}.` : ''}`,
+      defaultValue: '',
+    });
+    const name = String(colour || '').trim();
+    if (!name) return;
+
+    // Does the new colour move us to the other ink lane? null = unknown colour
+    // or same lane — keep what the design is already priced on.
+    const nextShade = shadeChangeFor(name, specShade);
+    const priced = nextShade && specSection
+      ? grid.qtys.reduce((acc, q) => {
+        const r = priceAreas(specSection, specMethod, { areas: specAreas, shade: nextShade }, num(q));
+        if (r && !r.error && r.printPerUnit != null) acc[q] = r;
+        return acc;
+      }, {})
+      : {};
+    const repricedAll = nextShade && grid.qtys.every(q => priced[q]);
+
+    const adds = grid.qtys.map((q) => {
+      const src = (grid.cellAt(b.key, q) || {}).line || firstLine;
+      const r = priced[q];
+      return {
+        ...src,
+        color: name,
+        // A fresh option starts un-picked and un-hidden; the client has not seen
+        // it yet and it must never inherit the source's acceptance.
+        accepted: false,
+        hiddenFromClient: false,
+        // Its own stable id — sharing the source's lid would make the two
+        // colours indistinguishable to the picker.
+        lid: '',
+        ...(r ? {
+          printCost:    r.printPerUnit,
+          setupCost:    r.setup != null ? r.setup : src.setupCost,
+          printDetails: composeAreaDetails(specMethod, { shade: nextShade, areas: specAreas }),
+          printSpec:    { method: specMethod, shade: nextShade, areas: specAreas.map(a => ({ ...a })) },
+          // The client price follows the new cost at the row's own margin, so a
+          // dark-garment copy is not silently sold at the light-garment price.
+          unitPrice: 0,
+        } : {}),
+      };
+    });
+    onAppendLines(adds);
+    setColourNote(
+      repricedAll
+        ? `Added ${name} — repriced for a ${nextShade} garment (${nextShade === 'dark' ? 'white underbase added' : 'underbase dropped'}). Set its client price.`
+        : nextShade
+          ? `Added ${name} — it is a ${nextShade} garment, but this printer had no price at every run size. Check its print cost.`
+          : `Added ${name} — same costs as ${srcColour || 'the source'}. If it changes the ink lane, re-price the print.`,
+    );
   };
 
   return (
@@ -1773,7 +1850,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
       {/* The matrix: option rows × quantity columns. Every cell is a real
           quote line the client can pick. Horizontal scroll on narrow screens. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
-        <Box sx={{ minWidth: 400 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
+        <Box sx={{ minWidth: 486 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
           gridTemplateColumns: tableCols }}>
 
           {/* Header row: option column title, then one header per quantity */}
@@ -1830,7 +1907,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
                   position: 'sticky', left: 0, zIndex: 1,
                   opacity: bLine.hiddenFromClient ? 0.5 : 1,
-                  gridTemplateColumns: '16px minmax(100px, 1fr) 66px 120px 26px 30px' }}>
+                  gridTemplateColumns: '16px minmax(96px, 1fr) 62px 86px 116px 26px 30px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
@@ -1845,6 +1922,14 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                     onCommit={(v) => onPatchIdxs(b.idxs, { description: v })} sx={tf} />
                   <BufferedTF value={bLine.styleCode || ''} placeholder="Style #"
                     onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
+                  {/* GARMENT COLOUR — a real field, not a word buried in the
+                      product name. It is what makes two rows read as colourways
+                      of one design rather than rival brands, which is what lets
+                      the client take BOTH on their link (quoteGrid.groupPickMode)
+                      and what drives the shade lane when a row is copied. */}
+                  <BufferedTF value={bLine.color || ''} placeholder="Colour"
+                    title="Garment colour. Two rows that differ ONLY by colour become options the client can take together (50 black + 50 white), instead of a pick-one choice."
+                    onCommit={(v) => onPatchIdxs(b.idxs, { color: v })} sx={tf} />
                   {/* The number next to the style # is the BLANK COST — always labeled
                       so it's never mistaken for anything else. */}
                   <DecimalField size="small" value={numValOver(b.idxs, 'blankCost')}
@@ -1963,7 +2048,17 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                     </Box>
                   );
                 })}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
+                  {/* Same design, another colour — copies this row at every run
+                      size and reprices it if the colour changes the ink lane.
+                      Rows that differ only by colour let the client take BOTH
+                      (see common/quoteGrid.groupPickMode), which is the whole
+                      point: 50 black + 50 white is one order, not a choice. */}
+                  <IconButton size="small" onClick={() => duplicateRowInColour(b)}
+                    title="Same design, another colour — copy this row at every run size and change the garment colour"
+                    sx={{ color: D.muted, '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+                    <PaletteOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
                   <IconButton size="small" onClick={() => removeRow(b)} title="Remove this option row"
                     sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
                     <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
@@ -2093,11 +2188,44 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
             );
           })}
         </Box>
-        <Button onClick={addRow} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} tabIndex={-1}
-          sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5, mt: 0.75,
-            borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
-          Add option
-        </Button>
+        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mt: 0.75 }}>
+          <Button onClick={addRow} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 15 }} />} tabIndex={-1}
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 700, fontSize: 11.5,
+              borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+            Add option
+          </Button>
+          {/* WHAT THE CLIENT WILL BE ALLOWED TO DO with this design — the single
+              most consequential thing about a group, and it used to be invisible.
+              Rows differing only by colour are colourways the client takes
+              together; anything else is a pick-one choice. Stated here so the
+              owner sees it while building, not after a client takes half an
+              order. The chip toggles the derivation when it reads it wrong. */}
+          {(() => {
+            const groupLines = all.map(i => lines[i]).filter(Boolean);
+            const mode = groupPickMode(groupLines);
+            const derived = groupPickMode(groupLines.map(l => ({ ...l, groupMode: '' })));
+            const pinned = mode !== derived || groupLines.some(l => l && l.groupMode);
+            const any = mode === 'any_of';
+            return (
+              <Box onClick={() => onPatchIdxs(all, { groupMode: any ? 'one_of' : 'any_of' })}
+                role="button" tabIndex={-1}
+                title={any
+                  ? 'The client can take ANY of these together — their quantities add up (50 black + 50 white = 100 pieces). Click to make them a pick-one choice instead.'
+                  : 'The client picks ONE of these — they are alternatives. Click to let them take any combination (use this for colourways of one design).'}
+                sx={{ cursor: 'pointer', px: 1.1, py: 0.4, borderRadius: 999, userSelect: 'none',
+                  border: `1px solid ${any ? D.green : D.line}`,
+                  color: any ? D.green : D.muted, fontSize: 10.5, fontWeight: 800,
+                  letterSpacing: 0.3, transition: 'all 0.16s ease',
+                  '&:hover': { borderColor: any ? D.green : 'rgba(255,255,255,0.3)' } }}>
+                {any ? 'CLIENT TAKES ANY — QUANTITIES ADD UP' : 'CLIENT PICKS ONE'}
+                {pinned ? ' · pinned' : ''}
+              </Box>
+            );
+          })()}
+        </Stack>
+        {colourNote && (
+          <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.6, lineHeight: 1.45 }}>{colourNote}</Typography>
+        )}
       </Box>
 
       {/* One markup strip for the whole design: each cell gets the markup applied
