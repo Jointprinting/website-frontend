@@ -235,10 +235,16 @@ describe('template registry', () => {
       expect(screen.queryByText(/See the work/i)).toBeNull();
     });
 
-    test('the six named pieces are seeded, with no photos guessed for them', () => {
+    test('every named piece is seeded, with no photos guessed for them', () => {
       const works = todd().seedData.works;
-      expect(works.map((w) => w.title)).toEqual(['SC 265', 'SC 262', 'SC 220', 'SC 261', 'SC 230', 'SC 203']);
+      expect(works.map((w) => w.title)).toEqual([
+        'SC 265', 'SC 262', 'SC 220', 'SC 261', 'SC 230', 'SC 203',
+        'SC 271', 'SC 267', 'SC 272', 'SC 273',
+      ]);
       expect(works.find((w) => w.title === 'SC 261').note).toBe('Gold plated');
+      // The later four came with heights; the first six have not yet.
+      expect(works.find((w) => w.title === 'SC 273').note).toContain('H 14¾ in.');
+      expect(works.find((w) => w.title === 'SC 271').note).toContain('Gold plated stainless steel');
       // Every photo empty: the image files are named to match these numbers, so
       // whoever uploads does the pairing. Guessing which photograph is which
       // sculpture is the one mistake this structure exists to prevent.
