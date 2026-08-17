@@ -191,6 +191,13 @@ export const CUSTOM_SITES = [
         { photo: '', title: 'SC 261', note: 'Gold plated', price: '' },
         { photo: '', title: 'SC 230', note: 'Stainless steel', price: '' },
         { photo: '', title: 'SC 203', note: 'Stainless steel', price: '' },
+        // Four more, sent later with heights — so these carry a dimension and
+        // the first six do not, until he reads those out too. His own numbers
+        // and his own wording for the material, kept as given.
+        { photo: '', title: 'SC 271', note: 'Gold plated stainless steel · H 9¾ in.', price: '' },
+        { photo: '', title: 'SC 267', note: 'Stainless steel · H 8½ × 14½ in.', price: '' },
+        { photo: '', title: 'SC 272', note: 'Stainless steel · H 11 in.', price: '' },
+        { photo: '', title: 'SC 273', note: 'Stainless steel · H 14¾ in.', price: '' },
       ],
       paletteId: 'steel',
     },

@@ -146,11 +146,11 @@ const css = (c, hero) => `
    pieces and cut the plinths off the wide ones; on a sculptor's page the
    silhouette IS the work, and a cropped sculpture is a misrepresented one.
    Every photo is CONTAINED, whole, inside a square tile.
-   The tile is a shade darker than his backdrops on purpose: his six whites
-   differ slightly shot to shot, and against a mat each photo reads as a light
-   panel placed on it rather than six near-matches failing to line up.
+   The tile is a shade darker than his backdrops on purpose: his whites differ
+   slightly shot to shot, and against a mat each photo reads as a light panel
+   placed on it rather than a set of near-matches failing to line up.
    Flex, not grid, so any number of pieces centres its last row instead of
-   leaving a hole — he may send a seventh or sell one at any time. */
+   leaving a hole — he sends more or sells one at any time. */
 .jpwtr-gal{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(16px,2.6vw,32px);}
 .jpwtr-work{flex:0 1 clamp(220px,30%,340px);min-width:0;margin:0;display:flex;flex-direction:column;}
 /* No drawn border: the mat is a step DARKER than the tile's surroundings, so a
