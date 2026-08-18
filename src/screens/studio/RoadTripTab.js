@@ -415,6 +415,8 @@ export default function RoadTripTab({ token, onNavigate }) {
     return !prev;
   });
   const [chainCount, setChainCount] = React.useState(0); // hidden-MSO count for the current view
+  const [loadError, setLoadError] = React.useState('');   // sticky, so a failed load can't read as empty ground
+  const loadSeqRef = React.useRef(0);                     // last-writer-wins on overlapping area loads
   const [heatmapOn, setHeatmapOn] = React.useState(false);
 
   // MISSION LOG — archived days (server FieldRun history) + the replay layer.
@@ -761,10 +763,17 @@ export default function RoadTripTab({ token, onNavigate }) {
         segments: segmentsOn.join(','),
         ...(chainsOn ? { chains: 'true' } : {}),
       });
+      const seq = ++loadSeqRef.current;
       const r = await axios.get(`${api}/api/roadtrip/dispensaries?${params}`, authHdr);
+      // A newer load started while this one was in flight — drop it. Without
+      // this, toggling CHAINS and panning at the same time races: the older
+      // response can land last and overwrite the newer pins, so the clicker
+      // silently appears not to work.
+      if (seq !== loadSeqRef.current) return;
       const rows = r.data?.results || [];
       setDisps(rows);
       setChainCount(r.data?.chainCount || 0);
+      setLoadError('');
       // A search-picked dispensary lands here after the fly-to: open its popup.
       const pending = pendingPopupRef.current;
       if (pending && rows.some((d) => String(d._id) === pending.id)) {
@@ -773,6 +782,12 @@ export default function RoadTripTab({ token, onNavigate }) {
         setTimeout(() => openDispPopupRef.current(pending.id, pending.coords), 60);
       }
     } catch (err) {
+      // A toast that disappears after 2.6 seconds and leaves the map looking
+      // empty is indistinguishable from "there are no dispensaries here" —
+      // which is exactly how a failed fetch got read as a sparse market. The
+      // error has to persist next to the thing it invalidated, and it has to
+      // offer the retry.
+      setLoadError(err?.response?.data?.message || err?.message || 'Area load failed.');
       showToast(err?.response?.data?.message || 'Area load failed.', 'error');
     } finally {
       setLoadingArea(false);
@@ -803,7 +818,11 @@ export default function RoadTripTab({ token, onNavigate }) {
       const r = await axios.post(`${api}/api/roadtrip/dispensaries/scan-osm`, {
         minLat: b.getSouth(), maxLat: b.getNorth(),
         minLng: b.getWest(), maxLng: b.getEast(),
-      }, authHdr);
+        // A hung request would otherwise never reach the finally, leaving
+        // scanBusyRef stuck true for the session: every later scan returns
+        // early, the coverage readout freezes at whatever it last said, and the
+        // "scanning" dot pulses forever — a wedged state that reads as healthy.
+      }, { ...authHdr, timeout: 25000 });
       if (r.data?.coverage) setCoverage(r.data.coverage);
       // The state under the viewport had no license roster yet — the server just
       // kicked its ingest ("hovering Cleveland, zero OH rows" heals itself).
@@ -2645,7 +2664,25 @@ export default function RoadTripTab({ token, onNavigate }) {
               chip inside a panel that sits behind the TODAY overlay on a phone,
               which is exactly where this was read as "Las Vegas is empty".
               Tapping it is the fix, so the banner IS the button. */}
-          {!zoomedOut && !chainsOn && chainCount > 0 && chainCount >= visibleDisps.length && (
+          {/* A failed load must not look like empty ground. Sticky until a load
+              succeeds, and tapping it retries — the same call the pan does. */}
+          {loadError && (
+            <Box
+              onClick={() => { setLoadError(''); loadAreaRef.current(); }}
+              sx={{
+                position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 3, bgcolor: 'rgba(5,8,10,0.94)', border: `1px solid ${TERM.red}`,
+                color: TERM.red, px: 2, py: 0.75, borderRadius: 0.5, cursor: 'pointer',
+                fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5,
+                textAlign: 'center', maxWidth: 'calc(100% - 24px)',
+                '&:hover': { bgcolor: 'rgba(248,113,113,0.14)' },
+              }}
+            >
+              COULDN'T LOAD THIS AREA — TAP TO RETRY
+            </Box>
+          )}
+
+          {!zoomedOut && !loadError && !chainsOn && chainCount > 0 && chainCount >= visibleDisps.length && (
             <Box
               onClick={toggleChains}
               sx={{
