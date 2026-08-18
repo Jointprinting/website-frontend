@@ -898,9 +898,31 @@ export default function ApprovalView() {
                 {shown.map(({ m, views }, i) => (
                   <Box key={i}>
                     {(m.name || m.mockupNum) && (
-                      <Typography sx={{ color: T.muted, fontSize: 12, fontWeight: 700, mb: 0.6 }}>
-                        {clientDesignName(m.name) || 'Design'}{m.mockupNum ? <Box component="span" sx={{ ...mono, color: T.faint, fontWeight: 600, ml: 0.75 }}>{displayMockupNum(m.mockupNum)}</Box> : null}
-                      </Typography>
+                      <Stack direction="row" alignItems="center" gap={0.75} sx={{ mb: 0.6 }} flexWrap="wrap">
+                        <Typography sx={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>
+                          {clientDesignName(m.name) || 'Design'}
+                        </Typography>
+                        {/* WHICH COLOUR this proof is. Four colourways of one
+                            design used to arrive as four tiles captioned with the
+                            same name, the letter in the number the only thing
+                            telling them apart — and only the owner knows what a
+                            letter means. */}
+                        {m.colorway && m.colorway.name && (
+                          <Stack direction="row" alignItems="center" gap={0.4}
+                            sx={{ px: 0.7, py: 0.2, borderRadius: 999, border: `1px solid ${T.line}`, bgcolor: T.inset }}>
+                            {m.colorway.hex && (
+                              <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: m.colorway.hex,
+                                border: '1px solid rgba(255,255,255,0.35)' }} />
+                            )}
+                            <Typography sx={{ color: T.text, fontSize: 10.5, fontWeight: 700 }}>{m.colorway.name}</Typography>
+                          </Stack>
+                        )}
+                        {m.mockupNum && (
+                          <Typography component="span" sx={{ ...mono, color: T.faint, fontSize: 12, fontWeight: 600 }}>
+                            {displayMockupNum(m.mockupNum)}
+                          </Typography>
+                        )}
+                      </Stack>
                     )}
                     {/* Dense wrap row of small thumbnails — a whole design collapses
                         from two big columns to one short strip. */}
