@@ -29,7 +29,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
-import { detectGridRows, groupPickModes } from '../common/quoteGrid';
+import { detectGridRows } from '../common/quoteGrid';
+import { validateSplit, tierLineFor, minRunFor, runLines, splitTotal } from '../common/colorSplit';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
@@ -207,6 +208,9 @@ export default function ApprovalView() {
   const [changesText, setChangesText] = useState('');
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
   const [picks, setPicks] = useState({});           // group label -> quote line index
+  // Colour runs: group label -> { colourName: typed quantity }. Held as the raw
+  // string so a half-typed "1" on the way to "150" doesn't fight the input.
+  const [alloc, setAlloc] = useState({});
   const [pickBusy, setPickBusy] = useState(false);
   const [payMethod, setPayMethod] = useState('');   // '' | 'cc' | 'ach' — client's payment choice
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
@@ -241,6 +245,24 @@ export default function ApprovalView() {
   // Derived from the server's approvalStatus so reopening the link shows the
   // same locked state for the client every time.
   const p = data?.project || {};
+
+  // Seed the colour allocation from whatever the client already committed, so
+  // re-opening the link (or reopening the picker to change their mind) shows
+  // their numbers rather than an empty grid. Keyed on the saved split, which the
+  // server writes onto the tier line their total landed on.
+  useEffect(() => {
+    const lines = (data?.project?.quoteLines) || [];
+    const seeded = {};
+    for (const l of lines) {
+      const split = (l && l.colorSplit) || [];
+      if (!l.group || !split.length) continue;
+      seeded[l.group] = split.reduce((m, c) => {
+        if (c && c.name && Number(c.qty) > 0) m[c.name] = String(Number(c.qty));
+        return m;
+      }, {});
+    }
+    if (Object.keys(seeded).length) setAlloc(prev => ({ ...seeded, ...prev }));
+  }, [data]);
   const approvalStatus = p.approvalStatus || 'pending';   // 'pending' | 'approved' | 'requested_changes'
   // PAID — the admin ticked the order_paid tracking step. From here the page
   // leads with the tracking timeline: the "invoice is coming" notice retires,
@@ -482,46 +504,80 @@ export default function ApprovalView() {
         : `Please approve ${when} — ${noun.toLowerCase()} is held for you until then.` };
   })();
 
-  // How many options each group allows — the SHARED rule, mirrored server-side
-  // in utils/quoteGroups and enforced there on submit. `one_of` groups are
-  // alternatives (brands, print variants). `any_of` groups are colourways: "50
-  // black AND 50 white of the same design" is two runs the client wants both of,
-  // and capping that at one is what left a client's second 50 unsellable.
-  const pickModes = groupPickModes(quoteLines);
-  const isAnyOf = (g) => pickModes[g] === 'any_of';
-
-  // Current selection for a group, ALWAYS as an array of line indexes (empty =
-  // skipped). A one_of group simply never holds more than one. Explicit picks
-  // state wins ([] = the client deselected/skipped it); otherwise fall back to
-  // the server-accepted lines so a re-pick opens on what they had.
-  const pickedIdxs = (g) => {
-    if (Object.prototype.hasOwnProperty.call(picks, g)) return picks[g] || [];
-    const acc = [];
-    quoteLines.forEach((l, i) => { if (l.group === g && l.accepted) acc.push(i); });
-    return isAnyOf(g) ? acc : acc.slice(0, 1);
+  // Which RUNS are sold by colour. A run is one print job (one ink); the client
+  // types a quantity per garment colour under it and those quantities ADD UP,
+  // with the total selecting the price tier. Runs with different ink are
+  // separate and never combine — that is the owner's rule, and it is why the
+  // colours live inside a run rather than being options beside it.
+  //
+  // Everything without colorOptions keeps the historical behaviour exactly:
+  // one option per group, one fixed quantity.
+  const colorRunFor = (g) => {
+    const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
+    const withColours = entries.filter(l => (l.colorOptions || []).length);
+    if (!withColours.length) return null;
+    const first = withColours[0];
+    const tiers = runLines(entries, first).sort((a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0));
+    return { first, tiers, options: first.colorOptions || [] };
   };
-  const isPicked = (g, idx) => pickedIdxs(g).includes(idx);
-  // Toggle. In a one_of group, clicking another option MOVES the pick and
-  // clicking the lit one skips the group. In an any_of group each option is
-  // independent — clients are never required to take a whole group.
+
+  // The client's typed allocation per group: { group: { colourName: qty } }.
+  const allocFor = (g) => alloc[g] || {};
+  const setAllocQty = (g, name, raw) => {
+    const v = String(raw ?? '').replace(/[^0-9]/g, '');
+    setAlloc(prev => ({ ...prev, [g]: { ...(prev[g] || {}), [name]: v } }));
+  };
+  // Resolve one colour run to live money: what they allocated, which tier that
+  // reaches, and what it costs. The SAME rules the server re-derives on submit.
+  const runState = (g) => {
+    const run = colorRunFor(g);
+    if (!run) return null;
+    const typed = Object.entries(allocFor(g))
+      .map(([name, qty]) => ({ name, qty: Number(qty) || 0 }))
+      .filter(c => c.qty > 0);
+    const check = validateSplit(run.options, typed, run.tiers);
+    const total = check.total || splitTotal(typed);
+    const tier = total > 0 ? tierLineFor(run.tiers, total) : null;
+    const unit = tier ? (Number(tier.unitPrice) || 0) : 0;
+    return { ...run, typed, check, total, tier, unit, lineTotal: unit * total, min: minRunFor(run.tiers) };
+  };
+
+  // Current selection for a NON-colour group. Explicit picks state wins (null =
+  // the client deselected/skipped it); otherwise fall back to any server-accepted
+  // line so a re-pick opens on what they had. undefined = nothing chosen.
+  const pickFor = (g) => {
+    if (Object.prototype.hasOwnProperty.call(picks, g)) return picks[g] == null ? undefined : picks[g];
+    const acc = quoteLines.findIndex(l => l.group === g && l.accepted);
+    return acc >= 0 ? acc : undefined;
+  };
+  // Toggle: click the selected option again to skip the whole group. Clients are
+  // NOT required to pick every group — pitch 10, keep the 5 you want.
   const togglePick = (g, idx) => setPicks(prev => {
-    const cur = Object.prototype.hasOwnProperty.call(prev, g) ? (prev[g] || []) : pickedIdxs(g);
-    if (isAnyOf(g)) {
-      const next = cur.includes(idx) ? cur.filter(i => i !== idx) : [...cur, idx];
-      return { ...prev, [g]: next.sort((a, b) => a - b) };
-    }
-    return { ...prev, [g]: cur.includes(idx) ? [] : [idx] };
+    const has = Object.prototype.hasOwnProperty.call(prev, g);
+    const cur = has ? prev[g] : (() => { const a = quoteLines.findIndex(l => l.group === g && l.accepted); return a >= 0 ? a : null; })();
+    return { ...prev, [g]: cur === idx ? null : idx };
   });
-  const allPickedIdxs = groupNames.flatMap(g => pickedIdxs(g));
-  const pickedGroupCount = groupNames.filter(g => pickedIdxs(g).length > 0).length;
+
+  // A group counts as chosen when its colour run has a VALID allocation, or
+  // (for a plain group) when an option is picked.
+  const groupChosen = (g) => (colorRunFor(g) ? !!(runState(g) || {}).check?.ok : pickFor(g) !== undefined);
+  const pickedGroupCount = groupNames.filter(groupChosen).length;
   // Ready to continue when they've kept at least one option — or the quote
   // carries standalone lines that are always part of the order.
   const canSubmitPicks = pickedGroupCount > 0 || standaloneLines.length > 0;
+  // Any allocation that is started but not yet valid blocks submit, so a client
+  // never sends 20 pieces of a 50-minimum run and gets a bare rejection.
+  const allocError = groupNames.map(g => {
+    const st = colorRunFor(g) ? runState(g) : null;
+    return st && st.total > 0 && !st.check.ok ? st.check.message : '';
+  }).find(Boolean) || '';
   // Live total of what they've kept so far (chosen options + standalone lines).
-  // An any_of group contributes EVERY option taken, so a 50-black + 50-white
-  // pick reads as the full 100-piece order rather than half of it.
   const selectionTotal =
-    allPickedIdxs.reduce((s, idx) => {
+    groupNames.reduce((s, g) => {
+      const st = colorRunFor(g) ? runState(g) : null;
+      if (st) return s + (st.check.ok ? st.lineTotal : 0);
+      const idx = pickFor(g);
+      if (idx === undefined) return s;
       const l = quoteLines[idx] || {};
       return s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
     }, 0) +
@@ -529,14 +585,26 @@ export default function ApprovalView() {
 
   const submitPicks = async () => {
     if (isPreview) { alert("Preview only — this is exactly what your client sees. Picks work on the real link, not in preview."); return; }
-    if (!canSubmitPicks) return;
+    if (!canSubmitPicks || allocError) return;
     setPickBusy(true);
     try {
       // Picks post the line's stable id (lid) when the server provided one —
       // ids survive owner-side edits/reorders between pushes, indexes don't.
       // Index fallback keeps very old payloads working.
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`,
-        { picks: allPickedIdxs.map(i => (quoteLines[i] && quoteLines[i].lid) || i) });
+      // A colour run posts { lid, colors } — the lid only says WHICH run; the
+      // server resolves the tier from what they allocated, exactly as the page
+      // just showed them. A plain group posts its line id as before.
+      const payload = [];
+      for (const g of groupNames) {
+        const st = colorRunFor(g) ? runState(g) : null;
+        if (st) {
+          if (st.check.ok) payload.push({ lid: st.first.lid || st.first.idx, colors: st.check.split });
+          continue;
+        }
+        const idx = pickFor(g);
+        if (idx !== undefined) payload.push((quoteLines[idx] && quoteLines[idx].lid) || idx);
+      }
+      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`, { picks: payload });
       setRepicking(false);
       await refresh();
     } catch (e) {
@@ -877,35 +945,152 @@ export default function ApprovalView() {
               </Box>
             </Typography>
             {groupNames.map((g, gi) => {
-              const gPicked = pickedIdxs(g);
-              const gAny = isAnyOf(g);
-              // An any_of group is a set of colourways of one design. Say so
-              // plainly — "pick one" on a colour set is exactly the instruction
-              // that made a client take 50 shirts when they wanted 100.
-              const gUnits = gPicked.reduce((s, i) => s + (Number(quoteLines[i]?.qty) || 0), 0);
+              const run = colorRunFor(g);
+              const st = run ? runState(g) : null;
+              const chosen = groupChosen(g);
               return (
               <Box key={g} sx={{ mb: 3.5 }}>
                 <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }} flexWrap="wrap">
                   <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, ...mono,
-                    color: gPicked.length ? T.onAccent : T.green,
-                    bgcolor: gPicked.length ? T.green : 'transparent',
+                    color: chosen ? T.onAccent : T.green,
+                    bgcolor: chosen ? T.green : 'transparent',
                     border: `2px solid ${T.green}`, transition: 'all 180ms ease' }}>
-                    {gPicked.length ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
+                    {chosen ? <CheckIcon sx={{ fontSize: 15 }} /> : gi + 1}
                   </Box>
                   <Typography sx={{ fontWeight: 800, fontSize: 17 }}>{g}</Typography>
                   <Box component="span" sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>
-                    {gAny ? 'Take any — colours add up' : 'Pick one'} · optional
+                    {run ? 'Choose your colours' : 'Pick one'} · optional
                   </Box>
-                  {/* Running units for a colour set, so "50 black + 50 white"
-                      reads as the 100 pieces it is while they're choosing. */}
-                  {gAny && gUnits > 0 && (
-                    <Box component="span" sx={{ ...mono, fontSize: 11, fontWeight: 800, color: T.green,
-                      px: 1, py: 0.3, borderRadius: 999, border: `1px solid ${T.lineHi}` }}>
-                      {gUnits} units selected
-                    </Box>
-                  )}
                 </Stack>
+                {/* ── A COLOUR RUN ────────────────────────────────────────────
+                    One print job, sold in whichever garment colours the owner
+                    offered. The client types a quantity per colour; those add up
+                    and the TOTAL selects the price break. This is what replaced
+                    fixed quantity chips — a client wanting three colours at 150
+                    each could not express 450 by picking from 50/100/150. */}
+                {run ? (() => {
+                  const cheapest = st.tiers[st.tiers.length - 1];
+                  return (
+                  <Box sx={{ p: { xs: 1.75, sm: 2.25 }, borderRadius: 2.5, border: `1.5px solid ${st.check.ok ? T.green : T.line}`,
+                    bgcolor: st.check.ok ? T.panelHi : T.inset, transition: 'border-color 180ms ease, background 180ms ease' }}>
+                    <Stack direction="row" gap={2} alignItems="flex-start" flexWrap="wrap" sx={{ mb: 1.5 }}>
+                      {st.first.image && (
+                        <ZoomImg src={st.first.image} onZoom={openLightbox} badge={false}
+                          sx={{ width: 92, height: 92, objectFit: 'cover', borderRadius: 2,
+                            border: `1px solid ${T.line}`, bgcolor: T.inset, flexShrink: 0 }} />
+                      )}
+                      <Box sx={{ flex: '1 1 200px', minWidth: 180 }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: 15.5, lineHeight: 1.3 }}>
+                          {[st.first.description, st.first.styleCode && `(${st.first.styleCode})`].filter(Boolean).join(' ') || 'Option'}
+                        </Typography>
+                        {[st.first.printType, st.first.printDetails].filter(Boolean).length > 0 && (
+                          <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.3 }}>
+                            {[st.first.printType, st.first.printDetails].filter(Boolean).join(' · ')}
+                          </Typography>
+                        )}
+                        {/* The price BREAKS, as information rather than buttons —
+                            the client reaches one by typing quantities, so the
+                            better price is something they can aim at. */}
+                        <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mt: 0.9 }}>
+                          {st.tiers.map((t) => {
+                            const hit = st.tier && Number(st.tier.qty) === Number(t.qty);
+                            return (
+                              <Box key={t.qty} sx={{ px: 0.9, py: 0.35, borderRadius: 999, ...mono, fontSize: 11, fontWeight: 800,
+                                border: `1px solid ${hit ? T.green : T.line}`,
+                                color: hit ? T.green : T.muted, bgcolor: hit ? T.glow : 'transparent' }}>
+                                {t.qty}+ · {money(Number(t.unitPrice) || 0)}/ea
+                              </Box>
+                            );
+                          })}
+                        </Stack>
+                        {st.first.productUrl && (
+                          <Typography component="a" href={st.first.productUrl} target="_blank" rel="noopener noreferrer"
+                            sx={{ display: 'inline-block', mt: 0.7, color: T.green, fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                              '&:hover': { textDecoration: 'underline' } }}>
+                            View product details ↗
+                          </Typography>
+                        )}
+                      </Box>
+                    </Stack>
+
+                    <Typography sx={{ ...eyebrow, color: T.faint, mb: 1 }}>
+                      How many of each colour?
+                    </Typography>
+                    <Box sx={{ display: 'grid', gap: 1,
+                      gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(132px, 1fr))', sm: 'repeat(auto-fill, minmax(148px, 1fr))' } }}>
+                      {st.options.map((c) => {
+                        const val = allocFor(g)[c.name] ?? '';
+                        const on = Number(val) > 0;
+                        return (
+                          <Box key={c.name || c.code} sx={{ display: 'flex', alignItems: 'center', gap: 1,
+                            p: 0.85, borderRadius: 2, border: `1.5px solid ${on ? T.green : T.line}`,
+                            bgcolor: on ? T.panelHi : T.panel, transition: 'border-color 160ms ease' }}>
+                            {/* The swatch is the S&S colour, so what they pick is
+                                a real garment the owner confirmed was in stock. */}
+                            <Box sx={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                              bgcolor: c.hex || 'rgba(255,255,255,0.15)',
+                              border: '1px solid rgba(255,255,255,0.35)',
+                              backgroundImage: c.image ? `url(${c.image})` : 'none',
+                              backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <Typography sx={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.2,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</Typography>
+                              <Box component="input" type="text" inputMode="numeric" pattern="[0-9]*"
+                                value={val} placeholder="0"
+                                aria-label={`Quantity of ${c.name}`}
+                                onChange={(e) => setAllocQty(g, c.name, e.target.value)}
+                                sx={{ width: '100%', mt: 0.25, background: 'transparent', border: 'none', outline: 'none',
+                                  color: on ? T.green : T.text, fontSize: 15, fontWeight: 800, ...mono,
+                                  '&::placeholder': { color: T.faint, fontWeight: 600 } }} />
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+
+                    {/* The running answer: units, the break they've reached, and
+                        what it costs — updating as they type, so the trade-off
+                        between "a few more" and a better price is visible. */}
+                    <Stack direction="row" alignItems="baseline" gap={1} flexWrap="wrap"
+                      sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${T.line}` }}>
+                      <Typography sx={{ ...mono, fontSize: 15, fontWeight: 900, color: st.total > 0 ? T.text : T.faint }}>
+                        {st.total} {st.total === 1 ? 'piece' : 'pieces'}
+                      </Typography>
+                      {st.tier && (
+                        <Typography sx={{ ...mono, fontSize: 13, color: T.muted }}>
+                          at {money(st.unit)}/ea
+                        </Typography>
+                      )}
+                      <Box sx={{ flex: 1 }} />
+                      {st.check.ok && (
+                        <Typography sx={{ ...mono, fontSize: 17, fontWeight: 900, color: T.green }}>
+                          {money(st.lineTotal)}
+                        </Typography>
+                      )}
+                    </Stack>
+                    {/* Never a bare rejection: below the minimum it says how many
+                        more, and short of the next break it says what that saves. */}
+                    {st.total > 0 && !st.check.ok && (
+                      <Typography sx={{ color: T.amber, fontSize: 12.5, mt: 0.75, fontWeight: 600 }}>
+                        {st.check.message}
+                      </Typography>
+                    )}
+                    {st.check.ok && cheapest && st.tier && Number(st.tier.qty) < Number(cheapest.qty) && (() => {
+                      const next = st.tiers.find(t => Number(t.qty) > st.total);
+                      if (!next) return null;
+                      const save = (st.unit - (Number(next.unitPrice) || 0)) * Number(next.qty);
+                      return save > 0 ? (
+                        <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.75 }}>
+                          {Number(next.qty) - st.total} more pieces reaches {money(Number(next.unitPrice) || 0)}/ea
+                          {' '}— {money(next.qty * (Number(next.unitPrice) || 0))} for {next.qty}.
+                        </Typography>
+                      ) : null;
+                    })()}
+                  </Box>
+                  );
+                })() : null}
+                {run ? null : (<>
                 {(() => {
                   const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
                   const gridQ = detectGridRows(entries);
@@ -921,7 +1106,7 @@ export default function ApprovalView() {
                         const rDesc = [f.description, f.styleCode && `(${f.styleCode})`, f.color].filter(Boolean).join(' ');
                         const rDetail = [f.printType, f.printDetails].filter(Boolean).join(' · ');
                         const rWeeks = Number(f.turnaroundWeeks) || 0;
-                        const rowSel = row.some(c => isPicked(g, c.idx));
+                        const rowSel = row.some(c => pickFor(g) === c.idx);
                         return (
                           <Box key={`${f.idx}`} sx={{ p: { xs: 1.5, sm: 1.75 }, borderRadius: 2.5,
                             border: `1.5px solid ${rowSel ? T.green : T.line}`, bgcolor: rowSel ? T.panelHi : T.inset,
@@ -953,7 +1138,7 @@ export default function ApprovalView() {
                             </Box>
                             <Stack direction="row" gap={1} flexWrap="wrap">
                               {row.map((cell) => {
-                                const sel = isPicked(g, cell.idx);
+                                const sel = pickFor(g) === cell.idx;
                                 const cUnit = Number(cell.unitPrice) || 0;
                                 const cQty = Number(cell.qty) || 0;
                                 return (
@@ -989,7 +1174,7 @@ export default function ApprovalView() {
                   return (
                 <Stack gap={1.25}>
                   {entries.map((l) => {
-                    const sel = isPicked(g, l.idx);
+                    const sel = pickFor(g) === l.idx;
                     const unit = Number(l.unitPrice) || 0;
                     const desc = [l.description, l.styleCode && `(${l.styleCode})`, l.color].filter(Boolean).join(' ');
                     const detail = [l.printType, l.printDetails].filter(Boolean).join(' · ');
@@ -1005,12 +1190,7 @@ export default function ApprovalView() {
                           transition: 'border-color 180ms ease, background 180ms ease, box-shadow 220ms ease, transform 160ms ease',
                           '&:hover': { borderColor: sel ? T.green : 'rgba(255,255,255,0.22)', transform: 'translateY(-1px)' },
                           '&:focus-visible': { outline: `2px solid ${T.green}`, outlineOffset: 2 } }}>
-                        {/* A colour set is multi-select, so it wears a CHECKBOX;
-                            alternatives keep the radio circle. The shape is the
-                            only cue a client gets that they may take both — the
-                            round "pick one" affordance is what made a client
-                            stop at 50 shirts when they wanted 100. */}
-                        <Box sx={{ width: 26, height: 26, borderRadius: gAny ? 1.4 : '50%', flexShrink: 0, display: 'flex',
+                        <Box sx={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex',
                           alignItems: 'center', justifyContent: 'center',
                           bgcolor: sel ? T.green : 'transparent', border: `2px solid ${sel ? T.green : 'rgba(255,255,255,0.25)'}`,
                           transition: 'all 160ms ease' }}>
@@ -1063,6 +1243,7 @@ export default function ApprovalView() {
                 </Stack>
                   );
                 })()}
+                </>)}
               </Box>
               );
             })}
@@ -1110,12 +1291,20 @@ export default function ApprovalView() {
               </Box>
             </Box>
             {lockedNote && <LockedNote text={lockedNote} T={T} />}
+            {/* A started-but-invalid allocation blocks here with the reason, so a
+                client never submits 20 pieces of a 50-minimum run and gets a
+                bare rejection back from the server. */}
+            {allocError && (
+              <Typography sx={{ color: T.amber, fontSize: 13, fontWeight: 600, mt: 1 }}>{allocError}</Typography>
+            )}
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mt: 1 }}>
-              <Button fullWidth disabled={pickBusy || !canSubmitPicks} onClick={submitPicks}
-                endIcon={!pickBusy && canSubmitPicks ? <ArrowForwardIcon /> : null}
+              <Button fullWidth disabled={pickBusy || !canSubmitPicks || !!allocError} onClick={submitPicks}
+                endIcon={!pickBusy && canSubmitPicks && !allocError ? <ArrowForwardIcon /> : null}
                 sx={{ ...primaryBtn, flex: 2 }}>
                 {pickBusy ? <CircularProgress size={18} sx={{ color: T.onAccent }} />
-                  : canSubmitPicks ? (hasGroups ? 'Continue to review' : 'Accept & continue') : 'Tap the options you want'}
+                  : allocError ? 'Adjust your quantities'
+                  : canSubmitPicks ? (hasGroups ? 'Continue to review' : 'Accept & continue')
+                  : (groupNames.some(colorRunFor) ? 'Enter your quantities' : 'Tap the options you want')}
               </Button>
               <Button fullWidth onClick={() => setChangesOpen(true)} disabled={pickBusy} sx={{ ...ghostBtn, flex: 1 }}>
                 Ask a question

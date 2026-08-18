@@ -42,6 +42,7 @@ import CloseIcon               from '@mui/icons-material/Close';
 import AddCircleOutlineIcon    from '@mui/icons-material/AddCircleOutline';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import PaletteOutlinedIcon    from '@mui/icons-material/PaletteOutlined';
+import ColorLensOutlinedIcon from '@mui/icons-material/ColorLensOutlined';
 import ImageOutlinedIcon       from '@mui/icons-material/ImageOutlined';
 import KeyboardArrowUpIcon     from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon   from '@mui/icons-material/KeyboardArrowDown';
@@ -58,7 +59,7 @@ import {
 } from './_shared';
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
-import { quoteRowKey, detectGridRows, groupPickMode } from '../../common/quoteGrid';
+import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
 import { shadeChangeFor } from '../../common/garmentShade';
 import { stateDistanceMi } from './_roadTrip';
@@ -796,7 +797,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
         ) : (
           <Stack gap={2}>
             {blocks.map((b, bi) => b.type === 'grid' ? (
-              <DesignGridCard key={`grid-${b.grid.group}`} grid={b.grid} lines={lines}
+              <DesignGridCard key={`grid-${b.grid.group}`} grid={b.grid} lines={lines} authHdr={authHdr}
                 printers={printers} shipToState={shipToState}
                 accent={accentFor(b.grid.group)}
                 onPatchIdxs={patchIdxs}
@@ -1210,11 +1211,140 @@ function SupplierLink({ line, onPatch, tf, sx }) {
 //   • a cell's unit price → that one line
 //   • the tier strip → per-cell price at each cell's OWN cost (so every
 //     option/quantity prices correctly from one click)
-function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
+// WHICH GARMENT COLOURS THIS RUN IS SOLD IN.
+//
+// A run is one print job. The client picks colours from THIS list and types a
+// quantity against each; those quantities add up and their total selects the
+// price break. So the list is the offer, and it has to be true: every colour is
+// pulled live from S&S for the row's style, with its real swatch, its garment
+// photo and its stock, and anything S&S has nothing on hand for is refused here
+// rather than discovered after the client has ordered it.
+//
+// It SNAPSHOTS onto the quote lines. The client's approval page never calls S&S
+// — an approval link must not depend on a live vendor API, and supplier data
+// must never ride out to a public route.
+function ColorRangeDialog({ open, styleCode, chosen, onClose, onApply, authHdr }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [colors, setColors] = useState(null);
+  const [sel, setSel] = useState(() => new Set((chosen || []).map((c) => c.name)));
+
+  useEffect(() => { setSel(new Set((chosen || []).map((c) => c.name))); }, [chosen, open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    const code = String(styleCode || '').trim();
+    if (!code) { setColors([]); setMsg('Set this option\u2019s style code first \u2014 the colours come from S&S for that style.'); return undefined; }
+    setBusy(true); setMsg('Loading colours from S&S\u2026'); setColors(null);
+    axios.get(`${config.backendUrl}/api/products/ss/finder`, { ...authHdr, params: { style: code } })
+      .then(({ data }) => {
+        if (!live) return;
+        if (data && data.error) { setColors([]); setMsg(`\u2717 ${data.error}`); return; }
+        // A style-code search can be ambiguous; the finder answers with a picker
+        // payload. Say so plainly rather than showing an empty grid.
+        if (data && data.multipleMatches) {
+          setColors([]);
+          setMsg(`"${code}" matches ${(data.matches || []).length} S&S styles \u2014 use the exact style number.`);
+          return;
+        }
+        const list = (data && data.colors) || (data && data.match ? [data.match] : []);
+        setColors(list);
+        setMsg(list.length ? `${(data && data.name) || code} \u00b7 ${list.length} colours` : 'S&S returned no colours for that style.');
+      })
+      .catch((e) => { if (live) { setColors([]); setMsg(`\u2717 ${e.response?.data?.error || e.message}`); } })
+      .finally(() => { if (live) setBusy(false); });
+    return () => { live = false; };
+  }, [open, styleCode, authHdr]);
+
+  // Out of stock is not selectable. UNKNOWN is: S&S not returning readable
+  // inventory is not evidence a blank is missing, and refusing it would quietly
+  // shrink the offer whenever the feed changes shape.
+  const sellable = (c) => !(c.stock && c.stock.known && c.stock.ok === false);
+  const toggle = (c) => {
+    if (!sellable(c)) return;
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(c.color)) n.delete(c.color); else n.add(c.color);
+      return n;
+    });
+  };
+  const apply = () => {
+    const list = (colors || []).filter((c) => sel.has(c.color) && sellable(c)).map((c) => ({
+      name: c.color, code: c.colorCode || '', hex: c.swatch1 || '', image: c.front || '',
+    }));
+    onApply(list);
+    onClose();
+  };
+
+  return (
+    <Dialog open={!!open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, mb: 0.4 }}>
+          Colours this run is sold in
+        </Typography>
+        <Typography sx={{ color: D.faint, fontSize: 11.5, mb: 1.5, lineHeight: 1.5 }}>
+          The client picks from these and types a quantity for each. Their quantities add up, and the
+          total picks the price break \u2014 so one ink across several garment colours is one run.
+          Out-of-stock colours can\u2019t be offered.
+        </Typography>
+        {msg && <Typography sx={{ color: busy ? D.muted : D.faint, fontSize: 11.5, mb: 1 }}>{msg}</Typography>}
+        {busy && <CircularProgress size={18} sx={{ color: D.green, mb: 1 }} />}
+        {colors && colors.length > 0 && (
+          <Box sx={{ display: 'grid', gap: 0.75, maxHeight: 380, overflowY: 'auto', pr: 0.5,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            {colors.map((c) => {
+              const on = sel.has(c.color);
+              const ok = sellable(c);
+              const st = c.stock || {};
+              const note = !st.known ? 'stock unknown'
+                : st.ok === false ? `out \u00b7 short ${(st.shortSizes || []).slice(0, 3).join(', ')}`
+                : `${st.total} on hand`;
+              return (
+                <Box key={c.color} onClick={() => toggle(c)}
+                  title={ok ? c.color : `${c.color} \u2014 S&S has nothing on hand across the size run`}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 0.7, borderRadius: 2,
+                    cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : 0.4,
+                    border: `1.5px solid ${on ? D.green : D.line}`,
+                    bgcolor: on ? 'rgba(74,222,128,0.08)' : D.inset,
+                    transition: 'border-color 0.15s ease, background 0.15s ease' }}>
+                  <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                    bgcolor: c.swatch1 || 'rgba(255,255,255,0.15)',
+                    border: '1px solid rgba(255,255,255,0.35)',
+                    backgroundImage: c.front ? `url(${c.front})` : 'none',
+                    backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ color: D.text, fontSize: 11.5, fontWeight: 700, lineHeight: 1.2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.color}</Typography>
+                    <Typography sx={{ color: st.ok === false ? '#f87171' : D.faint, fontSize: 9.5, ...mono }}>{note}</Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+        <Stack direction="row" gap={1} justifyContent="flex-end" sx={{ mt: 2 }}>
+          <Button onClick={onClose} sx={{ color: D.muted, textTransform: 'none', fontSize: 12.5 }}>Cancel</Button>
+          <Button onClick={apply} disabled={busy}
+            sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 12.5,
+              border: `1px solid ${D.green}`, borderRadius: 999, px: 2,
+              '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
+            {sel.size ? `Offer ${sel.size} colour${sel.size === 1 ? '' : 's'}` : 'Sell in one colour only'}
+          </Button>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authHdr, onPatchIdxs, onRemoveIdxs, onSetLine, onAppendLines, onSwapLines, onEditAsCards, onMoveUp, onMoveDown }) {
   const [openRows, setOpenRows] = useState(() => new Set());   // row cost-drawers (by row POSITION — stable across renames)
   // What the last "another colour" copy did — shown inline under the row actions.
   // Repricing for a shade change is real money moving, so it is stated, never silent.
   const [colourNote, setColourNote] = useState('');
+  // Which row's colour range is being edited (row position, or null).
+  const [rangeRow, setRangeRow] = useState(null);
   // REHYDRATE the spec panel from what was saved on this design (4C). Every cell
   // carries the same printSpec, so seed off the first line. This component is
   // keyed by group, so it remounts per design — a lazy initializer runs once and
@@ -1500,11 +1630,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
   // "Same design, another colour" — duplicate this whole option ROW across every
   // run size, keeping all of its quote info, and change only the garment colour.
   //
-  // This is the job that used to mean re-typing a row: an order of 50 black + 50
-  // white of one design had to be built as two hand-copied rows, and the client
-  // could then only take ONE of them. Both halves are fixed here — the copy is a
-  // button, and rows that differ only by colour derive an `any_of` group so the
-  // client takes both (see common/quoteGrid.groupPickMode).
+  // Use it the way the owner works: duplicate the design and label each copy by
+  // its INK ("black ink", "white ink"). A run is one print job, so two inks are
+  // two rows that never share a price tier — while the garment colours WITHIN
+  // one row are chosen by the client and add up (see the Colours control).
   //
   // The costs are NOT copied blindly. A garment colour implies a print SHADE, and
   // the shade is a real money difference: dark reads the light-ink-on-dark grid
@@ -1850,7 +1979,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
       {/* The matrix: option rows × quantity columns. Every cell is a real
           quote line the client can pick. Horizontal scroll on narrow screens. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
-        <Box sx={{ minWidth: 486 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
+        <Box sx={{ minWidth: 512 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
           gridTemplateColumns: tableCols }}>
 
           {/* Header row: option column title, then one header per quantity */}
@@ -1907,7 +2036,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
                   position: 'sticky', left: 0, zIndex: 1,
                   opacity: bLine.hiddenFromClient ? 0.5 : 1,
-                  gridTemplateColumns: '16px minmax(96px, 1fr) 62px 86px 116px 26px 30px' }}>
+                  gridTemplateColumns: '16px minmax(92px, 1fr) 58px 82px 108px 24px 26px 28px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
@@ -1923,10 +2052,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   <BufferedTF value={bLine.styleCode || ''} placeholder="Style #"
                     onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
                   {/* GARMENT COLOUR — a real field, not a word buried in the
-                      product name. It is what makes two rows read as colourways
-                      of one design rather than rival brands, which is what lets
-                      the client take BOTH on their link (quoteGrid.groupPickMode)
-                      and what drives the shade lane when a row is copied. */}
+                      product name. For a run sold in ONE colour this names it;
+                      for a run the client picks colours from, leave it empty and
+                      set the Colours list instead. It also drives the shade lane
+                      when a row is duplicated. */}
                   <BufferedTF value={bLine.color || ''} placeholder="Colour"
                     title="Garment colour. Two rows that differ ONLY by colour become options the client can take together (50 black + 50 white), instead of a pick-one choice."
                     onCommit={(v) => onPatchIdxs(b.idxs, { color: v })} sx={tf} />
@@ -2049,11 +2178,23 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
                   );
                 })}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
-                  {/* Same design, another colour — copies this row at every run
-                      size and reprices it if the colour changes the ink lane.
-                      Rows that differ only by colour let the client take BOTH
-                      (see common/quoteGrid.groupPickMode), which is the whole
-                      point: 50 black + 50 white is one order, not a choice. */}
+                  {/* The garment colours this run is sold in. With a range set,
+                      the client types a quantity per colour and the TOTAL picks
+                      the price break — which is how one design in three colours
+                      at 150 each becomes a 450-piece run instead of an
+                      un-expressable pick from 50/100/150 chips. */}
+                  <IconButton size="small" onClick={() => setRangeRow(bIdx)}
+                    title={(bLine.colorOptions || []).length
+                      ? `Sold in ${(bLine.colorOptions || []).length} colours — the client picks quantities per colour`
+                      : 'Choose which garment colours the client can order this run in (live from S&S, in-stock only)'}
+                    sx={{ color: (bLine.colorOptions || []).length ? D.green : D.muted, p: 0.3,
+                      '&:hover': { color: D.green } }}>
+                    <ColorLensOutlinedIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                  {/* Duplicate this run — the owner's model: copy the row and
+                      label each by its ink ("black ink" / "white ink"). Two inks
+                      are two runs and never share a tier; the garment colours
+                      inside one run are the client's to allocate. */}
                   <IconButton size="small" onClick={() => duplicateRowInColour(b)}
                     title="Same design, another colour — copy this row at every run size and change the garment colour"
                     sx={{ color: D.muted, '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
@@ -2194,38 +2335,43 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, onPat
               borderRadius: 999, px: 1.5, '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
             Add option
           </Button>
-          {/* WHAT THE CLIENT WILL BE ALLOWED TO DO with this design — the single
-              most consequential thing about a group, and it used to be invisible.
-              Rows differing only by colour are colourways the client takes
-              together; anything else is a pick-one choice. Stated here so the
-              owner sees it while building, not after a client takes half an
-              order. The chip toggles the derivation when it reads it wrong. */}
-          {(() => {
-            const groupLines = all.map(i => lines[i]).filter(Boolean);
-            const mode = groupPickMode(groupLines);
-            const derived = groupPickMode(groupLines.map(l => ({ ...l, groupMode: '' })));
-            const pinned = mode !== derived || groupLines.some(l => l && l.groupMode);
-            const any = mode === 'any_of';
-            return (
-              <Box onClick={() => onPatchIdxs(all, { groupMode: any ? 'one_of' : 'any_of' })}
-                role="button" tabIndex={-1}
-                title={any
-                  ? 'The client can take ANY of these together — their quantities add up (50 black + 50 white = 100 pieces). Click to make them a pick-one choice instead.'
-                  : 'The client picks ONE of these — they are alternatives. Click to let them take any combination (use this for colourways of one design).'}
-                sx={{ cursor: 'pointer', px: 1.1, py: 0.4, borderRadius: 999, userSelect: 'none',
-                  border: `1px solid ${any ? D.green : D.line}`,
-                  color: any ? D.green : D.muted, fontSize: 10.5, fontWeight: 800,
-                  letterSpacing: 0.3, transition: 'all 0.16s ease',
-                  '&:hover': { borderColor: any ? D.green : 'rgba(255,255,255,0.3)' } }}>
-                {any ? 'CLIENT TAKES ANY — QUANTITIES ADD UP' : 'CLIENT PICKS ONE'}
-                {pinned ? ' · pinned' : ''}
-              </Box>
-            );
-          })()}
         </Stack>
         {colourNote && (
           <Typography sx={{ color: D.muted, fontSize: 11, mt: 0.6, lineHeight: 1.45 }}>{colourNote}</Typography>
         )}
+        {/* What the client will be able to order each run in. Stated here because
+            it changes how their page BEHAVES — a run with colours lets them type
+            quantities and reach a better break; one without is a fixed pick. */}
+        {grid.brands.map((b, bIdx) => {
+          const opts = (b.first && b.first.colorOptions) || [];
+          if (!opts.length) return null;
+          return (
+            <Stack key={`cr-${bIdx}`} direction="row" alignItems="center" gap={0.6} flexWrap="wrap" sx={{ mt: 0.6 }}>
+              <Typography sx={{ color: D.faint, fontSize: 10, fontWeight: 700, letterSpacing: 0.3 }}>
+                {b.first.description || `Option ${bIdx + 1}`} · client picks from
+              </Typography>
+              {opts.slice(0, 12).map((c) => (
+                <Box key={c.name} title={c.name} sx={{ width: 13, height: 13, borderRadius: '50%',
+                  bgcolor: c.hex || 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)' }} />
+              ))}
+              <Typography sx={{ color: D.muted, fontSize: 10, ...mono }}>
+                {opts.length} colour{opts.length === 1 ? '' : 's'}
+                {' · '}quantities add up to the price break
+              </Typography>
+            </Stack>
+          );
+        })}
+        <ColorRangeDialog
+          open={rangeRow !== null}
+          authHdr={authHdr}
+          styleCode={rangeRow !== null && grid.brands[rangeRow] ? (grid.brands[rangeRow].first.styleCode || '') : ''}
+          chosen={rangeRow !== null && grid.brands[rangeRow] ? (grid.brands[rangeRow].first.colorOptions || []) : []}
+          onClose={() => setRangeRow(null)}
+          onApply={(list) => {
+            // Onto EVERY run size of the row: the colour range belongs to the
+            // run, not to one break, and the client's total decides the break.
+            if (rangeRow !== null && grid.brands[rangeRow]) onPatchIdxs(grid.brands[rangeRow].idxs, { colorOptions: list });
+          }} />
       </Box>
 
       {/* One markup strip for the whole design: each cell gets the markup applied

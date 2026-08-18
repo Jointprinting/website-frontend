@@ -24,6 +24,7 @@ import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
+import { flatFieldsFor, summarizeType, summarizeDetails, nextPlacement, PRINT_PLACEMENTS, PRINT_METHODS } from './_printLocations';
 import { alertDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { mockupViewList } from '../../common/mockupViews';
@@ -182,10 +183,14 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         // A line's own design wins: its mockup # (explicit link) or uploaded
         // vendor render (items with no mockup number — ashtrays etc.); the
         // positional auto-match is the fallback.
-        const items = chosenQuoteLines(project.quoteLines).map((line, i) =>
-          ({ ...seedItemFromQuote(line, project.printerName),
-             mockupNum: line.mockupNum || matchedNums[i] || '',
-             customMockupDataUrl: line.image || '' }),
+        // flatMap, because a line the client answered with a colour split seeds
+        // one item PER COLOUR — separate things to make, ship and put on a PO.
+        const items = chosenQuoteLines(project.quoteLines).flatMap((line, i) =>
+          seedItemsFromQuote(line, project.printerName).map(it => ({
+            ...it,
+            mockupNum: line.mockupNum || matchedNums[i] || '',
+            customMockupDataUrl: line.image || '',
+          })),
         );
         seed = {
           orderTitle:  `${project.companyName || project.clientName || ''} Merch`.trim(),
@@ -288,11 +293,12 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
   // (drops manual size splits — acceptable for the rare re-pick case).
   const reseedFromPicks = () => {
     const matched = inferMockupNumsFor(project, mockups);
-    const items = chosenQuoteLines(project.quoteLines).map((line, i) => ({
-      ...seedItemFromQuote(line, project.printerName),
-      mockupNum: line.mockupNum || matched[i] || '',
-      customMockupDataUrl: line.image || '',
-    }));
+    const items = chosenQuoteLines(project.quoteLines).flatMap((line, i) =>
+      seedItemsFromQuote(line, project.printerName).map(it => ({
+        ...it,
+        mockupNum: line.mockupNum || matched[i] || '',
+        customMockupDataUrl: line.image || '',
+      })));
     update({ items });
   };
 
@@ -928,6 +934,26 @@ function MultiShipTo({ local, update }) {
 }
 
 function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, shipTos, project, noSpinner }) {
+  // Per-placement decoration for THIS item. Empty for every item that only has
+  // one method — the flat Print type dropdown shows instead, unchanged.
+  const locs = item.printLocations || [];
+  const writeLocs = (next) => {
+    // Keep the flat fields in step as he types, so the preview, the PDF and the
+    // client document agree before the server folds them on save.
+    const real = next.filter(l => l && (l.location || l.method || l.details));
+    onUpdate({ printLocations: next, ...(real.length ? flatFieldsFor(next) : {}) });
+  };
+  const addPrintLocation = () => writeLocs([
+    ...locs,
+    // Seed the first row from whatever single method was already set, so opening
+    // the list never silently drops what he had typed.
+    locs.length === 0 && item.printType
+      ? { location: nextPlacement([]), method: item.printType, details: item.printDetails || '' }
+      : { location: nextPlacement(locs), method: '', details: '' },
+  ]);
+  const setPrintLocation = (i, patch) => writeLocs(locs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const removePrintLocation = (i) => writeLocs(locs.filter((_, j) => j !== i));
+
   const singleFileRef = React.useRef(null);
   const multiFileRef  = React.useRef(null);
   const updateSize = (sIdx, patch) => onUpdate({
@@ -1096,18 +1122,69 @@ function ItemCard({ idx, item, mockups, mockupMap, onUpdate, onRemove, onMove, s
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 0.6, mb: 1 }}>
         <SmallField label="Brand"      value={item.brandName} onChange={v => onUpdate({ brandName: v })} />
         <SmallField label="Style code" value={item.styleCode} onChange={v => onUpdate({ styleCode: v })} />
-        <Box>
-          <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', mb: 0.2 }}>
-            Print type
-          </Typography>
-          <Select size="small" value={item.printType || ''}
-            onChange={e => onUpdate({ printType: e.target.value })}
-            displayEmpty fullWidth
-            sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 12, borderRadius: 2,
-              '& .MuiSelect-icon': { color: D.muted } }}>
-            <MenuItem value=""><em>—</em></MenuItem>
-            {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </Select>
+        {/* PRINT TYPE — one method, or one per PLACEMENT.
+            A garment often carries more than one: a screen-printed front with a
+            DTG back, or a screen front and an embroidered sleeve. The single
+            dropdown could only ever say one of them. Adding a placement switches
+            this item to the per-location list; the flat Print type / details the
+            PDF, PO and client document read are summarized from it on save
+            (utils/printLocations, mirrored in _printLocations.js). */}
+        <Box sx={{ gridColumn: locs.length ? '1 / -1' : 'auto' }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.2 }}>
+            <Typography sx={{ color: D.faint, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              {locs.length ? 'Print by location' : 'Print type'}
+            </Typography>
+            <Typography onClick={addPrintLocation} role="button" tabIndex={-1}
+              title="This garment is decorated in more than one place — or with more than one method (screen front, DTG back)"
+              sx={{ cursor: 'pointer', color: D.green, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3,
+                textTransform: 'uppercase', '&:hover': { textDecoration: 'underline' } }}>
+              + Add print location
+            </Typography>
+          </Stack>
+          {locs.length === 0 ? (
+            <Select size="small" value={item.printType || ''}
+              onChange={e => onUpdate({ printType: e.target.value })}
+              displayEmpty fullWidth
+              sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 12, borderRadius: 2,
+                '& .MuiSelect-icon': { color: D.muted } }}>
+              <MenuItem value=""><em>—</em></MenuItem>
+              {PRINT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </Select>
+          ) : (
+            <Stack gap={0.5}>
+              {locs.map((L, li) => (
+                <Stack key={li} direction="row" gap={0.5} alignItems="center">
+                  <Select size="small" value={L.location || ''} displayEmpty
+                    onChange={e => setPrintLocation(li, { location: e.target.value })}
+                    sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 11.5, borderRadius: 2,
+                      flex: '0 0 108px', '& .MuiSelect-icon': { color: D.muted } }}>
+                    <MenuItem value=""><em>where</em></MenuItem>
+                    {PRINT_PLACEMENTS.map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}
+                  </Select>
+                  <Select size="small" value={L.method || ''} displayEmpty
+                    onChange={e => setPrintLocation(li, { method: e.target.value })}
+                    sx={{ ...dropInput['& .MuiOutlinedInput-root'], color: D.text, fontSize: 11.5, borderRadius: 2,
+                      flex: '0 0 122px', '& .MuiSelect-icon': { color: D.muted } }}>
+                    <MenuItem value=""><em>method</em></MenuItem>
+                    {PRINT_METHODS.map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}
+                  </Select>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <SmallField label="" value={L.details || ''} placeholder="3 color / 12x16 / 8,000 st"
+                      onChange={v => setPrintLocation(li, { details: v })} />
+                  </Box>
+                  <IconButton size="small" onClick={() => removePrintLocation(li)} title="Remove this location"
+                    sx={{ color: D.faint, p: 0.3, '&:hover': { color: '#f87171' } }}>
+                    <CloseIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Stack>
+              ))}
+              {/* Exactly what the PDF, the PO and the client's document will say. */}
+              <Typography sx={{ color: D.muted, fontSize: 10, lineHeight: 1.4, mt: 0.2 }}>
+                Reads as <b>{summarizeType(locs) || '—'}</b>
+                {summarizeDetails(locs) ? ` · ${summarizeDetails(locs)}` : ''}
+              </Typography>
+            </Stack>
+          )}
         </Box>
         <SmallField label="Color"      value={item.color}     onChange={v => onUpdate({ color: v })} />
         <Box sx={{ gridColumn: '1 / -1' }}>
@@ -1366,6 +1443,24 @@ function quoteVariantKey(o) {
 // owner confirms/flips per item, this just gets the default right.
 const APPAREL_RE = /\b(tee|t-?shirts?|shirts?|hoodies?|hoods?|crewnecks?|crews?|sweatshirts?|sweaters?|sweatpants?|joggers?|pants?|shorts?|polos?|long ?sleeves?|tanks?|jackets?|windbreakers?|beanies?|hats?|caps?|socks?|apparel|jerse?ys?|zip[- ]?ups?|pullovers?|fleece)\b/i;
 export function isApparelDescription(s) { return APPAREL_RE.test(String(s || '')); }
+
+// A quote line the client answered with a COLOUR SPLIT seeds ONE ITEM PER
+// COLOUR — the same shape a cleared preorder drop already rolls into (one line
+// per product/colour with the size run under it). The colours were one run for
+// PRICING, but they are separate things to make, ship and put on a PO, so the
+// confirmation lists them separately at the run's unit price.
+//
+// Without a split this returns a single item, exactly as it always did.
+function seedItemsFromQuote(line, projectPrinter) {
+  const split = ((line && line.colorSplit) || []).filter(c => c && Number(c.qty) > 0);
+  if (!split.length) return [seedItemFromQuote(line, projectPrinter)];
+  return split.map((c) => {
+    // Each colour is seeded from the TIER line the client's total reached, so
+    // every colour bills at the price their combined run actually earned.
+    const it = seedItemFromQuote({ ...line, qty: Number(c.qty) || 0, color: c.name || '' }, projectPrinter);
+    return { ...it, color: c.name || '' };
+  });
+}
 
 function seedItemFromQuote(line, projectPrinter) {
   const description = line.description || '';
