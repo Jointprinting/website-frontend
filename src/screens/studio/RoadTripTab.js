@@ -2638,6 +2638,29 @@ export default function RoadTripTab({ token, onNavigate }) {
             </Box>
           )}
 
+          {/* When the CHAINS filter is hiding MORE stores than it is showing, a
+              sparse map is not information about the ground — it is information
+              about a filter, and the map has to say so where the map is. The
+              audience panel already prints "+N hidden here", but it is a 9px
+              chip inside a panel that sits behind the TODAY overlay on a phone,
+              which is exactly where this was read as "Las Vegas is empty".
+              Tapping it is the fix, so the banner IS the button. */}
+          {!zoomedOut && !chainsOn && chainCount > 0 && chainCount >= visibleDisps.length && (
+            <Box
+              onClick={toggleChains}
+              sx={{
+                position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 2, bgcolor: 'rgba(5,8,10,0.94)', border: `1px solid ${CHAINS_CLICKER.color}`,
+                color: CHAINS_CLICKER.color, px: 2, py: 0.75, borderRadius: 0.5, cursor: 'pointer',
+                fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5,
+                textAlign: 'center', maxWidth: 'calc(100% - 24px)',
+                '&:hover': { bgcolor: `${CHAINS_CLICKER.color}22` },
+              }}
+            >
+              {chainCount} MORE STORE{chainCount === 1 ? '' : 'S'} HERE ARE TAGGED CHAIN AND HIDDEN — TAP TO SHOW
+            </Box>
+          )}
+
           {mapError && (
             <Box sx={{ position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 2, width: 'calc(100vw - 24px)', maxWidth: 480 }}>
               <Alert severity="error" sx={{
