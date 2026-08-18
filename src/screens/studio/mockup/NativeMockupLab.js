@@ -38,6 +38,9 @@ import { exportMockupPdf } from './mockupPdf';
 import { analyzeArtwork, isScreenPrintType, INK } from './inkDetect';
 import { detectSolidBg, removeBackground, recolorInk, fnvHash } from './artTools';
 import MockupCanvas from './MockupCanvas';
+// The bake lives in one place so a colour variation and the lab produce
+// byte-identical proofs (see flattenSide.js).
+import { loadImg, flattenHeadless } from './flattenSide';
 import { displayMockupNum, clientDesignName } from '../../../common/mockupNum';
 
 const base = `${config.backendUrl}/api`;
@@ -48,34 +51,6 @@ const uid = () => (window.crypto && window.crypto.randomUUID)
 const fileToDataUrl = (file) => new Promise((resolve) => {
   const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => resolve(null); r.readAsDataURL(file);
 });
-const loadImg = (src) => new Promise((resolve) => {
-  if (!src) { resolve(null); return; }
-  const im = new Image(); im.crossOrigin = 'anonymous';
-  im.onload = () => resolve(im); im.onerror = () => resolve(null); im.src = src;
-});
-
-// Headless flatten for save/PDF — uses the SHARED blankBox (printAreas.js), the
-// same one the interactive canvas and the print-area guide derive from, so every
-// side (not just the one on screen) bakes identically.
-async function flattenHeadless(blankSrc, logoSrc, pos) {
-  const [blank, logo] = await Promise.all([loadImg(blankSrc), loadImg(logoSrc)]);
-  if (!blank) return null;
-  const bW = blank.naturalWidth, bH = blank.naturalHeight;
-  const off = document.createElement('canvas'); off.width = bW; off.height = bH;
-  const ctx = off.getContext('2d');
-  ctx.drawImage(blank, 0, 0, bW, bH);
-  if (logo && pos && pos.x != null) {
-    const box = blankBox(bW, bH);
-    const sX = bW / box.dispW, sY = bH / box.dispH;
-    const lw = logo.naturalWidth * (pos.w || 1) * sX, lh = logo.naturalHeight * (pos.h || 1) * sY;
-    const lx = (pos.x - box.originX) * sX, ly = (pos.y - box.originY) * sY;
-    const cx = lx + lw / 2, cy = ly + lh / 2;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(((pos.angle || 0) * Math.PI) / 180);
-    ctx.drawImage(logo, -lw / 2, -lh / 2, lw, lh); ctx.restore();
-  }
-  try { return off.toDataURL('image/png'); } catch (_) { return null; }
-}
-
 const clonePages = (pages) => (pages || []).map((pg) => ({
   ...pg,
   category: pg.category || 'generic',

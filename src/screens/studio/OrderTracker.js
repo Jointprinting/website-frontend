@@ -50,7 +50,9 @@ import { SOURCE_META } from './_submissions';
 import { useContextMenu } from './ContextMenu';
 import { buildOrderMenu, buildFallbackMenu } from './contextMenuActions';
 import MockupPickerDialog from './MockupPickerDialog';
+import ColorLensOutlinedIcon from '@mui/icons-material/ColorLensOutlined';
 import CarryMockupsDialog from './mockup/CarryMockupsDialog';
+import AddColourDialog from './mockup/AddColourDialog';
 import FixDataDialog from './FixDataDialog';
 import { readStudioUrl, patchStudioUrl, onStudioNavigate, closeStudioOverlay } from './_studioUrl';
 import ConfirmationBuilder from './ConfirmationBuilder';
@@ -2014,6 +2016,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
   const [uploading, setUploading] = useState(false);
   // "Add a variation" in flight — the tile whose duplicate is being cloned.
   const [duplicatingNum, setDuplicatingNum] = useState('');
+  // "Same design, another colour" — the tile whose colourways are being made.
+  const [colourSource, setColourSource] = useState(null);
   // "Carry over" picker — this client's earlier projects, grouped.
   const [carryOpen, setCarryOpen] = useState(false);
   const [client, setClient] = useState(null);
@@ -2657,6 +2661,23 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
                             : <ContentCopyIcon sx={{ fontSize: 12 }} />}
                         </IconButton>
                       )}
+                      {/* "Same design, another colour" — swap the garment, keep
+                          the artwork and its placement, letter it under this
+                          project. The bake and the placement re-anchor live in
+                          mockup/recolor.js so the proof matches the lab's. */}
+                      {t.item && (
+                        <IconButton className="tile-x" size="small"
+                          onClick={(e) => { e.stopPropagation(); setColourSource(t); }}
+                          title={`Same design, another colour — new garment colours of ${t.num}`}
+                          sx={{
+                            position: 'absolute', bottom: 2, left: 2, zIndex: 1, p: 0.25,
+                            opacity: 0, transition: 'opacity 0.12s',
+                            bgcolor: 'rgba(0,0,0,0.72)', color: D.text,
+                            '&:hover': { bgcolor: D.green, color: '#06140c' },
+                          }}>
+                          <ColorLensOutlinedIcon sx={{ fontSize: 12 }} />
+                        </IconButton>
+                      )}
                       {(
                         <IconButton className="tile-x" size="small"
                           onClick={(e) => { e.stopPropagation(); removeMockup(t.num); }}
@@ -3131,6 +3152,20 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
         authHdr={authHdr}
         onToast={onToast}
         onCarried={onReload}
+      />
+      <AddColourDialog
+        open={!!colourSource}
+        source={colourSource}
+        project={project}
+        authHdr={authHdr}
+        onToast={onToast}
+        onClose={() => setColourSource(null)}
+        onDone={(nums) => {
+          // The new letters are on the project the moment they're saved; reflect
+          // that locally so the tiles appear without waiting for the reload.
+          if (nums && nums.length) updateLocal({ mockupNumbers: [...(local.mockupNumbers || []), ...nums] });
+          onReload?.();
+        }}
       />
     </Drawer>
   );
