@@ -4688,17 +4688,42 @@ async function saveMockupToLibrary(opts) {
     // missing rather than crashing the save.
     try { return off.toDataURL('image/png'); } catch (_) { return null; }
   }
+  //
+  // SAY WHY when a side can't be rebuilt. A silent skip is indistinguishable
+  // from "nothing was wrong", which is exactly how a mockup goes to a client
+  // with a missing back and nobody finds out until the client says so.
   let _jpRebuilt = 0;
-  for (const _pg of state.pages) {
+  const _jpStuck = [];
+  for (let _pi = 0; _pi < state.pages.length; _pi++) {
+    const _pg = state.pages[_pi];
+    const _where = state.pages.length > 1 ? ` (page ${_pi + 1})` : '';
     for (const _side of ['front', 'back']) {
       const cKey = _side + 'CompositeBase64', bKey = _side + 'BlankBase64',
             lKey = _side + 'LogoBase64', pKey = _side + 'LogoPosSize';
-      if (_pg[cKey] || !_pg[bKey] || !_pg[lKey]) continue;
-      const comp = await _jpFlatten(_pg[bKey], _pg[lKey], _pg[pKey]);
+      if (_pg[cKey]) continue;                       // already flattened
+      const pos = _pg[pKey];
+      const placed = !!(pos && pos.x != null);
+      // Nothing on this side at all — a front-only design has no back to make.
+      if (!_pg[bKey] && !_pg[lKey] && !placed) continue;
+      if (!_pg[lKey]) {
+        // A placement (or a stray blank) with no artwork LAYER. Usually a mockup
+        // pulled back from the cloud: _trimPageStateForSync nulls every blank,
+        // logo and composite before the push, so a copy that was synced rather
+        // than authored on this device has no layers to flatten. The composite
+        // it already had is all that survived — and if that side never got one,
+        // there is nothing here to rebuild from.
+        _jpStuck.push(`${_side}${_where}: artwork layer isn't on this device`);
+        continue;
+      }
+      if (!_pg[bKey]) { _jpStuck.push(`${_side}${_where}: no garment image`); continue; }
+      if (!placed) { _jpStuck.push(`${_side}${_where}: artwork was never positioned`); continue; }
+      const comp = await _jpFlatten(_pg[bKey], _pg[lKey], pos);
       if (comp) { _pg[cKey] = comp; _jpRebuilt++; }
+      else _jpStuck.push(`${_side}${_where}: couldn't be flattened (image blocked, or placed in a window this can't reconstruct)`);
     }
   }
   if (_jpRebuilt) toast(`Re-flattened ${_jpRebuilt} view${_jpRebuilt === 1 ? '' : 's'} ✓`, 'success');
+  if (_jpStuck.length) toast(`No proof for — ${_jpStuck.join(' · ')}. The client sees only the sides that have one.`, 'error');
 
   const p0 = state.pages[0];
   const stripLayers = (p) => JSON.parse(JSON.stringify({...p,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined}));
