@@ -4016,7 +4016,12 @@ function confirmLogoPosition() {
   if (!logoObj) { closeLogoEditor(); return; }
   const pg = state.pages[state.currentPage];
   const key = fabricSide==='front'?'frontLogoPosSize':'backLogoPosSize';
-  pg[key]={x:logoObj.left,y:logoObj.top,w:logoObj.scaleX,h:logoObj.scaleY,angle:logoObj.angle||0};
+  // The canvas this placement was made in. Coordinates are absolute to THAT
+  // canvas, and the editor sizes itself to the window (modalW/modalH above), so
+  // without it a later rebuild has to assume the desktop 620x500 and would
+  // misplace anything positioned in a smaller one.
+  pg[key]={x:logoObj.left,y:logoObj.top,w:logoObj.scaleX,h:logoObj.scaleY,angle:logoObj.angle||0,
+           stageW:fabricCanvas.getWidth(),stageH:fabricCanvas.getHeight()};
   const blankB64 = pg[fabricSide==='front'?'frontBlankBase64':'backBlankBase64'];
   const logoB64  = pg[fabricSide==='front'?'frontLogoBase64' :'backLogoBase64'];
   const blankNative = new Image();
@@ -4632,6 +4637,69 @@ async function saveMockupToLibrary(opts) {
   // page 1 when you saved while viewing page 2. `pages` carries the full array;
   // `pageState` has its base64s stripped for the server (Mongo's 16MB limit),
   // which is why the composites are also copied into thumbnail/data.
+  // ── Rebuild any composite that went missing ────────────────────────────────
+  //
+  // A composite is only ever written by confirmLogoPosition, and it is NULLED
+  // whenever the blank or the logo changes (see the updateThumb handlers). So
+  // swapping a garment to make a colour variation wipes that side's flattened
+  // proof, and unless the logo position is confirmed again nothing puts it back.
+  //
+  // What shipped to the client was the fallback: `backCompositeBase64 ||
+  // backBlankBase64`, and the blank is the SUPPLIER'S photo URL. Every colour
+  // variation went out with a working front and a back that was a hotlink to
+  // S&S — which does not load. Nine designs, nine dead backs.
+  //
+  // The geometry is the editor's own: a 620x500 desktop stage with the blank
+  // fit at 0.93 and centred (identical to the React lab's printAreas, whose
+  // BLANK_FIT is commented "legacy blankImg fit factor"). A placement made in a
+  // smaller window carries its own stage now and is rebuilt against that; one
+  // saved before this change has none, so it assumes the desktop stage — and is
+  // SKIPPED when it plainly does not fit there, because a misplaced print on a
+  // client's proof is worse than a missing one.
+  const _JP_STAGE_W = 620, _JP_STAGE_H = 500, _JP_BLANK_FIT = 0.93;
+  const _jpLoadImg = (src) => new Promise((res) => {
+    if (!src) { res(null); return; }
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => res(im); im.onerror = () => res(null); im.src = src;
+  });
+  async function _jpFlatten(blankSrc, logoSrc, pos) {
+    if (!pos || pos.x == null || pos.y == null) return null;
+    const stageW = pos.stageW || _JP_STAGE_W, stageH = pos.stageH || _JP_STAGE_H;
+    // No recorded stage and a placement that could not have come from the
+    // desktop one — do not guess where the print goes.
+    if (!pos.stageW && (pos.x > stageW || pos.y > stageH)) return null;
+    const [blank, logo] = await Promise.all([_jpLoadImg(blankSrc), _jpLoadImg(logoSrc)]);
+    if (!blank || !logo) return null;
+    const bW = blank.naturalWidth, bH = blank.naturalHeight;
+    if (!bW || !bH) return null;
+    const scale = Math.min(stageW / bW, stageH / bH) * _JP_BLANK_FIT;
+    const dispW = bW * scale, dispH = bH * scale;
+    const originX = (stageW - dispW) / 2, originY = (stageH - dispH) / 2;
+    const sX = bW / dispW, sY = bH / dispH;
+    const lw = logo.naturalWidth * (pos.w || 1) * sX, lh = logo.naturalHeight * (pos.h || 1) * sY;
+    const lx = (pos.x - originX) * sX, ly = (pos.y - originY) * sY;
+    const off = document.createElement('canvas'); off.width = bW; off.height = bH;
+    const ctx = off.getContext('2d');
+    ctx.drawImage(blank, 0, 0, bW, bH);
+    const cx = lx + lw / 2, cy = ly + lh / 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(((pos.angle || 0) * Math.PI) / 180);
+    ctx.drawImage(logo, -lw / 2, -lh / 2, lw, lh); ctx.restore();
+    // A tainted canvas (a blank host without CORS) throws — leave the composite
+    // missing rather than crashing the save.
+    try { return off.toDataURL('image/png'); } catch (_) { return null; }
+  }
+  let _jpRebuilt = 0;
+  for (const _pg of state.pages) {
+    for (const _side of ['front', 'back']) {
+      const cKey = _side + 'CompositeBase64', bKey = _side + 'BlankBase64',
+            lKey = _side + 'LogoBase64', pKey = _side + 'LogoPosSize';
+      if (_pg[cKey] || !_pg[bKey] || !_pg[lKey]) continue;
+      const comp = await _jpFlatten(_pg[bKey], _pg[lKey], _pg[pKey]);
+      if (comp) { _pg[cKey] = comp; _jpRebuilt++; }
+    }
+  }
+  if (_jpRebuilt) toast(`Re-flattened ${_jpRebuilt} view${_jpRebuilt === 1 ? '' : 's'} ✓`, 'success');
+
   const p0 = state.pages[0];
   const stripLayers = (p) => JSON.parse(JSON.stringify({...p,frontBlankImg:null,backBlankImg:null,frontLogoImg:null,backLogoImg:null,_savedRemoteId:undefined,_savedDbId:undefined}));
   const name=p0.title||p0.pdfName||pg.mockupNum||`Mockup ${new Date().toLocaleDateString()}`;
