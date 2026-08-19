@@ -939,17 +939,22 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
             </Stack>
             {apparelEst?.data && (
               <Box sx={{ mt: 1 }}>
+                {/* Each run size is its own shipment, so there is no single
+                    total — the honest headline is the smallest run to the
+                    largest. It used to read as one number, which is what made a
+                    300-shirt job look like it cost the sum of every option. */}
                 <Typography sx={{ fontSize: 12, fontWeight: 800, color: D.text, ...mono }}>
-                  ~{fmt(apparelEst.data.total)}
-                  <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, color: D.muted, ml: 1, ...mono }}>
-                    (range {fmt(apparelEst.data.low)}–{fmt(apparelEst.data.high)})
+                  {fmt(apparelEst.data.low)}–{fmt(apparelEst.data.high)}
+                  <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, color: D.muted, ml: 1 }}>
+                    per run size, smallest to largest
                   </Typography>
                 </Typography>
                 {(apparelEst.data.basis || []).map((b, i) => (
                   <Typography key={i} sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6 }}>· {b}</Typography>
                 ))}
                 <Typography sx={{ fontSize: 10.5, color: D.faint, lineHeight: 1.6, mt: 0.5 }}>
-                  Added to each line's shipping cost, so it flows through your markup like blanks and print do. Edit any line's shipping in its ⌄ drawer to override.
+                  Every run size gets its OWN shipping filled in — you don't set it per tier. It flows through your
+                  markup like blanks and print do. Edit any run size's shipping in its ⌄ drawer to override.
                 </Typography>
               </Box>
             )}
@@ -1572,6 +1577,41 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
     if (grid.qtys.length <= 2) return;                            // below 2 columns it stops being a grid
     onRemoveIdxs(colIdxs(q));
   };
+  // "Duplicate this whole design" — the Staff / non-Staff case. Copy every
+  // option row at every run size into a NEW group, ready to tweak, instead of
+  // rebuilding a four-brand × four-quantity pitch by hand because two words on
+  // the back print differ.
+  //
+  // The copy is deliberately un-picked and un-pushed: it is a fresh pitch, and
+  // inheriting the client's acceptance would book an order they never saw.
+  const duplicateGrid = async () => {
+    const name = await promptDialog({
+      title: 'Duplicate this design',
+      message: 'Name for the copy — everything else comes across and you can tweak it.',
+      defaultValue: `${grid.group} (copy)`,
+    });
+    const g = String(name || '').trim();
+    if (!g) return;
+    const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()));
+    if (used.has(g.toLowerCase())) {
+      await alertDialog(`"${g}" is already a design on this quote — give the copy a different name.`);
+      return;
+    }
+    // Row-major, so the copy's rows and columns land in the same order as the
+    // original rather than being reshuffled by the source array's layout.
+    const adds = [];
+    for (const b of grid.brands) {
+      for (const q of grid.qtys) {
+        const cell = grid.cellAt(b.key, q);
+        if (!cell) continue;
+        adds.push({ ...cell.line, group: g, accepted: false, lid: '' });
+      }
+    }
+    if (!adds.length) return;
+    onAppendLines(adds);
+    setColourNote(`Copied ${adds.length} option${adds.length === 1 ? '' : 's'} into "${g}" — change what differs (the print details, usually) and the rest is already priced.`);
+  };
+
   const removeGrid = async () => {
     if (await confirmDialog({ title: 'Remove option group?', message: `Remove "${grid.group}" and its ${all.length} option${all.length === 1 ? '' : 's'}?`, confirmLabel: 'Remove', danger: true })) {
       onRemoveIdxs(all);
@@ -1724,6 +1764,17 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
           onPatch={(patch) => onPatchIdxs(all, patch)} tf={tf}
           sx={{ width: { xs: '100%', sm: 230 } }} />
         <Stack direction="row" sx={{ ml: 'auto', mb: 0.3 }} alignItems="center" gap={0.25}>
+          {/* Copy the WHOLE design — every option at every run size — into a new
+              group. The staff / non-staff case: two pitches that differ by a
+              couple of words on the back print should not mean rebuilding a
+              four-brand grid by hand. */}
+          <Button onClick={duplicateGrid} startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 13 }} />}
+            tabIndex={-1}
+            title="Duplicate this whole design — every option and run size — into a new one you can tweak"
+            sx={{ color: D.muted, textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1,
+              '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
+            Duplicate
+          </Button>
           <Button onClick={onEditAsCards} startIcon={<ViewAgendaOutlinedIcon sx={{ fontSize: 14 }} />}
             tabIndex={-1}
             title="Open this design's options as individual line cards (full per-option control)"
@@ -1979,7 +2030,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
       {/* The matrix: option rows × quantity columns. Every cell is a real
           quote line the client can pick. Horizontal scroll on narrow screens. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
-        <Box sx={{ minWidth: 512 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
+        <Box sx={{ minWidth: 452 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
           gridTemplateColumns: tableCols }}>
 
           {/* Header row: option column title, then one header per quantity */}
@@ -2036,7 +2087,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                   bgcolor: D.inset, border: `1px solid ${open ? D.lineHi : D.line}`,
                   position: 'sticky', left: 0, zIndex: 1,
                   opacity: bLine.hiddenFromClient ? 0.5 : 1,
-                  gridTemplateColumns: '16px minmax(92px, 1fr) 58px 82px 108px 24px 26px 28px' }}>
+                  gridTemplateColumns: '18px minmax(120px, 1fr) 70px 124px 96px' }}>
                   <Stack>
                     <IconButton size="small" onClick={() => moveRow(bIdx, -1)} disabled={bIdx === 0}
                       sx={{ color: D.muted, p: 0, '&:hover': { color: D.green }, '&.Mui-disabled': { color: D.faint, opacity: 0.3 } }}>
@@ -2051,14 +2102,6 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                     onCommit={(v) => onPatchIdxs(b.idxs, { description: v })} sx={tf} />
                   <BufferedTF value={bLine.styleCode || ''} placeholder="Style #"
                     onCommit={(v) => onPatchIdxs(b.idxs, { styleCode: v })} sx={tf} />
-                  {/* GARMENT COLOUR — a real field, not a word buried in the
-                      product name. For a run sold in ONE colour this names it;
-                      for a run the client picks colours from, leave it empty and
-                      set the Colours list instead. It also drives the shade lane
-                      when a row is duplicated. */}
-                  <BufferedTF value={bLine.color || ''} placeholder="Colour"
-                    title="Garment colour. Two rows that differ ONLY by colour become options the client can take together (50 black + 50 white), instead of a pick-one choice."
-                    onCommit={(v) => onPatchIdxs(b.idxs, { color: v })} sx={tf} />
                   {/* The number next to the style # is the BLANK COST — always labeled
                       so it's never mistaken for anything else. */}
                   <DecimalField size="small" value={numValOver(b.idxs, 'blankCost')}
@@ -2067,24 +2110,44 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                     onChange={e => onPatchIdxs(b.idxs, { blankCost: e.target.value })}
                     InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', mr: 0.4, whiteSpace: 'nowrap' }}>blank&nbsp;$</Typography> }}
                     sx={{ ...cellTf, '& .MuiInputBase-input': { ...cellTf['& .MuiInputBase-input'], fontWeight: 600, fontSize: 12.5, textAlign: 'left' } }} />
-                  {/* Park this option: stays here with all its costs, but the
-                      client never sees it (and it drops out of the design math). */}
-                  <IconButton size="small" onClick={() => toggleRowHidden(b)}
-                    title={bLine.hiddenFromClient
-                      ? 'Hidden from the client — click to show it on their quote again'
-                      : 'Hide this option from the client (kept here for you)'}
-                    sx={{ color: bLine.hiddenFromClient ? D.amber : D.faint, p: 0.3, '&:hover': { color: D.amber } }}>
-                    {bLine.hiddenFromClient
-                      ? <VisibilityOffOutlinedIcon sx={{ fontSize: 15 }} />
-                      : <VisibilityOutlinedIcon sx={{ fontSize: 15 }} />}
-                  </IconButton>
-                  <IconButton size="small" onClick={() => toggleRow(bIdx)}
-                    title="Per-option costs: print $/u, setup $ & shipping (per quantity), print details, product link"
-                    sx={{ color: open ? D.green : D.muted, p: 0.3,
-                      transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease',
-                      '&:hover': { color: D.green } }}>
-                    <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
+                  {/* ONE action cluster, evenly spaced — colours · copy in
+                      another colour · hide from client · open the cost drawer.
+                      These used to be scattered across their own grid tracks
+                      (and two of them squeezed into the 40px remove column),
+                      which is what made the row read as misaligned. */}
+                  <Stack direction="row" alignItems="center" justifyContent="flex-end" sx={{ gap: 0.1 }}>
+                    <IconButton size="small" onClick={() => setRangeRow(bIdx)}
+                      title={(bLine.colorOptions || []).length
+                        ? `Sold in ${(bLine.colorOptions || []).length} colours — the client picks quantities per colour`
+                        : 'Choose which garment colours the client can order this run in (live from S&S, in-stock only)'}
+                      sx={{ color: (bLine.colorOptions || []).length ? D.green : D.faint, p: 0.3,
+                        '&:hover': { color: D.green } }}>
+                      <ColorLensOutlinedIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => duplicateRowInColour(b)}
+                      title="Copy this option at every run size and change the garment colour"
+                      sx={{ color: D.faint, p: 0.3, '&:hover': { color: D.green } }}>
+                      <PaletteOutlinedIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                    {/* Park this option: stays here with all its costs, but the
+                        client never sees it (and it drops out of the design math). */}
+                    <IconButton size="small" onClick={() => toggleRowHidden(b)}
+                      title={bLine.hiddenFromClient
+                        ? 'Hidden from the client — click to show it on their quote again'
+                        : 'Hide this option from the client (kept here for you)'}
+                      sx={{ color: bLine.hiddenFromClient ? D.amber : D.faint, p: 0.3, '&:hover': { color: D.amber } }}>
+                      {bLine.hiddenFromClient
+                        ? <VisibilityOffOutlinedIcon sx={{ fontSize: 15 }} />
+                        : <VisibilityOutlinedIcon sx={{ fontSize: 15 }} />}
+                    </IconButton>
+                    <IconButton size="small" onClick={() => toggleRow(bIdx)}
+                      title="Per-option costs: print $/u, setup $ & shipping (per quantity), print details, product link"
+                      sx={{ color: open ? D.green : D.muted, p: 0.3,
+                        transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease',
+                        '&:hover': { color: D.green } }}>
+                      <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Stack>
                 </Box>
 
                 {/* Price cells */}
@@ -2177,29 +2240,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                     </Box>
                   );
                 })}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
-                  {/* The garment colours this run is sold in. With a range set,
-                      the client types a quantity per colour and the TOTAL picks
-                      the price break — which is how one design in three colours
-                      at 150 each becomes a 450-piece run instead of an
-                      un-expressable pick from 50/100/150 chips. */}
-                  <IconButton size="small" onClick={() => setRangeRow(bIdx)}
-                    title={(bLine.colorOptions || []).length
-                      ? `Sold in ${(bLine.colorOptions || []).length} colours — the client picks quantities per colour`
-                      : 'Choose which garment colours the client can order this run in (live from S&S, in-stock only)'}
-                    sx={{ color: (bLine.colorOptions || []).length ? D.green : D.muted, p: 0.3,
-                      '&:hover': { color: D.green } }}>
-                    <ColorLensOutlinedIcon sx={{ fontSize: 15 }} />
-                  </IconButton>
-                  {/* Duplicate this run — the owner's model: copy the row and
-                      label each by its ink ("black ink" / "white ink"). Two inks
-                      are two runs and never share a tier; the garment colours
-                      inside one run are the client's to allocate. */}
-                  <IconButton size="small" onClick={() => duplicateRowInColour(b)}
-                    title="Same design, another colour — copy this row at every run size and change the garment colour"
-                    sx={{ color: D.muted, '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.08)' } }}>
-                    <PaletteOutlinedIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <IconButton size="small" onClick={() => removeRow(b)} title="Remove this option row"
                     sx={{ color: D.muted, '&:hover': { color: '#f87171', bgcolor: 'rgba(248,113,113,0.08)' } }}>
                     <RemoveCircleOutlineIcon sx={{ fontSize: 16 }} />
@@ -2227,6 +2268,17 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                           placeholder={numMixedOver(b.idxs, 'setupCost') ? 'per-qty' : '0'}
                           title="Fills one-time setup on every quantity of this option — override per run size below when it differs"
                           onChange={e => onPatchIdxs(b.idxs, { setupCost: e.target.value })} sx={tf} />
+                      </QF>
+                      {/* Garment colour is NOT a price input — the blank costs the
+                          same in black as in white. It lives here, off the main row,
+                          because the colours a client can actually order are the
+                          Colours list (the palette button), not a box to type in.
+                          Kept editable so a one-colour run can still be named and a
+                          legacy typed colour can be cleared. */}
+                      <QF label="Garment colour (label only)" sx={{ width: 132 }}>
+                        <BufferedTF fullWidth value={bLine.color || ''} placeholder="e.g. Black"
+                          title="Names a run sold in ONE colour. It does not affect price. For a run the client picks colours from, leave this empty and use the Colours button instead."
+                          onCommit={(v) => onPatchIdxs(b.idxs, { color: v })} sx={tf} />
                       </QF>
                       <QF label="Print details (this option)" sx={{ flex: '1 1 150px', minWidth: 140 }}>
                         <BufferedTF fullWidth value={bLine.printDetails || ''} placeholder="7c front"

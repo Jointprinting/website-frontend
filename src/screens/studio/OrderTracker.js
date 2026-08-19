@@ -2561,9 +2561,21 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-                <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                  Mockups · {tiles.length}
-                </Typography>
+                <Stack direction="row" alignItems="baseline" gap={0.75} flexWrap="wrap">
+                  <Typography sx={{ color: D.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                    Mockups · {tiles.length}
+                  </Typography>
+                  {/* This list IS what the client sees. It used to be additive
+                      only — every design on the project reached the quote link
+                      whatever was picked here — so say plainly which state it is
+                      in, because "everything" and "these three" look identical
+                      as a row of tiles. */}
+                  <Typography sx={{ color: D.faint, fontSize: 10, lineHeight: 1.4 }}>
+                    {explicitNums.length
+                      ? `— the ${explicitNums.length} the client sees on their link. Remove one with ✕ to hide it.`
+                      : '— all of them show on the client\u2019s link. Use Edit to pick just some.'}
+                  </Typography>
+                </Stack>
                 <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
                   {/* "New mockup" opens the Mockup Lab deep-linked to this project,
                       so each mockup saved there auto-links to it. "Edit"/"Link" opens
