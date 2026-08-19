@@ -1327,6 +1327,33 @@ export default function JpwSitesTab({ token }) {
               </Section>
             )}
 
+            {/* The CV, declared by the look (see cvEditor in the registry).
+                An artist's site needs a career record; a plumber's does not. */}
+            {tpl?.cvEditor && (
+              <Section title={tpl.cvEditor.title} hint={tpl.cvEditor.hint}>
+                {tpl.cvEditor.text && (
+                  <F label={tpl.cvEditor.text.label} value={d[tpl.cvEditor.text.key]}
+                    onChange={(v) => setData(tpl.cvEditor.text.key, v)}
+                    placeholder={tpl.cvEditor.text.placeholder} />
+                )}
+                {tpl.cvEditor.groups.map((g) => (
+                  <Box key={g.key}>
+                    <T sx={{ fontSize: 12, fontWeight: 600, letterSpacing: '.08em',
+                      textTransform: 'uppercase', color: D.muted, mb: g.hint ? 0.25 : 1 }}>
+                      {g.label}
+                    </T>
+                    {g.hint && (
+                      <T sx={{ fontSize: 12, color: D.faint, mb: 1 }}>{g.hint}</T>
+                    )}
+                    <RowsEditor
+                      rows={d[g.key]} onChange={(v) => setData(g.key, v)}
+                      blank={g.blank} addLabel={g.addLabel} fields={g.fields}
+                    />
+                  </Box>
+                ))}
+              </Section>
+            )}
+
             <Section title="Style" hint={`${tpl ? tpl.label : 'Template'} palettes — the whole site recolors instantly.`}>
               <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
                 {(tpl?.palettes || []).map((p) => {
