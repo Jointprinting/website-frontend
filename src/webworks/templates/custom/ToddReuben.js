@@ -238,6 +238,51 @@ const css = (c, hero) => `
 .jpwtr-about p{font-size:clamp(15.5px,2vw,17.5px);color:color-mix(in srgb,${c.ink} 82%,${c.sub});font-weight:300;white-space:pre-line;overflow-wrap:anywhere;}
 @media(max-width:760px){.jpwtr-about .in{grid-template-columns:1fr;}}
 
+/* Background (CV) — he asked for this by name: the page talked about the work
+   and said nothing about the career behind it.
+   Shares the About column layout so the two read as one chapter, and sits
+   AFTER About: the prose introduces the man, the ledger backs him up.
+   A CV is a list of facts, which is the plainest register on the page — so
+   the type here is small, quiet and evenly ruled, and does no persuading. */
+.jpwtr-cv .in{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);
+  gap:clamp(24px,5vw,64px);align-items:start;}
+@media(min-width:761px){.jpwtr-cv .in>div:first-child{position:sticky;top:96px;}}
+@media(max-width:760px){.jpwtr-cv .in{grid-template-columns:1fr;}}
+.jpwtr-cv h2{font-size:clamp(26px,4vw,42px);margin-top:14px;}
+.jpwtr-cvgroup{margin-top:clamp(26px,3.4vw,40px);}
+.jpwtr-cvgroup:first-child{margin-top:0;}
+.jpwtr-cvgroup>h3{margin:0 0 4px;font-weight:500;font-size:11.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:${c.sub};}
+/* Dated rows (the career). The years column is a FIXED width, not max-content:
+   max-content sizes each row independently, so every description started at a
+   different x and the column read as ragged rather than as a ledger. Every set
+   of years is the same shape ("1982 — 1989"), so one width fits them all. */
+.jpwtr-cvrow{display:grid;grid-template-columns:minmax(0,10em) minmax(0,1fr);
+  gap:6px clamp(16px,2.4vw,28px);padding:13px 2px;border-bottom:1px solid ${c.line};}
+.jpwtr-cvrow>b{font-weight:400;font-size:13px;letter-spacing:.04em;color:${c.ink};
+  font-variant-numeric:tabular-nums;}
+.jpwtr-cvrow>span{font-size:14.5px;color:${c.sub};font-weight:300;overflow-wrap:anywhere;}
+/* Name/place pairs (galleries, memberships) — same ledger as the hours rows
+   below: the place sits flush right, so names of wildly different lengths still
+   line up down BOTH edges. A fixed column can't do that here, because
+   "John Zaccheo Fine Art Gallery" and "Fine Art Firm" are not the same shape. */
+.jpwtr-cvpair{display:flex;justify-content:space-between;gap:18px;
+  padding:13px 2px;border-bottom:1px solid ${c.line};}
+.jpwtr-cvpair>b{font-weight:500;font-size:13.5px;color:${c.ink};min-width:0;}
+.jpwtr-cvpair>span{font-size:14px;color:${c.sub};font-weight:300;text-align:right;
+  overflow-wrap:anywhere;}
+.jpwtr-cvgroup>:last-child{border-bottom:none;}
+/* Under ~560px there is no room for two columns of anything — stack, and let
+   the place sit under its name rather than squeezed against the right edge. */
+@media(max-width:560px){
+  .jpwtr-cvrow{grid-template-columns:1fr;}
+  .jpwtr-cvpair{flex-direction:column;gap:3px;}
+  .jpwtr-cvpair>span{text-align:left;}
+}
+/* Education is one fact, so it gets a line rather than a two-column row. */
+.jpwtr-cvline{padding:13px 2px;font-size:14.5px;color:${c.sub};font-weight:300;
+  overflow-wrap:anywhere;}
+
 /* Words from collectors */
 .jpwtr-q{max-width:660px;}
 .jpwtr-q p{font-family:'Marcellus',Georgia,serif;font-size:clamp(20px,3vw,28px);line-height:1.44;overflow-wrap:anywhere;}
@@ -324,6 +369,15 @@ export default function ToddReubenSite({ data }) {
   const hours = rows(d.hours, 'days', 'hours');
   const quotes = rows(d.testimonials, 'quote');
 
+  // The CV. Each group is independently optional — `rows()` drops any entry
+  // that is blank in every column, so half-filled rows in the Studio never
+  // print an empty line on his page.
+  const education = txt(d.education);
+  const career = rows(d.career, 'years', 'what');
+  const galleries = rows(d.galleries, 'name', 'where');
+  const memberships = rows(d.memberships, 'name', 'where');
+  const hasCv = !!(education || career.length || galleries.length || memberships.length);
+
   // Which piece is open in the closer look. -1 is closed.
   const [viewing, setViewing] = React.useState(-1);
   const openPiece = viewing >= 0 && viewing < works.length ? works[viewing] : null;
@@ -368,6 +422,7 @@ export default function ToddReubenSite({ data }) {
     works.length && ['#work', 'Work'],
     pieces.length && ['#commissions', 'Commissions'],
     about && ['#about', 'About'],
+    hasCv && ['#background', 'Background'],
     hasContact && ['#contact', 'Contact'],
   ].filter(Boolean);
 
@@ -482,6 +537,63 @@ export default function ToddReubenSite({ data }) {
               <h2 className="jpwtr-serif">About</h2>
             </div>
             <p>{about}</p>
+          </div>
+        </section>
+      )}
+
+      {/* Background — the CV. Hidden entirely when every group is empty, like
+          every other section here, so a site with no CV never shows a stub. */}
+      {hasCv && (
+        <section className="jpwtr-sec jpwtr-cv" id="background">
+          <div className="jpwtr-wrap in">
+            <div>
+              <span className="jpwtr-cap">Curriculum vitae</span>
+              <h2 className="jpwtr-serif">Background</h2>
+            </div>
+            <div>
+              {education && (
+                <div className="jpwtr-cvgroup">
+                  <h3>Education</h3>
+                  <div className="jpwtr-cvline">{education}</div>
+                </div>
+              )}
+              {career.length > 0 && (
+                <div className="jpwtr-cvgroup">
+                  <h3>Professional career</h3>
+                  {career.map((r, i) => (
+                    <div className="jpwtr-cvrow" key={i}>
+                      <b>{txt(r.years)}</b>
+                      <span>{txt(r.what)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {galleries.length > 0 && (
+                <div className="jpwtr-cvgroup">
+                  {/* HIS heading, word for word. See the note in the registry:
+                      his CV says former, an older page implies current, and
+                      only one of those is safe for a buyer to act on. */}
+                  <h3>Former gallery affiliations</h3>
+                  {galleries.map((r, i) => (
+                    <div className="jpwtr-cvpair" key={i}>
+                      <b>{txt(r.name)}</b>
+                      <span>{txt(r.where)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {memberships.length > 0 && (
+                <div className="jpwtr-cvgroup">
+                  <h3>Memberships</h3>
+                  {memberships.map((r, i) => (
+                    <div className="jpwtr-cvpair" key={i}>
+                      <b>{txt(r.name)}</b>
+                      <span>{txt(r.where)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}

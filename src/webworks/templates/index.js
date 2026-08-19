@@ -173,6 +173,40 @@ export const CUSTOM_SITES = [
         'I earned a Bachelor of Arts at Columbia University in 1980, and from 1982 to 1989 I was apprenticed to Roy Gussow, a sculptor in stainless steel in New York. In 1989 I began working on my own, leaving his shapes behind to find my own, and in 1992 I moved my studio to Woodstock.',
         'I make free-form work rather than sculptures of things, because what interests me is finding a shape that has never existed before. I title each piece by number, so the name does not suggest something the sculpture is not.',
       ].join('\n\n'),
+      // ── The CV ────────────────────────────────────────────────────────
+      // He asked for this by name: the site said nothing about his career,
+      // his years of apprenticeship, or the galleries. It does now.
+      //
+      // Straight off the CV page of his letter, in his own headings. Two
+      // judgement calls worth knowing about:
+      //
+      //  · "FORMER Gallery Affiliations" is HIS word, and it is the heading
+      //    kept here. His older biographical sketch says two of them show his
+      //    work "presently" — but that page also describes the 1992 move as
+      //    recent, so the CV is the later document and wins. Listing them as
+      //    former is true either way; claiming current representation is only
+      //    true one way, and a buyer can check it with a phone call.
+      //  · Career runs newest-first, the way a CV is read. His page runs
+      //    oldest-first, which buries "1989–present, Artist" at the bottom.
+      //
+      // "In." under Memberships is a typo for "Inc." on his page — corrected,
+      // because it is plainly a slip and not a name.
+      education: 'B.A., Columbia University, New York, 1980',
+      career: [
+        { years: '1989 — present', what: 'Artist and sculptor. Studio in Boonton, New Jersey, and in Woodstock, Vermont since 1992.' },
+        { years: '1982 — 1989', what: 'Apprentice to Roy Gussow, sculptor in stainless steel, New York City.' },
+        { years: '1981 — 1982', what: 'Teaching assistant, Department of Art, Columbia University.' },
+      ],
+      galleries: [
+        { name: 'Gallery North Star', where: 'Grafton, Vermont' },
+        { name: 'Simon Gallery', where: 'Morristown, New Jersey' },
+        { name: 'John Zaccheo Fine Art Gallery', where: 'Manchester, Vermont' },
+        { name: 'Fine Art Firm', where: 'Louisville, Kentucky' },
+      ],
+      memberships: [
+        { name: 'Southern Vermont Artists, Inc.', where: 'Manchester, Vermont' },
+        { name: 'Vermont Arts Council', where: 'Montpelier, Vermont' },
+      ],
       testimonials: [],
       // The six pieces he named, with the material he gave for each, in the
       // order he read them out. Titles are his own: he numbers his sculptures
@@ -214,6 +248,42 @@ export const CUSTOM_SITES = [
         { key: 'title', label: 'Title / number', placeholder: 'No. 270' },
         { key: 'price', label: 'Price', narrow: true, placeholder: 'blank = says nothing' },
         { key: 'note', label: 'Description', wide: true, minRows: 2, placeholder: 'Stainless steel, 34 in.' },
+      ],
+    },
+    // The CV, editable in the Studio like everything else. Declared here rather
+    // than hard-coded in the component so Nate can fix a date or add a gallery
+    // without a deploy — the same reason `worksEditor` above exists.
+    cvEditor: {
+      title: 'Background (CV)',
+      hint: 'His professional record. Leave a group empty and it disappears from the site.',
+      text: { key: 'education', label: 'Education', placeholder: 'B.A., Columbia University, New York, 1980' },
+      groups: [
+        {
+          key: 'career', label: 'Professional career', addLabel: 'Add a role',
+          hint: 'Newest first — that is the order the site prints them in.',
+          blank: { years: '', what: '' },
+          fields: [
+            { key: 'years', label: 'Years', narrow: true, placeholder: '1982 — 1989' },
+            { key: 'what', label: 'What he was doing', wide: true, minRows: 2 },
+          ],
+        },
+        {
+          key: 'galleries', label: 'Former gallery affiliations', addLabel: 'Add a gallery',
+          hint: 'His own CV says FORMER. If any are current again, say so on the site before changing this.',
+          blank: { name: '', where: '' },
+          fields: [
+            { key: 'name', label: 'Gallery', placeholder: 'Gallery North Star' },
+            { key: 'where', label: 'Where', placeholder: 'Grafton, Vermont' },
+          ],
+        },
+        {
+          key: 'memberships', label: 'Memberships', addLabel: 'Add a membership',
+          blank: { name: '', where: '' },
+          fields: [
+            { key: 'name', label: 'Organisation', placeholder: 'Vermont Arts Council' },
+            { key: 'where', label: 'Where', placeholder: 'Montpelier, Vermont' },
+          ],
+        },
       ],
     },
     Component: lazy(() => import('./custom/ToddReuben')),

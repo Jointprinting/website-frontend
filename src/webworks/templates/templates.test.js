@@ -217,6 +217,75 @@ describe('template registry', () => {
     });
   });
 
+  // He read the live site and said it never mentioned his career, his years of
+  // apprenticeship, or the galleries. It is a record of a real person's working
+  // life, so the bar is the same as everywhere else on this site: his facts,
+  // his wording, nothing upgraded.
+  describe('Todd Reuben — the CV says what his CV says', () => {
+    const todd = () => getTemplate('custom-todd-reuben');
+    const render = () => renderTpl(todd(), { businessName: 'Todd Reuben Sculptor', ...todd().seedData });
+
+    test('the career runs newest first, so "still working" is the first thing read', () => {
+      expect(todd().seedData.career.map((r) => r.years))
+        .toEqual(['1989 — present', '1982 — 1989', '1981 — 1982']);
+    });
+
+    test('every CV fact traces to his letter', async () => {
+      const { container } = render();
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      const cv = container.querySelector('#background');
+      expect(cv).not.toBeNull();
+      [
+        'B.A., Columbia University, New York, 1980',
+        'Roy Gussow', 'Teaching assistant', 'Boonton',
+        'Gallery North Star', 'Simon Gallery', 'John Zaccheo Fine Art Gallery', 'Fine Art Firm',
+        'Southern Vermont Artists, Inc.', 'Vermont Arts Council',
+      ].forEach((fact) => expect(cv.textContent).toContain(fact));
+    });
+
+    test('the galleries are labelled FORMER, which is his own word for them', async () => {
+      const { container } = render();
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      const cv = container.querySelector('#background');
+      expect(cv.textContent).toMatch(/Former gallery affiliations/i);
+      // The trap this guards: an older page of the same letter says two of them
+      // show his work "presently". Printing that as current representation is a
+      // claim a buyer can disprove with one phone call to the gallery.
+      expect(cv.textContent).not.toMatch(/represented by|currently show|now showing/i);
+    });
+
+    test('no borrowed prestige — the CV states roles, it does not rate them', () => {
+      const cv = JSON.stringify([
+        todd().seedData.education, todd().seedData.career,
+        todd().seedData.galleries, todd().seedData.memberships,
+      ]);
+      expect(cv).not.toMatch(/renowned|celebrated|prestigious|acclaimed|award-winning|master/i);
+    });
+
+    test('an empty CV hides the section and its nav link entirely', async () => {
+      const { container } = renderTpl(todd(), {
+        businessName: 'Todd Reuben Sculptor',
+        ...todd().seedData,
+        education: '', career: [], galleries: [], memberships: [],
+      });
+      await screen.findAllByText(/Todd Reuben Sculptor/);
+      expect(container.querySelector('#background')).toBeNull();
+      expect(container.querySelector('a[href="#background"]')).toBeNull();
+    });
+
+    test('the Studio can edit every CV group without a deploy', () => {
+      const ed = todd().cvEditor;
+      expect(ed.text.key).toBe('education');
+      expect(ed.groups.map((g) => g.key)).toEqual(['career', 'galleries', 'memberships']);
+      // Each group must be able to round-trip its own seeded shape.
+      ed.groups.forEach((g) => {
+        const seeded = todd().seedData[g.key][0];
+        expect(Object.keys(g.blank).sort()).toEqual(Object.keys(seeded).sort());
+        expect(g.fields.map((f) => f.key).sort()).toEqual(Object.keys(g.blank).sort());
+      });
+    });
+  });
+
   // The whole point of the work grid is that it shows HIS sculptures.
   describe('Todd Reuben — the work grid never invents a sculpture', () => {
     const todd = () => getTemplate('custom-todd-reuben');
