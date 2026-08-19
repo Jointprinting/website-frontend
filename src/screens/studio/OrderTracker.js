@@ -37,6 +37,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -2319,6 +2320,30 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
 
   const updateLocal = (patch) => setLocal(prev => ({ ...prev, ...patch }));
 
+  // SHOW / HIDE one design on the client's link.
+  //
+  // Order.mockupNumbers is presentation, not membership (see the schema note):
+  // in the list = the client sees it, out = they don't, and either way the
+  // mockup stays on the project — its projectNumber is what links it, and this
+  // never touched that. So it is a toggle, and always was; it just wore an ✕,
+  // which reads as "throw it away" and made a reversible choice feel destructive.
+  const toggleShown = async (num) => {
+    const nk = _normKey(num);
+    const cur = local.mockupNumbers || [];
+    const isShown = cur.some(n => _normKey(n) === nk);
+    // With NOTHING picked, every design shows (the fallback that stops an empty
+    // list shipping a confirmation with no artwork). So hiding the first one
+    // means picking all the others — otherwise the click would appear to do
+    // nothing at all.
+    const next = !cur.length
+      ? (projectMockups || [])
+        .map(m => (m.pageState && m.pageState.mockupNum) || '')
+        .filter(n => n && _normKey(n) !== nk)
+      : (isShown ? cur.filter(n => _normKey(n) !== nk) : [...cur, num]);
+    updateLocal({ mockupNumbers: next });
+    await onSave(project._id, { mockupNumbers: next });
+  };
+
   // "Add a variation": server-side clone of a mockup into the project's next
   // letter — identical art, new number/identity, immediately editable in the
   // studio. The endpoint reserves the number atomically (same path as the
@@ -2339,16 +2364,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
     }
   };
 
-  // Drop one mockup # from this project (typo, wrong #, never-made design).
-  // Just a removal now: nothing re-attaches it, so there is no exclusion list to
-  // keep. (excludedMockups existed solely to make "remove" stick against the
-  // client-name matcher that used to re-add it on every open. Both are gone.)
-  const removeMockup = async (num) => {
-    const nk = _normKey(num);
-    const next = (local.mockupNumbers || []).filter(n => _normKey(n) !== nk);
-    updateLocal({ mockupNumbers: next });
-    await onSave(project._id, { mockupNumbers: next });
-  };
+
 
   return (
     <Drawer anchor="right" open={open} onClose={handleClose}
@@ -2557,7 +2573,11 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
           // number so a design's colours (A, B, C…) and each colour's edits
           // (#150A, #150A2…) sit adjacent — the grouping derived from the number
           // itself (promo/unparseable tiles sort last).
-          const tiles = sortMockupTiles([...explicitTiles.filter(t => t.item), ...linkedTiles], t => t.num);
+          // Shown on the client's link? With a pick made, membership decides.
+          // With none made, everything shows — so every tile reads as shown.
+          const anyPicked = explicitNums.length > 0;
+          const tiles = sortMockupTiles([...explicitTiles.filter(t => t.item), ...linkedTiles], t => t.num)
+            .map(t => ({ ...t, shown: !anyPicked || explicitKeys.has(_normKey(t.num)) }));
           return (
             <>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
@@ -2572,8 +2592,8 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
                       as a row of tiles. */}
                   <Typography sx={{ color: D.faint, fontSize: 10, lineHeight: 1.4 }}>
                     {explicitNums.length
-                      ? `— the ${explicitNums.length} the client sees on their link. Remove one with ✕ to hide it.`
-                      : '— all of them show on the client\u2019s link. Use Edit to pick just some.'}
+                      ? `— ${explicitNums.length} of ${tiles.length} shown on the client\u2019s link. Tap the eye on a tile to show or hide it.`
+                      : `— all ${tiles.length} show on the client\u2019s link. Tap the eye on a tile to hide one.`}
                   </Typography>
                 </Stack>
                 <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap" useFlexGap>
@@ -2690,19 +2710,25 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
                           <ColorLensOutlinedIcon sx={{ fontSize: 12 }} />
                         </IconButton>
                       )}
-                      {(
-                        <IconButton className="tile-x" size="small"
-                          onClick={(e) => { e.stopPropagation(); removeMockup(t.num); }}
-                          title={t.source === 'auto'
-                            ? `Remove ${t.num} — it won't auto-match back onto this project`
-                            : `Remove ${t.num} from this project`}
+                      {/* SHOW / HIDE on the client's link. Always visible when
+                          hidden — a design the client can't see has to say so
+                          without needing a hover to find out. */}
+                      {t.item && (
+                        <IconButton size="small"
+                          onClick={(e) => { e.stopPropagation(); toggleShown(t.num); }}
+                          title={t.shown
+                            ? `${t.num} is on the client's link — click to hide it (stays on the project)`
+                            : `${t.num} is hidden from the client — click to show it`}
                           sx={{
                             position: 'absolute', top: 2, right: 2, zIndex: 1, p: 0.25,
-                            opacity: 0, transition: 'opacity 0.12s',
-                            bgcolor: 'rgba(0,0,0,0.72)', color: D.text,
-                            '&:hover': { bgcolor: '#ef4444', color: '#fff' },
-                          }}>
-                          <CloseIcon sx={{ fontSize: 12 }} />
+                            opacity: t.shown ? 0 : 1, transition: 'opacity 0.12s',
+                            bgcolor: 'rgba(0,0,0,0.72)', color: t.shown ? D.text : D.amber,
+                            '&:hover': { bgcolor: t.shown ? 'rgba(0,0,0,0.9)' : D.amber, color: t.shown ? D.amber : '#1a1206' },
+                          }}
+                          className={t.shown ? 'tile-x' : ''}>
+                          {t.shown
+                            ? <VisibilityOutlinedIcon sx={{ fontSize: 12 }} />
+                            : <VisibilityOffOutlinedIcon sx={{ fontSize: 12 }} />}
                         </IconButton>
                       )}
                       {t.source === 'auto' && (
