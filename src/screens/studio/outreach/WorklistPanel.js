@@ -171,7 +171,8 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
         <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 40, color: D.green }} />
         <Typography sx={{ color: D.text, fontWeight: 800, mt: 1 }}>You’re all caught up</Typography>
         <Typography sx={{ color: D.faint, fontSize: 12.5, mt: 0.5 }}>
-          No replies are waiting on a next step. New replies land here as they’re triaged.
+          No NEW replies waiting on you. Conversations you’re already in don’t show here —
+          they’re in your inbox and the CRM.
         </Typography>
       </Box>
     );
@@ -188,8 +189,8 @@ export default function WorklistPanel({ worklist, loading, onSetStatus, onStartJ
           <Chip label={rows.length} size="small" sx={{ height: 18, fontSize: 10.5, fontWeight: 800, bgcolor: `${D.green}22`, color: D.green }} />
         </Stack>
         <Typography sx={{ color: D.faint, fontSize: 11.5, mb: 1 }}>
-          Conversations where they spoke last — buying signals first. Answer in Gmail and the card clears itself;
-          it comes back the moment they write again.
+          First replies from new shops, buying signals first. Answer one — here or in Gmail — and it’s
+          off the list for good; a shop that goes quiet for weeks and writes back counts as new again.
         </Typography>
 
         <Stack spacing={0.75}>
