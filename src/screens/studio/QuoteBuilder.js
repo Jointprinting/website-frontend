@@ -516,6 +516,14 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
         })),
         printerName,
         destState: shipToState,
+        // The ship-to ADDRESS, so the server can read its ZIP and place the
+        // destination in a real postal sector instead of the state's centre —
+        // which for Michigan sits 300 miles north of its southern cities. No
+        // new field to fill in: this is the address already on the order.
+        destAddress: [
+          project?.confirmation?.shipping?.cityStateZip,
+          (project?.confirmation?.shipTos || [])[0]?.cityStateZip,
+        ].filter(Boolean)[0] || '',
       }, authHdr);
       setLines(prev => prev.map((l, i) => {
         const at = idxs.indexOf(i);
