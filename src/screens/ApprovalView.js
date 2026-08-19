@@ -104,7 +104,14 @@ const _norm = (n) => String(n || '').replace(/^#/, '').replace(/^0+/, '').toUppe
 // Clickable image that opens the lightbox. Adds a zoom cursor + a soft hover
 // lift and a small magnifier badge so it reads as "tap to enlarge".
 function ZoomImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
-  if (!src) return null;
+  // An image that cannot load must take its TILE with it. Hiding only the <img>
+  // left the wrapper standing — and the wrapper is the thing carrying the tile's
+  // white background, so a dead R2 URL rendered as a blank white rectangle the
+  // exact size of a mockup, on the page a client reviews the artwork on. An
+  // empty frame reads as "this design is missing", which is worse than one
+  // fewer view.
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
   return (
     <Box
       sx={{
@@ -120,7 +127,7 @@ function ZoomImg({ src, alt = '', onZoom, sx = {}, badge = true }) {
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onZoom && onZoom(src); } }}
     >
       <Box component="img" className="zimg" src={src} alt={alt} loading="lazy"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        onError={() => setFailed(true)}
         sx={{ width: '100%', height: '100%' }} />
       {badge && (
         <Box className="zoom-badge" sx={{
