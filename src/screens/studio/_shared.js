@@ -272,6 +272,27 @@ export function confRevenue(conf) {
   return roundCents(rev);   // snap to cents (H4), matching the backend grand total
 }
 
+// ── Subtree revisions (optimistic concurrency bookkeeping) ───────────────────
+//
+// The server versions `confirmation` and `quoteLines` separately and refuses a
+// whole-subtree write whose base revision has moved (backend
+// utils/orderRevision.js). The client's job is to remember the NEWEST revision
+// it has been handed for a project and send that with the next write.
+//
+// Newest, not latest-seen — and that distinction is the whole function. Board
+// refreshes, hydration fetches and save responses all land asynchronously, so a
+// board refresh that started before a save can arrive after it carrying the
+// pre-save number. Adopting it would send a stale base on the next keystroke
+// and raise a conflict against nobody. Revisions only ever count up, and every
+// value here came from the server, so keeping the max is always right.
+export function mergeRevs(prev, doc) {
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return {
+    confirmationRev: Math.max(n(prev && prev.confirmationRev), n(doc && doc.confirmationRev)),
+    quoteLinesRev: Math.max(n(prev && prev.quoteLinesRev), n(doc && doc.quoteLinesRev)),
+  };
+}
+
 // ── Reading a project ROW vs a project DOCUMENT ──────────────────────────────
 //
 // GET /api/orders/projects returns a CARD, not a whole order: the confirmation,
