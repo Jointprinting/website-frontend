@@ -43,7 +43,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 
 import { copyToClipboard } from './ContextMenu';
 import { CRM_STAGES, PRE_CUSTOMER_STAGES, isClient, stageMeta, telHref, smsHref, primaryPhone } from './crm/_crm';
-import { STATUS_OPTIONS, hasConfirmation } from './_shared';
+import { STATUS_OPTIONS, projectHasConfirmation, projectQuoteLineCount } from './_shared';
 
 // First usable email for a CRM record: its own, else the first contact with one.
 function primaryEmail(rec) {
@@ -164,8 +164,12 @@ export function buildOrderMenu(p, handlers = {}) {
   if (!p) return [];
   const num = p.orderNumber || (p.projectNumber != null ? `#${p.projectNumber}` : '');
   const title = p.companyName || p.clientName || (num ? `Order ${num}` : 'Order');
-  const hasQuote = (p.quoteLines || []).length > 0 || !!p.quote;
-  const confirmed = hasConfirmation(p.confirmation);
+  // A right-click can land on a board CARD (quote lines and confirmation
+  // summarised server-side) or on a full order document, so read both through
+  // the shared card-aware helpers — otherwise every card menu would offer
+  // "Start quote" over a project that already has one.
+  const hasQuote = projectQuoteLineCount(p) > 0 || !!p.quote;
+  const confirmed = projectHasConfirmation(p);
 
   const items = [
     { header: title },

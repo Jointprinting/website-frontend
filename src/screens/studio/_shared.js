@@ -272,6 +272,47 @@ export function confRevenue(conf) {
   return roundCents(rev);   // snap to cents (H4), matching the backend grand total
 }
 
+// ── Reading a project ROW vs a project DOCUMENT ──────────────────────────────
+//
+// GET /api/orders/projects returns a CARD, not a whole order: the confirmation,
+// the quote lines and the activity log are summarised server-side so one board
+// load stops allocating every order's artwork (see backend utils/projectCard.js).
+// A full Order document still arrives from GET /api/orders/:id, from a PUT, and
+// from POST /orders — so anything that reads a project has to handle both.
+//
+// These two do that in one place. They prefer the card summary when it's there
+// and fall back to computing off the subtree, so the SAME call site reads a card
+// and a document identically and neither shape needs a special case.
+//
+// `hasConfirmationItems` is the discriminator: a card always carries it, a
+// document never does.
+export const isProjectCard = (p) => !!(p && p.hasConfirmationItems !== undefined);
+
+export const projectHasConfirmation = (p) => (isProjectCard(p)
+  ? !!p.hasConfirmationItems
+  : hasConfirmation(p && p.confirmation));
+
+// What the board shows as the project's money: the client-approved
+// confirmation's revenue once one exists, else the stored totalValue. The
+// backend computes the card's figure with the same computeConfirmationTotals
+// this file's confRevenue mirrors, so the board and the drawer agree to the cent.
+export function projectRevenue(p) {
+  if (!p) return 0;
+  if (isProjectCard(p)) {
+    return p.hasConfirmationItems
+      ? (Number(p.confirmationRevenue) || 0)
+      : (Number(p.totalValue) || 0);
+  }
+  return hasConfirmation(p.confirmation)
+    ? confRevenue(p.confirmation)
+    : (Number(p.totalValue) || 0);
+}
+
+// How many quote lines a project carries, without the lines themselves.
+export const projectQuoteLineCount = (p) => (isProjectCard(p)
+  ? (Number(p.quoteLineCount) || 0)
+  : ((p && p.quoteLines) || []).length);
+
 // Estimated COGS from the CONFIRMATION's items — Σ (item qty × unitCost), the
 // internal cost/unit each item carried over from its accepted quote line
 // (never the client-facing unitPrice). Once a confirmation exists it IS the
