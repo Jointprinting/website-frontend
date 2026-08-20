@@ -1851,8 +1851,13 @@ function BookReceiptDialog({ receipt, categories = CATEGORIES, onClose, onBook }
             <TextField size="small" label="Date" type="date" value={date}
               onChange={(e) => setDate(e.target.value)} sx={dropInput} InputLabelProps={{ shrink: true, sx: { color: D.muted } }} />
           </Stack>
+          {/* A number that resolves to a real Order links this row to the job; one that
+              doesn't is kept as the INVOICE # instead of minting a phantom order —
+              said out loud here so the demotion is never a surprise. */}
           <TextField size="small" label="Order # (optional — links it to the job)" value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
+            onChange={(e) => setOrderNumber(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }}
+            helperText="A number that matches no order is kept as the invoice #, not an order link."
+            FormHelperTextProps={{ sx: { color: D.muted, fontSize: 10.5, ml: 0.25 } }} />
           <TextField size="small" label="Note" value={summary} multiline minRows={2}
             onChange={(e) => setSummary(e.target.value)} sx={dropInput} InputLabelProps={{ sx: { color: D.muted } }} />
           <Stack direction="row" gap={1} justifyContent="flex-end">
@@ -2071,6 +2076,12 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   const [brand, setBrand] = useState(seed?.brand || '');
   const [amount, setAmount] = useState(seed?.amount != null && seed?.amount !== '' ? String(seed.amount) : '');
   const [orderNumber, setOrderNumber] = useState(seed?.orderNumber || '');
+  // The owner's INVOICE number (Transaction.invoiceNumber) — a different sequence
+  // from the order # (invoice #1054 vs order #138). Kept so a scanned invoice number
+  // that matches no order is preserved as what it is instead of being written into
+  // the order link, which used to mint a phantom order and hide the real job's
+  // payment. Not a visible field: it round-trips from the scan and from an edit.
+  const [invoiceNumber, setInvoiceNumber] = useState(seed?.invoiceNumber || '');
   const [party, setParty] = useState(seed?.party || '');
   // Hard vendor link on an EXPENSE: set when a vendor is picked from the party
   // suggestions (or preloaded when editing a linked row); cleared the moment the
@@ -2137,11 +2148,17 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
       if (f.amount !== '' && f.amount != null) setAmount(String(f.amount));
       if (f.date) setDate(f.date);
       if (f.orderNumber) setOrderNumber(f.orderNumber);
+      // A number that matched NO order comes back as an invoice #, not an order link
+      // — the server refuses to pre-fill a phantom order. Keep it, and SAY so, so the
+      // owner can add the real order # rather than the money landing on a ghost job.
+      if (f.invoiceNumber) setInvoiceNumber(f.invoiceNumber);
       if (f.description) setDescription(f.description);
       if (typeof f.isCredit === 'boolean') setIsCredit(f.isCredit);
       setScanNote(f.isCredit
         ? 'Looks like a credit / return — I marked it as a credit. Double-check the direction before saving.'
-        : 'Auto-filled from the receipt — double-check it before saving.');
+        : f.invoiceNumber
+          ? `Auto-filled from the receipt. #${f.invoiceNumber} is an invoice number, not one of your order numbers — add the order # so this links to the job.`
+          : 'Auto-filled from the receipt — double-check it before saving.');
     } catch (_) {
       // Fields stay as-is; the receipt is still attached for manual entry — but
       // say so, so a failed scan doesn't read as the AI silently doing nothing.
@@ -2180,6 +2197,9 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
     }
     setSaving(true); setErr('');
     const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit, brand };
+    // Only sent when there is one, so an ordinary entry never writes a blank over a
+    // saved invoice #.
+    if (invoiceNumber) form.invoiceNumber = String(invoiceNumber).replace(/[^0-9]/g, '');
     // A vendor PICKED from the suggestions sends its hard link; free-typed text
     // sends none, so the server auto-resolves from the party name instead.
     if (type === 'expense' && vendorId) form.vendorId = vendorId;
