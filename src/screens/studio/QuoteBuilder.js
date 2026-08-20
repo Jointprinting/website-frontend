@@ -63,6 +63,7 @@ import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
 import { shadeChangeFor } from '../../common/garmentShade';
 import { stateDistanceMi } from './_roadTrip';
+import { priceAtMargin, repriceToMargin } from './_quotePricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -70,8 +71,8 @@ import { stateDistanceMi } from './_roadTrip';
 // cost, so clicking "10%" yielded a 9.1% margin and read as broken.
 const TIERS = [];
 for (let p = 5; p <= 70; p += 5) TIERS.push(p);
-const priceAtMargin = (cogs, marginPct) =>
-  marginPct >= 100 ? 0 : cogs / (1 - marginPct / 100);
+// priceAtMargin + repriceToMargin live in _quotePricing so the three controls
+// that reprice a line share one lock-aware definition.
 
 // The design's print-type LABEL options. The first five mirror the engine
 // methods (METHOD_SECTION keys) so the label and the "Price the print" method
@@ -342,12 +343,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
       return;
     }
     // Target MARGIN: price so that pct% of what the client pays is profit.
-    const c = lineCogsPerUnit(lines[i]);
-    const price = +priceAtMargin(c, pct).toFixed(2);
     setLine(i, {
-      unitPrice: price,
-      markup:    c > 0 ? +(price / c).toFixed(4) : 1,
-      noMarkup:  false,
+      ...repriceToMargin(lines[i], pct),
     });
   };
   const addLine    = () => { setLines(prev => [...prev, emptyLine()]); setDirty(true); };
@@ -1503,15 +1500,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   })();
 
   // Price every cell to hit the target MARGIN over its own cost.
-  const applyTier = (pct) => onPatchIdxs(all, (l) => {
-    const c = lineCogsPerUnit(l);
-    const price = +priceAtMargin(c, pct).toFixed(2);
-    return {
-      unitPrice: price,
-      markup:    c > 0 ? +(price / c).toFixed(4) : 1,
-      noMarkup:  false,   // choosing a margin turns off fixed-price
-    };
-  });
+  // Locked (catalog-priced) cells keep their number — repriceToMargin returns an
+  // empty patch for them, so this strip can no longer overwrite what the per-cell
+  // strip and AT COST both refuse to touch.
+  const applyTier = (pct) => onPatchIdxs(all, (l) => repriceToMargin(l, pct));
 
   // "How much do I make at m%?" — the client picks ONE cell, so the honest
   // answer is a RANGE across the possible picks at that margin (smallest pick
@@ -1648,11 +1640,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   // mutually-exclusive options would be a number that never happens).
 
   // Price ONE option row at a target margin (same math as the design strip).
-  const applyRowTier = (idxs, pct) => onPatchIdxs(idxs, (l) => {
-    const c = lineCogsPerUnit(l);
-    const price = +priceAtMargin(c, pct).toFixed(2);
-    return { unitPrice: price, markup: c > 0 ? +(price / c).toFixed(4) : 1, noMarkup: false };
-  });
+  const applyRowTier = (idxs, pct) => onPatchIdxs(idxs, (l) => repriceToMargin(l, pct));
 
   // Copy THIS option's costs (print $/u, setup, shipping, print specs) to
   // every other option at the matching run size — brands usually share print
