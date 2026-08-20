@@ -44,7 +44,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { D, accentBar, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, dropInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey, isProjectCard, projectHasConfirmation, projectRevenue } from './_shared';
+import { D, accentBar, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, dropInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey, isProjectCard, projectHasConfirmation, projectRevenue, mergeRevs } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { sortMockupTiles, mockupBadge } from './_mockupNumbers';
 import { SOURCE_META } from './_submissions';
@@ -175,6 +175,29 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const [toast, setToast] = useState({ open: false, msg: '', sev: 'success' });
   const flash = useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
 
+  // ── Optimistic concurrency: what revision of each subtree did we last see ──
+  //
+  // The quote and confirmation builders send the WHOLE quoteLines[] /
+  // confirmation on every autosave — 800ms after a keystroke, no Save button —
+  // so two tabs on one project used to overwrite each other silently. The
+  // server now versions each subtree and refuses a write whose base revision
+  // has moved (see backend utils/orderRevision.js); this is the client half:
+  // remember the newest revision we've been handed for each project, and send it
+  // with any write that replaces a subtree.
+  //
+  // A ref rather than state on purpose — it is bookkeeping, never rendered, and
+  // it must be readable by a save that fires between renders. Board cards carry
+  // the counters too (a card is a removal, not a whitelist), so the map is warm
+  // before anything is opened.
+  const revsRef = React.useRef({});
+  const noteRevs = useCallback((doc) => {
+    if (!doc || !doc._id) return doc;
+    const key = String(doc._id);
+    revsRef.current[key] = mergeRevs(revsRef.current[key], doc);
+    return doc;
+  }, []);
+
+
   const loadProjects = useCallback(async () => {
     setLoading(true);
     // allSettled so one slow/broken endpoint doesn't blank the whole tab.
@@ -196,7 +219,11 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       // card badge — the backend attention feed, surfaced on the board.
       axios.get(`${base}/orders/attention`, authHdr),
     ]);
-    if (pr.status === 'fulfilled') setProjects(pr.value.data.projects || []);
+    if (pr.status === 'fulfilled') {
+      const cards = pr.value.data.projects || [];
+      cards.forEach(noteRevs);          // board cards carry the subtree revisions
+      setProjects(cards);
+    }
     else console.error('loadProjects /orders/projects failed:', pr.reason?.message || pr.reason);
     if (mk.status === 'fulfilled') {
       // /studio/library/mockups returns a bare array, NOT { items: [...] }.
@@ -226,7 +253,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       setAttention(map);
     } else setAttention({});
     setLoading(false);
-  }, [authHdr]);
+  }, [authHdr, noteRevs]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
@@ -300,8 +327,8 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   const fetchFull = useCallback(async (proj) => {
     if (!proj || !proj._id || !isProjectCard(proj)) return proj;
     const r = await axios.get(`${base}/orders/${proj._id}`, authHdr);
-    return (r.data && r.data._id) ? r.data : proj;
-  }, [authHdr]);
+    return (r.data && r.data._id) ? noteRevs(r.data) : proj;
+  }, [authHdr, noteRevs]);
 
   // The open project hydrates itself, whichever route opened it — a card click,
   // a right-click "Open order", a cross-tab deep link, back/forward, or a ?p= on
@@ -515,7 +542,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     try {
       const r = await axios.post(`${base}/orders`, { status: 'quoted', companyName: '', clientName: '' }, authHdr);
       await loadProjects();
-      setActiveProject(r.data);
+      setActiveProject(noteRevs(r.data));
     } catch (e) {
       flash(`Couldn't create project: ${e.message}`, 'error');
     } finally {
@@ -531,20 +558,67 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     try {
       const r = await axios.post(`${base}/orders/${id}/duplicate`, { carryMockups: true }, authHdr);
       await loadProjects();
-      setActiveProject(r.data);
+      setActiveProject(noteRevs(r.data));
       flash(`Reordered — new quote #${r.data.projectNumber || ''} created from this job.`, 'success');
     } catch (e) {
       flash(`Couldn't reorder: ${e.response?.data?.message || e.message}`, 'error');
     }
   };
 
-  const handleSave = async (id, patch) => {
+  // One conflict prompt at a time. Autosave retries on every keystroke, so
+  // without this a single conflict would stack a dialog per retry.
+  const conflictRef = React.useRef(false);
+
+  const handleSave = async (id, patch, opts = {}) => {
+    const known = revsRef.current[String(id)];
+    // Only a write that REPLACES a subtree needs a precondition. A scalar field
+    // patch from the drawer (status, paid, a note) touches neither, and guarding
+    // it would turn every background write into a false conflict.
+    const body = { ...patch };
+    if (known && !opts.force) {
+      if ('confirmation' in body) body.baseConfirmationRev = known.confirmationRev;
+      if ('quoteLines' in body) body.baseQuoteLinesRev = known.quoteLinesRev;
+    }
+    if (opts.force) body.forceOverwrite = true;
+
     try {
-      const r = await axios.put(`${base}/orders/${id}`, patch, authHdr);
+      const r = await axios.put(`${base}/orders/${id}`, body, authHdr);
+      noteRevs(r.data);
       setProjects(prev => prev.map(p => p._id === id ? r.data : p));
       if (activeProject?._id === id) setActiveProject(r.data);
       return r.data;
     } catch (e) {
+      if (e.response?.status === 409 && !opts.force) {
+        // Somebody else's write landed first. Never resolve this silently in
+        // either direction: dropping the owner's edit and clobbering the other
+        // tab's are both data loss, and only the owner knows which one is right.
+        if (conflictRef.current) return null;
+        conflictRef.current = true;
+        try {
+          const overwrite = await confirmDialog({
+            title: 'This project changed somewhere else',
+            message: 'Another tab or device saved this project while you were editing it. '
+              + 'Keep what is on this screen and overwrite theirs, or load the newer version and lose your last edit?',
+            confirmLabel: 'Keep mine (overwrite)',
+            cancelLabel: 'Load the newer version',
+            danger: true,
+          });
+          if (overwrite) return await handleSave(id, patch, { force: true });
+          // Load theirs: re-read the record and let every open surface adopt it.
+          const fresh = await axios.get(`${base}/orders/${id}`, authHdr);
+          if (fresh.data && fresh.data._id) {
+            noteRevs(fresh.data);
+            setProjects(prev => prev.map(p => p._id === id ? fresh.data : p));
+            if (activeProject?._id === id) setActiveProject(fresh.data);
+            if (quote?._id === id) setQuote(fresh.data);
+            if (confirmation?._id === id) setConfirmation(fresh.data);
+          }
+          flash('Loaded the newer version of this project.', 'info');
+          return null;
+        } finally {
+          conflictRef.current = false;
+        }
+      }
       // Let callers detect failure so they can avoid closing a dialog over
       // an unsaved change. Still surface the error to the user immediately.
       flash(`Save failed: ${e.response?.data?.message || e.message}`, 'error');

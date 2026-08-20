@@ -11,7 +11,7 @@
 
 import {
   isProjectCard, projectHasConfirmation, projectRevenue, projectQuoteLineCount,
-  confRevenue,
+  confRevenue, mergeRevs,
 } from './_shared';
 
 // One item: qty units at unitPrice each, plus the internal cost/unit.
@@ -89,5 +89,36 @@ describe('projectQuoteLineCount', () => {
     // menu of a project that already has a three-option pitch.
     const card = { hasConfirmationItems: false, quoteLineCount: 4, quoteGroupCount: 2 };
     expect(projectQuoteLineCount(card) > 0).toBe(true);
+  });
+});
+
+describe('mergeRevs', () => {
+  // The server versions `confirmation` and `quoteLines` separately and refuses a
+  // whole-subtree write whose base revision has moved. The client sends the
+  // newest revision it has been handed — newest, not latest-seen.
+  test('adopts the revisions from a fresh document', () => {
+    expect(mergeRevs(undefined, { confirmationRev: 3, quoteLinesRev: 1 }))
+      .toEqual({ confirmationRev: 3, quoteLinesRev: 1 });
+  });
+
+  test('a late board refresh cannot drag a revision backwards', () => {
+    // This is the false conflict the max exists to prevent: a board load that
+    // started before a save arrives after it, carrying the pre-save number. The
+    // next keystroke would send a stale base and conflict against nobody.
+    const afterSave = { confirmationRev: 5, quoteLinesRev: 2 };
+    const staleCard = { confirmationRev: 4, quoteLinesRev: 2 };
+    expect(mergeRevs(afterSave, staleCard)).toEqual({ confirmationRev: 5, quoteLinesRev: 2 });
+  });
+
+  test('each subtree advances on its own', () => {
+    expect(mergeRevs({ confirmationRev: 5, quoteLinesRev: 2 }, { confirmationRev: 5, quoteLinesRev: 9 }))
+      .toEqual({ confirmationRev: 5, quoteLinesRev: 9 });
+  });
+
+  test('a legacy order with no counters reads as revision 0, never NaN', () => {
+    // NaN would be sent as a base and silently drop the precondition.
+    expect(mergeRevs(undefined, { _id: 'a' })).toEqual({ confirmationRev: 0, quoteLinesRev: 0 });
+    expect(mergeRevs(undefined, { confirmationRev: null, quoteLinesRev: 'x' }))
+      .toEqual({ confirmationRev: 0, quoteLinesRev: 0 });
   });
 });
