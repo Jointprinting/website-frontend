@@ -1390,7 +1390,11 @@ function ColorRangeDialog({ open, styleCode, chosen, onClose, onApply, authHdr }
             sx={{ color: D.green, textTransform: 'none', fontWeight: 800, fontSize: 12.5,
               border: `1px solid ${D.green}`, borderRadius: 999, px: 2,
               '&:hover': { bgcolor: 'rgba(74,222,128,0.10)' } }}>
-            {sel.size ? `Offer ${sel.size} colour${sel.size === 1 ? '' : 's'}` : 'Sell in one colour only'}
+            {/* Applying an EMPTY selection clears colorOptions, which turns the
+                colour picker off entirely — the client goes back to fixed
+                quantity chips on a single colour label. It does not "sell in one
+                colour", which is what the old label promised. */}
+            {sel.size ? `Offer ${sel.size} colour${sel.size === 1 ? '' : 's'}` : 'No colour choice'}
           </Button>
         </Stack>
       </DialogContent>
