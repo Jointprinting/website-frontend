@@ -7,6 +7,11 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 // ConfirmationDocument, so the Studio's tax and the client's tax can't drift.
 // Re-exported below so every `from './_shared'` importer keeps working unchanged.
 import { roundCents, isTaxCustomLine, confLocationTax } from '../../common/confTax';
+// The ORDERED quantity of a quote line — the colour split's total when the client
+// typed one, else the line qty. Same module the client's approval page prices from,
+// and the exact twin of the backend's utils/colorSplit.orderedQty, so quoteCogs
+// below can mirror models/Order.js computeQuoteTotals for real.
+import { orderedQty } from '../../common/colorSplit';
 
 // True on phone-width viewports — spread onto a <Dialog fullScreen={…}> so a
 // content-heavy modal takes the whole screen on a phone instead of a cramped,
@@ -294,7 +299,11 @@ export function lineEffectivePrice(l) {
 // Order.cogs scalar, and Finances always agree. Returns 0 until the client has
 // picked (nothing accepted) — same gate as the backend.
 export function quoteCogs(lines, orderSetup = 0, orderShip = 0) {
-  const all = Array.isArray(lines) ? lines : [];
+  // Hidden lines are owner-only parking — never part of what the client can take,
+  // so never part of the money. The backend drops them FIRST (models/Order.js), so
+  // the accepted-gate below must run on the already-filtered array too, or a quote
+  // whose only accepted line is hidden prices here and books zero there.
+  const all = (Array.isArray(lines) ? lines : []).filter((l) => l && !l.hiddenFromClient);
   if (!all.some((l) => l && l.accepted)) return 0;
   // Accepted picks + always-included standalone (ungrouped) lines. A grouped
   // alternative the client declined contributes nothing.
@@ -305,7 +314,9 @@ export function quoteCogs(lines, orderSetup = 0, orderShip = 0) {
   const perLineExtras = arr.reduce((s, l) => s + n(l.setupCost) + n(l.shippingCost), 0);
   const legacy = perLineExtras === 0 ? (n(orderSetup) + n(orderShip)) : 0;
   const cogs = arr.reduce(
-    (s, l) => s + n(l.qty) * (n(l.blankCost) + n(l.printCost)) + n(l.setupCost) + n(l.shippingCost),
+    // orderedQty, NOT l.qty: the line's own qty is only the TIER it priced at, so a
+    // 450-piece colour split that landed on the 300 break costs 450 units, not 300.
+    (s, l) => s + orderedQty(l) * (n(l.blankCost) + n(l.printCost)) + n(l.setupCost) + n(l.shippingCost),
     0,
   ) + legacy;
   return roundCents(cogs);
