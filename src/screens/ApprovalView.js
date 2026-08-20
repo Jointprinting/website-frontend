@@ -30,7 +30,7 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import { detectGridRows } from '../common/quoteGrid';
-import { validateSplit, tierLineFor, minRunFor, runLines, splitTotal } from '../common/colorSplit';
+import { validateSplit, validateQty, tierLineFor, minRunFor, runLines, splitTotal } from '../common/colorSplit';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
@@ -222,6 +222,12 @@ export default function ApprovalView() {
   // Colour runs: group label -> { colourName: typed quantity }. Held as the raw
   // string so a half-typed "1" on the way to "150" doesn't fight the input.
   const [alloc, setAlloc] = useState({});
+  // A FREE QUANTITY typed on a run that isn't sold by colour: { group: '75' }.
+  // The colour runs above already let a client land between the owner's chips;
+  // this is the same thing for the runs that have no colour list, which is most
+  // of them — promo items, hand-typed lines, and any apparel line the owner
+  // didn't do an S&S colour lookup on.
+  const [qtyPick, setQtyPick] = useState({});
   const [pickBusy, setPickBusy] = useState(false);
   const [payMethod, setPayMethod] = useState('');   // '' | 'cc' | 'ach' — client's payment choice
   const [repicking, setRepicking] = useState(false); // client reopened the picker to change selections
@@ -273,6 +279,13 @@ export default function ApprovalView() {
       }, {});
     }
     if (Object.keys(seeded).length) setAlloc(prev => ({ ...seeded, ...prev }));
+    // Same for a typed quantity — reopening the link shows what they chose, not
+    // the chip the tier happens to sit on.
+    const seededQty = {};
+    for (const l of lines) {
+      if (l && l.group && Number(l.pickedQty) > 0) seededQty[l.group] = String(Number(l.pickedQty));
+    }
+    if (Object.keys(seededQty).length) setQtyPick(prev => ({ ...seededQty, ...prev }));
   }, [data]);
   const approvalStatus = p.approvalStatus || 'pending';   // 'pending' | 'approved' | 'requested_changes'
   // PAID — the admin ticked the order_paid tracking step. From here the page
@@ -558,6 +571,55 @@ export default function ApprovalView() {
     return { ...run, typed, check, total, tier, unit, lineTotal: unit * total, min: minRunFor(run.tiers) };
   };
 
+  // ── A QUANTITY RUN ─────────────────────────────────────────────────────────
+  //
+  // The run the client's current pick belongs to, when that run offers more
+  // than one price break and isn't sold by colour.
+  //
+  // A quote shows its breaks as sibling lines — 50 / 100 / 150 of the same
+  // product — and until now the client could only click one of those chips. A
+  // client who needed 75 had to email and ask for a chip to be added. The owner:
+  // "I don't want them to have to ask me to make the change, it adds friction."
+  //
+  // runKey is what tells three TIERS of one product apart from three different
+  // BRANDS in the same group: tiers share style, description, print spec and
+  // colour and differ only in run size, and that is exactly the key runLines
+  // already groups on for the colour runs.
+  const qtyRunFor = (g) => {
+    if (colorRunFor(g)) return null;                      // colour runs own their own quantity UI
+    const idx = pickFor(g);
+    if (idx === undefined) return null;                   // nothing picked — nothing to size
+    const entries = quoteLines.map((l, i) => ({ ...l, idx: i })).filter(l => l.group === g);
+    const picked = entries.find(l => l.idx === idx);
+    if (!picked) return null;
+    const tiers = runLines(entries, picked).sort((a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0));
+    if (tiers.length < 2) return null;                    // one price, nothing to choose between
+    return { picked, tiers, min: minRunFor(tiers) };
+  };
+
+  const setQtyFor = (g, raw) => {
+    const v = String(raw ?? '').replace(/[^0-9]/g, '');
+    setQtyPick(prev => ({ ...prev, [g]: v }));
+  };
+
+  // Resolve a quantity run to live money — the SAME rules the server re-derives
+  // on submit. `custom` is false while they're on one of the owner's chips, so
+  // the page reads exactly as it always did until they type something.
+  const qtyState = (g) => {
+    const run = qtyRunFor(g);
+    if (!run) return null;
+    const chipQty = Number(run.picked.qty) || 0;
+    const raw = qtyPick[g];
+    if (raw === undefined || raw === '') {
+      return { ...run, typed: null, qty: chipQty, tier: run.picked,
+        unit: Number(run.picked.unitPrice) || 0, check: { ok: true, message: '' }, custom: false };
+    }
+    const check = validateQty(Number(raw), run.tiers);
+    const tier = (check.ok && tierLineFor(run.tiers, check.qty)) || run.picked;
+    return { ...run, typed: Number(raw), qty: check.ok ? check.qty : 0, tier,
+      unit: Number(tier.unitPrice) || 0, check, custom: Number(raw) !== chipQty };
+  };
+
   // Current selection for a NON-colour group. Explicit picks state wins (null =
   // the client deselected/skipped it); otherwise fall back to any server-accepted
   // line so a re-pick opens on what they had. undefined = nothing chosen.
@@ -585,7 +647,9 @@ export default function ApprovalView() {
   // never sends 20 pieces of a 50-minimum run and gets a bare rejection.
   const allocError = groupNames.map(g => {
     const st = colorRunFor(g) ? runState(g) : null;
-    return st && st.total > 0 && !st.check.ok ? st.check.message : '';
+    if (st) return st.total > 0 && !st.check.ok ? st.check.message : '';
+    const qs = qtyState(g);
+    return qs && !qs.check.ok ? qs.check.message : '';
   }).find(Boolean) || '';
   // Live total of what they've kept so far (chosen options + standalone lines).
   const selectionTotal =
@@ -594,6 +658,8 @@ export default function ApprovalView() {
       if (st) return s + (st.check.ok ? st.lineTotal : 0);
       const idx = pickFor(g);
       if (idx === undefined) return s;
+      const qs = qtyState(g);
+      if (qs) return s + (qs.check.ok ? qs.qty * qs.unit : 0);
       const l = quoteLines[idx] || {};
       return s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
     }, 0) +
@@ -618,7 +684,14 @@ export default function ApprovalView() {
           continue;
         }
         const idx = pickFor(g);
-        if (idx !== undefined) payload.push((quoteLines[idx] && quoteLines[idx].lid) || idx);
+        if (idx === undefined) continue;
+        const ref = (quoteLines[idx] && quoteLines[idx].lid) || idx;
+        // A typed quantity posts { lid, qty }. As with a colour run the lid only
+        // says WHICH run — the server resolves the tier from the number, exactly
+        // as the page just showed them.
+        const qs = qtyState(g);
+        if (qs && qs.custom && qs.check.ok) payload.push({ lid: ref, qty: qs.qty });
+        else payload.push(ref);
       }
       await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/select?${q}`, { picks: payload });
       setRepicking(false);
@@ -1279,6 +1352,75 @@ export default function ApprovalView() {
                     );
                   })}
                 </Stack>
+                  );
+                })()}
+
+                {/* ── NEED A DIFFERENT QUANTITY? ─────────────────────────────
+                    The chips above are the owner's price breaks, not the only
+                    quantities he'll sell. A client who needs 75 on a 50/100/150
+                    quote used to have to email and ask him to add a chip; now
+                    they type it and the largest break at or below it sets the
+                    price. Only shown when the run actually HAS more than one
+                    break — a single-price option has nothing to choose. */}
+                {(() => {
+                  const qs = qtyState(g);
+                  if (!qs) return null;
+                  const chipQty = Number(qs.picked.qty) || 0;
+                  const offBreak = qs.check.ok && qs.custom && Number(qs.tier.qty) !== qs.qty;
+                  return (
+                    <Box sx={{ mt: 1.25, p: { xs: 1.5, sm: 1.75 }, borderRadius: 2.5,
+                      border: `1px dashed ${T.line}`, bgcolor: T.inset }}>
+                      <Stack direction="row" alignItems="center" gap={1.25} flexWrap="wrap">
+                        <Typography sx={{ color: T.muted, fontSize: 13, fontWeight: 600 }}>
+                          Need a different quantity?
+                        </Typography>
+                        {/* Same raw input the colour grid uses — this page has
+                            its own type scale and MUI's field fights it. */}
+                        <Box component="input" type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={qtyPick[g] ?? ''}
+                          placeholder={String(chipQty || qs.min || '')}
+                          aria-label={`Quantity for ${g}`}
+                          onChange={(e) => setQtyFor(g, e.target.value)}
+                          sx={{ width: 96, px: 1.25, py: 0.75, borderRadius: 2,
+                            border: `1.5px solid ${qs.custom && qs.check.ok ? T.green : T.line}`,
+                            bgcolor: T.panel, outline: 'none',
+                            color: qs.custom && qs.check.ok ? T.green : T.text,
+                            fontSize: 15, fontWeight: 800, ...mono,
+                            '&::placeholder': { color: T.faint, fontWeight: 600 },
+                            '&:focus': { borderColor: T.green, boxShadow: `0 0 0 3px ${T.glow}` } }} />
+                        <Typography sx={{ color: T.faint, fontSize: 12.5 }}>
+                          pieces{qs.min > 0 ? ` · ${qs.min} minimum` : ''}
+                        </Typography>
+                      </Stack>
+
+                      {/* Never a bare rejection — the same rule the colour runs
+                          follow: say how many more, or what the price becomes. */}
+                      {!qs.check.ok ? (
+                        <Typography sx={{ color: T.amber, fontSize: 12.5, mt: 0.85, fontWeight: 600 }}>
+                          {qs.check.message}
+                        </Typography>
+                      ) : qs.custom ? (
+                        <Typography sx={{ color: T.green, fontSize: 13, mt: 0.85, fontWeight: 700, ...mono }}>
+                          {qs.qty} pieces at {money(qs.unit)}/ea
+                          {offBreak ? ` — the ${Number(qs.tier.qty)}-piece price` : ''}
+                          {' · '}{money(qs.qty * qs.unit)} total
+                        </Typography>
+                      ) : null}
+
+                      {/* Short of the next break, say what it saves — the same
+                          nudge the colour runs give, and the owner's upsell. */}
+                      {qs.check.ok && (() => {
+                        const next = qs.tiers.find(t => (Number(t.qty) || 0) > qs.qty);
+                        if (!next) return null;
+                        const save = (qs.unit - (Number(next.unitPrice) || 0)) * (Number(next.qty) || 0);
+                        return save > 0 ? (
+                          <Typography sx={{ color: T.muted, fontSize: 12.5, mt: 0.5 }}>
+                            {(Number(next.qty) || 0) - qs.qty} more reaches {money(Number(next.unitPrice) || 0)}/ea
+                            {' '}— {money((Number(next.qty) || 0) * (Number(next.unitPrice) || 0))} for {Number(next.qty) || 0}.
+                          </Typography>
+                        ) : null;
+                      })()}
+                    </Box>
                   );
                 })()}
                 </>)}

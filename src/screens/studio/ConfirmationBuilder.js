@@ -27,6 +27,7 @@ import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RA
 import { confTaxableSubtotal, supersedesTaxLine, customLineValue } from '../../common/confTax';
 import { flatFieldsFor, summarizeType, summarizeDetails, nextPlacement, PRINT_PLACEMENTS, PRINT_METHODS } from './_printLocations';
 import { splitRunQty, seedUnitCost } from './_confSeed';
+import { orderedQty } from '../../common/colorSplit';
 import { alertDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { mockupViewList } from '../../common/mockupViews';
@@ -1455,7 +1456,11 @@ export function isApparelDescription(s) { return APPAREL_RE.test(String(s || '')
 // Without a split this returns a single item, exactly as it always did.
 function seedItemsFromQuote(line, projectPrinter) {
   const split = ((line && line.colorSplit) || []).filter(c => c && Number(c.qty) > 0);
-  if (!split.length) return [seedItemFromQuote(line, projectPrinter)];
+  // What the client ORDERED, which is not always the tier the line priced at.
+  // A 75-piece order on a 50/100/150 quote sits on the 50 line, so seeding
+  // line.qty would build a confirmation for 50 shirts and invoice 50. Identical
+  // to line.qty for every line without a typed quantity, so nothing else moves.
+  if (!split.length) return [seedItemFromQuote({ ...line, qty: orderedQty(line) }, projectPrinter)];
   // Setup and shipping are charged ONCE for the whole print run, so they must be
   // amortized over the RUN total, not over each colour's slice. Seeding each
   // colour with its own qty made every colour carry the full setup+ship, and
