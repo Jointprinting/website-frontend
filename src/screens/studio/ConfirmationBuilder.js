@@ -25,6 +25,7 @@ import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
 import { flatFieldsFor, summarizeType, summarizeDetails, nextPlacement, PRINT_PLACEMENTS, PRINT_METHODS } from './_printLocations';
+import { splitRunQty, seedUnitCost } from './_confSeed';
 import { alertDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { mockupViewList } from '../../common/mockupViews';
@@ -1454,22 +1455,37 @@ export function isApparelDescription(s) { return APPAREL_RE.test(String(s || '')
 function seedItemsFromQuote(line, projectPrinter) {
   const split = ((line && line.colorSplit) || []).filter(c => c && Number(c.qty) > 0);
   if (!split.length) return [seedItemFromQuote(line, projectPrinter)];
+  // Setup and shipping are charged ONCE for the whole print run, so they must be
+  // amortized over the RUN total, not over each colour's slice. Seeding each
+  // colour with its own qty made every colour carry the full setup+ship, and
+  // computeConfirmationCogs then summed them: a 300-piece run split 150/150 with
+  // $120 setup + $90 shipping booked $2,220 of COGS against a true $2,010 — one
+  // extra copy of setup+ship per additional colour, understating margin forever.
+  const runQty = splitRunQty(split);
   return split.map((c) => {
     // Each colour is seeded from the TIER line the client's total reached, so
     // every colour bills at the price their combined run actually earned.
-    const it = seedItemFromQuote({ ...line, qty: Number(c.qty) || 0, color: c.name || '' }, projectPrinter);
+    const it = seedItemFromQuote(
+      { ...line, qty: Number(c.qty) || 0, color: c.name || '' },
+      projectPrinter,
+      runQty,
+    );
     return { ...it, color: c.name || '' };
   });
 }
 
-function seedItemFromQuote(line, projectPrinter) {
+// `amortizeQty` is the quantity setup+shipping is spread across. It defaults to
+// the line's own qty (the single-item case, unchanged) and is passed the RUN
+// total when a colour split seeds one item per colour — see seedItemsFromQuote.
+function seedItemFromQuote(line, projectPrinter, amortizeQty) {
   const description = line.description || '';
-  // Carry the quote line's true cost/unit (blank + print + setup/ship spread
-  // over its qty) so the order's COGS can be derived from the confirmation.
-  // Internal only — never rendered on the client-facing doc.
+  // The quantity THIS item carries. For a colour split that is the colour's
+  // slice; setup+shipping are still amortized over the whole run (amortizeQty).
   const q = Number(line.qty) || 0;
-  const setupShip = Math.max(0, Number(line.setupCost) || 0) + Math.max(0, Number(line.shippingCost) || 0);
-  const unitCost = (Number(line.blankCost) || 0) + (Number(line.printCost) || 0) + (q > 0 ? setupShip / q : 0);
+  // Carry the quote line's true cost/unit (blank + print + setup/ship spread
+  // over the run) so the order's COGS can be derived from the confirmation.
+  // Internal only — never rendered on the client-facing doc.
+  const unitCost = seedUnitCost(line, amortizeQty);
   return {
     // Carry the line's art too (its studio mockup # or uploaded render), so the
     // "+ From quote" path lands with the design attached, not just text. The
