@@ -56,6 +56,8 @@ import CarryMockupsDialog from './mockup/CarryMockupsDialog';
 import AddColourDialog from './mockup/AddColourDialog';
 import FixDataDialog from './FixDataDialog';
 import { readStudioUrl, patchStudioUrl, onStudioNavigate, closeStudioOverlay } from './_studioUrl';
+// A drop committer leaves a phone or an email — the same one-tap dial the CRM uses.
+import { telHref } from './crm/_crm';
 import ConfirmationBuilder from './ConfirmationBuilder';
 import PoBuilderDialog from './PoBuilderDialog';
 import FlowPipeline from './FlowPipeline';
@@ -1951,6 +1953,23 @@ function PreorderSection({ order, authHdr, onToast }) {
     try { await navigator.clipboard.writeText(url); onToast('Customer link copied — the one your client shares with their people.', 'success'); }
     catch { onToast(url, 'success'); }
   };
+  // The roster as a paste-able table. Every column here is data the drop already
+  // captured and the Studio never showed — the contact you need to chase someone
+  // and the note they left ("XL runs small, size me up"). Tab-separated so it
+  // lands as columns in Sheets, which is what pickup day actually runs on.
+  const copyRoster = async (l) => {
+    const label = new Map((l.items || []).map((i) => [String(i.id), i.label]));
+    const head = ['Name', 'Item', 'Brand', 'Colour', 'Size', 'Qty', 'Contact', 'Note', 'Committed'];
+    const rows = (l.commitments || []).map((c) => [
+      c.name || '', label.get(String(c.itemId)) || c.itemId || '',
+      c.variant || '', c.color || '', c.size || '', c.qty || 0,
+      c.contact || '', (c.note || '').replace(/\s+/g, ' '),
+      c.at ? new Date(c.at).toLocaleDateString() : '',
+    ]);
+    const tsv = [head, ...rows].map((r) => r.join('\t')).join('\n');
+    try { await navigator.clipboard.writeText(tsv); onToast(`Roster copied — ${rows.length} commitment${rows.length === 1 ? '' : 's'}.`, 'success'); }
+    catch { onToast('Could not copy — check clipboard permissions.', 'error'); }
+  };
   // Roll a cleared drop's tally into the project's confirmation — the step the
   // whole drop exists for. The server refuses to overwrite existing confirmation
   // lines unless we say so, so a second roll-in asks first rather than silently
@@ -2115,19 +2134,67 @@ function PreorderSection({ order, authHdr, onToast }) {
                     {l.tally.totalQty === 0 ? (
                       <Typography sx={{ color: D.muted, fontSize: 11 }}>No commitments yet.</Typography>
                     ) : (
-                      <Stack gap={0.5}>
+                      <Stack gap={0.75}>
                         {Object.entries(l.tally.byItem).map(([itemId, t]) => (
-                          <Typography key={itemId} sx={{ color: D.text, fontSize: 11 }}>
-                            <b>{itemLabel.get(itemId) || 'Item'}</b> — {t.qty} units
-                            <Box component="span" sx={{ color: D.muted }}>
-                              {' '}({Object.entries(t.bySize).map(([s, q]) => `${s} ${q}`).join(' · ')})
-                            </Box>
-                          </Typography>
+                          <Box key={itemId}>
+                            <Typography sx={{ color: D.text, fontSize: 11 }}>
+                              <b>{itemLabel.get(itemId) || 'Item'}</b> — {t.qty} units
+                              <Box component="span" sx={{ color: D.muted }}>
+                                {' '}({Object.entries(t.bySize).map(([s, q]) => `${s} ${q}`).join(' · ')})
+                              </Box>
+                            </Typography>
+                            {/* WHICH BRAND AND COLOUR. The server has always
+                                computed this and nothing rendered it — so on a
+                                drop where people chose between blanks or
+                                colourways, the one number needed to actually
+                                PLACE the order was the one number not on screen. */}
+                            {Object.keys(t.byVariant || {}).length > 0 && (
+                              <Typography sx={{ color: D.green, fontSize: 10.5, fontFamily: 'monospace', pl: 1 }}>
+                                {Object.entries(t.byVariant).map(([v, q]) => `${v} × ${q}`).join('  ·  ')}
+                              </Typography>
+                            )}
+                          </Box>
                         ))}
-                        <Typography sx={{ color: D.muted, fontSize: 10.5, mt: 0.25 }}>
-                          {(l.commitments || []).slice(-8).reverse().map((c) => `${c.name} (${c.qty}${c.size ? ` ${c.size}` : ''})`).join(' · ')}
-                          {(l.commitments || []).length > 8 ? ' · …' : ''}
-                        </Typography>
+
+                        {/* WHO COMMITTED. Every commitment carries a contact and
+                            a note; both were stored and rendered nowhere, so a
+                            customer could type "XL runs small, size me up" or
+                            leave a phone number and no one would ever see it.
+                            The full roster, not the last eight — pickup day needs
+                            all of them. */}
+                        <Box sx={{ mt: 0.5, pt: 0.75, borderTop: `1px solid ${D.line}`,
+                          maxHeight: 190, overflowY: 'auto', ...scrollbar }}>
+                          {(l.commitments || []).slice().reverse().map((c, i) => (
+                            <Box key={c._id || i} sx={{ py: 0.4, borderBottom: i < (l.commitments || []).length - 1 ? `1px solid ${D.line}` : 'none' }}>
+                              <Typography sx={{ color: D.text, fontSize: 11 }}>
+                                {c.name}
+                                <Box component="span" sx={{ color: D.muted }}>
+                                  {' — '}{[c.variant, c.color, c.size].filter(Boolean).join(' · ') || 'no options'} × {c.qty}
+                                </Box>
+                                {c.contact && (
+                                  <Box component="a"
+                                    href={c.contact.includes('@') ? `mailto:${c.contact}` : telHref(c.contact) || undefined}
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{ color: D.green, fontSize: 10.5, fontFamily: 'monospace', ml: 1, textDecoration: 'none',
+                                      '&:hover': { textDecoration: 'underline' } }}>
+                                    {c.contact}
+                                  </Box>
+                                )}
+                              </Typography>
+                              {c.note && (
+                                <Typography sx={{ color: '#fbbf24', fontSize: 10.5, pl: 1, lineHeight: 1.4 }}>
+                                  “{c.note}”
+                                </Typography>
+                              )}
+                            </Box>
+                          ))}
+                        </Box>
+
+                        <Button size="small" onClick={() => copyRoster(l)}
+                          title="Tab-separated — paste straight into Sheets for pickup day"
+                          sx={{ alignSelf: 'flex-start', color: D.muted, fontSize: 10.5, textTransform: 'none', minWidth: 0, mt: 0.25 }}>
+                          Copy roster
+                        </Button>
                       </Stack>
                     )}
                   </Box>
