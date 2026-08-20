@@ -55,8 +55,7 @@ import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import {
   D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen,
-  lineCogsPerUnit, lineCommitted, lineEffectivePrice,
-} from './_shared';
+  lineCogsPerUnit, lineCommitted, lineEffectivePrice, builderDialogPaper } from './_shared';
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -687,10 +686,10 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
     <Dialog open={open}
       onClose={(_, reason) => { if (reason === 'backdropClick') return; closeWithSave(); }}
       maxWidth={false} fullWidth fullScreen={fullScreen}
-      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3,
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`,
         backgroundImage: `radial-gradient(120% 50% at 50% 0%, rgba(74,222,128,0.07), rgba(7,11,9,0) 62%)`,
         boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
-        m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
+        ...builderDialogPaper(fullScreen) } }}>
       {/* Header */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
         borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.35,
@@ -737,7 +736,8 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
         {/* Project-level meta — sticks with the quote so re-quotes don't forget.
             Setup + shipping moved onto each line (each option carries its own). */}
         <Box sx={{ display: 'grid', gap: 1.25, mb: 1, maxWidth: 640,
-          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(2, minmax(0, 1fr))' } }}>
+          // xs and sm were identical, so this responsive object did nothing.
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           <QF label="Ship to (state)">
             <TextField size="small" fullWidth value={shipToState} placeholder="PA"
               onChange={e => setMeta(setShipToState)(e.target.value)} sx={inkInput} />
@@ -981,6 +981,7 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
 // quoteLines to onPick. Reads the SAME /api/orders/projects feed the tracker
 // uses — which already carries quoteLines — so there's no new endpoint.
 function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick }) {
+  const fullScreen = useMobileFullScreen();
   const [projects, setProjects] = useState(null);
   const [q, setQ] = useState('');
   useEffect(() => {
@@ -1011,7 +1012,7 @@ function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick
     });
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}
       PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3 } }}>
       <DialogContent sx={{ p: 2.5 }}>
         <Typography sx={{ fontWeight: 800, fontSize: 15, color: D.text, mb: 0.5 }}>Copy from a past quote</Typography>
@@ -1234,6 +1235,7 @@ function SupplierLink({ line, onPatch, tf, sx }) {
 // — an approval link must not depend on a live vendor API, and supplier data
 // must never ride out to a public route.
 function ColorRangeDialog({ open, styleCode, chosen, onClose, onApply, authHdr }) {
+  const fullScreen = useMobileFullScreen();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [colors, setColors] = useState(null);
@@ -1288,7 +1290,7 @@ function ColorRangeDialog({ open, styleCode, chosen, onClose, onApply, authHdr }
   };
 
   return (
-    <Dialog open={!!open} onClose={onClose} maxWidth="md" fullWidth
+    <Dialog open={!!open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
       PaperProps={{ sx: { bgcolor: D.panel, border: `1px solid ${D.line}`, borderRadius: 3, backgroundImage: 'none' } }}>
       <DialogContent sx={{ p: 2.5 }}>
         <Typography sx={{ color: D.text, fontWeight: 800, fontSize: 15, mb: 0.4 }}>
@@ -1632,7 +1634,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   });
 
   const nCols = grid.qtys.length;
-  const tableCols = `minmax(280px, 1.3fr) repeat(${nCols}, minmax(158px, 1fr)) 40px`;
+  // Track 1 holds the sticky identity cell, whose OWN grid is
+  // `18px minmax(120px,1fr) 70px 124px 96px` + 4 gaps + padding + border = ~464px.
+  // Flooring the track at 280px meant it overflowed by ~184px — and because that
+  // cell is position:sticky with an opaque background and a z-index, it did not
+  // merely overhang, it PAINTED OVER the first quantity column.
+  const IDENTITY_COL_MIN = 464;
+  const tableCols = `minmax(${IDENTITY_COL_MIN}px, 1.3fr) repeat(${nCols}, minmax(158px, 1fr)) 40px`;
   const headCellSx = { color: D.faint, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase' };
 
   // The client picks ONE cell of this design — the per-cell money panel above
@@ -1906,8 +1914,12 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
             {/* PRINT AREAS — one row per area, each showing only the field(s)
                 its method prices on. First-class for every method now: add a
                 second (or third) area to ANY method, and priceAreas() sums them. */}
+            {/* flexWrap on each area row: the fields below are fixed widths
+                totalling ~486px (area 108 + print size 118 + design size 100 +
+                placement 116 + the remove button), which overflowed the spec
+                panel, the card and the dialog on a phone. */}
             {specAreas.map((a, i) => (
-              <Stack key={i} direction="row" gap={0.5} alignItems="flex-end">
+              <Stack key={i} direction="row" gap={0.5} alignItems="flex-end" flexWrap="wrap">
                 <QF label={`Area ${i + 1}`} sx={{ width: 108 }}>
                   <TextField size="small" fullWidth value={a.label} placeholder={areaLabelFor(i)}
                     onChange={e => setArea(i, { label: e.target.value })} sx={tf} />
@@ -2026,7 +2038,11 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
       {/* The matrix: option rows × quantity columns. Every cell is a real
           quote line the client can pick. Horizontal scroll on narrow screens. */}
       <Box sx={{ px: { xs: 1.5, md: 2 }, pb: 1.25, overflowX: 'auto', ...scrollbar }}>
-        <Box sx={{ minWidth: 452 + nCols * 130, display: 'grid', gap: 0.75, alignItems: 'stretch',
+        {/* Real content width: identity(464) + nCols x 158 + the 40px action column
+            + 6px gaps between each. The old `452 + nCols * 130` used numbers that
+            match nothing in tableCols, so it understated the row by 126-188px and
+            the scroller could not reach the right-hand edge of the matrix. */}
+        <Box sx={{ minWidth: IDENTITY_COL_MIN + 40 + 6 + nCols * 164, display: 'grid', gap: 0.75, alignItems: 'stretch',
           gridTemplateColumns: tableCols }}>
 
           {/* Header row: option column title, then one header per quantity */}
@@ -3119,6 +3135,7 @@ function promoWeeks(s) {
 }
 
 function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
+  const fullScreen = useMobileFullScreen();
   const [products, setProducts] = useState(null);   // null = loading
   const [error,    setError]    = useState('');
   const [q,        setQ]        = useState('');
@@ -3187,7 +3204,7 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
   const minQty = picked ? Math.max(picked.moq || 0, (picked.clientPriceBreaks || [])[0]?.qty || 0) : 0;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={fullScreen}
       PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: 3, maxHeight: '86vh' } }}>
       <Box sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${D.line}`, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box sx={accentBar} />
