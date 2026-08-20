@@ -560,6 +560,24 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
       // Promo provenance rides along (mirrors the backend duplicateOrder list)
       // so a copied catalog line stays protected from the margin chips.
       catalogUnitPrice: l.catalogUnitPrice, priceLocked: l.priceLocked,
+      // The garment colours this run is offered in — the owner's curated list,
+      // checked against S&S stock when he built the original quote. It is what
+      // lets the client split a run across colours and land between price
+      // breaks, so dropping it downgraded every copied quote to fixed chips.
+      colorOptions: (l.colorOptions || []).map(c => ({
+        name: c.name || '', code: c.code || '', hex: c.hex || '', image: c.image || '',
+      })),
+      // A parked line stays parked. Copying it as visible would put an internal
+      // costing line on a client's approval page.
+      hiddenFromClient: !!l.hiddenFromClient,
+      // The line's own product render — a vendor-shot promo item has no mockup
+      // number, so this IS its design.
+      image: l.image || '',
+      // mockupNum is deliberately NOT copied. A mockup number belongs to the
+      // project that minted it; carrying one here would point this project's
+      // quote at another project's designs, which is exactly the cross-project
+      // bleed the mockup work already fixed once. The owner links the design
+      // after copying, or carries the mockups properly via "Reorder".
     }));
     if (!clean.length) return;
     const used = new Set(lines.map(l => (l.group || '').trim().toLowerCase()).filter(Boolean));
