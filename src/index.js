@@ -22,9 +22,15 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 // mounts the native lab against legacy-shaped docs inside the REAL bundle so a
 // would-be white screen reproduces headlessly. Synthetic data only — no API,
 // no auth, unreachable without the explicit flag.
+// NOTE: this MUST stay a dynamic import(), never require(). The `if` is a runtime
+// condition but webpack resolves require() STATICALLY, so a require() here pulls the
+// harness — and through it NativeMockupLab -> MockupCanvas -> fabric.js — into the
+// main entry chunk that every visitor to the public marketing site downloads. As
+// import(), it becomes its own chunk that only ?__labtest fetches.
 if (window.location.search.includes('__labtest')) {
-  const LabTestHarness = require('./LabTestHarness').default;
-  root.render(<LabTestHarness />);
+  import('./LabTestHarness').then(({ default: LabTestHarness }) => {
+    root.render(<LabTestHarness />);
+  });
 } else {
   root.render(
     <BrowserRouter>

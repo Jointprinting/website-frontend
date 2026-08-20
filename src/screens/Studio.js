@@ -76,7 +76,6 @@ import { SOURCE_FILTERS, SOURCE_META, visibleSubmissions, submissionSource, coun
 import { StudioDialogHost, confirmDialog, alertDialog, promptDialog } from './studio/_dialog';
 import { COLD_CALL_NODES } from './studio/coldCallTree';
 import CatalogManagerTab from './studio/CatalogManagerTab';
-import RoadTripTab from './studio/RoadTripTab';
 import JpwReconTab from './studio/JpwReconTab';
 import OrderTracker from './studio/OrderTracker';
 import CrmTab from './studio/crm/CrmTab';
@@ -85,7 +84,6 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import BackupTab from './studio/BackupTab';
 import FinancesTab from './studio/FinancesTab';
 import LookbooksTab from './studio/LookbooksTab';
-import NativeMockupLabHost from './studio/mockup/NativeMockupLabHost';
 import LabErrorBoundary from './studio/mockup/LabErrorBoundary';
 import ContentTab from './studio/ContentTab';
 import NewsletterTab from './studio/NewsletterTab';
@@ -109,6 +107,11 @@ const JpwSitesTab = React.lazy(() => import('./studio/JpwSitesTab'));
 const WebworksOpsTab = React.lazy(() => import('./studio/WebworksOpsTab'));
 // Mockup Lab v2 — the in-Studio surface (browse + render mockups natively, no new tab).
 const MockupLab = React.lazy(() => import('./studio/mockup/MockupLab'));
+// Field Map — lazy because it pulls mapbox-gl (~250kB gz), which nothing else in
+// the Studio needs. Loading it eagerly charged that to every Studio open.
+const RoadTripTab = React.lazy(() => import('./studio/RoadTripTab'));
+// Mockup Lab editor — lazy because it pulls fabric.js and the canvas stack.
+const NativeMockupLabHost = React.lazy(() => import('./studio/mockup/NativeMockupLabHost'));
 
 const TOKEN_KEY = 'jpStudioToken';
 // The signed-in account's role ('owner' | 'agent'), stored alongside the token so
@@ -3336,7 +3339,13 @@ function StudioBody({ token, onLogout }) {
             SIGN OUT
           </Button>
         </Stack>
-        <RoadTripTab token={token} onNavigate={navigate} />
+        <React.Suspense fallback={
+          <Box display="flex" justifyContent="center" py={8}>
+            <JpLoader size={56} label="Loading Field Map…" />
+          </Box>
+        }>
+          <RoadTripTab token={token} onNavigate={navigate} />
+        </React.Suspense>
       </Box>
     );
   }
@@ -3347,6 +3356,11 @@ function StudioBody({ token, onLogout }) {
   if (view === 'mockup' && (mockupEntry.editProject || mockupEntry.editMockup || mockupEntry.editFresh)) {
     return (
       <LabErrorBoundary key={mockupEntry.nonce} remoteId={mockupEntry.editMockup} onBack={() => setView('hub')}>
+        <React.Suspense fallback={
+          <Box display="flex" justifyContent="center" py={8}>
+            <JpLoader size={56} label="Loading Mockup Lab…" />
+          </Box>
+        }>
         <NativeMockupLabHost
           token={token}
           entry={{
@@ -3359,6 +3373,7 @@ function StudioBody({ token, onLogout }) {
           onBack={() => setView('hub')}
           onNavigate={navigate}
         />
+        </React.Suspense>
       </LabErrorBoundary>
     );
   }

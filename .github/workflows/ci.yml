@@ -1,7 +1,8 @@
 name: CI
 
-# Compile the app on every PR and on pushes to main. Runs under CI=true, so any
-# ESLint warning fails the build — the same strict mode Vercel uses for prod.
+# Test then compile the app on every PR and on pushes to main. Runs under
+# CI=true, so any ESLint warning fails the build — the same strict mode Vercel
+# uses for prod.
 on:
   push:
     branches: [main]
@@ -9,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Frontend build
+    name: Frontend tests + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +19,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The money tests (pricing engine, colour-split tiers, NJ sales tax,
+      # confirmation totals) and the frontend/backend constant-mirror guards live
+      # here. They were written but never gated, so a change that broke what a
+      # customer gets charged could merge green. They run before the build so a
+      # logic failure is reported as a test failure, not a build failure.
+      - run: npm test -- --watchAll=false
+        env:
+          CI: true
       - run: npm run build
         env:
           CI: true
