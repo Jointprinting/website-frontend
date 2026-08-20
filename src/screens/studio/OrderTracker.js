@@ -174,8 +174,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
   // Snackbar toast — same pattern as the CRM tab (flash(msg, sev)) so feedback
   // reads the same across Studio tools instead of jarring native alert()s.
-  const [toast, setToast] = useState({ open: false, msg: '', sev: 'success' });
-  const flash = useCallback((msg, sev = 'success') => setToast({ open: true, msg, sev }), []);
+  const [toast, setToast] = useState({ open: false, msg: '', sev: 'success', action: null });
+  // `action` = { label, run } — an optional one-click follow-up on the toast.
+  // It exists for UNDO: every "delete" in this tab has always been a soft
+  // archive, and the honest place to offer the reversal is the moment after the
+  // action, not a trash screen nobody opens.
+  const flash = useCallback((msg, sev = 'success', action = null) => setToast({ open: true, msg, sev, action }), []);
 
   // ── Optimistic concurrency: what revision of each subtree did we last see ──
   //
@@ -660,13 +664,34 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   })), [registerFallback, onBack]);
 
   const handleDelete = async (id) => {
-    if (!(await confirmDialog({ title: 'Delete project?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
+    // It was never true. deleteOrder has always been a soft archive — it even
+    // archives the project's POs so "an unarchive of the order can restore
+    // both", in its own words. The dialog said "cannot be undone" over an action
+    // that could, which is how an owner ends up afraid of his own tools.
+    if (!(await confirmDialog({
+      title: 'Delete project?',
+      message: 'It drops out of the board, your stats and every report — and its POs go with it. '
+        + 'Nothing is destroyed, and you can put it back.',
+      confirmLabel: 'Delete', danger: true,
+    }))) return;
     try {
       await axios.delete(`${base}/orders/${id}`, authHdr);
       setProjects(prev => prev.filter(p => p._id !== id));
       setActiveProject(null);
+      flash('Project deleted.', 'success', { label: 'Undo', run: () => restoreProject(id) });
     } catch (e) {
       flash(`Delete failed: ${e.message}`, 'error');
+    }
+  };
+
+  // The reversal the delete always allowed and the UI never offered.
+  const restoreProject = async (id) => {
+    try {
+      await axios.post(`${base}/orders/${id}/restore`, {}, authHdr);
+      await loadProjects();
+      flash('Project restored — its POs came back with it.', 'success');
+    } catch (e) {
+      flash(`Couldn't restore: ${e.response?.data?.message || e.message}`, 'error');
     }
   };
 
@@ -697,11 +722,32 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
 
   const handleCleanupDelete = async (ids) => {
     if (ids.length === 0) return;
-    if (!(await confirmDialog({ title: 'Delete empty projects?', message: `Delete ${ids.length} empty project${ids.length === 1 ? '' : 's'}? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
+    // Also never true: the sweep soft-archives, and refuses outright anything
+    // that isn't genuinely empty. It was the most defensive action in the tab
+    // wearing the scariest warning in the tab.
+    if (!(await confirmDialog({
+      title: 'Delete empty projects?',
+      message: `Clear ${ids.length} empty project${ids.length === 1 ? '' : 's'}. Anything carrying a name, a line, a design or a file is refused, and what does go can be put back.`,
+      confirmLabel: 'Delete', danger: true,
+    }))) return;
     try {
-      await axios.post(`${base}/orders/cleanup-delete`, { ids }, authHdr);
+      const r = await axios.post(`${base}/orders/cleanup-delete`, { ids }, authHdr);
       await loadProjects();
       await handleOpenCleanup();   // refresh the list
+      // Undo exactly what it archived — not what we asked it to, since it
+      // refuses anything that isn't empty.
+      const done = (r.data && r.data.archivedIds) || [];
+      if (done.length) {
+        flash(`${done.length} empty project${done.length === 1 ? '' : 's'} cleared.`, 'success', {
+          label: 'Undo',
+          run: async () => {
+            await Promise.allSettled(done.map((id) => axios.post(`${base}/orders/${id}/restore`, {}, authHdr)));
+            await loadProjects();
+            await handleOpenCleanup();
+            flash('Put back.', 'success');
+          },
+        });
+      }
     } catch (e) { flash(`Delete failed: ${e.message}`, 'error'); }
   };
   const handleMergeCompany = async (from, to) => {
@@ -1466,6 +1512,12 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
       >
         <Alert
           severity={toast.sev} variant="filled" onClose={() => setToast((t) => ({ ...t, open: false }))}
+          action={toast.action ? (
+            <Button size="small" onClick={() => { const a = toast.action; setToast((t) => ({ ...t, open: false, action: null })); a.run(); }}
+              sx={{ color: 'inherit', fontWeight: 800, textTransform: 'none', fontSize: 12.5 }}>
+              {toast.action.label}
+            </Button>
+          ) : undefined}
           sx={{ borderRadius: 2, fontWeight: 600, alignItems: 'center' }}
         >
           {toast.msg}

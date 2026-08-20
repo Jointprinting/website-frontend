@@ -607,6 +607,8 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   const [bookRec, setBookRec] = useState(null);   // the receipt being booked (dialog)
   const [loading, setLoading] = useState(false);
   const [busy, setBusy]       = useState('');
+  // A one-click reversal offered beside the status line — see deleteTxnById.
+  const [undoAction, setUndoAction] = useState(null);   // { label, run }
   const [showAdd, setShowAdd] = useState(false);
   // Prefill for "record payment for this order" — opens the Add-transaction
   // modal already set to Income · Client Sales · the order's client + amount.
@@ -921,6 +923,22 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
       await axios.delete(`${base}/finances/transactions/${t._id}`, authHdr);
       if (editTxn && editTxn._id === t._id) setEditTxn(null);
       await load();
+      // POST /finances/transactions/:id/restore has existed, and been tested,
+      // the whole time — and nothing in the Studio ever called it, while the
+      // delete dialog said "this cannot be undone" over a soft archive. The undo
+      // was built; it just had no button. This is the button.
+      setBusy('Transaction archived ✓');
+      setUndoAction({
+        label: 'Undo',
+        run: async () => {
+          setUndoAction(null);
+          try {
+            await axios.post(`${base}/finances/transactions/${t._id}/restore`, {}, authHdr);
+            await load();
+            setBusy('Restored ✓');
+          } catch (e) { setBusy(e.response?.data?.message || e.message); }
+        },
+      });
     } catch (e) { setBusy(e.response?.data?.message || e.message); }
   };
 
@@ -1047,6 +1065,12 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
             '&:hover': { color: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>Studio</Button>
         <Typography sx={{ color: D.green, fontWeight: 800, fontSize: 14, flex: 1 }}>Finances</Typography>
         {busy && <Typography sx={{ fontSize: 11, color: busy.includes('✓') ? D.green : D.muted }}>{busy}</Typography>}
+        {undoAction && (
+          <Button size="small" onClick={undoAction.run}
+            sx={{ color: D.green, fontSize: 11, fontWeight: 800, textTransform: 'none', minWidth: 0, px: 1 }}>
+            {undoAction.label}
+          </Button>
+        )}
         {/* "Review duplicate transactions" — shown ONLY when the ledger actually has
             cross-source duplicate pairs (auto-hides at zero). One tap opens the merge
             surface; the count keeps it honest. */}

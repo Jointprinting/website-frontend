@@ -42,6 +42,8 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
   const [sendMocks, setSendMocks] = useState(true);
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState(null);   // the PO being edited (local copy)
+  // The PO just archived, so its undo can be offered where it used to sit.
+  const [undoPo, setUndoPo] = useState(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -182,13 +184,36 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
   };
 
   const deletePo = async (po) => {
-    if (!(await confirmDialog({ title: 'Delete PO?', message: `Delete PO ${po.poNumber || ''}? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
+    // Never true: deletePo has always been a soft archive. The warning scared
+    // the owner off a reversible action and offered no way to reverse it.
+    if (!(await confirmDialog({
+      title: 'Delete PO?',
+      message: `PO ${po.poNumber || ''} drops off this order, the vendor's card and the PO list. `
+        + 'Nothing is destroyed — you can put it back.',
+      confirmLabel: 'Delete', danger: true,
+    }))) return;
     try {
       await axios.delete(`${base}/orders/pos/${po._id}`, authHdr);
       setPos(prev => prev.filter(p => p._id !== po._id));
       if (editing && editing._id === po._id) setEditing(null);
+      setUndoPo(po);
     } catch (e) {
       alertDialog(`Delete failed: ${e.response?.data?.message || e.message}`);
+    }
+  };
+
+  // The reversal the archive always allowed. Offered inline where the PO was,
+  // rather than behind a trash screen — the moment after is when it's wanted.
+  const restorePo = async () => {
+    const po = undoPo;
+    if (!po) return;
+    setUndoPo(null);
+    try {
+      await axios.post(`${base}/orders/pos/${po._id}/restore`, {}, authHdr);
+      const r = await axios.get(`${base}/orders/${project._id}/pos`, authHdr);
+      setPos((r.data && r.data.pos) || []);
+    } catch (e) {
+      alertDialog(`Couldn't restore: ${e.response?.data?.message || e.message}`);
     }
   };
 
@@ -422,6 +447,26 @@ export default function PoBuilderDialog({ open, project, authHdr, onClose, onNav
           <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress size={24} sx={{ color: D.green }} /></Box>
         ) : !editing ? (
           <>
+            {/* The reversal, offered where the PO was and while it's still on the
+                owner's mind. Every "delete" in this dialog has always been a soft
+                archive; until now the only thing the UI did about that was warn
+                him it wasn't. */}
+            {undoPo && (
+              <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 1.5, p: 1.25, borderRadius: 2.5,
+                border: `1px solid ${D.line}`, bgcolor: D.inset }}>
+                <Typography sx={{ color: D.muted, fontSize: 12.5, flex: 1 }}>
+                  PO {undoPo.poNumber || ''} deleted.
+                </Typography>
+                <Button size="small" onClick={restorePo}
+                  sx={{ color: D.green, fontSize: 12, fontWeight: 800, textTransform: 'none', minWidth: 0 }}>
+                  Undo
+                </Button>
+                <Button size="small" onClick={() => setUndoPo(null)}
+                  sx={{ color: D.muted, fontSize: 12, textTransform: 'none', minWidth: 0 }}>
+                  Dismiss
+                </Button>
+              </Stack>
+            )}
             {pos.length === 0 ? (
               <Box sx={{ border: `1px dashed ${D.line}`, borderRadius: 2.5, py: 5, textAlign: 'center', color: D.muted, bgcolor: D.inset }}>
                 <Typography sx={{ fontSize: 13, mb: 1.5 }}>
