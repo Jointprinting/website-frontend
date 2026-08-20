@@ -91,9 +91,68 @@ const SECTIONS = [
   },
 ];
 
+// ── Identifier collisions ────────────────────────────────────────────────────
+//
+// Read-only. Every other panel in this dialog proposes a field-level fix and
+// auto-hides at zero; this one only ever reports, because choosing which of two
+// orders keeps #142 is a judgement about live jobs, not a repair — and because a
+// badge that can never reach zero trains you to stop looking at badges.
+//
+// It is also the prerequisite for ever enforcing uniqueness in the database: an
+// index built over existing duplicates fails outright, and one built after a
+// blind auto-merge is worse than the duplicates were.
+function DuplicateIds({ data }) {
+  if (!data || !data.total) return null;
+  const SETS = [
+    { key: 'projectNumbers', label: 'Project #', line: (r) => `#${r.projectNumber} · ${r.companyName || 'unnamed'}${r.orderNumber ? ` · invoice ${r.orderNumber}` : ''}${r.status ? ` · ${r.status}` : ''}` },
+    { key: 'orderNumbers',   label: 'Invoice #', line: (r) => `${r.orderNumber} · ${r.companyName || 'unnamed'}${r.projectNumber ? ` · project #${r.projectNumber}` : ''}` },
+    { key: 'poNumbers',      label: 'PO # (per vendor)', line: (r) => `${r.poNumber} · ${r.vendorName || r.vendorKey || 'vendor'}` },
+    { key: 'dealNumbers',    label: 'Deal #', line: (r) => `${r.dealNumber} · ${r.companyKey || ''}${r.stage ? ` · ${r.stage}` : ''}` },
+    { key: 'remoteIds',      label: 'Mockup id (per store)', line: (r) => `${r.remoteId} · ${r.name || 'untitled'}${r.projectNumber ? ` · project #${r.projectNumber}` : ''}` },
+  ];
+  return (
+    <Box sx={{ mb: 1.75, border: '1px solid rgba(251,191,36,0.35)', borderRadius: 1.5,
+      bgcolor: 'rgba(251,191,36,0.05)', p: 1.5 }}>
+      <Typography sx={{ color: '#fbbf24', fontWeight: 800, fontSize: 12.5 }}>
+        {data.total} number{data.total === 1 ? '' : 's'} used twice
+        <Box component="span" sx={{ color: D.faint, fontWeight: 600 }}> · {data.records} records</Box>
+      </Typography>
+      <Typography sx={{ color: D.faint, fontSize: 11, mt: 0.4, lineHeight: 1.55, mb: 1 }}>
+        These are the numbers everything else joins on — a PO finds its order by one, a receipt
+        finds its project by one. When two records share one, whatever looks it up silently picks
+        one of them. Nothing here is fixed automatically: which record keeps the number is your
+        call, and it moves real POs and real money.
+      </Typography>
+      {SETS.map(({ key, label, line }) => {
+        const groups = data[key] || [];
+        if (!groups.length) return null;
+        return (
+          <Box key={key} sx={{ mt: 0.75 }}>
+            <Typography sx={{ color: D.muted, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              {label} · {groups.length}
+            </Typography>
+            {groups.map((g) => (
+              <Box key={String(g.value)} sx={{ mt: 0.4, pl: 1, borderLeft: `2px solid rgba(251,191,36,0.35)` }}>
+                {(g.records || []).map((r) => (
+                  <Typography key={r.id} sx={{ color: D.text, fontSize: 11, fontFamily: 'monospace', lineHeight: 1.5 }}>
+                    {line(r)}
+                  </Typography>
+                ))}
+              </Box>
+            ))}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 export default function FixDataDialog({ open, onClose, authHdr, onToast, onApplied }) {
   const fullScreen = useMobileFullScreen();
   const [plan, setPlan] = React.useState(null);      // null = loading
+  // The read-only collision report. Separate from `plan` because it is never
+  // applied — see the panel below.
+  const [dupeIds, setDupeIds] = React.useState(null);
   const [picked, setPicked] = React.useState({});    // key → Set of ids
   const [openSections, setOpenSections] = React.useState({});
   const [busy, setBusy] = React.useState(false);
@@ -104,6 +163,11 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
   const load = React.useCallback(async () => {
     setPlan(null);
     try {
+      // Read-only, and deliberately separate from the fixable plan below — see
+      // the ID-COLLISIONS panel for why it is reported rather than fixed.
+      axios.get(`${base}/crm/data-cleanup/duplicate-ids`, authHdr)
+        .then((d) => setDupeIds(d.data || null))
+        .catch(() => setDupeIds(null));
       const r = await axios.get(`${base}/crm/data-cleanup/preview`, authHdr);
       setPlan(r.data);
       // Everything detected starts selected — the common case is "fix it all",
@@ -204,6 +268,22 @@ export default function FixDataDialog({ open, onClose, authHdr, onToast, onAppli
       </Box>
 
       <DialogContent sx={{ p: 2.5, ...scrollbar }}>
+        {/* ── ID COLLISIONS — reported, never auto-fixed ─────────────────────
+            projectNumber, orderNumber, poNumber, dealNumber and remoteId are
+            what the whole ecosystem joins on, and not one of them is enforced
+            unique in the database. They come from atomic counters, so a
+            duplicate means something bypassed the counter — a hand-typed
+            number, an import, a restore — and from then on the join silently
+            picks one.
+
+            Not offered as a fix, and not counted in the badge: deciding which
+            of two orders keeps #142 is a judgement about real jobs with real
+            POs and real money hanging off them, and a permanent unfixable
+            badge would teach the owner to ignore the badge. Everything else in
+            this dialog auto-hides at zero; this does too, but only when the
+            collisions are actually gone. */}
+        <DuplicateIds data={dupeIds} />
+
         {plan === null ? (
           <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress size={24} sx={{ color: D.green }} /></Box>
         ) : nothingToDo ? (
