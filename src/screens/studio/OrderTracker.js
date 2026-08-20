@@ -44,7 +44,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import axios from 'axios';
-import { D, accentBar, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, dropInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey } from './_shared';
+import { D, accentBar, STATUS_META, STATUS_OPTIONS, fmt, fmtRelative, scrollbar, dropInput, hasConfirmation, confRevenue, quoteCogs, confCogs, clientApproved, approvalActivity, normOrderNo, deriveCompanyKey, isProjectCard, projectHasConfirmation, projectRevenue } from './_shared';
 import { confirmDialog, promptDialog } from './_dialog';
 import { sortMockupTiles, mockupBadge } from './_mockupNumbers';
 import { SOURCE_META } from './_submissions';
@@ -282,6 +282,62 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
     closeStudioOverlay({ projectNumber: '', tab: '' });
   }, []);
 
+  // ── Board rows are CARDS; anything that EDITS needs the whole record ────────
+  //
+  // /orders/projects summarises the confirmation, the quote lines and the
+  // activity log server-side (backend utils/projectCard.js) so one board load
+  // stops allocating every order's artwork. The board reads only what the card
+  // carries — but the drawer, the quoter and the confirmation builder read the
+  // subtrees themselves, and a builder opened over a card would show an EMPTY
+  // quote for a project that has one.
+  //
+  // So every path that opens a project for editing goes through here first.
+  // A record that isn't a card (a PUT/POST response, an already-hydrated one)
+  // is returned untouched, so this costs nothing on the paths that were already
+  // whole. A failed fetch returns the card rather than nothing: the drawer stays
+  // on its loader and the owner sees an error, instead of an empty document that
+  // a field save could write back.
+  const fetchFull = useCallback(async (proj) => {
+    if (!proj || !proj._id || !isProjectCard(proj)) return proj;
+    const r = await axios.get(`${base}/orders/${proj._id}`, authHdr);
+    return (r.data && r.data._id) ? r.data : proj;
+  }, [authHdr]);
+
+  // The open project hydrates itself, whichever route opened it — a card click,
+  // a right-click "Open order", a cross-tab deep link, back/forward, or a ?p= on
+  // first load. Keyed on the id so re-opening the same project doesn't refetch,
+  // and guarded on the id so opening B while A is in flight never lands A's
+  // record in B's drawer.
+  const [hydrating, setHydrating] = useState(false);
+  const activeIsCard = isProjectCard(activeProject);
+  useEffect(() => {
+    if (!activeProject || !activeIsCard) { setHydrating(false); return undefined; }
+    const id = activeProject._id;
+    let cancelled = false;
+    setHydrating(true);
+    fetchFull(activeProject)
+      .then((full) => {
+        if (cancelled || !full || isProjectCard(full)) return;
+        setActiveProject((prev) => (prev && String(prev._id) === String(id) ? full : prev));
+      })
+      .catch((e) => { if (!cancelled) flash(`Couldn't load this project: ${e.response?.data?.message || e.message}`, 'error'); })
+      .finally(() => { if (!cancelled) setHydrating(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?._id, activeIsCard, fetchFull]);
+
+  // Opening a builder straight off a card (the right-click menu) — same rule,
+  // but the builder can't render half-loaded, so it waits for the record.
+  const openQuoteFor = useCallback(async (proj) => {
+    try { setQuote(await fetchFull(proj)); }
+    catch (e) { flash(`Couldn't open the quote: ${e.response?.data?.message || e.message}`, 'error'); }
+  }, [fetchFull, flash]);
+
+  const openConfirmationFor = useCallback(async (proj) => {
+    try { setConfirmation(await fetchFull(proj)); }
+    catch (e) { flash(`Couldn't open the confirmation: ${e.response?.data?.message || e.message}`, 'error'); }
+  }, [fetchFull, flash]);
+
   // Back/forward: the URL is the truth. No project in it → the drawer closes.
   useEffect(() => onStudioNavigate((next) => {
     if (!next.projectNumber) { setActiveProject(null); return; }
@@ -510,14 +566,14 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
   // right-click time so the menu reflects the live quote/confirmation state.
   const bindOrder = useCallback((p) => bindMenu(() => buildOrderMenu(p, {
     onOpen: (proj) => openProject(proj),
-    onOpenQuote: (proj) => setQuote(proj),
-    onOpenConfirmation: (proj) => setConfirmation(proj),
+    onOpenQuote: openQuoteFor,
+    onOpenConfirmation: openConfirmationFor,
     // "Open POs" opens the project drawer and tells it to pop the PO dialog on
     // mount — the same deep-link path used when arriving from a PO link.
     onOpenPos: (proj) => { openProject(proj); setOpenPosOnMount(true); },
     onSetStatus: setOrderStatus,
     flash,
-  })), [bindMenu, setOrderStatus, flash, openProject]);
+  })), [bindMenu, setOrderStatus, flash, openProject, openQuoteFor, openConfirmationFor]);
 
   // Right-click on empty Order Tracker chrome → search (focus the box) + hub.
   useEffect(() => registerFallback(() => buildFallbackMenu({
@@ -1044,6 +1100,7 @@ export default function OrderTracker({ token, onBack, onNavigate, initialOrder }
         onUploadLogo={(file) => activeProject && uploadLogo(activeProject, file)}
         onRemoveLogo={() => activeProject && removeLogo(activeProject)}
         onClose={closeProject}
+        hydrating={hydrating}
         onSave={handleSave}
         onReload={loadProjects}
         onDelete={handleDelete}
@@ -1509,7 +1566,7 @@ function ProjectCard({ project, lookupMockup, logo, attention, onClick, selectMo
         </Box>
         {/* Client picked their quote options — needs a confirmation built.
             Only meaningful pre-confirmation; the status chip takes over after. */}
-        {project.status === 'quoted' && project.optionsPickedAt && !hasConfirmation(project.confirmation) && (
+        {project.status === 'quoted' && project.optionsPickedAt && !projectHasConfirmation(project) && (
           <Box sx={{
             position: 'absolute', top: 34, right: 8,
             bgcolor: 'rgba(74,222,128,0.18)', color: D.green,
@@ -1571,9 +1628,9 @@ function ProjectCard({ project, lookupMockup, logo, attention, onClick, selectMo
               total, exactly like the drawer + margin strip. Prefer it over the
               stored totalValue scalar, which can lag if the confirmation is
               edited after approval. */}
-          {(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : (Number(project.totalValue) || 0)) > 0 ? (
+          {projectRevenue(project) > 0 ? (
             <Typography sx={{ color: D.text, fontSize: 13, fontWeight: 700, fontFamily: 'monospace' }}>
-              {fmt(hasConfirmation(project.confirmation) ? confRevenue(project.confirmation) : project.totalValue)}
+              {fmt(projectRevenue(project))}
             </Typography>
           ) : (
             // A quote is worth $0 to the pipeline until the client actually
@@ -2010,7 +2067,7 @@ function PreorderSection({ order, authHdr, onToast }) {
   );
 }
 
-function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
+function ProjectDrawer({ open, project, hydrating, mockupMap, mockups, projectMockups, logo, onUploadLogo, onRemoveLogo, onClose, onSave, onReload, onDelete, onShareApproval, onReorder, onOpenPicker, onOpenConfirmation, onOpenQuote, onNavigate, onToast, openPosOnMount, onPosOpened, token, authHdr }) {
   const [poOpen, setPoOpen] = useState(false);
   const [local, setLocal] = useState(null);
   const [savingField, setSavingField] = useState('');
@@ -2548,7 +2605,21 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
         })}
       </Box>
 
-      {tab === 'overview' && (<>
+      {/* The board hands the drawer a CARD (summarised confirmation / quote
+          lines / activity — see backend utils/projectCard.js) and the full
+          record follows from GET /orders/:id. Every panel below reads those
+          subtrees, so they wait rather than render a project's money and
+          designs as empty for the half-second in between — which is also what
+          keeps a click on "Build confirmation" in that window from opening a
+          builder over a confirmation that does exist. The header above stays
+          up throughout, so the drawer still opens instantly. */}
+      {hydrating && (
+        <Box sx={{ px: 2.5, py: 8, textAlign: 'center' }}>
+          <JpLoader size={48} label="Loading project…" />
+        </Box>
+      )}
+
+      {!hydrating && tab === 'overview' && (<>
       {/* Mockup grid */}
       <Box sx={{ px: 2.5, pt: 2 }}>
         {(() => {
@@ -2923,7 +2994,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
       <ClientProfileSection client={client} saving={clientSaving} saveClient={saveClient} />
       </>)}
 
-      {tab === 'files' && (
+      {!hydrating && tab === 'files' && (
       /* Files */
       <Box sx={{ px: 2.5, pt: 2, pb: 2 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
@@ -2977,7 +3048,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
       </Box>
       )}
 
-      {tab === 'approval' && (<>
+      {!hydrating && tab === 'approval' && (<>
       {/* Share for approval — the one shared hub link per project. The dialog
           (opened from here or from the confirmation builder's header button)
           handles generating/copying the link, emailing recipients, and
@@ -3078,7 +3149,7 @@ function ProjectDrawer({ open, project, mockupMap, mockups, projectMockups, logo
         onClose={() => setPoOpen(false)} onNavigate={onNavigate} />
 
       {/* Activity timeline — merges admin activity[] + client approvalEvents[] */}
-      {tab === 'files' && (() => {
+      {!hydrating && tab === 'files' && (() => {
         const KIND_META = {
           // client-side approvalEvents
           viewed:             { color: D.muted,   label: 'Viewed',             actor: 'client' },

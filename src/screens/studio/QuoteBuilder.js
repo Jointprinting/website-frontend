@@ -55,7 +55,8 @@ import VisibilityOutlinedIcon    from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import {
   D, scrollbar, dropInput, fmt, mono, accentBar, useMobileFullScreen,
-  lineCogsPerUnit, lineCommitted, lineEffectivePrice, builderDialogPaper } from './_shared';
+  lineCogsPerUnit, lineCommitted, lineEffectivePrice, builderDialogPaper,
+  isProjectCard, projectQuoteLineCount } from './_shared';
 import { confirmDialog, alertDialog, promptDialog } from './_dialog';
 import { lsGet, lsSet, lsRemove } from '../../common/jpStorage';
 import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
@@ -979,27 +980,54 @@ export default function QuoteBuilder({ open, project, authHdr, onClose, onSave }
 // A picker for reusing an earlier quote: lists past projects that carry quote
 // lines (this client's first, then newest), and hands the chosen project's
 // quoteLines to onPick. Reads the SAME /api/orders/projects feed the tracker
-// uses — which already carries quoteLines — so there's no new endpoint.
+// uses, so there's no new endpoint.
+//
+// That feed is a CARD feed — it reports how many lines and option groups a
+// project has, not the lines themselves (backend utils/projectCard.js), because
+// a quote line carries a per-line image data URL and downloading every past
+// quote's artwork to draw a LIST of them was most of what made that endpoint an
+// out-of-memory risk. The counts are all this picker ever rendered; the lines
+// are fetched for the one project actually picked.
 function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick }) {
   const fullScreen = useMobileFullScreen();
   const [projects, setProjects] = useState(null);
+  const [picking, setPicking] = useState('');
   const [q, setQ] = useState('');
   useEffect(() => {
     if (!open) return undefined;
     let gone = false;
-    setProjects(null); setQ('');
+    setProjects(null); setQ(''); setPicking('');
     axios.get(`${config.backendUrl}/api/orders/projects`, authHdr)
       .then(r => { if (!gone) setProjects(r.data.projects || r.data.orders || []); })
       .catch(() => { if (!gone) setProjects([]); });
     return () => { gone = true; };
   }, [open, authHdr]);
 
+  // Pull the chosen project's actual lines, then hand them over exactly as
+  // before. Full order documents (should the feed ever hand one over) skip the
+  // fetch — isProjectCard is the discriminator, not a version flag.
+  const pick = async (p) => {
+    if (!p || picking) return;
+    if (!isProjectCard(p)) { onPick(p.quoteLines || []); return; }
+    setPicking(String(p._id));
+    try {
+      const r = await axios.get(`${config.backendUrl}/api/orders/${p._id}`, authHdr);
+      onPick((r.data && r.data.quoteLines) || []);
+    } catch (_) {
+      // Never hand the builder an empty set on a failed read — that would look
+      // like a quote with no lines and overwrite the draft with nothing.
+      setPicking('');
+    }
+  };
+
   const rows = (projects || [])
-    .filter(p => String(p._id) !== String(currentId) && Array.isArray(p.quoteLines) && p.quoteLines.length)
+    .filter(p => String(p._id) !== String(currentId) && projectQuoteLineCount(p) > 0)
     .map(p => ({
       ...p,
-      _optionCount: new Set((p.quoteLines || []).map(l => (l.group || '').trim()).filter(Boolean)).size,
-      _lineCount: p.quoteLines.length,
+      _optionCount: isProjectCard(p)
+        ? (Number(p.quoteGroupCount) || 0)
+        : new Set((p.quoteLines || []).map(l => (l.group || '').trim()).filter(Boolean)).size,
+      _lineCount: projectQuoteLineCount(p),
     }));
   const needle = q.trim().toLowerCase();
   const shown = rows
@@ -1032,8 +1060,8 @@ function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick
             <Stack gap={0.75}>
               {shown.map(p => (
                 <Box key={p._id} role="button" tabIndex={0}
-                  onClick={() => onPick(p.quoteLines)}
-                  onKeyDown={e => { if (e.key === 'Enter') onPick(p.quoteLines); }}
+                  onClick={() => pick(p)}
+                  onKeyDown={e => { if (e.key === 'Enter') pick(p); }}
                   sx={{ cursor: 'pointer', border: `1px solid ${D.line}`, borderRadius: 2, p: 1.25,
                     display: 'flex', alignItems: 'center', gap: 1,
                     '&:hover': { borderColor: D.green, bgcolor: 'rgba(74,222,128,0.06)' } }}>
@@ -1051,7 +1079,9 @@ function CopyQuoteDialog({ open, onClose, authHdr, currentId, companyKey, onPick
                       {p._optionCount ? `${p._optionCount} design${p._optionCount === 1 ? '' : 's'} · ` : ''}{p._lineCount} line{p._lineCount === 1 ? '' : 's'}
                     </Typography>
                   </Box>
-                  <ContentCopyOutlinedIcon sx={{ fontSize: 16, color: D.faint }} />
+                  {picking === String(p._id)
+                    ? <CircularProgress size={14} sx={{ color: D.green }} />
+                    : <ContentCopyOutlinedIcon sx={{ fontSize: 16, color: D.faint }} />}
                 </Box>
               ))}
             </Stack>
