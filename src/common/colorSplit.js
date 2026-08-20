@@ -120,6 +120,37 @@ export function validateSplit(offered, split, rowLines) {
   return { ok: true, total, split: clean, message: '' };
 }
 
+// ── CLIENT-ONLY, and deliberately not mirrored on the server ─────────────────
+//
+// Everything else in this file is mirrored byte-for-byte in
+// website-backend/utils/colorSplit.js, because both sides compute PRICES from
+// it and a divergence would quote a number we then don't honour. This one is
+// about what the approval page RENDERS, which the server has no opinion on — so
+// it lives here alone rather than as dead code over there. Read the asymmetry as
+// intentional, not as drift.
+//
+// A group can hold BOTH a colour run and ordinary options: "Bucket Hats" might
+// pitch a Gildan blank the owner did an S&S colour lookup on, beside a promo
+// item with no colour list at all. The page used to render the colour run and
+// stop, so every option in that group without colours was invisible to the
+// client — the owner built a two-option pitch and the client saw one.
+//
+// Splits a group's lines into the colour run (if any) and everything it doesn't
+// cover, so both can render.
+export function splitGroupByRun(entries) {
+  const list = (Array.isArray(entries) ? entries : []).filter(Boolean);
+  const withColours = list.filter((l) => ((l && l.colorOptions) || []).length);
+  if (!withColours.length) return { run: null, rest: list };
+
+  const first = withColours[0];
+  const tiers = runLines(list, first).slice().sort((a, b) => n(a && a.qty) - n(b && b.qty));
+  const inRun = new Set(tiers);
+  return {
+    run: { first, tiers, options: first.colorOptions || [] },
+    rest: list.filter((l) => !inRun.has(l)),
+  };
+}
+
 // The RUN a line belongs to — identical to quoteGrid.quoteRowKey, because a row
 // in the owner's design grid IS one run: the lines that differ only by run size.
 export function runKey(l) {

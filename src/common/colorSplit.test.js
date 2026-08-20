@@ -1,7 +1,7 @@
 // SYNC GUARD: mirrors website-backend/utils/__tests__/colorSplit.test.js case for
 // case. The client quotes the live price from these rules and the server
 // re-derives it on submit — a divergence quotes a number we don't honour.
-import { splitTotal, orderedQty, tierLineFor, minRunFor, validateSplit, validateQty, runKey, runLines } from './colorSplit';
+import { splitTotal, orderedQty, tierLineFor, minRunFor, validateSplit, validateQty, runKey, runLines, splitGroupByRun } from './colorSplit';
 
 const RUN = [
   { group: 'Tees', lid: 'a', styleCode: 'G500', description: 'Heavy Tee', printDetails: 'black ink', qty: 50, unitPrice: 12 },
@@ -158,5 +158,69 @@ describe('orderedQty with a typed quantity', () => {
 
   test('a colour split still wins — the two are never both set', () => {
     expect(orderedQty({ qty: 50, pickedQty: 75, colorSplit: [{ name: 'Black', qty: 200 }] })).toBe(200);
+  });
+});
+
+// ── A group holding BOTH a colour run and ordinary options ───────────────────
+//
+// The approval page used to render the colour run and stop, so every option in
+// that group WITHOUT colours was invisible to the client: the owner pitched two
+// options and the client saw one. The server would have accepted a pick for the
+// hidden option all along — it simply never appeared on the page to be picked.
+describe('splitGroupByRun', () => {
+  const COLOUR_TIERS = [
+    { idx: 0, group: 'Hats', styleCode: 'C112', description: 'Trucker', printDetails: '1c front', qty: 50,  unitPrice: 14,
+      colorOptions: [{ name: 'Black' }, { name: 'Charcoal' }] },
+    { idx: 1, group: 'Hats', styleCode: 'C112', description: 'Trucker', printDetails: '1c front', qty: 150, unitPrice: 11,
+      colorOptions: [{ name: 'Black' }, { name: 'Charcoal' }] },
+  ];
+  const PLAIN = [
+    { idx: 2, group: 'Hats', styleCode: '', description: 'Embroidered beanie', printDetails: 'embroidery', qty: 50, unitPrice: 18 },
+    { idx: 3, group: 'Hats', styleCode: '', description: 'Embroidered beanie', printDetails: 'embroidery', qty: 100, unitPrice: 15 },
+  ];
+
+  test('the colour run takes its own tiers and leaves the rest of the group alone', () => {
+    const { run, rest } = splitGroupByRun([...COLOUR_TIERS, ...PLAIN]);
+    expect(run.tiers.map(t => t.idx)).toEqual([0, 1]);
+    expect(rest.map(l => l.idx)).toEqual([2, 3]);
+  });
+
+  test('the beanie is not swallowed by the trucker run — different runKey', () => {
+    // This is the regression: `rest` empty here meant the client never saw the
+    // beanie at all.
+    const { rest } = splitGroupByRun([...COLOUR_TIERS, ...PLAIN]);
+    expect(rest.length).toBeGreaterThan(0);
+  });
+
+  test('a group with no colours anywhere is entirely "rest" — unchanged behaviour', () => {
+    const { run, rest } = splitGroupByRun(PLAIN);
+    expect(run).toBeNull();
+    expect(rest).toEqual(PLAIN);
+  });
+
+  test('a pure colour group leaves nothing behind, so no "or" divider appears', () => {
+    const { run, rest } = splitGroupByRun(COLOUR_TIERS);
+    expect(run.tiers.map(t => t.idx)).toEqual([0, 1]);
+    expect(rest).toEqual([]);
+  });
+
+  test('tiers come back smallest first, whatever order they were built in', () => {
+    const { run } = splitGroupByRun([COLOUR_TIERS[1], COLOUR_TIERS[0]]);
+    expect(run.tiers.map(t => t.qty)).toEqual([50, 150]);
+  });
+
+  test('a second colour run in the same group stays visible as "rest"', () => {
+    // Two different inks can never combine, so the second one is a separate
+    // choice — and must not vanish just because the first one claimed the slot.
+    const otherInk = { idx: 4, group: 'Hats', styleCode: 'C112', description: 'Trucker',
+      printDetails: 'white ink', qty: 50, unitPrice: 15, colorOptions: [{ name: 'Black' }] };
+    const { run, rest } = splitGroupByRun([...COLOUR_TIERS, otherInk]);
+    expect(run.tiers.map(t => t.idx)).toEqual([0, 1]);
+    expect(rest.map(l => l.idx)).toEqual([4]);
+  });
+
+  test('junk is safe', () => {
+    expect(splitGroupByRun(null)).toEqual({ run: null, rest: [] });
+    expect(splitGroupByRun([null, undefined])).toEqual({ run: null, rest: [] });
   });
 });

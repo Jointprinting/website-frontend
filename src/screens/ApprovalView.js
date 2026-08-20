@@ -30,7 +30,7 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import axios from 'axios';
 import config from '../config.json';
 import { detectGridRows } from '../common/quoteGrid';
-import { validateSplit, validateQty, tierLineFor, minRunFor, runLines, splitTotal } from '../common/colorSplit';
+import { validateSplit, validateQty, tierLineFor, minRunFor, runLines, splitTotal, splitGroupByRun } from '../common/colorSplit';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
@@ -541,20 +541,35 @@ export default function ApprovalView() {
   //
   // Everything without colorOptions keeps the historical behaviour exactly:
   // one option per group, one fixed quantity.
-  const colorRunFor = (g) => {
-    const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
-    const withColours = entries.filter(l => (l.colorOptions || []).length);
-    if (!withColours.length) return null;
-    const first = withColours[0];
-    const tiers = runLines(entries, first).sort((a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0));
-    return { first, tiers, options: first.colorOptions || [] };
-  };
+  const groupEntries = (g) => quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
+  const colorRunFor = (g) => splitGroupByRun(groupEntries(g)).run;
+
+  // ── The rest of a group ─────────────────────────────────────────────────────
+  //
+  // A group can hold BOTH a colour run and ordinary options. "Bucket Hats" might
+  // pitch a Gildan blank the owner did an S&S colour lookup on, beside a promo
+  // item that has no colour list at all.
+  //
+  // The page used to render the colour run and stop — `run ? colourUI : plainUI`
+  // — so every option in that group WITHOUT colours was invisible to the client.
+  // The owner built a two-option pitch and the client saw one. The server would
+  // have accepted a pick for the hidden option all along; it simply never
+  // appeared on the page to be picked.
+  //
+  // So: the colour run covers its own tiers, and everything else in the group
+  // still renders through the ordinary path below.
+  const restFor = (g) => splitGroupByRun(groupEntries(g)).rest;
 
   // The client's typed allocation per group: { group: { colourName: qty } }.
   const allocFor = (g) => alloc[g] || {};
   const setAllocQty = (g, name, raw) => {
     const v = String(raw ?? '').replace(/[^0-9]/g, '');
     setAlloc(prev => ({ ...prev, [g]: { ...(prev[g] || {}), [name]: v } }));
+    // The options in a group are ALTERNATIVES and the server takes at most one
+    // per group, so allocating colours drops any plain option picked beside it.
+    // Without this the two could both be set and submit would come back
+    // "Please choose just one option" with nothing on screen explaining why.
+    if (restFor(g).length) setPicks(prev => ({ ...prev, [g]: null }));
   };
   // Resolve one colour run to live money: what they allocated, which tier that
   // reaches, and what it costs. The SAME rules the server re-derives on submit.
@@ -630,15 +645,21 @@ export default function ApprovalView() {
   };
   // Toggle: click the selected option again to skip the whole group. Clients are
   // NOT required to pick every group — pitch 10, keep the 5 you want.
-  const togglePick = (g, idx) => setPicks(prev => {
-    const has = Object.prototype.hasOwnProperty.call(prev, g);
-    const cur = has ? prev[g] : (() => { const a = quoteLines.findIndex(l => l.group === g && l.accepted); return a >= 0 ? a : null; })();
-    return { ...prev, [g]: cur === idx ? null : idx };
-  });
+  const togglePick = (g, idx) => {
+    setPicks(prev => {
+      const has = Object.prototype.hasOwnProperty.call(prev, g);
+      const cur = has ? prev[g] : (() => { const a = quoteLines.findIndex(l => l.group === g && l.accepted); return a >= 0 ? a : null; })();
+      return { ...prev, [g]: cur === idx ? null : idx };
+    });
+    // The other half of the same rule: picking a plain option clears the colour
+    // allocation this group may also carry.
+    if (colorRunFor(g)) setAlloc(prev => (prev[g] ? { ...prev, [g]: {} } : prev));
+  };
 
   // A group counts as chosen when its colour run has a VALID allocation, or
   // (for a plain group) when an option is picked.
-  const groupChosen = (g) => (colorRunFor(g) ? !!(runState(g) || {}).check?.ok : pickFor(g) !== undefined);
+  // Either half counts: a valid colour allocation, or a picked plain option.
+  const groupChosen = (g) => !!(runState(g) || {}).check?.ok || pickFor(g) !== undefined;
   const pickedGroupCount = groupNames.filter(groupChosen).length;
   // Ready to continue when they've kept at least one option — or the quote
   // carries standalone lines that are always part of the order.
@@ -647,7 +668,9 @@ export default function ApprovalView() {
   // never sends 20 pieces of a 50-minimum run and gets a bare rejection.
   const allocError = groupNames.map(g => {
     const st = colorRunFor(g) ? runState(g) : null;
-    if (st) return st.total > 0 && !st.check.ok ? st.check.message : '';
+    if (st && st.total > 0 && !st.check.ok) return st.check.message;
+    // A group can carry both halves, so a bad typed quantity on the plain side
+    // still has to block submit even when a colour run sits above it.
     const qs = qtyState(g);
     return qs && !qs.check.ok ? qs.check.message : '';
   }).find(Boolean) || '';
@@ -655,7 +678,7 @@ export default function ApprovalView() {
   const selectionTotal =
     groupNames.reduce((s, g) => {
       const st = colorRunFor(g) ? runState(g) : null;
-      if (st) return s + (st.check.ok ? st.lineTotal : 0);
+      if (st && st.check.ok) return s + st.lineTotal;
       const idx = pickFor(g);
       if (idx === undefined) return s;
       const qs = qtyState(g);
@@ -679,10 +702,12 @@ export default function ApprovalView() {
       const payload = [];
       for (const g of groupNames) {
         const st = colorRunFor(g) ? runState(g) : null;
-        if (st) {
-          if (st.check.ok) payload.push({ lid: st.first.lid || st.first.idx, colors: st.check.split });
+        if (st && st.check.ok) {
+          payload.push({ lid: st.first.lid || st.first.idx, colors: st.check.split });
           continue;
         }
+        // No valid allocation → this group's answer, if any, is a plain option.
+        // A group can hold both, and the two are kept mutually exclusive above.
         const idx = pickFor(g);
         if (idx === undefined) continue;
         const ref = (quoteLines[idx] && quoteLines[idx].lid) || idx;
@@ -1058,6 +1083,7 @@ export default function ApprovalView() {
             {groupNames.map((g, gi) => {
               const run = colorRunFor(g);
               const st = run ? runState(g) : null;
+              const rest = restFor(g);
               const chosen = groupChosen(g);
               return (
               <Box key={g} sx={{ mb: 3.5 }}>
@@ -1071,7 +1097,8 @@ export default function ApprovalView() {
                   </Box>
                   <Typography sx={{ fontWeight: 800, fontSize: 17 }}>{g}</Typography>
                   <Box component="span" sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>
-                    {run ? 'Choose your colours' : 'Pick one'} · optional
+                    {run && rest.length ? 'Choose your colours, or pick another option'
+                      : run ? 'Choose your colours' : 'Pick one'} · optional
                   </Box>
                 </Stack>
                 {/* ── A COLOUR RUN ────────────────────────────────────────────
@@ -1201,9 +1228,23 @@ export default function ApprovalView() {
                   </Box>
                   );
                 })() : null}
-                {run ? null : (<>
+                {/* ── THE REST OF THE GROUP ───────────────────────────────────
+                    Everything the colour run above doesn't already cover. This
+                    used to be `run ? null : plainOptions`, so a group holding a
+                    colour run AND ordinary options showed only the colour run —
+                    the owner pitched two options and the client saw one. The
+                    server would have accepted a pick for the hidden option all
+                    along; it simply never appeared on the page to be picked. */}
+                {rest.length > 0 && (<>
+                {run && (
+                  <Stack direction="row" alignItems="center" gap={1.25} sx={{ my: 1.75 }}>
+                    <Box sx={{ flex: 1, height: 1, bgcolor: T.line }} />
+                    <Typography sx={{ ...eyebrow, color: T.faint, fontSize: 10 }}>or</Typography>
+                    <Box sx={{ flex: 1, height: 1, bgcolor: T.line }} />
+                  </Stack>
+                )}
                 {(() => {
-                  const entries = quoteLines.map((l, idx) => ({ ...l, idx })).filter(l => l.group === g);
+                  const entries = rest;
                   const gridQ = detectGridRows(entries);
                   if (gridQ) return (
                     /* Matrix picker: one tidy row per option (brand or print
