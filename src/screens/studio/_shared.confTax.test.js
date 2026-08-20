@@ -19,7 +19,10 @@ const round = (n) => Math.round(n * 100) / 100;
 describe('confLocationTax', () => {
   test('inactive with no shipTos', () => {
     const conf = { items: [item(100, 10)], customLines: [] };
-    expect(confLocationTax(conf)).toEqual({ active: false, total: 0, lines: [] });
+    // `allocated` reports whether any units are actually assigned to a taxed
+    // location — it is what stops a half-configured multi-ship order from
+    // suppressing the legacy tax line while computing $0. See confTax.taxBase.test.
+    expect(confLocationTax(conf)).toEqual({ active: false, allocated: false, total: 0, lines: [] });
   });
 
   test('inactive when every shipTo rate is 0', () => {

@@ -40,8 +40,16 @@ export function confLocationTax(conf) {
   const n = (v) => Number(v) || 0;
   const shipTos = (conf && Array.isArray(conf.shipTos)) ? conf.shipTos : [];
   const taxed = shipTos.filter((st) => st && n(st.taxRate) > 0);
-  if (taxed.length === 0) return { active: false, total: 0, lines: [] };
+  if (taxed.length === 0) return { active: false, allocated: false, total: 0, lines: [] };
   const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
+  // Has the owner actually ALLOCATED units to a taxed location? A shipTo with a
+  // rate makes per-location tax "active", but the taxable base comes from per-item
+  // allocations — so a half-finished setup computed $0 tax while ALSO suppressing
+  // the legacy "NJ tax" line, and the tax silently vanished ($2,132.50 -> $2,000).
+  // MUST mirror backend computeLocationTax.
+  const taxedKeys = new Set(taxed.map((st) => st && st.key));
+  const allocated = items.some((it) => ((it && it.allocations) || [])
+    .some((a) => a && taxedKeys.has(a.key) && n(a.qty) > 0));
   const lines = taxed.map((st) => {
     const subtotal = items.reduce((sum, it) => {
       // NJ clothing exemption — mirrors backend computeLocationTax: a taxExempt
@@ -62,5 +70,35 @@ export function confLocationTax(conf) {
     // displayed tax and the summed total are real cent amounts.
     return { label: `${st.label || st.name || 'Location'} tax - ${rate}%`, key: st.key, subtotal, rate, value: roundCents(subtotal * rate / 100) };
   });
-  return { active: true, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
+  return { active: true, allocated, total: roundCents(lines.reduce((s, l) => s + l.value, 0)), lines };
+}
+
+// The MERCHANDISE base a sales-tax line may charge against: item revenue with
+// taxExempt items removed. Per-location tax has always used this base; a legacy
+// percent "NJ tax" customLine charged the whole running subtotal instead, so it
+// taxed NJ-exempt clothing. A $1,500 apparel + $500 promo order billed $132.50
+// where $33.13 was due. MUST mirror backend computeConfirmationTotals.
+export function confTaxableSubtotal(conf) {
+  const n = (v) => Number(v) || 0;
+  const items = (conf && Array.isArray(conf.items)) ? conf.items : [];
+  return items.reduce((s, it) => (it && it.taxExempt) ? s : (
+    s + ((it && it.sizes) || []).reduce((ss, sz) => ss + n(sz.qty) * n(sz.unitPrice), 0)
+  ), 0);
+}
+
+// Should this legacy tax customLine be dropped because per-location tax covers it?
+// Only once per-location tax is REALLY in use (a rate AND allocations) — dropping
+// on `active` alone lost the tax entirely on a half-configured multi-ship order.
+export function supersedesTaxLine(locationTax, line) {
+  return !!(locationTax && locationTax.active && locationTax.allocated && isTaxCustomLine(line));
+}
+
+// The dollar value a customLine contributes. A percent SALES-TAX line charges the
+// taxable merchandise base; every other percent line (card fee, discount) still
+// compounds on the running subtotal, which is the existing behaviour.
+export function customLineValue(line, running, taxableSubtotal) {
+  const n = (v) => Number(v) || 0;
+  if (!line || !line.isPercent) return n(line && line.amount);
+  const base = isTaxCustomLine(line) ? n(taxableSubtotal) : n(running);
+  return base * n(line.amount) / 100;
 }
