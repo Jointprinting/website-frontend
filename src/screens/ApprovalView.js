@@ -31,6 +31,7 @@ import axios from 'axios';
 import config from '../config.json';
 import { detectGridRows } from '../common/quoteGrid';
 import { validateSplit, validateQty, tierLineFor, minRunFor, runLines, splitTotal, splitGroupByRun } from '../common/colorSplit';
+import { priceCoverSentence, worthShowingIncludes } from '../common/priceIncludes';
 import JpLoader from '../common/JpLoader';
 import ConfirmationDocument, { computeConfTotals, hasBakedPaymentFee } from './ConfirmationDocument';
 import { displayMockupNum, clientDesignName } from '../common/mockupNum';
@@ -83,6 +84,55 @@ export const TOKENS = {
     shadow:  '0 24px 50px rgba(11,30,20,0.15)',
   },
 };
+
+
+// ── What the client's per-unit price covers ──────────────────────────────────
+//
+// The page used to say "every price is all-in per unit" and leave it there. The
+// owner's own read: "the copy probably needs work cause I don't think it says it
+// includes shipping."
+//
+// Every claim here is DERIVED server-side from the quote's own lines (backend
+// utils/priceIncludes.js), all-or-nothing across the options on offer — because
+// a promise on a page someone signs has to be one the quote can keep, and a
+// wrong "shipping included" is worse than a quiet page. When the quote can't
+// back any of it, this renders nothing at all rather than a hedge.
+//
+// A row of ticks rather than another bordered card: the owner called the page
+// "blocky", and a fourth panel here would be the reason.
+export function PriceIncludes({ T, includes, mono: monoSx }) {
+  const inc = includes || {};
+  const weeks = Number(inc.turnaroundWeeks) || 0;
+  if (!worthShowingIncludes(inc)) return null;
+  const sentence = priceCoverSentence(inc);
+
+  return (
+    <Box sx={{ maxWidth: 540 }}>
+      <Stack direction="row" alignItems="flex-start" gap={1} sx={{ mb: 0.6 }}>
+        <CheckIcon sx={{ fontSize: 16, color: T.green, mt: '2px', flexShrink: 0 }} />
+        <Typography sx={{ color: T.text, fontSize: 14, lineHeight: 1.55 }}>
+          Each price is <Box component="span" sx={{ fontWeight: 800 }}>per unit and covers {sentence}</Box>.
+        </Typography>
+      </Stack>
+      {weeks > 0 && (
+        <Stack direction="row" alignItems="flex-start" gap={1} sx={{ mb: 0.6 }}>
+          <CheckIcon sx={{ fontSize: 16, color: T.green, mt: '2px', flexShrink: 0 }} />
+          <Typography sx={{ color: T.text, fontSize: 14, lineHeight: 1.55 }}>
+            About <Box component="span" sx={{ fontWeight: 800, ...monoSx }}>{weeks} week{weeks === 1 ? '' : 's'}</Box>
+            {' '}from approved artwork to delivery.
+          </Typography>
+        </Stack>
+      )}
+      <Stack direction="row" alignItems="flex-start" gap={1}>
+        <Box sx={{ width: 16, textAlign: 'center', color: T.faint, fontSize: 15, lineHeight: 1.2, flexShrink: 0 }}>+</Box>
+        <Typography sx={{ color: T.muted, fontSize: 13.5, lineHeight: 1.55 }}>
+          Sales tax, if it applies to you, is added on your confirmation — along with your
+          payment options.
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
 
 export const sxCard = (T) => ({ bgcolor: T.panel, border: `1px solid ${T.line}`, borderRadius: 3 });
 export const sxEyebrow = (T) => ({ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: T.green });
@@ -1071,14 +1121,26 @@ export default function ApprovalView() {
             <Typography sx={{ color: T.text, fontSize: { xs: 25, md: 30 }, fontWeight: 800, mt: 0.75, lineHeight: 1.15, letterSpacing: -0.4 }}>
               {hasGroups ? "Pick what you'd like" : 'Review your quote'}
             </Typography>
-            <Typography sx={{ color: T.muted, fontSize: { xs: 14.5, md: 15 }, mt: 1.25, mb: 3, lineHeight: 1.6, maxWidth: 540 }}>
+            <Typography sx={{ color: T.muted, fontSize: { xs: 14.5, md: 15 }, mt: 1.25, mb: 2, lineHeight: 1.6, maxWidth: 540 }}>
               {hasGroups
-                ? "Tap the options you want — you don't have to take everything. Every price is all-in per unit."
-                : "Here's your quote — every price is all-in per unit. Accept it to move forward and we'll finalize your confirmation."}
-              <Box component="span" sx={{ display: 'block', mt: 1, color: T.faint, fontSize: 13.5 }}>
-                Next you'll get your full confirmation — pricing, mockups &amp; details — to review and approve.
-                You're just choosing here; nothing's final yet.
-              </Box>
+                ? "Take the options you want — you don't have to take them all, and you can change your mind before anything is final."
+                : "Here's your quote. Nothing is final yet — accepting it just moves you to your confirmation."}
+            </Typography>
+
+            {/* ── WHAT THE PRICE COVERS ───────────────────────────────────────
+                "Every price is all-in per unit" was the whole of it, which the
+                owner read on his own page and called out: it never actually says
+                shipping is in there. It usually is — a line's setup and freight
+                are spread across its own quantity — but only when that quote was
+                built that way, so every claim here is DERIVED from the lines
+                (backend utils/priceIncludes.js) rather than written into the
+                copy. A promise on a page someone signs has to be one the quote
+                can keep. */}
+            <PriceIncludes T={T} includes={p.priceIncludes} mono={mono} />
+
+            <Typography sx={{ color: T.faint, fontSize: 13.5, mt: 1.75, mb: 3, lineHeight: 1.6, maxWidth: 540 }}>
+              Next you&apos;ll get your full confirmation — every price, your mockups, sizes and
+              shipping details — to review and approve. You&apos;re only choosing here.
             </Typography>
             {groupNames.map((g, gi) => {
               const run = colorRunFor(g);
@@ -1610,7 +1672,18 @@ export default function ApprovalView() {
         {/* Action panel — locked once the client has decided. Hidden during the
             pick stage (the picker has its own actions). */}
         {(stage === 'confirmation' || stage === 'legacy' || approvalStatus !== 'pending') && (
-          <Box sx={{ ...card, p: { xs: 2.5, md: 3 }, mt: 2.5, animation: 'rise 500ms ease both', animationDelay: '240ms' }}>
+          /* The page is a stack of identically-weighted panels — the owner's word
+             for it was "blocky" — and the one panel that asks for a DECISION read
+             the same as the four that only inform. It now carries the brand accent
+             the dialogs already use, and a little more air above it, so the eye
+             lands on the choice instead of scanning five equal boxes. */
+          <Box sx={{ ...card, p: 0, mt: 3.5, overflow: 'hidden',
+            borderColor: approvalStatus === 'pending' ? T.lineHi : T.line,
+            animation: 'rise 500ms ease both', animationDelay: '240ms' }}>
+            {approvalStatus === 'pending' && (
+              <Box sx={{ height: 3, background: `linear-gradient(90deg, ${T.greenDk}, ${T.green}, ${T.greenDk})` }} />
+            )}
+            <Box sx={{ p: { xs: 2.5, md: 3 } }}>
             {approvalStatus === 'requested_changes' ? (
               <Box sx={{ textAlign: 'center', py: 2 }}>
                 <Box sx={{ width: 56, height: 56, mx: 'auto', mb: 1.5, borderRadius: '50%', display: 'flex', alignItems: 'center',
@@ -1704,6 +1777,17 @@ export default function ApprovalView() {
                     By approving, you confirm all spelling, colors, sizes, placement, and garment specs are correct, and that production can begin. On-screen colors and placement are approximations and may vary slightly on the finished product.
                   </Typography>
                 </Box>
+                {/* The last thing they read before the highest-stakes click on
+                    the page. It used to say what approving MEANS ("approval is
+                    final") but never what it DOES — the client pressed the
+                    button without knowing whether they were about to be invoiced,
+                    when production started, or where tracking would live. All
+                    three are true of this link today; none of them were on it. */}
+                <Typography sx={{ color: T.muted, fontSize: 12.5, mb: 2, lineHeight: 1.6 }}>
+                  <Box component="span" sx={{ color: T.text, fontWeight: 700 }}>What happens next:</Box>{' '}
+                  we send your invoice and get production started. Keep this link —
+                  it stays live, and your tracking appears right here as the order moves.
+                </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
                   <Button onClick={handleApprove} disabled={actionBusy} endIcon={!actionBusy ? <ArrowForwardIcon /> : null}
                     startIcon={actionBusy ? <CircularProgress size={16} sx={{ color: T.onAccent }} /> : null}
@@ -1716,6 +1800,7 @@ export default function ApprovalView() {
                 </Stack>
               </>
             )}
+            </Box>
           </Box>
         )}
 
