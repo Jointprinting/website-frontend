@@ -863,9 +863,16 @@ export default function FinancesTab({ token, onBack, onNavigate }) {
   // to the stored file, so the ledger row carries the receipt automatically.
   const bookReceipt = async (rec, extracted, { force = false } = {}) => {
     try {
-      await axios.post(`${base}/receipts/${rec._id}/confirm`, { extracted, force }, authHdr);
+      const res = await axios.post(`${base}/receipts/${rec._id}/confirm`, { extracted, force }, authHdr);
       setBookRec(null);
-      setBusy('Receipt booked into the ledger ✓');
+      // The server links the printed number to a job only when it resolves to a real
+      // order; otherwise it keeps it as the invoice #. Say which happened — booking a
+      // row whose Order # silently came back empty is exactly how a payment ends up
+      // attached to nothing while the real job still reads "no payment".
+      const nl = (res && res.data && res.data.numberLink) || null;
+      setBusy(nl && nl.unmatched
+        ? `Booked ✓ — #${nl.invoiceNumber} matches no order, so it's kept as the invoice #. Add the order # on the ledger row to link it to the job.`
+        : 'Receipt booked into the ledger ✓');
       await load();
     } catch (e) {
       if (e?.response?.status === 409 && !force) {
@@ -2135,7 +2142,11 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
   };
 
   const scanReceipt = async (dataUrl) => {
-    setScanning(true); setErr(''); setScanErr('');
+    // Reset the invoice # first. It is not a visible field, so a value left over from
+    // a previously attached file would be saved unseen — and it is not inert:
+    // orderReconcile keys order ALIASES off Transaction.invoiceNumber, so a stale one
+    // can move real money onto the wrong job.
+    setScanning(true); setErr(''); setScanErr(''); setInvoiceNumber('');
     try {
       const authHdr = { headers: { Authorization: `Bearer ${token}` } };
       const res = await axios.post(`${base}/receipts/scan`, { dataUrl }, authHdr);
@@ -2157,7 +2168,11 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
       setScanNote(f.isCredit
         ? 'Looks like a credit / return — I marked it as a credit. Double-check the direction before saving.'
         : f.invoiceNumber
-          ? `Auto-filled from the receipt. #${f.invoiceNumber} is an invoice number, not one of your order numbers — add the order # so this links to the job.`
+          // Don't say "add the order #" when one is already in the field (e.g. opened
+          // from "Record payment" on the money-owed panel, which pre-fills it) — that
+          // reads as an instruction to REPLACE a correct order # with the invoice
+          // number, hand-building the very phantom link this change removes.
+          ? `Auto-filled from the receipt. #${f.invoiceNumber} is an invoice number, not one of your order numbers${orderNumber ? ` — kept as the invoice #, order #${orderNumber} still links this to the job.` : ' — add the order # so this links to the job.'}`
           : 'Auto-filled from the receipt — double-check it before saving.');
     } catch (_) {
       // Fields stay as-is; the receipt is still attached for manual entry — but
@@ -2198,8 +2213,9 @@ function TxnDialog({ txn, prefill, token, onClose, onSave, onDelete, categories 
     setSaving(true); setErr('');
     const form = { type, date, category, amount: Number(amount), orderNumber: String(orderNumber).replace(/[^0-9]/g, ''), party, description, isCredit, brand };
     // Only sent when there is one, so an ordinary entry never writes a blank over a
-    // saved invoice #.
-    if (invoiceNumber) form.invoiceNumber = String(invoiceNumber).replace(/[^0-9]/g, '');
+    // saved invoice #. Sent VERBATIM — Transaction.invoiceNumber is free-form, so
+    // digit-stripping would quietly rewrite a saved "INV-2024-1054" on any edit.
+    if (invoiceNumber) form.invoiceNumber = invoiceNumber;
     // A vendor PICKED from the suggestions sends its hard link; free-typed text
     // sends none, so the server auto-resolves from the party name instead.
     if (type === 'expense' && vendorId) form.vendorId = vendorId;
