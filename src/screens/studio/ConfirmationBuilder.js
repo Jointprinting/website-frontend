@@ -24,6 +24,7 @@ import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
 import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
+import { confTaxableSubtotal, supersedesTaxLine, customLineValue } from '../../common/confTax';
 import { flatFieldsFor, summarizeType, summarizeDetails, nextPlacement, PRINT_PLACEMENTS, PRINT_METHODS } from './_printLocations';
 import { splitRunQty, seedUnitCost } from './_confSeed';
 import { alertDialog } from './_dialog';
@@ -1536,16 +1537,15 @@ function computeTotals(conf) {
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0),
     0);
   const locationTax = confLocationTax(conf);
+  const taxableSubtotal = confTaxableSubtotal(conf);
   let running = itemsSubtotal;
   const lines = [];
   (conf.customLines || []).forEach(l => {
     // Double-tax guard (C3): drop a legacy tax customLine from BOTH the preview
-    // lines and the running total when per-location tax is active — per-location
-    // tax wins. Mirrors backend computeConfirmationTotals.
-    if (locationTax.active && isTaxCustomLine(l)) return;
-    const value = l.isPercent
-      ? running * (Number(l.amount) || 0) / 100
-      : Number(l.amount) || 0;
+    // lines and the running total once per-location tax is really in use (rate
+    // AND allocations). Mirrors backend computeConfirmationTotals.
+    if (supersedesTaxLine(locationTax, l)) return;
+    const value = customLineValue(l, running, taxableSubtotal);
     running += value;
     lines.push({ label: l.label || (l.isPercent ? 'Adjustment' : 'Add-on'), amount: l.amount, isPercent: l.isPercent, value });
   });

@@ -6,7 +6,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 // Sales-tax math lives in ONE dependency-free module shared with the client-facing
 // ConfirmationDocument, so the Studio's tax and the client's tax can't drift.
 // Re-exported below so every `from './_shared'` importer keeps working unchanged.
-import { roundCents, isTaxCustomLine, confLocationTax } from '../../common/confTax';
+import { roundCents, isTaxCustomLine, confLocationTax, confTaxableSubtotal, supersedesTaxLine, customLineValue } from '../../common/confTax';
 // The ORDERED quantity of a quote line — the colour split's total when the client
 // typed one, else the line qty. Same module the client's approval page prices from,
 // and the exact twin of the backend's utils/colorSplit.orderedQty, so quoteCogs
@@ -233,14 +233,15 @@ export { roundCents, isTaxCustomLine, confLocationTax };
 export function confRevenue(conf) {
   if (!conf || !Array.isArray(conf.items)) return 0;
   const locationTax = confLocationTax(conf);
+  const taxableSubtotal = confTaxableSubtotal(conf);
   let rev = conf.items.reduce((s, it) =>
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
   (conf.customLines || []).forEach((l) => {
     // Double-tax guard (C3): when per-location tax is active, a legacy tax
     // customLine must NOT also apply — per-location tax wins. Mirrors backend
     // computeConfirmationTotals.
-    if (locationTax.active && isTaxCustomLine(l)) return;
-    rev += l.isPercent ? rev * (Number(l.amount) || 0) / 100 : (Number(l.amount) || 0);
+    if (supersedesTaxLine(locationTax, l)) return;
+    rev += customLineValue(l, rev, taxableSubtotal);
   });
   // Per-location sales tax (added last, like the grand total in the backend).
   // No-op unless a shipTo carries taxRate > 0, so single-location is unchanged.

@@ -28,7 +28,7 @@ import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupported
 // Sales-tax math is the ONE canonical implementation shared with the Studio
 // (see common/confTax.js) — so the tax the client sees on this document and the
 // tax the owner sees in the Studio are computed by the exact same code.
-import { roundCents, isTaxCustomLine, confLocationTax } from '../common/confTax';
+import { roundCents, isTaxCustomLine, confLocationTax, confTaxableSubtotal, supersedesTaxLine, customLineValue } from '../common/confTax';
 
 // ── Brand tokens (dark) — kept in lockstep with ApprovalView's T set. ─────────
 export const DOC = {
@@ -90,16 +90,17 @@ export function computeConfTotals(conf) {
     s + (it.sizes || []).reduce((ss, sz) => ss + (Number(sz.qty) || 0) * (Number(sz.unitPrice) || 0), 0), 0);
   const totalUnits = items.reduce((s, it) => s + itemTotalQty(it), 0);
   const locationTax = confLocationTax(conf);
+  const taxableSubtotal = confTaxableSubtotal(conf);
   let running = itemsSubtotal;
   const lines = [];
   (conf?.customLines || []).forEach(l => {
-    if (locationTax.active && isTaxCustomLine(l)) return;         // double-tax guard
+    if (supersedesTaxLine(locationTax, l)) return;                // double-tax guard
     // A baked payment fee always applies here; the double-charge is prevented by
     // hiding the client picker when one exists (see hasBakedPaymentFee), not by
     // dropping the line.
     const isPct = !!l.isPercent;
     const amt = Number(l.amount) || 0;
-    const value = isPct ? running * amt / 100 : amt;
+    const value = customLineValue(l, running, taxableSubtotal);
     running += value;
     const base = l.label || (isPct ? 'Adjustment' : 'Add-on');
     lines.push({ label: isPct ? `${base} - ${amt}%` : base, value });
