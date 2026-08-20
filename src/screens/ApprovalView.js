@@ -214,6 +214,10 @@ export default function ApprovalView() {
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesText, setChangesText] = useState('');
   const [lockedNote, setLockedNote] = useState(''); // friendly note when someone else just decided
+  // A question asked BEFORE the confirmation is published is a note, not a
+  // decision — the quote stays live and the page doesn't change on its own, so
+  // this is the acknowledgement that it sent.
+  const [noteSent, setNoteSent] = useState(false);
   const [picks, setPicks] = useState({});           // group label -> quote line index
   // Colour runs: group label -> { colourName: typed quantity }. Held as the raw
   // string so a half-typed "1" on the way to "150" doesn't fight the input.
@@ -388,10 +392,15 @@ export default function ApprovalView() {
     if (isPreview) { setChangesOpen(false); alert("Preview only — this is exactly what your client sees. Approve / Request changes work on the real link, not in preview."); return; }
     setActionBusy(true);
     try {
-      await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?${q}`,
+      const r = await axios.post(`${config.backendUrl}/api/public/projects/${projectId}/feedback?${q}`,
         { message: changesText });
       setChangesOpen(false);
       setChangesText('');
+      // Before the confirmation is published this is a QUESTION, not a decision:
+      // the server records a non-terminal note and the quote stays live, so the
+      // page won't change by itself. Say so, or sending a question looks like
+      // nothing happened.
+      if (r && r.data && r.data.terminal === false) setNoteSent(true);
       await refresh();
     } catch (e) {
       if (e.response?.status === 409) {
@@ -1320,6 +1329,7 @@ export default function ApprovalView() {
               </Box>
             </Box>
             {lockedNote && <LockedNote text={lockedNote} T={T} />}
+            {noteSent && <SentNote T={T} onClose={() => setNoteSent(false)} />}
             {/* A started-but-invalid allocation blocks here with the reason, so a
                 client never submits 20 pieces of a 50-minimum run and gets a
                 bare rejection back from the server. */}
@@ -1501,6 +1511,7 @@ export default function ApprovalView() {
                   <PaymentChoice value={payMethod} onChange={setPayMethod} baseTotal={payableTotal} T={T} />
                 )}
                 {lockedNote && <LockedNote text={lockedNote} T={T} />}
+                {noteSent && <SentNote T={T} onClose={() => setNoteSent(false)} />}
                 {/* Brief, low-key "approval is final" notice. Lives inside the
                     pending action panel, which only renders on the finalized
                     confirmation/legacy view — never the picker/quoting stage. */}
@@ -1600,6 +1611,25 @@ function LockedNote({ text, T }) {
   return (
     <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)' }}>
       <Typography sx={{ color: T.amber, fontSize: 13, lineHeight: 1.5 }}>{text}</Typography>
+    </Box>
+  );
+}
+
+// Green "your question is with us" note. Shown when a question was recorded as a
+// NON-terminal note (pre-confirmation), where nothing else on the page changes —
+// without it, asking a question looks like the button did nothing.
+function SentNote({ T, onClose }) {
+  return (
+    <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.35)',
+      display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+      <Typography sx={{ color: T.green, fontSize: 13, lineHeight: 1.5, flex: 1 }}>
+        Got it — your question is with us and we'll come back to you shortly. Your quote is still
+        open, so you can keep looking or pick your options whenever you're ready.
+      </Typography>
+      <Button size="small" onClick={onClose}
+        sx={{ color: T.muted, textTransform: 'none', fontSize: 12, minWidth: 0, p: 0.25, '&:hover': { color: T.green, bgcolor: 'transparent' } }}>
+        Dismiss
+      </Button>
     </Box>
   );
 }
