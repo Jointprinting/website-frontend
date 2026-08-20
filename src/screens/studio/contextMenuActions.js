@@ -287,7 +287,17 @@ export function buildTransactionMenu(t, handlers = {}) {
     handlers.onDelete && { divider: true },
     handlers.onDelete && {
       key: 'delete', label: 'Delete transaction', icon: DeleteOutlineIcon, danger: true,
-      onClick: async () => { if (await confirmDialog({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) handlers.onDelete(t); },
+      // It was never true: finances.remove soft-archives (money history is never
+      // destroyed — the model's query guard just stops showing it), and the
+      // restore endpoint has existed and been tested the whole time.
+      onClick: async () => {
+        if (await confirmDialog({
+          title: 'Delete transaction?',
+          message: 'It leaves your P&L and every report — and its auto processing-fee row goes with it. '
+            + 'Money history is never destroyed, so you can put it back.',
+          confirmLabel: 'Delete', danger: true,
+        })) handlers.onDelete(t);
+      },
     },
   ];
   return items;
