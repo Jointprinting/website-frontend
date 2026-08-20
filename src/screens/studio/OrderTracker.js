@@ -3229,6 +3229,11 @@ function ProjectDrawer({ open, project, hydrating, mockupMap, mockups, projectMo
           viewed:             { color: D.muted,   label: 'Viewed',             actor: 'client' },
           approved:           { color: D.green,   label: 'Approved',           actor: 'client' },
           requested_changes:  { color: '#fbbf24', label: 'Requested changes',  actor: 'client' },
+          // A question asked BEFORE the confirmation is published. Deliberately
+          // not a decision — see the approval controller.
+          question:           { color: '#60a5fa', label: 'Asked a question',   actor: 'client' },
+          options_picked:     { color: D.green,   label: 'Picked options',     actor: 'client' },
+          preorder_commit:    { color: '#2dd4bf', label: 'Group-drop commit',  actor: 'client' },
           // admin / system activity
           created:            { color: '#60a5fa', label: 'Created',            actor: 'admin'  },
           status_changed:     { color: '#a78bfa', label: 'Status changed',     actor: 'admin'  },
@@ -3236,6 +3241,15 @@ function ProjectDrawer({ open, project, hydrating, mockupMap, mockups, projectMo
           duplicated_from:    { color: '#60a5fa', label: 'Cloned',             actor: 'admin'  },
           file_uploaded:      { color: '#2dd4bf', label: 'File uploaded',      actor: 'admin'  },
           mockups_linked:     { color: D.green,   label: 'Mockup linked',      actor: 'admin'  },
+          approval_shared:    { color: '#60a5fa', label: 'Link shared',        actor: 'admin'  },
+          approval_reopened:  { color: '#fbbf24', label: 'Cycle reopened',     actor: 'admin'  },
+          confirmation_pushed:{ color: D.green,   label: 'Pushed to client',   actor: 'admin'  },
+          // A re-push that landed on an option the client had already accepted,
+          // so their pick was cleared and they have to choose again. Amber
+          // because it is the one entry here that UNDID something.
+          quote_repushed:     { color: '#fbbf24', label: 'Quote re-pushed',    actor: 'admin'  },
+          preorder_rolled_in: { color: D.green,   label: 'Drop rolled in',     actor: 'admin'  },
+          notify_failed:      { color: '#f87171', label: 'Notification failed', actor: 'admin' },
         };
         const merged = [
           ...(local.activity || []).map(e => ({ ...e, source: 'activity' })),
