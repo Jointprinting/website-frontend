@@ -32,7 +32,14 @@ export function splitTotal(split) {
 // one, else the line's own tier quantity.
 export function orderedQty(line) {
   const t = splitTotal(line && line.colorSplit);
-  return t > 0 ? t : n(line && line.qty);
+  if (t > 0) return t;
+  // A FREE QUANTITY on a run that isn't sold by colour. Same idea as the split,
+  // one step simpler: the client types how many they need and the largest tier
+  // at or below it sets the price, so a quote showing 50/100/150 can be bought
+  // at 75 without anyone asking the owner to add a chip. `qty` remains the TIER
+  // the line priced at — never what was ordered.
+  const picked = n(line && line.pickedQty);
+  return picked > 0 ? picked : n(line && line.qty);
 }
 
 // The tier a total lands on: the largest run size at or below it. Mirrors how
@@ -53,6 +60,33 @@ export function tierLineFor(rowLines, total) {
 export function minRunFor(rowLines) {
   const qs = (Array.isArray(rowLines) ? rowLines : []).map((l) => n(l && l.qty)).filter((q) => q > 0);
   return qs.length ? Math.min(...qs) : 0;
+}
+
+// Validate a FREE QUANTITY against what the owner offered — the colour-less twin
+// of validateSplit. Returns { ok, qty, message }.
+//
+// The rules are deliberately the same two: it has to be a real whole quantity,
+// and it has to clear the run's MOQ. Above that, anything goes — the tier is
+// whatever price break it reaches, so 75 on a 50/100/150 quote is a legitimate
+// order at the 50-piece price rather than a request the owner has to action by
+// hand.
+//
+// No ceiling: quoting more than the largest break is the owner's problem to
+// price, not the client's to be blocked on, and tierLineFor already tops out at
+// the biggest tier at or below the number.
+export function validateQty(raw, rowLines) {
+  const q = Number(raw);
+  if (!Number.isFinite(q) || q <= 0) {
+    return { ok: false, qty: 0, message: 'Enter how many you need.' };
+  }
+  if (!Number.isInteger(q)) {
+    return { ok: false, qty: 0, message: 'Please enter a whole number of pieces.' };
+  }
+  const min = minRunFor(rowLines);
+  if (min > 0 && q < min) {
+    return { ok: false, qty: q, message: `This design runs from ${min} pieces — you have ${q}. Add ${min - q} more.` };
+  }
+  return { ok: true, qty: q, message: '' };
 }
 
 // Validate an allocation against what the owner offered. Returns

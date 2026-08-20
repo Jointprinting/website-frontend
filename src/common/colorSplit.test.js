@@ -1,7 +1,7 @@
 // SYNC GUARD: mirrors website-backend/utils/__tests__/colorSplit.test.js case for
 // case. The client quotes the live price from these rules and the server
 // re-derives it on submit — a divergence quotes a number we don't honour.
-import { splitTotal, orderedQty, tierLineFor, minRunFor, validateSplit, runKey, runLines } from './colorSplit';
+import { splitTotal, orderedQty, tierLineFor, minRunFor, validateSplit, validateQty, runKey, runLines } from './colorSplit';
 
 const RUN = [
   { group: 'Tees', lid: 'a', styleCode: 'G500', description: 'Heavy Tee', printDetails: 'black ink', qty: 50, unitPrice: 12 },
@@ -94,4 +94,69 @@ it('junk is safe', () => {
   expect(tierLineFor([], 100)).toBeNull();
   expect(minRunFor(null)).toBe(0);
   expect(validateSplit(null, null, null).ok).toBe(false);
+});
+
+// ── A FREE QUANTITY on a run that is not sold by colour ──────────────────────
+//
+// The owner's first complaint about the quoter, verbatim: "when I show tiers 50
+// 100 150 and they only need 75 units (at 50 unit cost) they can't select that
+// ... I don't want them to have to ask me to make the change, it adds friction."
+//
+// The engine that solves it already existed and was already proven by the colour
+// split — it was simply unreachable unless the line carried a live S&S colour
+// lookup. These pin the colour-less path.
+describe('validateQty — a typed quantity on a tiered run', () => {
+  const TIERS = [{ qty: 50, unitPrice: 12 }, { qty: 100, unitPrice: 10 }, { qty: 150, unitPrice: 9 }];
+
+  test('75 on a 50/100/150 quote is a valid order', () => {
+    expect(validateQty(75, TIERS)).toEqual({ ok: true, qty: 75, message: '' });
+  });
+
+  test('and it bills at the 50-piece price — the largest break at or below it', () => {
+    expect(tierLineFor(TIERS, 75).qty).toBe(50);
+    expect(tierLineFor(TIERS, 75).unitPrice).toBe(12);
+  });
+
+  test('landing exactly on a break takes that break, not the one under it', () => {
+    expect(tierLineFor(TIERS, 100).qty).toBe(100);
+  });
+
+  test('above the largest break it stays on the largest — no ceiling', () => {
+    // Quoting past the top break is the owner's problem to price, not the
+    // client's to be blocked on.
+    expect(validateQty(500, TIERS).ok).toBe(true);
+    expect(tierLineFor(TIERS, 500).qty).toBe(150);
+  });
+
+  test('below the MOQ it says how many more, never a bare rejection', () => {
+    const r = validateQty(20, TIERS);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('50 pieces');
+    expect(r.message).toContain('30 more');
+  });
+
+  test('junk and fractions are refused in the client\'s own language', () => {
+    expect(validateQty('', TIERS).ok).toBe(false);
+    expect(validateQty(0, TIERS).ok).toBe(false);
+    expect(validateQty(-5, TIERS).ok).toBe(false);
+    expect(validateQty('abc', TIERS).ok).toBe(false);
+    expect(validateQty(75.5, TIERS).message).toContain('whole number');
+  });
+});
+
+describe('orderedQty with a typed quantity', () => {
+  test('bills what they ordered, not the tier the line priced at', () => {
+    // This is the whole point: the line sits on the 50 break, the client bought
+    // 75, and the money math has to say 75.
+    expect(orderedQty({ qty: 50, pickedQty: 75 })).toBe(75);
+  });
+
+  test('a line with no typed quantity is unchanged', () => {
+    expect(orderedQty({ qty: 50 })).toBe(50);
+    expect(orderedQty({ qty: 50, pickedQty: 0 })).toBe(50);
+  });
+
+  test('a colour split still wins — the two are never both set', () => {
+    expect(orderedQty({ qty: 50, pickedQty: 75, colorSplit: [{ name: 'Black', qty: 200 }] })).toBe(200);
+  });
 });
