@@ -23,7 +23,7 @@ import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown';
 import PlaceOutlinedIcon       from '@mui/icons-material/PlaceOutlined';
 import axios from 'axios';
 import config from '../../config.json';
-import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen } from './_shared';
+import { D, scrollbar, dropInput, mono, accentBar, confLocationTax, STATE_TAX_RATES, isTaxCustomLine, roundCents, useMobileFullScreen, builderDialogPaper } from './_shared';
 import { confTaxableSubtotal, supersedesTaxLine, customLineValue } from '../../common/confTax';
 import { flatFieldsFor, summarizeType, summarizeDetails, nextPlacement, PRINT_PLACEMENTS, PRINT_METHODS } from './_printLocations';
 import { splitRunQty, seedUnitCost } from './_confSeed';
@@ -454,9 +454,9 @@ export default function ConfirmationBuilder({ open, project, mockupMap, mockups,
         closeWithSave();
       }}
       maxWidth={false} fullWidth fullScreen={fullScreen}
-      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`, borderRadius: fullScreen ? 0 : 3,
+      PaperProps={{ sx: { bgcolor: D.bg, color: D.text, border: `1px solid ${D.line}`,
         boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
-        m: { xs: 1, md: 3 }, maxHeight: '94vh', width: 'calc(100% - 24px)' } }}>
+        ...builderDialogPaper(fullScreen) } }}>
       <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: D.panel,
         borderBottom: `1px solid ${D.line}`, px: 2.5, py: 1.35,
         display: 'flex', alignItems: 'center', gap: 1 }}>

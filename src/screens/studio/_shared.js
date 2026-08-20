@@ -156,9 +156,32 @@ export const darkInput = {
 };
 
 export const scrollbar = {
-  '&::-webkit-scrollbar': { width: 5, bgcolor: 'transparent' },
+  // BOTH axes. `width` alone does nothing to a HORIZONTAL scrollbar, so every
+  // sideways scroller using this token rendered with no visible bar at all —
+  // including the quoter's 14-chip margin strip, where it meant the chips past
+  // the first few were undiscoverable rather than merely off-screen.
+  '&::-webkit-scrollbar': { width: 5, height: 5, bgcolor: 'transparent' },
   '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.10)', borderRadius: 3 },
 };
+
+// The paper for the two full-bleed builder dialogs (Quote, Confirmation).
+//
+// Both used to hardcode `m: {xs:1, md:3}` with `width: 'calc(100% - 24px)'`.
+// At md the margin is 24px PER SIDE — 48px — so the paper was 24px wider than
+// the space it had. `.MuiDialog-container` centres its child, so an oversized
+// one overflows equally both ways and is clipped by the fixed-position root:
+// 12px of the builder was cut off the left edge and 12px off the right, on
+// every desktop screen, including part of the close button's hit area.
+//
+// The same three properties also silently defeated `fullScreen`. MUI's
+// .MuiDialog-paperFullScreen rule (margin:0; width:100%; maxHeight:none) is
+// injected BEFORE the sx class, so sx wins — on a phone the builder was a card
+// with 8px margins and 6vh of dead backdrop, despite fullScreen being passed.
+export const builderDialogPaper = (fullScreen) => (fullScreen
+  ? { m: 0, width: '100%', maxWidth: '100%', maxHeight: '100%', borderRadius: 0 }
+  : { m: { xs: 1, md: 3 },
+      width: { xs: 'calc(100% - 16px)', md: 'calc(100% - 48px)' },
+      maxHeight: '94vh', borderRadius: 3 });
 
 export const fmt = (n) =>
   `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
