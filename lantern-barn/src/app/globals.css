@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight text-pine;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background-color: #e0a45855;
+  }
+
+  /* Keyboard focus ring in brand color */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-lantern ring-offset-2 ring-offset-cream;
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3
+      text-sm font-semibold transition-colors duration-200 focus-visible:ring-2;
+  }
+  .btn-primary {
+    @apply btn bg-pine text-cream hover:bg-ink;
+  }
+  .btn-accent {
+    @apply btn bg-lantern text-ink hover:bg-clay hover:text-cream;
+  }
+  .btn-outline {
+    @apply btn border border-pine/30 bg-transparent text-pine hover:bg-pine hover:text-cream;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-clay;
+  }
+
+  /* Simple rich-text styling for CMS body copy */
+  .prose-barn p {
+    @apply mb-4 leading-relaxed text-ink/80;
+  }
+  .prose-barn h2 {
+    @apply mb-3 mt-8 text-2xl;
+  }
+  .prose-barn a {
+    @apply text-clay underline underline-offset-2;
+  }
+  .prose-barn ul {
+    @apply mb-4 list-disc space-y-1 pl-5 text-ink/80;
+  }
+}
