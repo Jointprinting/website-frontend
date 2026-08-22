@@ -64,6 +64,7 @@ import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/pri
 import { shadeChangeFor } from '../../common/garmentShade';
 import { stateDistanceMi } from './_roadTrip';
 import { priceAtMargin, repriceToMargin } from './_quotePricing';
+import { parsePromoMoney, promoSetupTotal, promoUnitAllIn, PER_LABEL } from './_promoPricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
 // clicking 30% prices the line so that exactly 30% of what the client pays is
@@ -3169,11 +3170,8 @@ function promoBreakAt(breaks, qty, valKey) {
   for (const b of arr) if (b.qty <= qty && (!best || b.qty > best.qty)) best = b;
   return best ? { qty: best.qty, value: num(best[valKey]) } : { qty: arr[0].qty, value: num(arr[0][valKey]) };
 }
-// "$50 (G)" → 50; blank/junk → 0.
-function promoMoney(s) {
-  const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) : 0;
-}
+// Setup money lives in _promoPricing.js — see parsePromoMoney for why taking the
+// first number is not enough ("$40 per color" is not $40).
 // "3-5 Business Days" → 1, "7-10 business days" → 2, "8-10 weeks" → 10. The
 // max number in the string, converted to whole weeks (5 business days ≈ 1wk).
 function promoWeeks(s) {
@@ -3194,6 +3192,10 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
   const [cat,      setCat]      = useState('');
   const [picked,   setPicked]   = useState(null);   // the product being configured
   const [qtys,     setQtys]     = useState(() => new Set());
+  // How many the setup charge repeats over, when the vendor quoted it "per
+  // color" / "per location". Asked rather than assumed: assuming one is exactly
+  // how "$40 per color" used to book $40 against a real $120.
+  const [perCount, setPerCount] = useState(1);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -3207,6 +3209,7 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
   }, [open]);
 
   useEffect(() => { if (!open) { setPicked(null); setQ(''); setCat(''); } }, [open]);
+  useEffect(() => { setPerCount(1); }, [picked]);
 
   const cats = [...new Set((products || []).map((p) => p.category).filter(Boolean))].sort();
   const needle = q.trim().toLowerCase();
@@ -3231,15 +3234,20 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
     const lines = [...qtys].sort((a, b) => a - b).map((qty) => {
       const price = promoBreakAt(picked.clientPriceBreaks, qty, 'price').value;
       const cost  = promoBreakAt(picked.netCostBreaks, qty, 'cost').value;
+      // Setup is amortized into BOTH sides — into the cost because it is one,
+      // and into the price because otherwise the run absorbs it. That is the
+      // same treatment apparel already gets, and it passes the setup through at
+      // cost so the vendor's baked-in catalog margin is preserved exactly.
+      const allIn = promoUnitAllIn({ catalogPrice: price, netCost: cost, setupTotal, qty });
       return {
         ...emptyLine(),
         group: label, description: label, styleCode: picked.sku || '',
         qty,
         blankCost: cost, printCost: 0,
-        setupCost: promoMoney(picked.setupCostNet || picked.setupCostClient),
+        setupCost: setupTotal,
         printType: 'None', printDetails: picked.printMethod || '',
         turnaroundWeeks: promoWeeks(picked.turnaround),
-        unitPrice: price, markup: 1, noMarkup: true,
+        unitPrice: allIn.unitPrice, markup: 1, noMarkup: true,
         // The catalog price, kept pristine and separate from `unitPrice`.
         // `unitPrice` moves when shipping is passed through or the owner edits
         // it; `catalogUnitPrice` is what "restore catalog price" restores, and
@@ -3252,6 +3260,11 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
     });
     onAdd(lines);
   };
+
+  // The vendor's setup charge, parsed rather than first-number'd, and resolved
+  // into a real total. This is the number that used to be absorbed.
+  const setupParsed = parsePromoMoney(picked && (picked.setupCostNet || picked.setupCostClient));
+  const setupTotal  = promoSetupTotal(setupParsed, perCount);
 
   const minQty = picked ? Math.max(picked.moq || 0, (picked.clientPriceBreaks || [])[0]?.qty || 0) : 0;
 
@@ -3293,6 +3306,27 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
                 <Chip size="small" label={`Setup: client ${picked.setupCostClient || '—'} · you ${picked.setupCostNet || '—'}`}
                   sx={{ bgcolor: D.inset, color: D.muted, fontWeight: 700, fontSize: 11 }} />
               )}
+              {/* A charge quoted "per color" repeats, so how many it repeats
+                  over is the difference between $40 and $120. Asked, never
+                  assumed — assuming one is the bug this replaces. */}
+              {setupParsed.per && (
+                <Stack direction="row" alignItems="center" gap={0.6}
+                  sx={{ px: 1, py: 0.35, borderRadius: 999, bgcolor: 'rgba(251,191,36,0.12)', border: `1px solid ${D.amber}` }}>
+                  <Typography sx={{ color: D.amber, fontSize: 11, fontWeight: 800 }}>
+                    ×
+                  </Typography>
+                  <TextField
+                    size="small" type="number" value={perCount}
+                    onChange={(e) => setPerCount(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    inputProps={{ min: 1, 'aria-label': `How many ${PER_LABEL[setupParsed.per] || 'units'}` }}
+                    sx={{ width: 52, '& .MuiInputBase-input': { color: D.amber, fontSize: 11.5, fontWeight: 800, py: 0.1, px: 0.4 },
+                      '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
+                  />
+                  <Typography sx={{ color: D.amber, fontSize: 11, fontWeight: 700 }}>
+                    {PER_LABEL[setupParsed.per] || 'units'} · {fmt(setupTotal)} setup
+                  </Typography>
+                </Stack>
+              )}
               {(picked.flags || []).map((f) => (
                 <Chip key={f} size="small" label={f} sx={{ bgcolor: D.inset, color: D.faint, fontSize: 10.5 }} />
               ))}
@@ -3304,7 +3338,12 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
             <Stack gap={0.5}>
               {(picked.clientPriceBreaks || []).map((b) => {
                 const cost = promoBreakAt(picked.netCostBreaks, b.qty, 'cost').value;
-                const margin = b.price > 0 && cost > 0 ? ((b.price - cost) / b.price) * 100 : null;
+                // Setup included. The old readout compared the catalog price to
+                // the net cost with the setup nowhere in it, so a run that
+                // earned 21% displayed 30% — on the screen where the owner
+                // decides whether to take the job.
+                const allIn = promoUnitAllIn({ catalogPrice: b.price, netCost: cost, setupTotal, qty: b.qty });
+                const margin = cost > 0 ? allIn.marginPct : null;
                 return (
                   <Stack key={b.qty} direction="row" alignItems="center" gap={1}
                     onClick={() => toggleQty(b.qty)}
@@ -3313,7 +3352,12 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
                       transition: 'border-color 0.15s, background-color 0.15s' }}>
                     <Checkbox size="small" checked={qtys.has(b.qty)} sx={{ p: 0.25, color: D.faint, '&.Mui-checked': { color: D.green } }} />
                     <Typography sx={{ ...mono, fontWeight: 800, fontSize: 13, width: 76 }}>{b.qty.toLocaleString()}</Typography>
-                    <Typography sx={{ ...mono, fontSize: 12.5, color: D.text, width: 110 }}>client {fmt(b.price)}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 12.5, color: D.text, width: 110 }}>
+                      client {fmt(allIn.unitPrice)}
+                      {allIn.perUnitSetup > 0 && (
+                        <Box component="span" sx={{ color: D.faint, fontSize: 10.5 }}> ({fmt(b.price)}+setup)</Box>
+                      )}
+                    </Typography>
                     <Typography sx={{ ...mono, fontSize: 12, color: D.muted, width: 100 }}>{cost > 0 ? `you ${fmt(cost)}` : '—'}</Typography>
                     {margin != null && (
                       <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 800, color: marginColor(margin) }}>
@@ -3332,7 +3376,8 @@ function PromoPickerDialog({ open, onClose, authHdr, onAdd }) {
                 Add to quote · {qtys.size} run size{qtys.size === 1 ? '' : 's'}
               </Button>
               <Typography sx={{ color: D.faint, fontSize: 11 }}>
-                Prices land committed with no markup added — the catalog price already includes your margin.
+                Committed with no markup — the catalog price already carries your margin. Setup rides
+                along at cost, so it stops coming out of it.
               </Typography>
             </Stack>
           </Box>
