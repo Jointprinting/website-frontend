@@ -1439,7 +1439,17 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   // Methods any printer in the network can actually price, in menu order.
   const netMethods = ['Screen Print', 'Digital Squeegee', 'DTG', 'DTF', 'Embroidery']
     .filter(m => printers.some(p => sectionFor(p, m)));
-  const capablePrinters = printers.filter(p => sectionFor(p, specMethod))
+  // The method an area is decorated with. Absent = the design's method, which is
+  // every spec saved to date, so nothing needs backfilling.
+  const areaMethodOf = (a) => (a && a.method) || specMethod;
+  // Every distinct method this design uses. One entry for an ordinary job.
+  const methodsUsed = [...new Set(specAreas.map(areaMethodOf))];
+  const isMixed = methodsUsed.length > 1;
+  // A printer can quote this design only if it has a price book for EVERY method
+  // on it. A shop that screens but can't DTG cannot quote a screen-front /
+  // DTG-back garment, and offering it would produce a number that isn't real.
+  const canRunAll = (p) => methodsUsed.every(m => sectionFor(p, m));
+  const capablePrinters = printers.filter(canRunAll)
     // Nearest ELIGIBLE (out-of-state) printer first; same-state sink to the end
     // (still shown, greyed with the nexus reason). shipToState-aware, stable
     // otherwise — see printerNexusRank.
@@ -1447,15 +1457,10 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   const [specPrinterKey, setSpecPrinterKey] = useState(() => seedLine.printerKey || '');
   const specPrinter = capablePrinters.find(p => p.key === specPrinterKey) || capablePrinters[0] || null;
   const specSection = sectionFor(specPrinter, specMethod);
-  // Size options for size-priced methods (DTG sizes, DTF discrete-size bands).
-  const sizeOptions = specSection ? (specSection.sizes || specSection.sizeBands || []) : [];
-  const needsSize = sizeOptions.length > 0;
-  // A+ DTF prices by a real square-inch area the user types (not a dropdown) plus
-  // a flat/non-flat placement that swaps the apply fee.
-  const usesSqin = !!(specSection && specSection.model === 'qty_x_size_sqin');
-  const needsStitches = specMethod === 'Embroidery';
-  const needsColors = specMethod === 'Screen Print';
-  const usesShade = specMethod === 'Screen Print' || specMethod === 'DTG';
+  // Which inputs an area shows is resolved PER AREA now (an area carries its own
+  // method), so these design-wide flags are gone — see the area rows below.
+  // Shade stays design-wide: it is a property of the garment, not of a print.
+  const usesShade = methodsUsed.some(m => m === 'Screen Print' || m === 'DTG');
   // If the picked printer's DTG section doesn't offer the current shade lane (e.g.
   // switching off A+'s white-ink-only to a printer without it), fall back to light so
   // pricing stays valid and the Select never holds an out-of-range value.
@@ -1476,6 +1481,11 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
   };
   const setArea = (i, patch) => setSpecAreas(a => a.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const addArea = () => setSpecAreas(a => [...a, freshArea(specMethod, a.length)]);
+  // Change ONE area's method, reshaping only that area's fields. The design's own
+  // method is left alone — it is still what a new area defaults to.
+  const setAreaMethod = (i, m) => setSpecAreas(a => a.map((x, j) => (
+    j === i ? { ...freshArea(m, j), label: x.label || areaLabelFor(j), method: m === specMethod ? undefined : m } : x
+  )));
   const removeArea = (i) => setSpecAreas(a => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
   // Switching method reshapes the areas to that method's fields (keeping labels)
   // AND broadcasts the label to every cell, so the design's "Print type" chip and
@@ -1489,7 +1499,13 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
 
   // Price the whole design (every area, summed) at a quantity, and compose the
   // print-details label — both delegate to the pure engine (unit-tested).
-  const priceAt = (qty) => priceAreas(specSection, specMethod, { areas: specAreas, shade: specShade }, num(qty));
+  // sectionFor lets the engine resolve a SECOND method's price book off the same
+  // printer, so "screen the front, DTG the back" prices in one pass and sums —
+  // which is what the shop bills, and what the owner was adding up by hand.
+  const priceAt = (qty) => priceAreas(specSection, specMethod, {
+    areas: specAreas, shade: specShade,
+    sectionFor: (m) => sectionFor(specPrinter, m),
+  }, num(qty));
   const detailsFor = () => composeAreaDetails(specMethod, { shade: specShade, areas: specAreas });
   const noSpinner = {
     '& input[type=number]': { MozAppearance: 'textfield' },
@@ -1971,30 +1987,53 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                 totalling ~486px (area 108 + print size 118 + design size 100 +
                 placement 116 + the remove button), which overflowed the spec
                 panel, the card and the dialog on a phone. */}
-            {specAreas.map((a, i) => (
+            {specAreas.map((a, i) => {
+              // Every input on this row follows THIS AREA's method, not the
+              // design's — that is what makes a screen front and a DTG back
+              // fillable on one design instead of two passes added up by hand.
+              const aMethod  = areaMethodOf(a);
+              const aSection = sectionFor(specPrinter, aMethod);
+              const aSizes   = aSection ? (aSection.sizes || aSection.sizeBands || []) : [];
+              const aNeedsSize     = aSizes.length > 0;
+              const aUsesSqin      = !!(aSection && aSection.model === 'qty_x_size_sqin');
+              const aNeedsStitches = aMethod === 'Embroidery';
+              const aNeedsColors   = aMethod === 'Screen Print';
+              return (
               <Stack key={i} direction="row" gap={0.5} alignItems="flex-end" flexWrap="wrap">
                 <QF label={`Area ${i + 1}`} sx={{ width: 108 }}>
                   <TextField size="small" fullWidth value={a.label} placeholder={areaLabelFor(i)}
                     onChange={e => setArea(i, { label: e.target.value })} sx={tf} />
                 </QF>
-                {needsColors && (
+                {/* Per-area method. Only worth the space once the network can
+                    actually do more than one thing. */}
+                {netMethods.length > 1 && (
+                  <QF label="Method" sx={{ width: 126 }}>
+                    <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
+                      <Select value={aMethod} onChange={e => setAreaMethod(i, e.target.value)}
+                        sx={{ color: a.method ? D.green : D.text, fontSize: 13, borderRadius: 2, fontWeight: a.method ? 800 : 400 }}>
+                        {netMethods.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </QF>
+                )}
+                {aNeedsColors && (
                   <QF label="Colors" sx={{ width: 70 }}>
                     <TextField size="small" fullWidth type="number" value={a.colors}
                       onChange={e => setArea(i, { colors: e.target.value })} sx={tf} />
                   </QF>
                 )}
-                {needsSize && (
+                {aNeedsSize && (
                   <QF label="Print size" sx={{ width: 118 }}>
                     <FormControl size="small" fullWidth sx={{ ...dropInput, '& .MuiOutlinedInput-root': inputRoot }}>
                       <Select value={a.size || ''} displayEmpty onChange={e => setArea(i, { size: e.target.value })}
                         sx={{ color: D.text, fontSize: 13, borderRadius: 2 }}>
                         <MenuItem value="" disabled><em>size</em></MenuItem>
-                        {sizeOptions.map(s => <MenuItem key={s} value={s}>{s}{/^\d/.test(s) && !/x/i.test(s) ? ' sq"' : ''}</MenuItem>)}
+                        {aSizes.map(s => <MenuItem key={s} value={s}>{s}{/^\d/.test(s) && !/x/i.test(s) ? ' sq"' : ''}</MenuItem>)}
                       </Select>
                     </FormControl>
                   </QF>
                 )}
-                {usesSqin && (
+                {aUsesSqin && (
                   <>
                     <QF label="Design size" sx={{ width: 100 }}>
                       <TextField size="small" fullWidth type="number" value={a.sqin || ''} placeholder="sq in"
@@ -2012,7 +2051,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                     </QF>
                   </>
                 )}
-                {needsStitches && (
+                {aNeedsStitches && (
                   <QF label="Stitches" sx={{ width: 92 }}>
                     <TextField size="small" fullWidth type="number" value={a.stitches || ''} placeholder="8000"
                       onChange={e => setArea(i, { stitches: e.target.value })} sx={tf} />
@@ -2025,7 +2064,8 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                   </IconButton>
                 )}
               </Stack>
-            ))}
+              );
+            })}
             <Button size="small" onClick={addArea} startIcon={<AddCircleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ color: D.muted, fontSize: 11, textTransform: 'none', mb: 0.4,
                 '&:hover': { color: D.green } }}>area</Button>
@@ -2054,10 +2094,17 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                   // margin-audited against the printer's live catalog later — internal
                   // only, never whitelisted into the client payload.
                   return { printCost: r.printPerUnit, setupCost: r.setup || 0,
-                    printType: specMethod, printDetails: detailsFor(),
+                    // A mixed job's print TYPE names both, so the chip, the PO
+                    // and the confirmation don't claim it is one method.
+                    printType: isMixed ? methodsUsed.join(' + ') : specMethod,
+                    printDetails: detailsFor(),
                     printerKey: specPrinter ? specPrinter.key : '',
                     printerName: specPrinter ? specPrinter.name : '',
-                    printSpec: { method: specMethod, shade: specShade, areas: specAreas.map(a => ({ ...a })) } };
+                    printSpec: { method: specMethod, shade: specShade,
+                      // Per-method subtotals ride along so the confirmation and a
+                      // later margin audit can see how the number was built.
+                      byMethod: r.byMethod || null,
+                      areas: specAreas.map(a => ({ ...a })) } };
                 });
               }}
               sx={{ bgcolor: D.green, color: D.ink, fontWeight: 800, fontSize: 11.5, textTransform: 'none', px: 2,
@@ -2068,18 +2115,36 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
           </Stack>
           {/* Live preview per run size, so he sees the price before applying. */}
           {specSection && (
-            <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 1 }}>
-              {grid.qtys.map(q => {
-                const r = priceAt(q);
-                const tier = r && r.tier ? (r.tier.label || (r.tier.dozens != null ? `${r.tier.dozens}dz` : '')) : '';
+            <Stack gap={0.4} sx={{ mt: 1 }}>
+              <Stack direction="row" gap={1.5} flexWrap="wrap">
+                {grid.qtys.map(q => {
+                  const r = priceAt(q);
+                  const tier = r && r.tier ? (r.tier.label || (r.tier.dozens != null ? `${r.tier.dozens}dz` : '')) : '';
+                  return (
+                    <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
+                      {q}u → {r && !r.error
+                        ? `${fmt(r.printPerUnit)}/u${r.setup ? ` · ${fmt(r.setup)} setup` : ''}${tier ? ` (${tier})` : ''}`
+                        : (r && r.warnings && r.warnings[0]) || 'enter the spec'}
+                    </Typography>
+                  );
+                })}
+              </Stack>
+              {/* A mixed job shows its working. One summed number is the thing to
+                  quote, but "screen $2.00 + DTG $3.40" is the thing to CHECK —
+                  and this is the number the owner used to add up by hand. */}
+              {isMixed && (() => {
+                const r = priceAt(grid.qtys[0]);
+                if (!r || r.error || !r.byMethod) return null;
                 return (
-                  <Typography key={q} sx={{ ...mono, fontSize: 11, color: r && !r.error ? D.muted : D.amber }}>
-                    {q}u → {r && !r.error
-                      ? `${fmt(r.printPerUnit)}/u${r.setup ? ` · ${fmt(r.setup)} setup` : ''}${tier ? ` (${tier})` : ''}`
-                      : (r && r.warnings && r.warnings[0]) || 'enter the spec'}
+                  <Typography sx={{ ...mono, fontSize: 10.5, color: D.green }}>
+                    at {grid.qtys[0]}u ={' '}
+                    {Object.entries(r.byMethod)
+                      .map(([m, v]) => `${m} ${fmt(v.printPerUnit)}`)
+                      .join(' + ')}
+                    {' = '}{fmt(r.printPerUnit)}/u
                   </Typography>
                 );
-              })}
+              })()}
             </Stack>
           )}
           <Typography sx={{ color: D.faint, fontSize: 10.5, mt: 0.75 }}>
