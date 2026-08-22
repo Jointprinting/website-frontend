@@ -1,6 +1,8 @@
 // Heritage screen-print pricing engine — values read straight off the 2025
 // catalog grids (verified twice against the PDF).
-import { screenPrintQuote, specDetails } from './printerPricing';
+import {
+  screenPrintQuote, specDetails, rankPrintersForSpec, PICK_TIER,
+} from './printerPricing';
 
 const SP = {
   screenFees: { perScreen: 20 },
@@ -344,4 +346,248 @@ test('composeAreaDetails: multi-area DTG names every area', () => {
   expect(composeAreaDetails('DTG', { shade: 'dark',
     areas: [{ label: 'front', size: '12x16' }, { label: 'left-chest', size: '4x4' }] }))
     .toBe('DTG front 12x16 + left-chest 4x4 · dark garment');
+});
+
+// ── Mixed methods on one garment ─────────────────────────────────────────────
+//
+// The owner's ask, verbatim: "if a client wants screen print on front and dtg on
+// back then I add the costs and input it for thr per unit cost". Until now
+// priceAreas took ONE section and ONE method for every area, so that job could
+// only be priced by running the tool twice and adding it up by hand — and "Fill
+// costs" REPLACED rather than accumulated, so the second run erased the first.
+
+describe('priceAreas — two methods on one garment', () => {
+  const screen = {
+    model: 'qty_x_colors', setup: 'included',
+    colorColumns: ['1', '2', '3'],
+    tiers: [{ minQty: 1, label: '1+', prices: [1.00, 1.50, 2.00] }],
+  };
+  const dtg = {
+    model: 'qty_x_size', label: 'DTG',
+    sizes: ['A4'],
+    qtyTiers: [{ minQty: 1, label: '1+' }],
+    grid: { A4: [3.40] },
+  };
+  const sectionFor = (m) => ({ 'Screen Print': screen, DTG: dtg }[m] || null);
+
+  test('per-unit print is the SUM across methods', () => {
+    const r = priceAreas(
+      screen, 'Screen Print',
+      { areas: [{ label: 'front', colors: 3 }, { label: 'back', method: 'DTG', size: 'A4' }], sectionFor },
+      100,
+    );
+    expect(r.error).toBeUndefined();
+    expect(r.printPerUnit).toBeCloseTo(2.00 + 3.40, 2);
+  });
+
+  test('it shows its working per method', () => {
+    const r = priceAreas(
+      screen, 'Screen Print',
+      { areas: [{ label: 'front', colors: 3 }, { label: 'back', method: 'DTG', size: 'A4' }], sectionFor },
+      100,
+    );
+    expect(r.methods.sort()).toEqual(['DTG', 'Screen Print']);
+    expect(r.byMethod['Screen Print'].printPerUnit).toBeCloseTo(2.00, 2);
+    expect(r.byMethod.DTG.printPerUnit).toBeCloseTo(3.40, 2);
+  });
+
+  test('a single-method design prices EXACTLY as before — no backfill needed', () => {
+    // Every spec saved to date has one method for the whole design and no
+    // per-area method. It must not move by a cent.
+    const areas = [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }];
+    const before = priceAreas(screen, 'Screen Print', { areas }, 100);
+    const after  = priceAreas(screen, 'Screen Print', { areas, sectionFor }, 100);
+    expect(after.printPerUnit).toBe(before.printPerUnit);
+    expect(after.setup).toBe(before.setup);
+    expect(after.screens).toBe(before.screens);
+  });
+
+  test('a method this printer cannot do is SAID, not silently dropped', () => {
+    const r = priceAreas(
+      screen, 'Screen Print',
+      { areas: [{ label: 'front', colors: 3 }, { label: 'back', method: 'Embroidery', stitches: 8000 }], sectionFor },
+      100,
+    );
+    expect(r.error).toBe('no-section');
+    expect(r.warnings.join(' ')).toMatch(/Embroidery/);
+  });
+});
+
+describe('priceMethod — a price book it cannot read', () => {
+  test("THE BUG: an unreadable section is an error, not 'nothing here'", () => {
+    // Heritage's DTG and embroidery blocks are legacy layouts predating the
+    // `model` tag. priceMethod returned null, which priceAreas treats as "area
+    // not filled in yet" and skips — so Heritage was offered in the DTG dropdown
+    // (capabilities are derived from the catalog, and the section IS there) and
+    // then returned nothing, forever, indistinguishable from an empty form.
+    const r = priceMethod({ someOldShape: true }, { qty: 100 });
+    expect(r).not.toBeNull();
+    expect(r.error).toBe('unreadable-section');
+  });
+
+  test('no section at all is still null — that is a different thing', () => {
+    expect(priceMethod(null, { qty: 100 })).toBeNull();
+  });
+});
+
+describe('composeAreaDetails — mixed methods', () => {
+  test('names the method per area so it cannot read as two screen locations', () => {
+    const s = composeAreaDetails('Screen Print', {
+      areas: [{ label: 'front', colors: 3 }, { label: 'back', method: 'DTG', size: 'A4' }],
+    });
+    expect(s).toMatch(/3c front \(screen\)/);
+    expect(s).toMatch(/DTG back/);
+  });
+
+  test('a single-method design keeps its exact old label', () => {
+    expect(composeAreaDetails('Screen Print', {
+      areas: [{ label: 'front', colors: 3 }, { label: 'back', colors: 1 }],
+    })).toBe('3c front + 1c back');
+  });
+});
+
+// ── Ranking printers for a spec ──────────────────────────────────────────────
+//
+// "how i can use the quoter to pick the best printer". Nothing looped over
+// printers before this: the dropdown sorted by nexus + haversine, which answers
+// "who is nearest that I can legally use", not "who is cheapest all-in".
+
+describe('rankPrintersForSpec', () => {
+  const screenBook = (price) => ({
+    model: 'qty_x_colors', setup: 'included',
+    colorColumns: ['1', '2', '3'],
+    tiers: [{ minQty: 1, label: '1+', prices: [price, price, price] }],
+  });
+  // Setup on a qty_x_colors book comes from screenFees keyed by colour count —
+  // this shape bills $40 for a 1-colour job's screen.
+  const withScreens = (price, fee) => ({
+    model: 'qty_x_colors',
+    screenFees: { 1: fee, 2: fee, 3: fee },
+    colorColumns: ['1', '2', '3'],
+    tiers: [{ minQty: 1, label: '1+', prices: [price, price, price] }],
+  });
+
+  const areas = [{ label: 'front', colors: 1 }];
+  const sectionFor = (p, m) => (p.catalog || {})[{ 'Screen Print': 'screenPrinting', DTG: 'dtg' }[m]] || null;
+  const nexusRank = (p) => p._miles ?? 0;
+
+  test('cheapest ALL-IN wins, not cheapest print rate', () => {
+    // This is the whole point. Cheap Print charges less per shirt and more in
+    // setup; on a 50-piece run that makes it the expensive one, and the old
+    // ordering could never see it.
+    const cheapRate = { key: 'cheap', name: 'Cheap Print', state: 'PA', _miles: 10,
+      catalog: { screenPrinting: withScreens(2.00, 40) } };       // 2.00 + 40/50 = 2.80
+    const cheapAllIn = { key: 'flat', name: 'Flat Rate', state: 'NC', _miles: 400,
+      catalog: { screenPrinting: screenBook(2.40) } };            // 2.40 + 0     = 2.40
+
+    const out = rankPrintersForSpec({
+      printers: [cheapRate, cheapAllIn], methods: ['Screen Print'],
+      areas, qty: 50, shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out[0].key).toBe('flat');
+    expect(out[0].allInPerUnit).toBeCloseTo(2.40, 2);
+    expect(out[1].allInPerUnit).toBeCloseTo(2.80, 2);
+  });
+
+  test('a same-state printer is BLOCKED with the reason, never hidden', () => {
+    const local = { key: 'local', name: 'Local', state: 'NJ', _miles: 0,
+      catalog: { screenPrinting: screenBook(1.00) } };
+    const away = { key: 'away', name: 'Away', state: 'PA', _miles: 60,
+      catalog: { screenPrinting: screenBook(9.00) } };
+
+    const out = rankPrintersForSpec({
+      printers: [local, away], methods: ['Screen Print'],
+      areas, qty: 50, shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    // Cheapest by a mile, and still last — nexus is a tax question, not a
+    // preference. But it is present, with the reason.
+    expect(out[0].key).toBe('away');
+    expect(out[1].key).toBe('local');
+    expect(out[1].tier).toBe(PICK_TIER.BLOCKED);
+    expect(out[1].reason).toMatch(/nexus/i);
+  });
+
+  test('a printer with no price book is listed, labelled, and sorted by distance', () => {
+    // Only 7 of ~16 counterparties have a price book. Hiding these would hide
+    // most of the network.
+    const priced = { key: 'priced', name: 'Priced', state: 'PA', _miles: 500,
+      catalog: { screenPrinting: screenBook(3.00) } };
+    const nearNoBook = { key: 'near', name: 'Near No Book', state: 'NY', _miles: 50, catalog: {} };
+    const farNoBook  = { key: 'far',  name: 'Far No Book',  state: 'TX', _miles: 900, catalog: {} };
+
+    const out = rankPrintersForSpec({
+      printers: [farNoBook, nearNoBook, priced], methods: ['Screen Print'],
+      areas, qty: 50, shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out.map(r => r.key)).toEqual(['priced', 'near', 'far']);
+    expect(out[1].tier).toBe(PICK_TIER.UNPRICED);
+    expect(out[1].reason).toMatch(/No price book for Screen Print/);
+  });
+
+  test("'can't read the book' is a different answer from 'no book'", () => {
+    // The Heritage legacy-section case. One is a bug to fix, the other a gap to
+    // fill, and they should not read the same to the owner.
+    const legacy = { key: 'legacy', name: 'Legacy', state: 'PA', _miles: 100,
+      catalog: { screenPrinting: { someOldShape: true } } };
+    const out = rankPrintersForSpec({
+      printers: [legacy], methods: ['Screen Print'],
+      areas, qty: 50, shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out[0].tier).toBe(PICK_TIER.UNPRICED);
+    expect(out[0].error).toBe('unreadable-section');
+    expect(out[0].reason).toMatch(/older format/i);
+  });
+
+  test('a printer must cover EVERY method on a mixed design', () => {
+    const screenOnly = { key: 'screen', name: 'Screen Only', state: 'PA', _miles: 100,
+      catalog: { screenPrinting: screenBook(2.00) } };
+    const out = rankPrintersForSpec({
+      printers: [screenOnly], methods: ['Screen Print', 'DTG'],
+      areas: [{ label: 'front', colors: 1 }, { label: 'back', method: 'DTG', size: 'A4' }],
+      qty: 50, shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out[0].tier).toBe(PICK_TIER.UNPRICED);
+    expect(out[0].reason).toMatch(/No price book for DTG/);
+  });
+
+  test('unknown freight is reported as unknown, not as zero', () => {
+    // "$X/u + freight TBD" is honest. A total that silently omits a leg is not.
+    const p = { key: 'p', name: 'P', state: 'PA', _miles: 100,
+      catalog: { screenPrinting: screenBook(2.00) } };
+    const out = rankPrintersForSpec({
+      printers: [p], methods: ['Screen Print'], areas, qty: 50,
+      shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out[0].freightKnown).toBe(false);
+    expect(out[0].freight).toBeNull();
+
+    const withFreight = rankPrintersForSpec({
+      printers: [p], methods: ['Screen Print'], areas, qty: 50,
+      shipToState: 'NJ', sectionFor, nexusRank, freightFor: () => 100,
+    });
+    expect(withFreight[0].freightKnown).toBe(true);
+    expect(withFreight[0].allInPerUnit).toBeCloseTo(2.00 + 100 / 50, 2);
+  });
+
+  test('a stale price book is flagged without being demoted', () => {
+    // pricingReviewDue is already computed on the model and had no reader.
+    const p = { key: 'p', name: 'P', state: 'PA', _miles: 100, pricingReviewDue: true,
+      catalog: { screenPrinting: screenBook(2.00) } };
+    const out = rankPrintersForSpec({
+      printers: [p], methods: ['Screen Print'], areas, qty: 50,
+      shipToState: 'NJ', sectionFor, nexusRank,
+    });
+    expect(out[0].tier).toBe(PICK_TIER.PRICED);
+    expect(out[0].stale).toBe(true);
+  });
+
+  test('no ship-to state yet blocks nobody', () => {
+    const nj = { key: 'nj', name: 'NJ Shop', state: 'NJ', _miles: 0,
+      catalog: { screenPrinting: screenBook(2.00) } };
+    const out = rankPrintersForSpec({
+      printers: [nj], methods: ['Screen Print'], areas, qty: 50,
+      shipToState: '', sectionFor, nexusRank,
+    });
+    expect(out[0].tier).toBe(PICK_TIER.PRICED);
+  });
 });

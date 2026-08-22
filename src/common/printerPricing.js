@@ -379,7 +379,18 @@ export function priceMethod(section, spec = {}) {
     default:
       if (section.priceGrids) return screenPrintQuote(section, spec); // Heritage
       if (section._needsFullGrid) return { error: 'grid-pending', warnings: ['This price grid is still being finalized.'] };
-      return null;
+      // A section EXISTS but carries no shape this engine can read — Heritage's
+      // DTG and embroidery blocks are legacy layouts predating the `model` tag.
+      //
+      // This used to return null, which priceAreas treats as "area not filled in
+      // yet" and skips. So the printer was offered in the DTG and Embroidery
+      // dropdowns (capabilities are derived from the catalog, and the section is
+      // right there) and then silently returned nothing, forever, with no way to
+      // tell that apart from an empty form. Saying so is the whole fix.
+      return {
+        error: 'unreadable-section',
+        warnings: ["This printer's price book for that method is in an older format the pricer can't read yet."],
+      };
   }
 }
 
@@ -421,10 +432,21 @@ export const METHOD_SECTION = {
 // Returns { printPerUnit, setup, screens, tier, tiers[], warnings[], notes[] },
 // or { error, warnings } when an area is out of the guide / not filled in yet,
 // or null when the section can't price the job at all.
-export function priceAreas(section, method, { areas = [], shade = 'light' } = {}, qty) {
-  if (!section) return null;
+export function priceAreas(section, method, { areas = [], shade = 'light', sectionFor = null } = {}, qty) {
+  if (!section && !sectionFor) return null;
   const list = Array.isArray(areas) && areas.length ? areas : [{}];
-  const specForArea = (a) => {
+  // The method an area is decorated with. Absent = the design's method, which is
+  // every spec saved to date, so nothing needs backfilling.
+  const methodOf = (a) => (a && a.method) || method;
+  // The price book for that method. `sectionFor` is how the caller (which holds
+  // the printer catalog) resolves a second method's section; without it every
+  // area uses the one section passed in, i.e. today's behaviour exactly.
+  const sectionOf = (a) => {
+    const m = methodOf(a);
+    if (m === method || !sectionFor) return section;
+    return sectionFor(m) || null;
+  };
+  const specForArea = (a, method) => {
     if (method === 'Screen Print') {
       const colors = num(a.colors);
       return { qty, shade, locations: colors > 0 ? [{ label: a.label, colors }] : [] };
@@ -446,14 +468,27 @@ export function priceAreas(section, method, { areas = [], shade = 'light' } = {}
   const warnings = [];
   const notes = [];
   const tiers = [];
+  // Per-method subtotals, so a mixed job can show its working — "Screen $2.00 +
+  // DTG $3.40" — instead of one number the owner has to take on faith.
+  const byMethod = {};
   for (const a of list) {
-    const r = priceMethod(section, specForArea(a));
+    const sec = sectionOf(a);
+    const areaMethod = methodOf(a);
+    if (!sec) {
+      return { error: 'no-section', warnings: [`This printer has no price book for ${areaMethod}.`] };
+    }
+    const r = priceMethod(sec, specForArea(a, areaMethod));
     if (r == null) continue;                 // an empty / unfilled area (e.g. 0 colors) — skip it
     if (r.error) return { error: r.error, warnings: r.warnings || [] };
     printPerUnit += num(r.printPerUnit);
     setup += num(r.setup);
     screens += num(r.screens);
     priced += 1;
+    if (!byMethod[areaMethod]) byMethod[areaMethod] = { printPerUnit: 0, setup: 0, screens: 0, areas: 0 };
+    byMethod[areaMethod].printPerUnit = +(byMethod[areaMethod].printPerUnit + num(r.printPerUnit)).toFixed(2);
+    byMethod[areaMethod].setup        = +(byMethod[areaMethod].setup + num(r.setup)).toFixed(2);
+    byMethod[areaMethod].screens     += num(r.screens);
+    byMethod[areaMethod].areas       += 1;
     (r.warnings || []).forEach((w) => warnings.push(w));
     (r.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
     if (r.tier) tiers.push(r.tier);
@@ -465,6 +500,10 @@ export function priceAreas(section, method, { areas = [], shade = 'light' } = {}
     screens,
     tier: tiers[0] || null,
     tiers,
+    byMethod,
+    // More than one decorating method on one garment. The confirmation has to
+    // know: a garment printed at two methods can need two POs.
+    methods: Object.keys(byMethod),
     warnings,
     notes,
   };
@@ -476,21 +515,161 @@ export function priceAreas(section, method, { areas = [], shade = 'light' } = {}
 // suffix only applies to the shade-priced methods (screen, DTG).
 export function composeAreaDetails(method, { shade = 'light', areas = [] } = {}) {
   const label = (a) => String(a.label || 'front').trim();
-  const parts = (areas || []).map((a) => {
-    if (method === 'Screen Print') {
+  const list = (areas || []).map((a) => a || {});
+  // A MIXED job names its method per area — "3c front (screen) + DTG back".
+  // Without that it reads "3c front + back", which looks like two screen
+  // locations, and a two-method garment can need two POs.
+  const mixed = list.some((a) => a.method && a.method !== method);
+
+  const describe = (a, m) => {
+    if (m === 'Screen Print') {
       const c = Math.round(num(a.colors));
-      return c > 0 ? `${c}c ${label(a)}` : '';
+      const body = c > 0 ? `${c}c ${label(a)}` : '';
+      return body && mixed ? `${body} (screen)` : body;
     }
-    if (method === 'Embroidery') {
+    if (m === 'Embroidery') {
       const st = Math.round(num(a.stitches));
-      return st > 0 ? `${label(a)} ${st} st` : label(a);
+      const body = st > 0 ? `${label(a)} ${st} st` : label(a);
+      return mixed ? `${m} ${body}` : body;
     }
-    if (num(a.sqin) > 0) return `${label(a)} ${Math.round(num(a.sqin))} sq in${a.placement === 'nonflat' ? ' non-flat' : ''}`;
-    if (a.size) return `${label(a)} ${a.size}`;
-    return label(a);
-  }).filter(Boolean);
-  const dark = shade === 'dark' && (method === 'Screen Print' || method === 'DTG');
-  const head = method === 'Screen Print' ? '' : `${method} `;
+    let body;
+    if (num(a.sqin) > 0) body = `${label(a)} ${Math.round(num(a.sqin))} sq in${a.placement === 'nonflat' ? ' non-flat' : ''}`;
+    else if (a.size) body = `${label(a)} ${a.size}`;
+    else body = label(a);
+    return mixed ? `${m} ${body}` : body;
+  };
+
+  const parts = list.map((a) => describe(a, a.method || method)).filter(Boolean);
+  // The shade suffix applies when any priced method is shade-sensitive.
+  const shadeMethods = new Set(['Screen Print', 'DTG']);
+  const anyShaded = list.some((a) => shadeMethods.has(a.method || method));
+  const dark = shade === 'dark' && anyShaded;
+  // A single-method job keeps its old heading exactly; a mixed one has already
+  // named each method inline, so a heading would say it twice.
+  const head = (mixed || method === 'Screen Print') ? '' : `${method} `;
   const body = (head + parts.join(' + ')).trim();
   return dark ? `${body} · dark garment` : body;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RANKING PRINTERS FOR A SPEC
+//
+// The owner's ask: "how i can use the quoter to pick the best printer".
+//
+// Nothing in the system looped over printers. The dropdown sorted by
+// printerNexusRank — same-state last, then haversine between state centroids —
+// which answers "who is nearest that I can legally use", not "who is cheapest
+// all-in". Cost was computable the whole time; there was simply no caller.
+//
+// The ranking is deliberately TIERED rather than one sorted list, because the
+// three groups are not comparable and collapsing them lies:
+//
+//   1  PRICED     — a real all-in number. Sorted by it.
+//   2  UNPRICED   — eligible and capable, but the price book can't answer.
+//                   Sorted by distance and LABELLED, never silently dropped:
+//                   only 7 of ~16 counterparties have a price book, so hiding
+//                   these would hide most of the network.
+//   3  BLOCKED    — same state as the ship-to. Shown, greyed, with the reason.
+//                   Nexus is a tax question, not a preference.
+//
+// Within tier 2 the reason matters and is carried: "no price book for DTG" is a
+// different problem from "the price book is in a format I can't read yet" (the
+// Heritage legacy-section case), and the second one is a bug to fix rather than
+// a gap to fill.
+//
+// PURE — no DB, no network, no React. `nexusRank` and `sectionFor` are injected
+// so this stays testable and the caller keeps owning catalog access.
+export const PICK_TIER = { PRICED: 1, UNPRICED: 2, BLOCKED: 3 };
+
+export function rankPrintersForSpec({
+  printers = [],
+  methods = [],
+  areas = [],
+  shade = 'light',
+  qty = 0,
+  shipToState = '',
+  sectionFor = () => null,
+  nexusRank = () => 0,
+  freightFor = null,
+} = {}) {
+  const st = String(shipToState || '').trim().toUpperCase();
+  const wanted = methods.length ? methods : ['Screen Print'];
+
+  const rows = (printers || []).filter(Boolean).map((p) => {
+    const distance = nexusRank(p, st);
+    const blocked = st && String(p.state || '').toUpperCase() === st;
+
+    // Capability first: a printer without a price book for every method on the
+    // design cannot quote it, and offering a partial number would be worse than
+    // saying so.
+    const missing = wanted.filter((m) => !sectionFor(p, m));
+    const base = {
+      printer: p, key: p.key || '', name: p.name || '', state: p.state || '',
+      distance, methods: wanted,
+      // A price book that has not been re-verified in a while is not the same as
+      // a missing one, and the owner should be able to tell at a glance which
+      // number he is trusting. Already computed on the model.
+      stale: !!p.pricingReviewDue,
+    };
+
+    if (blocked) {
+      return { ...base, tier: PICK_TIER.BLOCKED,
+        reason: `Same state as the ship-to (${st}) — using them creates nexus.` };
+    }
+    if (missing.length) {
+      return { ...base, tier: PICK_TIER.UNPRICED,
+        reason: `No price book for ${missing.join(' or ')}.` };
+    }
+
+    const r = priceAreas(sectionFor(p, wanted[0]), wanted[0], {
+      areas, shade, sectionFor: (m) => sectionFor(p, m),
+    }, qty);
+
+    if (!r) {
+      return { ...base, tier: PICK_TIER.UNPRICED, reason: 'Nothing filled in to price yet.' };
+    }
+    if (r.error) {
+      const reason = r.error === 'unreadable-section'
+        ? "Their price book is in an older format the pricer can't read yet."
+        : (r.warnings && r.warnings[0]) || 'The price book can\'t answer this spec.';
+      return { ...base, tier: PICK_TIER.UNPRICED, reason, error: r.error };
+    }
+
+    // ALL-IN per unit: the print, plus the one-time setup spread across the run,
+    // plus freight when the caller can supply it. Comparing bare print rates
+    // picks the wrong printer whenever setups differ — which is exactly when the
+    // comparison matters.
+    const q = Number(qty) > 0 ? Number(qty) : 0;
+    const setupPerUnit = q > 0 ? num(r.setup) / q : 0;
+    const freight = typeof freightFor === 'function' ? num(freightFor(p, r, qty)) : null;
+    const freightPerUnit = freight != null && q > 0 ? freight / q : 0;
+    return {
+      ...base,
+      tier: PICK_TIER.PRICED,
+      printPerUnit: r.printPerUnit,
+      setup: r.setup,
+      setupPerUnit: +setupPerUnit.toFixed(4),
+      // Null freight is reported as null, never as zero — "$X/u + freight TBD"
+      // is honest, and a total that silently omits a leg is not.
+      freight: freight,
+      allInPerUnit: +(num(r.printPerUnit) + setupPerUnit + freightPerUnit).toFixed(4),
+      freightKnown: freight != null,
+      byMethod: r.byMethod || null,
+      warnings: r.warnings || [],
+    };
+  });
+
+  return rows.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.tier === PICK_TIER.PRICED) {
+      // A priced printer whose freight is unknown cannot outrank one whose
+      // total is complete on a difference smaller than freight — but it still
+      // sorts on what we know, with the gap shown in the row.
+      if (a.allInPerUnit !== b.allInPerUnit) return a.allInPerUnit - b.allInPerUnit;
+    }
+    const da = Number.isFinite(a.distance) ? a.distance : Number.MAX_SAFE_INTEGER;
+    const db = Number.isFinite(b.distance) ? b.distance : Number.MAX_SAFE_INTEGER;
+    if (da !== db) return da - db;
+    return String(a.name).localeCompare(String(b.name));
+  });
 }
