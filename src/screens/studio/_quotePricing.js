@@ -46,3 +46,41 @@ export function repriceToMargin(line, pct) {
     noMarkup: false,   // choosing a margin turns off the fixed-price lane
   };
 }
+
+// The patch for a HAND-TYPED price.
+//
+// Typing a price used to write unitPrice and nothing else, which quietly left
+// `markup` holding whatever it held before — 1.4 by default, a MARKUP, i.e. a
+// 28.6% margin. That stale multiplier is what prices any cell created with its
+// unitPrice cleared: a new run-size column, a new option row, a colour
+// duplicate. So hand-typing $18.00 on a $10.00-cost cell (44.4% margin) and then
+// adding a 200-unit column produced a cell at 28.6%, with nothing on screen to
+// distinguish the two and a code comment claiming the opposite.
+//
+// Keeping the two in step at the moment of typing fixes it at the source, so
+// every downstream fallback inherits the margin the owner actually chose.
+// Locked (catalog) prices are left alone, exactly as repriceToMargin leaves them.
+export function patchTypedPrice(line, raw) {
+  if (isPriceLocked(line)) return { unitPrice: raw };
+  const price = Number(raw);
+  if (!Number.isFinite(price) || price <= 0) return { unitPrice: raw };
+  const cogs = lineCogsPerUnit(line);
+  return {
+    unitPrice: raw,
+    markup:   cogs > 0 ? +(price / cogs).toFixed(4) : 1,
+    noMarkup: false,
+  };
+}
+
+// The margin a line is ACTUALLY selling at, for display and for carrying onto a
+// copy. Derived from the committed price when there is one, because that is the
+// truth; `markup` is only the fallback for a line that has never been priced.
+export function effectiveMarginPct(line) {
+  const cogs = lineCogsPerUnit(line);
+  if (!(cogs > 0)) return null;
+  const price = Number(line && line.unitPrice) > 0
+    ? Number(line.unitPrice)
+    : cogs * (Number(line && line.markup) || 1);
+  if (!(price > 0)) return null;
+  return ((price - cogs) / price) * 100;
+}

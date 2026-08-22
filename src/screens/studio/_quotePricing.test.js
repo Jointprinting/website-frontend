@@ -6,7 +6,7 @@
 // overwrite a catalog price that the per-cell strip refused to touch.
 // Run: CI=true npm test
 
-import { priceAtMargin, isPriceLocked, repriceToMargin } from './_quotePricing';
+import { priceAtMargin, isPriceLocked, repriceToMargin, patchTypedPrice, effectiveMarginPct } from './_quotePricing';
 
 // A 100-unit line costing $7.75/u all-in: blank 3.20 + print 3.15 + (80+60)/100.
 const line = (o = {}) => ({
@@ -67,5 +67,65 @@ describe('repriceToMargin', () => {
     const patch = repriceToMargin({ qty: 10, blankCost: 0, printCost: 0 }, 40);
     expect(patch.unitPrice).toBe(0);
     expect(patch.markup).toBe(1);
+  });
+});
+
+// ── Hand-typed prices ────────────────────────────────────────────────────────
+//
+// The bug these pin cost money on every quote where a price was typed rather
+// than chosen from a chip, which is most of the interesting ones.
+describe('patchTypedPrice', () => {
+  // $10.00 all-in cost: blank 6 + print 4, no setup/freight to amortize.
+  const line = () => ({ qty: 100, blankCost: 6, printCost: 4, setupCost: 0, shippingCost: 0 });
+
+  test('THE BUG: typing a price now moves markup with it', () => {
+    // Type $18.00 on a $10.00 cost — a 44.4% margin, a 1.8 markup.
+    const patch = patchTypedPrice(line(), '18.00');
+    expect(patch.unitPrice).toBe('18.00');
+    expect(patch.markup).toBeCloseTo(1.8, 4);
+    expect(patch.noMarkup).toBe(false);
+  });
+
+  test('...so a new column no longer silently reprices at 28.6%', () => {
+    // A new run-size column clears unitPrice and falls back to `markup`.
+    // Before: markup was still the 1.4 default → $14.00, a 28.6% margin, with
+    // nothing on screen to show the new cell was cheaper than the one beside it.
+    const l = { ...line(), ...patchTypedPrice(line(), '18.00') };
+    const fallbackPrice = 10 * l.markup;
+    expect(fallbackPrice).toBeCloseTo(18, 2);
+    expect(fallbackPrice).not.toBeCloseTo(14, 1);
+  });
+
+  test('a catalog price is left alone — its margin is the vendor\'s', () => {
+    const locked = { ...line(), priceLocked: true };
+    expect(patchTypedPrice(locked, '18.00')).toEqual({ unitPrice: '18.00' });
+  });
+
+  test('a half-typed or cleared value writes the raw value and nothing else', () => {
+    // Mid-keystroke states must not compute a markup off a garbage price.
+    expect(patchTypedPrice(line(), '')).toEqual({ unitPrice: '' });
+    expect(patchTypedPrice(line(), '.')).toEqual({ unitPrice: '.' });
+    expect(patchTypedPrice(line(), '0')).toEqual({ unitPrice: '0' });
+  });
+
+  test('no cost yet means no markup to derive', () => {
+    const patch = patchTypedPrice({ qty: 100 }, '18.00');
+    expect(patch.markup).toBe(1);
+  });
+});
+
+describe('effectiveMarginPct', () => {
+  test('reads the committed price when there is one', () => {
+    expect(effectiveMarginPct({ qty: 100, blankCost: 6, printCost: 4, unitPrice: 18 }))
+      .toBeCloseTo(44.44, 1);
+  });
+
+  test('falls back to markup only for a line never priced', () => {
+    expect(effectiveMarginPct({ qty: 100, blankCost: 6, printCost: 4, markup: 1.4 }))
+      .toBeCloseTo(28.57, 1);
+  });
+
+  test('no cost, no margin', () => {
+    expect(effectiveMarginPct({ qty: 100, unitPrice: 18 })).toBeNull();
   });
 });

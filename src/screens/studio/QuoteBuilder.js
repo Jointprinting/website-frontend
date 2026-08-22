@@ -63,7 +63,7 @@ import { quoteRowKey, detectGridRows } from '../../common/quoteGrid';
 import { priceAreas, composeAreaDetails, METHOD_SECTION } from '../../common/printerPricing';
 import { shadeChangeFor } from '../../common/garmentShade';
 import { stateDistanceMi } from './_roadTrip';
-import { priceAtMargin, repriceToMargin } from './_quotePricing';
+import { priceAtMargin, repriceToMargin, patchTypedPrice } from './_quotePricing';
 import { parsePromoMoney, promoSetupTotal, promoUnitAllIn, PER_LABEL } from './_promoPricing';
 
 // Pricing tiers are TARGET MARGINS (the owner thinks in margin, not markup):
@@ -2242,7 +2242,7 @@ function DesignGridCard({ grid, lines, accent, printers = [], shipToState, authH
                           0 used to render a literal "0" over the real auto number. */}
                       <DecimalField size="small" value={num(l.unitPrice) > 0 ? l.unitPrice : ''}
                         placeholder={eff > 0 ? eff.toFixed(2) : '—'}
-                        onChange={e => onSetLine(cell.idx, { unitPrice: e.target.value })}
+                        onChange={e => onSetLine(cell.idx, patchTypedPrice(l, e.target.value))}
                         onBlur={e => { if (num(e.target.value) <= 0) onSetLine(cell.idx, { unitPrice: '' }); }}
                         InputProps={{ startAdornment: <Typography sx={{ color: D.faint, fontSize: 11, mr: 0.3 }}>$</Typography> }}
                         sx={cellTf} />
@@ -2865,7 +2865,7 @@ function QuoteLineCard({ line, accent, index, gridable, onViewAsGrid, onPatch, o
         <QF label={committed ? 'Unit price' : 'Unit price (auto)'}>
           <DecimalField size="small" value={num(line.unitPrice) > 0 ? line.unitPrice : ''}
             placeholder={cogsPerUnit > 0 ? unitPrice.toFixed(2) : ''}
-            onChange={e => onPatch({ unitPrice: e.target.value })}
+            onChange={e => onPatch(patchTypedPrice(line, e.target.value))}
             onBlur={e => { if (num(e.target.value) <= 0) onPatch({ unitPrice: '' }); }}
             sx={{ ...tf, width: 130,
               ...(committed ? {} : { '& .MuiOutlinedInput-root fieldset': { borderColor: 'rgba(251,191,36,0.4)' } }) }} />
